@@ -168,7 +168,7 @@ async def get_session(name: str):
 
 @app.post("/api/sessions/{name:path}")
 async def update_session(name: str, body: dict):
-    allowed = {"tool", "cwd", "description", "tmux_session", "tags"}
+    allowed = {"tool", "cwd", "description", "tmux_session"}
     filtered = {k: v for k, v in body.items() if k in allowed}
     registry.upsert_session(name, filtered)
     return {"ok": True}

@@ -570,7 +570,6 @@ def build_sessions(registry: dict) -> list[dict]:
             "git": git,
             "ai_title": ai_title,
             "description": description,
-            "tags": reg_entry.get("tags", []),
             "cwd": reg_entry.get("cwd") or proc.get("cwd") or "",
             "registry_key": matched_key,
         }

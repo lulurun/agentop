@@ -712,11 +712,8 @@ function renderDetail(s) {
     <div class="edit-form" id="meta-form">
       <label>Description</label>
       <textarea id="meta-description" placeholder="What is this session doing? Any notes…">${escHtml(s.description || '')}</textarea>
-      <label>Tags (comma-separated)</label>
-      <input type="text" id="meta-tags" value="${escHtml((s.tags || []).join(', '))}" placeholder="backend, bugfix">
       <button class="btn" onclick="saveMeta(${escHtml(JSON.stringify(sessionName))})">Save</button>
     </div>
-    ${s.tags && s.tags.length ? '<div style="margin-top:6px">' + s.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('') + '</div>' : ''}
   </div>`;
 
   document.getElementById('detail-body').innerHTML = html;
@@ -724,13 +721,11 @@ function renderDetail(s) {
 
 async function saveMeta(name) {
   const description = document.getElementById('meta-description').value;
-  const tagsRaw = document.getElementById('meta-tags').value;
-  const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
 
   await fetch('/api/sessions/' + encodeURIComponent(name), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description, tags }),
+    body: JSON.stringify({ description }),
   });
   await fetchSessions();
   if (selectedSession && selectedSession.name === name) {
