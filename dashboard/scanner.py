@@ -348,6 +348,85 @@ def start_tmux_session(name: str, cwd: str) -> bool:
         return False
 
 
+def start_session_with_tool(tool: str, cwd: str) -> dict:
+    """Start a tmux session, launch the tool inside it, wait for its PID, then rename to {tool}-{pid}.
+
+    Returns {"ok": True, "name": ..., "pid": ..., "tmux_session": ...} or {"ok": False, "error": ...}.
+    """
+    import random
+    import string
+    import time
+
+    rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+    temp_name = f"{tool}-tmp-{rand_id}"
+
+    # Create detached tmux session
+    try:
+        r = subprocess.run(
+            ["tmux", "new-session", "-d", "-s", temp_name, "-c", cwd],
+            capture_output=True, timeout=5,
+        )
+        if r.returncode != 0:
+            return {"ok": False, "error": r.stderr.decode().strip() or "tmux failed"}
+    except FileNotFoundError:
+        return {"ok": False, "error": "tmux is not installed"}
+    except subprocess.TimeoutExpired:
+        return {"ok": False, "error": "tmux timed out"}
+
+    # Send the tool command
+    subprocess.run(
+        ["tmux", "send-keys", "-t", temp_name, tool, "Enter"],
+        capture_output=True, timeout=5,
+    )
+
+    # Get the pane's shell PID
+    pane_pid = None
+    try:
+        r = subprocess.run(
+            ["tmux", "list-panes", "-t", temp_name, "-F", "#{pane_pid}"],
+            capture_output=True, text=True, timeout=3,
+        )
+        pid_str = r.stdout.strip()
+        if pid_str.isdigit():
+            pane_pid = int(pid_str)
+    except subprocess.TimeoutExpired:
+        pass
+
+    # Poll up to 5 s for the tool process to appear as a child of the pane
+    tool_pid = None
+    if pane_pid:
+        for _ in range(20):
+            time.sleep(0.25)
+            try:
+                for child in psutil.Process(pane_pid).children(recursive=True):
+                    try:
+                        pname = child.name().lower()
+                        cmd = " ".join(child.cmdline() or []).lower()
+                        if pname == tool or pname.startswith(tool + "-") or cmd.startswith(tool):
+                            tool_pid = child.pid
+                            break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        continue
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                break
+            if tool_pid:
+                break
+
+    if tool_pid:
+        final_name = f"{tool}-{tool_pid}"
+        try:
+            subprocess.run(
+                ["tmux", "rename-session", "-t", temp_name, final_name],
+                capture_output=True, timeout=3,
+            )
+        except subprocess.TimeoutExpired:
+            final_name = temp_name  # keep temp name if rename fails
+        return {"ok": True, "name": final_name, "pid": tool_pid, "tmux_session": final_name}
+
+    # Couldn't detect PID — leave tmux session alive with temp name
+    return {"ok": True, "name": temp_name, "pid": None, "tmux_session": temp_name}
+
+
 def stop_session(cwd: str, tmux_name: str) -> dict:
     """Kill agent processes in cwd and the named tmux session. Returns a summary."""
     import signal

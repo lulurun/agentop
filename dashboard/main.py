@@ -84,10 +84,38 @@ async def health():
     return {"status": "ok", "last_updated": _cache["last_updated"]}
 
 
+@app.get("/api/info")
+async def info():
+    return {"home": os.path.expanduser("~")}
+
+
 @app.get("/api/sessions")
 async def list_sessions():
     async with _cache_lock:
         return _cache["sessions"]
+
+
+@app.post("/api/sessions/start")
+async def create_and_start_session(body: dict):
+    tool = body.get("tool", "claude")
+    cwd = os.path.expanduser(body.get("cwd", ""))
+    description = body.get("description", "")
+    if not cwd:
+        raise HTTPException(status_code=400, detail="cwd is required")
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, scanner.start_session_with_tool, tool, cwd
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
+    name = result["name"]
+    registry.upsert_session(name, {
+        "tool": tool,
+        "cwd": cwd,
+        "description": description,
+        "status": "running",
+        "tmux_session": result["tmux_session"],
+    })
+    return {"ok": True, "name": name, "pid": result.get("pid")}
 
 
 @app.post("/api/sessions/{name}/start")

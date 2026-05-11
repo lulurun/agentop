@@ -455,8 +455,6 @@
     </div>
     <div class="modal-body">
       <div class="edit-form">
-        <label>Name</label>
-        <input type="text" id="new-name" placeholder="claude-myproject" autocomplete="off">
         <label>Tool</label>
         <select id="new-tool">
           <option value="claude">Claude</option>
@@ -469,7 +467,7 @@
         <input type="text" id="new-description" placeholder="What will this session do?">
         <div class="modal-footer">
           <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-          <button class="btn" onclick="submitNewSession()">Start</button>
+          <button class="btn" id="modal-start-btn" onclick="submitNewSession()">Start</button>
         </div>
       </div>
     </div>
@@ -804,12 +802,16 @@ function manualRefresh() {
 // ---------------------------------------------------------------------------
 // New Session modal
 // ---------------------------------------------------------------------------
-function openNewSession() {
-  document.getElementById('new-name').value = '';
-  document.getElementById('new-cwd').value = '';
+async function openNewSession() {
   document.getElementById('new-description').value = '';
   document.getElementById('modal-overlay').classList.add('open');
-  document.getElementById('new-name').focus();
+  // Pre-fill cwd with the dashboard user's home dir
+  try {
+    const r = await fetch('/api/info');
+    const data = await r.json();
+    document.getElementById('new-cwd').value = data.home || '';
+  } catch (_) {}
+  document.getElementById('new-cwd').focus();
 }
 
 function closeModal() {
@@ -817,18 +819,29 @@ function closeModal() {
 }
 
 async function submitNewSession() {
-  const name = document.getElementById('new-name').value.trim();
   const tool = document.getElementById('new-tool').value;
   const cwd = document.getElementById('new-cwd').value.trim();
   const description = document.getElementById('new-description').value.trim();
-  if (!name || !cwd) { alert('Name and working directory are required.'); return; }
-  await fetch('/api/sessions/' + encodeURIComponent(name) + '/start', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ tool, cwd, description }),
-  });
-  closeModal();
-  await fetchSessions();
+  if (!cwd) { alert('Working directory is required.'); return; }
+  const btn = document.getElementById('modal-start-btn');
+  btn.textContent = 'Starting…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/sessions/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, cwd, description }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Failed to start session');
+    closeModal();
+    await fetchSessions();
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btn.textContent = 'Start';
+    btn.disabled = false;
+  }
 }
 
 // ---------------------------------------------------------------------------
