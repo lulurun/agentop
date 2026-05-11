@@ -336,6 +336,75 @@ def get_claude_ai_title(pid: int, cwd: str) -> Optional[str]:
         return None
 
 
+def start_tmux_session(name: str, cwd: str) -> bool:
+    """Create a detached tmux session. Returns True if created, False if already exists or unavailable."""
+    try:
+        r = subprocess.run(["tmux", "has-session", "-t", name], capture_output=True, timeout=3)
+        if r.returncode == 0:
+            return False  # already exists
+        subprocess.run(["tmux", "new-session", "-d", "-s", name, "-c", cwd], timeout=5)
+        return True
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return False
+
+
+def stop_session(cwd: str, tmux_name: str) -> dict:
+    """Kill agent processes in cwd and the named tmux session. Returns a summary."""
+    import signal
+    import time
+
+    killed_pids: list[int] = []
+    targets = []
+
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            if proc.cwd() != cwd:
+                continue
+            cmd = " ".join(proc.info["cmdline"] or [])
+            pname = (proc.info["name"] or "").lower()
+            if any(p in pname or p in cmd.lower() for p in AGENT_PATTERNS):
+                targets.append(proc)
+        except (psutil.AccessDenied, psutil.NoSuchProcess):
+            continue
+
+    for proc in targets:
+        try:
+            proc.send_signal(signal.SIGINT)
+            time.sleep(0.3)
+            proc.send_signal(signal.SIGINT)
+            killed_pids.append(proc.pid)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
+    if killed_pids:
+        time.sleep(2)
+        for proc in targets:
+            try:
+                if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                    proc.send_signal(signal.SIGTERM)
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        time.sleep(1)
+        for proc in targets:
+            try:
+                if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                    proc.kill()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+
+    tmux_killed = False
+    if tmux_name:
+        try:
+            r = subprocess.run(["tmux", "has-session", "-t", tmux_name], capture_output=True, timeout=3)
+            if r.returncode == 0:
+                subprocess.run(["tmux", "kill-session", "-t", tmux_name], timeout=5)
+                tmux_killed = True
+        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+            pass
+
+    return {"killed_pids": killed_pids, "tmux_killed": tmux_killed}
+
+
 def get_recent_project_files(cwd: str, limit: int = 10) -> list[str]:
     """Return paths of recently modified files in a project directory."""
     if not cwd or not os.path.isdir(cwd):
