@@ -408,13 +408,20 @@ def build_sessions(registry: dict) -> list[dict]:
             name = f"{proc['tool']}-{proc['pid']}"
 
         ai_title = get_claude_ai_title(proc["pid"], proc["cwd"] or "") if proc.get("cwd") else None
+        description = reg_entry.get("description", "")
+        # Auto-populate description from AI title when user hasn't set one
+        if ai_title and not description and matched_key:
+            from dashboard import registry as _registry
+            _registry.upsert_session(matched_key, {"description": ai_title})
+            description = ai_title
+
         session = {
             **proc,
             "name": name,
             "tmux": tmux,
             "git": git,
             "ai_title": ai_title,
-            "description": reg_entry.get("description", ""),
+            "description": description,
             "tags": reg_entry.get("tags", []),
             "cwd": reg_entry.get("cwd") or proc.get("cwd") or "",
             "registry_key": matched_key,

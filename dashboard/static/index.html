@@ -629,14 +629,7 @@ function renderDetail(s) {
     html += '</ul></div>';
   }
 
-  // AI title (read-only) + description/tags/status (editable)
   const sessionName = s.name;
-  if (s.ai_title) {
-    html += `<div class="detail-section">
-      <div class="detail-section-title">Claude Title</div>
-      <div class="notes-box" style="color:var(--text)">${escHtml(s.ai_title)}</div>
-    </div>`;
-  }
   html += `<div class="detail-section">
     <div class="detail-section-title">Metadata</div>
     <div class="edit-form" id="meta-form">
