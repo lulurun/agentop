@@ -112,7 +112,6 @@ async def create_and_start_session(body: dict):
         "tool": tool,
         "cwd": cwd,
         "description": description,
-        "status": "running",
         "tmux_session": result["tmux_session"],
     })
     return {"ok": True, "name": name, "pid": result.get("pid")}
@@ -122,7 +121,6 @@ async def create_and_start_session(body: dict):
 async def start_session(name: str, body: dict):
     allowed = {"tool", "cwd", "description", "tmux_session"}
     filtered = {k: v for k, v in body.items() if k in allowed}
-    filtered["status"] = "running"
     registry.upsert_session(name, filtered)
     cwd = os.path.expanduser(filtered.get("cwd", ""))
     tmux_name = filtered.get("tmux_session") or name
@@ -143,7 +141,7 @@ async def stop_session(name: str):
     result = await asyncio.get_event_loop().run_in_executor(
         None, scanner.stop_session, cwd, tmux_name
     )
-    registry.set_status(name, "stopped")
+    registry.delete_session(name)
     return {"ok": True, **result}
 
 
@@ -170,7 +168,7 @@ async def get_session(name: str):
 
 @app.post("/api/sessions/{name:path}")
 async def update_session(name: str, body: dict):
-    allowed = {"tool", "cwd", "description", "status", "tmux_session", "tags"}
+    allowed = {"tool", "cwd", "description", "tmux_session", "tags"}
     filtered = {k: v for k, v in body.items() if k in allowed}
     registry.upsert_session(name, filtered)
     return {"ok": True}

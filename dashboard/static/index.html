@@ -392,7 +392,6 @@
               <tr>
                 <th>Name</th>
                 <th>Tool</th>
-                <th>Status</th>
                 <th>Project</th>
                 <th>Branch</th>
                 <th>Description</th>
@@ -404,7 +403,7 @@
               </tr>
             </thead>
             <tbody id="sessions-body">
-              <tr><td colspan="11" class="empty"><span class="spinner"></span></td></tr>
+              <tr><td colspan="10" class="empty"><span class="spinner"></span></td></tr>
             </tbody>
           </table>
         </div>
@@ -581,7 +580,7 @@ async function fetchSessions() {
 function renderSessions(list) {
   const tbody = document.getElementById('sessions-body');
   if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty"><h3>No agent sessions detected</h3>Start a Claude or Codex session to see it here.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><h3>No agent sessions detected</h3>Start a Claude or Codex session to see it here.</div></td></tr>';
     return;
   }
   tbody.innerHTML = list.map(s => {
@@ -589,7 +588,6 @@ function renderSessions(list) {
     return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))})">
       <td><span class="mono">${escHtml(s.name)}</span></td>
       <td>${toolBadge(s.tool)}</td>
-      <td>${statusBadge(s.status)}</td>
       <td class="wrap" title="${escHtml(s.cwd || '')}">${escHtml(fmtProject(s.cwd))}</td>
       <td>${branchBadge(s.git)}</td>
       <td class="wrap">${escHtml(s.description || s.ai_title) || '<span style="color:var(--text2)">—</span>'}</td>
@@ -617,7 +615,7 @@ async function selectSession(name) {
   document.getElementById('detail-name').textContent = s.name;
 
   const badges = document.getElementById('detail-badges');
-  badges.innerHTML = toolBadge(s.tool) + ' ' + statusBadge(s.status);
+  badges.innerHTML = toolBadge(s.tool);
 
   // Show skeleton
   document.getElementById('detail-body').innerHTML = '<div style="color:var(--text2);font-size:12px;padding:8px 0"><span class="spinner"></span> Loading…</div>';
@@ -716,8 +714,6 @@ function renderDetail(s) {
       <textarea id="meta-description" placeholder="What is this session doing? Any notes…">${escHtml(s.description || '')}</textarea>
       <label>Tags (comma-separated)</label>
       <input type="text" id="meta-tags" value="${escHtml((s.tags || []).join(', '))}" placeholder="backend, bugfix">
-      <label>Status</label>
-      <input type="text" id="meta-status" value="${escHtml(s.status || '')}" placeholder="running / waiting / done">
       <button class="btn" onclick="saveMeta(${escHtml(JSON.stringify(sessionName))})">Save</button>
     </div>
     ${s.tags && s.tags.length ? '<div style="margin-top:6px">' + s.tags.map(t => `<span class="tag">${escHtml(t)}</span>`).join('') + '</div>' : ''}
@@ -729,13 +725,12 @@ function renderDetail(s) {
 async function saveMeta(name) {
   const description = document.getElementById('meta-description').value;
   const tagsRaw = document.getElementById('meta-tags').value;
-  const status = document.getElementById('meta-status').value;
   const tags = tagsRaw.split(',').map(t => t.trim()).filter(Boolean);
 
   await fetch('/api/sessions/' + encodeURIComponent(name), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description, tags, status }),
+    body: JSON.stringify({ description, tags }),
   });
   await fetchSessions();
   if (selectedSession && selectedSession.name === name) {

@@ -576,32 +576,19 @@ def build_sessions(registry: dict) -> list[dict]:
         }
         auto_sessions.append(session)
 
-    # Add stopped registry sessions (no live process found)
+    # Clean up registry entries with no live process
+    from dashboard import registry as _registry
     for key, entry in reg_sessions.items():
         if key in matched_registry_keys:
             continue
-        cwd = os.path.expanduser(entry.get("cwd", ""))
-        status = entry.get("status", "stopped")
-        if status == "running":
-            status = "stopped"
-        session = {
-            "name": key,
-            "tool": entry.get("tool", "unknown"),
-            "pid": None,
-            "ppid": None,
-            "cmdline": "",
-            "cwd": cwd or None,
-            "runtime_seconds": 0,
-            "cpu_percent": 0.0,
-            "memory_mb": 0.0,
-            "status": status,
-            "tmux": None,
-            "git": get_git_info(cwd) if cwd else None,
-            "ai_title": None,
-            "description": entry.get("description", ""),
-            "tags": entry.get("tags", []),
-            "registry_key": key,
-        }
-        auto_sessions.append(session)
+        # Kill tmux session if still alive
+        tmux_name = entry.get("tmux_session") or key
+        try:
+            r = subprocess.run(["tmux", "has-session", "-t", tmux_name], capture_output=True, timeout=3)
+            if r.returncode == 0:
+                subprocess.run(["tmux", "kill-session", "-t", tmux_name], capture_output=True, timeout=5)
+        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+            pass
+        _registry.delete_session(key)
 
     return auto_sessions
