@@ -152,6 +152,31 @@ async def stop_session(name: str):
     return {"ok": True, **result}
 
 
+@app.post("/api/sessions/{name}/send")
+async def send_to_session(name: str, body: dict):
+    text = body.get("text", "").strip()
+    if not text:
+        raise HTTPException(status_code=400, detail="text is required")
+    async with _cache_lock:
+        cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
+    if cached is not None:
+        tmux_info = cached.get("tmux") or {}
+        tmux_name = tmux_info.get("session")
+    else:
+        tmux_name = None
+    if not tmux_name:
+        entry = registry.get_session(name)
+        if entry is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        tmux_name = entry.get("tmux_session") or name
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, scanner.send_to_session, tmux_name, text
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to send"))
+    return {"ok": True}
+
+
 @app.get("/api/sessions/{name:path}")
 async def get_session(name: str):
     async with _cache_lock:

@@ -702,6 +702,16 @@ function renderDetail(s) {
   }
 
   const sessionName = s.name;
+  if (s.tmux) {
+    const sname = escHtml(JSON.stringify(s.name));
+    html += `<div class="detail-section">
+      <div class="detail-section-title">Send Prompt</div>
+      <div class="edit-form">
+        <textarea id="send-text" placeholder="Type a prompt to send…" style="min-height:80px" onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){sendToSession(${sname});event.preventDefault();}"></textarea>
+        <button class="btn" id="send-btn" onclick="sendToSession(${sname})">▶ Send</button>
+      </div>
+    </div>`;
+  }
   if (s.pid) {
     html += `<div class="detail-section">
       <button class="btn btn-danger" style="width:100%" onclick="stopSession(${escHtml(JSON.stringify(s.name))})">■ Stop Session</button>
@@ -835,13 +845,43 @@ async function submitNewSession() {
 }
 
 // ---------------------------------------------------------------------------
-// Stop session
+// Stop session (sends "exit" — Claude exits gracefully, tmux cleans up naturally)
 // ---------------------------------------------------------------------------
 async function stopSession(name) {
-  if (!confirm(`Stop session "${name}"?`)) return;
-  await fetch('/api/sessions/' + encodeURIComponent(name) + '/stop', { method: 'POST' });
+  await fetch('/api/sessions/' + encodeURIComponent(name) + '/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'exit' }),
+  });
   closeDetail();
   await fetchSessions();
+}
+
+// ---------------------------------------------------------------------------
+// Send prompt to session
+// ---------------------------------------------------------------------------
+async function sendToSession(name) {
+  const textEl = document.getElementById('send-text');
+  const btnEl = document.getElementById('send-btn');
+  const text = textEl.value.trim();
+  if (!text) return;
+  btnEl.textContent = 'Sending…';
+  btnEl.disabled = true;
+  try {
+    const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Failed to send');
+    textEl.value = '';
+  } catch (e) {
+    alert('Error: ' + e.message);
+  } finally {
+    btnEl.textContent = '▶ Send';
+    btnEl.disabled = false;
+  }
 }
 
 // Start

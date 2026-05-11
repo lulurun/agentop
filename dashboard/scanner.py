@@ -11,6 +11,10 @@ import psutil
 
 AGENT_PATTERNS = ["claude", "codex", "openclaw"]
 
+TOOL_LAUNCH_CMD = {
+    "claude": "claude --dangerously-skip-permissions --remote-control",
+}
+
 IGNORE_CMDLINE_PATTERNS = [
     "grep",
     "pgrep",
@@ -348,6 +352,27 @@ def start_tmux_session(name: str, cwd: str) -> bool:
         return False
 
 
+def _auto_accept_trust(tmux_session: str) -> None:
+    """Poll the tmux pane until Claude's trust prompt appears, then press Enter to accept."""
+    for _ in range(40):  # up to 10 s
+        time.sleep(0.25)
+        try:
+            r = subprocess.run(
+                ["tmux", "capture-pane", "-t", tmux_session, "-p"],
+                capture_output=True, text=True, timeout=3,
+            )
+            content = r.stdout.lower()
+            if "trust" in content or "safety check" in content:
+                time.sleep(0.1)
+                subprocess.run(
+                    ["tmux", "send-keys", "-t", tmux_session, "Enter"],
+                    capture_output=True, timeout=3,
+                )
+                return
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
+            continue
+
+
 def start_session_with_tool(tool: str, cwd: str) -> dict:
     """Start a tmux session, launch the tool inside it, wait for its PID, then rename to {tool}-{pid}.
 
@@ -374,8 +399,9 @@ def start_session_with_tool(tool: str, cwd: str) -> dict:
         return {"ok": False, "error": "tmux timed out"}
 
     # Send the tool command
+    launch_cmd = TOOL_LAUNCH_CMD.get(tool, tool)
     subprocess.run(
-        ["tmux", "send-keys", "-t", temp_name, tool, "Enter"],
+        ["tmux", "send-keys", "-t", temp_name, launch_cmd, "Enter"],
         capture_output=True, timeout=5,
     )
 
@@ -421,10 +447,28 @@ def start_session_with_tool(tool: str, cwd: str) -> dict:
             )
         except subprocess.TimeoutExpired:
             final_name = temp_name  # keep temp name if rename fails
+        _auto_accept_trust(final_name)
         return {"ok": True, "name": final_name, "pid": tool_pid, "tmux_session": final_name}
 
     # Couldn't detect PID — leave tmux session alive with temp name
+    _auto_accept_trust(temp_name)
     return {"ok": True, "name": temp_name, "pid": None, "tmux_session": temp_name}
+
+
+def send_to_session(tmux_session: str, text: str) -> dict:
+    """Send text followed by Enter to the given tmux session."""
+    try:
+        r = subprocess.run(
+            ["tmux", "send-keys", "-t", tmux_session, text, "Enter"],
+            capture_output=True, timeout=5,
+        )
+        if r.returncode != 0:
+            return {"ok": False, "error": r.stderr.decode().strip() or "tmux send-keys failed"}
+        return {"ok": True}
+    except FileNotFoundError:
+        return {"ok": False, "error": "tmux is not installed"}
+    except (subprocess.TimeoutExpired, subprocess.SubprocessError) as e:
+        return {"ok": False, "error": str(e)}
 
 
 def stop_session(cwd: str, tmux_name: str) -> dict:
@@ -524,20 +568,23 @@ def build_sessions(registry: dict) -> list[dict]:
         tmux = map_process_to_tmux(proc["pid"], tmux_panes)
         git = get_git_info(proc["cwd"]) if proc["cwd"] else None
 
-        # Find matching registry entry
+        # Find matching registry entry (each registry entry is claimed by at most one process)
         matched_key = None
         for key, entry in reg_sessions.items():
-            # Match by tmux session name
+            if key in matched_registry_keys:
+                continue
+            # Match by tmux session name — always prefer this when available
             if tmux and (tmux["session"] == key or entry.get("tmux_session") == tmux["session"]):
                 matched_key = key
                 break
-            # Match by cwd
-            reg_cwd = entry.get("cwd", "")
-            if reg_cwd:
-                expanded = os.path.expanduser(reg_cwd)
-                if proc["cwd"] and os.path.normpath(expanded) == os.path.normpath(proc["cwd"]):
-                    matched_key = key
-                    break
+            # CWD fallback only when neither the process nor the entry has tmux info
+            if not tmux and not entry.get("tmux_session"):
+                reg_cwd = entry.get("cwd", "")
+                if reg_cwd:
+                    expanded = os.path.expanduser(reg_cwd)
+                    if proc["cwd"] and os.path.normpath(expanded) == os.path.normpath(proc["cwd"]):
+                        matched_key = key
+                        break
 
         reg_entry = reg_sessions.get(matched_key, {}) if matched_key else {}
         if matched_key:
