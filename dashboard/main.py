@@ -134,10 +134,17 @@ async def start_session(name: str, body: dict):
 @app.post("/api/sessions/{name}/stop")
 async def stop_session(name: str):
     entry = registry.get_session(name)
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    cwd = os.path.expanduser(entry.get("cwd", ""))
-    tmux_name = entry.get("tmux_session") or name
+    if entry is not None:
+        cwd = os.path.expanduser(entry.get("cwd", ""))
+        tmux_name = entry.get("tmux_session") or name
+    else:
+        # Auto-detected session — look up in live cache
+        async with _cache_lock:
+            cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
+        if cached is None:
+            raise HTTPException(status_code=404, detail="Session not found")
+        cwd = cached.get("cwd", "")
+        tmux_name = (cached.get("tmux") or {}).get("session") or name
     result = await asyncio.get_event_loop().run_in_executor(
         None, scanner.stop_session, cwd, tmux_name
     )
