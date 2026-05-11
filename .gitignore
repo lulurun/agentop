@@ -1,0 +1,4 @@
+*.log
+dashboard.pid
+__pycache__/
+*.pyc

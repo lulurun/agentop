@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""agentop — CLI helper for the Agentop dashboard.
+
+Usage:
+  agentop start <name> --tool <tool> --cwd <path> [--description <text>]
+  agentop list
+  agentop set-description <name> <text>
+  agentop stop <name>
+"""
+
+import argparse
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+REGISTRY_PATH = Path("~/.agent-dashboard/sessions.json").expanduser()
+
+
+# ---------------------------------------------------------------------------
+# Registry helpers
+# ---------------------------------------------------------------------------
+
+def _load():
+    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not REGISTRY_PATH.exists():
+        return {"sessions": {}}
+    try:
+        with open(REGISTRY_PATH) as f:
+            d = json.load(f)
+        d.setdefault("sessions", {})
+        return d
+    except (json.JSONDecodeError, OSError):
+        return {"sessions": {}}
+
+
+def _save(data):
+    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(REGISTRY_PATH, "w") as f:
+        json.dump(data, f, indent=2)
+    print(f"Registry saved: {REGISTRY_PATH}")
+
+
+# ---------------------------------------------------------------------------
+# Process helpers
+# ---------------------------------------------------------------------------
+
+def _is_process_running(pid: int) -> bool:
+    try:
+        import psutil
+        return psutil.pid_exists(pid) and psutil.Process(pid).status() != "zombie"
+    except ImportError:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
+def _find_agent_processes():
+    """Quick process scan without psutil."""
+    results = []
+    try:
+        import psutil
+        for proc in psutil.process_iter(["pid", "name", "cmdline", "cwd", "create_time"]):
+            try:
+                info = proc.info
+                name = info["name"] or ""
+                cmd = " ".join(info["cmdline"] or [])
+                for pattern in ("claude", "codex", "openclaw"):
+                    if name.lower() == pattern or cmd.lower().startswith(pattern):
+                        try:
+                            cwd = proc.cwd()
+                        except Exception:
+                            cwd = None
+                        results.append({
+                            "pid": info["pid"],
+                            "tool": pattern,
+                            "cmdline": cmd,
+                            "cwd": cwd,
+                        })
+                        break
+            except Exception:
+                continue
+    except ImportError:
+        pass
+    return results
+
+
+def _tmux_has_session(name: str) -> bool:
+    try:
+        r = subprocess.run(
+            ["tmux", "has-session", "-t", name],
+            capture_output=True, timeout=3,
+        )
+        return r.returncode == 0
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False
+
+
+def _in_tmux() -> bool:
+    return bool(os.environ.get("TMUX"))
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
+def cmd_start(args):
+    name = args.name
+    tool = args.tool
+    cwd = os.path.expanduser(args.cwd) if args.cwd else os.getcwd()
+    description = args.description or ""
+
+    data = _load()
+    entry = data["sessions"].get(name, {})
+    entry.update({"tool": tool, "cwd": cwd, "description": description, "status": "running"})
+    if args.tmux_session:
+        entry["tmux_session"] = args.tmux_session
+    data["sessions"][name] = entry
+    _save(data)
+
+    # Start or attach tmux session
+    tmux_name = args.tmux_session or name
+    try:
+        if _tmux_has_session(tmux_name):
+            print(f"Tmux session '{tmux_name}' already exists.")
+            if _in_tmux():
+                subprocess.run(["tmux", "switch-client", "-t", tmux_name])
+            else:
+                subprocess.run(["tmux", "attach-session", "-t", tmux_name])
+        else:
+            print(f"Starting tmux session: {tmux_name}")
+            if _in_tmux():
+                subprocess.run(["tmux", "new-session", "-d", "-s", tmux_name, "-c", cwd])
+                subprocess.run(["tmux", "switch-client", "-t", tmux_name])
+            else:
+                subprocess.run(["tmux", "new-session", "-s", tmux_name, "-c", cwd])
+    except FileNotFoundError:
+        print("Warning: tmux not found. Registry entry created but no tmux session started.")
+        print(f"  cd {cwd} && {tool}")
+
+
+def cmd_list(args):
+    data = _load()
+    procs = _find_agent_processes()
+    proc_cwds = {p["cwd"] for p in procs if p["cwd"]}
+
+    sessions = data.get("sessions", {})
+    if not sessions and not procs:
+        print("No sessions found.")
+        return
+
+    # Print registered sessions
+    if sessions:
+        print(f"{'NAME':<30} {'TOOL':<10} {'STATUS':<10} {'TASK'}")
+        print("-" * 80)
+        for name, entry in sessions.items():
+            cwd = os.path.expanduser(entry.get("cwd", ""))
+            is_running = cwd in proc_cwds if cwd else False
+            status = "running" if is_running else entry.get("status", "stopped")
+            description = entry.get("description", "")
+            tool = entry.get("tool", "?")
+            print(f"{name:<30} {tool:<10} {status:<10} {description}")
+
+    # Print unregistered live processes
+    unregistered = []
+    reg_cwds = {
+        os.path.expanduser(e.get("cwd", ""))
+        for e in sessions.values()
+    }
+    for p in procs:
+        if p["cwd"] and p["cwd"] not in reg_cwds:
+            unregistered.append(p)
+
+    if unregistered:
+        if sessions:
+            print()
+        print("Unregistered live processes:")
+        for p in unregistered:
+            print(f"  pid={p['pid']} tool={p['tool']} cwd={p['cwd']}")
+            print(f"    cmd: {p['cmdline'][:80]}")
+
+
+def cmd_set_description(args):
+    data = _load()
+    if args.name not in data["sessions"]:
+        data["sessions"][args.name] = {}
+    data["sessions"][args.name]["description"] = args.description
+    _save(data)
+    print(f"Description for '{args.name}' updated.")
+
+
+def cmd_stop(args):
+    import signal
+    import time
+
+    data = _load()
+    entry = data.get("sessions", {}).get(args.name)
+    if entry is None:
+        print(f"Session '{args.name}' not found in registry.")
+        sys.exit(1)
+
+    tmux_name = entry.get("tmux_session") or args.name
+    session_cwd = os.path.expanduser(entry.get("cwd", ""))
+    stopped_anything = False
+
+    # --- Kill agent processes running inside the session cwd ---
+    try:
+        import psutil
+
+        targets = []
+        for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+            try:
+                pcwd = proc.cwd()
+            except (psutil.AccessDenied, psutil.NoSuchProcess):
+                continue
+            if pcwd != session_cwd:
+                continue
+            cmd = " ".join(proc.info["cmdline"] or [])
+            pname = (proc.info["name"] or "").lower()
+            if not any(p in pname or p in cmd.lower() for p in ("claude", "codex", "openclaw")):
+                continue
+            targets.append(proc)
+
+        for proc in targets:
+            print(f"Sending SIGINT x2 to pid {proc.pid} ({proc.info['name']})…")
+            try:
+                proc.send_signal(signal.SIGINT)
+                time.sleep(0.5)
+                proc.send_signal(signal.SIGINT)
+                stopped_anything = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                print(f"  Could not signal pid {proc.pid}: {e}")
+
+        # Wait for graceful exit, then escalate
+        if stopped_anything:
+            time.sleep(3)
+            for proc in targets:
+                try:
+                    if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                        print(f"Sending SIGTERM to pid {proc.pid}…")
+                        proc.send_signal(signal.SIGTERM)
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    continue
+            time.sleep(2)
+            for proc in targets:
+                try:
+                    if proc.is_running() and proc.status() != psutil.STATUS_ZOMBIE:
+                        print(f"Force-killing pid {proc.pid}…")
+                        proc.kill()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+    except ImportError:
+        print("psutil not available — skipping process termination.")
+
+    # --- Kill tmux session ---
+    if _tmux_has_session(tmux_name):
+        print(f"Killing tmux session '{tmux_name}'…")
+        try:
+            subprocess.run(["tmux", "kill-session", "-t", tmux_name], timeout=5)
+            stopped_anything = True
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+            print(f"  Could not kill tmux session: {e}")
+    else:
+        print(f"No tmux session '{tmux_name}' found.")
+
+    if not stopped_anything:
+        print("Nothing was running.")
+
+    # --- Update registry ---
+    data["sessions"][args.name]["status"] = "stopped"
+    _save(data)
+    print(f"Session '{args.name}' stopped.")
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="agentop — local AI agent session manager",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    sub = parser.add_subparsers(dest="command")
+
+    # start
+    p_start = sub.add_parser("start", help="Create registry entry and start tmux session")
+    p_start.add_argument("name")
+    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "openclaw"])
+    p_start.add_argument("--cwd", default=None, help="Working directory (default: current directory)")
+    p_start.add_argument("--description", default="", help="Session description")
+    p_start.add_argument("--tmux-session", dest="tmux_session", default=None)
+
+    # list
+    sub.add_parser("list", help="List sessions")
+
+    # set-description
+    p_desc = sub.add_parser("set-description", help="Update description for a session")
+    p_desc.add_argument("name")
+    p_desc.add_argument("description")
+
+    # stop
+    p_stop = sub.add_parser("stop", help="Stop the agent process and tmux session")
+    p_stop.add_argument("name")
+
+    args = parser.parse_args()
+    if not args.command:
+        parser.print_help()
+        sys.exit(0)
+
+    dispatch = {
+        "start": cmd_start,
+        "list": cmd_list,
+        "set-description": cmd_set_description,
+        "stop": cmd_stop,
+    }
+    dispatch[args.command](args)
+
+
+if __name__ == "__main__":
+    main()
