@@ -392,8 +392,8 @@
               <tr>
                 <th>Name</th>
                 <th>Tool</th>
-                <th>Project</th>
-                <th>Branch</th>
+                <th>cwd</th>
+                <th>Remote</th>
                 <th>Description</th>
                 <th>PID</th>
                 <th>Runtime</th>
@@ -548,6 +548,15 @@ function branchBadge(git) {
   return `<span class="branch-badge">${escHtml(git.branch)}${dirty}</span>`;
 }
 
+function remoteBadge(s) {
+  if (!s.bridge_session_id) return '<span style="color:var(--text2)">—</span>';
+  const label = escHtml(s.remote_name || s.bridge_session_id);
+  const url = escHtml(s.bridge_url || '');
+  const statusCls = s.claude_status === 'busy' ? 'badge-running' : 'badge-waiting';
+  const dot = `<span class="badge ${statusCls}" style="font-size:10px;padding:1px 5px"><span class="dot"></span>${escHtml(s.claude_status || '')}</span>`;
+  return `<span class="mono" style="font-size:11px">${url ? `<a href="${url}" target="_blank" style="color:inherit;text-decoration:none" onclick="event.stopPropagation()">${label}</a>` : label}</span> ${dot}`;
+}
+
 function escHtml(s) {
   if (s == null) return '';
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -589,7 +598,7 @@ function renderSessions(list) {
       <td><span class="mono">${escHtml(s.name)}</span></td>
       <td>${toolBadge(s.tool)}</td>
       <td class="wrap" title="${escHtml(s.cwd || '')}">${escHtml(fmtProject(s.cwd))}</td>
-      <td>${branchBadge(s.git)}</td>
+      <td>${remoteBadge(s)}</td>
       <td class="wrap">${escHtml(s.description || s.ai_title) || '<span style="color:var(--text2)">—</span>'}</td>
       <td class="mono">${s.pid || '—'}</td>
       <td class="mono">${fmtRuntime(s.runtime_seconds)}</td>

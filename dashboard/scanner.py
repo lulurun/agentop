@@ -310,6 +310,31 @@ def get_process_tree(pid: int) -> list[dict]:
     return chain
 
 
+def get_claude_remote_meta(pid: int) -> dict:
+    """Read remote-control bridge info from ~/.claude/sessions/{pid}.json."""
+    import socket
+    session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
+    if not session_file.exists():
+        return {}
+    try:
+        with open(session_file) as f:
+            meta = json.load(f)
+        bridge_id = meta.get("bridgeSessionId")
+        if not bridge_id:
+            return {}
+        hostname = socket.gethostname()
+        raw = bridge_id.replace("session_", "")
+        remote_name = f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
+        return {
+            "bridge_session_id": bridge_id,
+            "bridge_url": f"https://claude.ai/code/{bridge_id}",
+            "remote_name": remote_name,
+            "claude_status": meta.get("status"),
+        }
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
 def get_claude_ai_title(pid: int, cwd: str) -> Optional[str]:
     """Read the AI-generated conversation title for a Claude Code session."""
     sessions_dir = Path("~/.claude/sessions").expanduser()
@@ -603,6 +628,7 @@ def build_sessions(registry: dict) -> list[dict]:
             name = f"{proc['tool']}-{proc['pid']}"
 
         ai_title = get_claude_ai_title(proc["pid"], proc["cwd"] or "") if proc.get("cwd") else None
+        remote_meta = get_claude_remote_meta(proc["pid"]) if proc.get("tool") == "claude" else {}
         description = reg_entry.get("description", "")
         # Auto-populate description from AI title when user hasn't set one
         if ai_title and not description and matched_key:
@@ -619,6 +645,7 @@ def build_sessions(registry: dict) -> list[dict]:
             "description": description,
             "cwd": reg_entry.get("cwd") or proc.get("cwd") or "",
             "registry_key": matched_key,
+            **remote_meta,
         }
         auto_sessions.append(session)
 
