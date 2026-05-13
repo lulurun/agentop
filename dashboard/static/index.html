@@ -393,7 +393,7 @@
                 <th>Name</th>
                 <th>Tool</th>
                 <th>cwd</th>
-                <th>Remote</th>
+                <th>Status</th>
                 <th>Description</th>
                 <th>PID</th>
                 <th>Runtime</th>
@@ -550,11 +550,8 @@ function branchBadge(git) {
 
 function remoteBadge(s) {
   if (!s.bridge_session_id) return '<span style="color:var(--text2)">—</span>';
-  const label = escHtml(s.remote_name || s.bridge_session_id);
-  const url = escHtml(s.bridge_url || '');
   const statusCls = s.claude_status === 'busy' ? 'badge-running' : 'badge-waiting';
-  const dot = `<span class="badge ${statusCls}" style="font-size:10px;padding:1px 5px"><span class="dot"></span>${escHtml(s.claude_status || '')}</span>`;
-  return `<span class="mono" style="font-size:11px">${url ? `<a href="${url}" target="_blank" style="color:inherit;text-decoration:none" onclick="event.stopPropagation()">${label}</a>` : label}</span> ${dot}`;
+  return `<span class="badge ${statusCls}" style="font-size:10px;padding:1px 5px"><span class="dot"></span>${escHtml(s.claude_status || '')}</span>`;
 }
 
 function escHtml(s) {
