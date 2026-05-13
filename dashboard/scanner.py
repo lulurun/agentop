@@ -630,8 +630,8 @@ def build_sessions(registry: dict) -> list[dict]:
         ai_title = get_claude_ai_title(proc["pid"], proc["cwd"] or "") if proc.get("cwd") else None
         remote_meta = get_claude_remote_meta(proc["pid"]) if proc.get("tool") == "claude" else {}
         description = reg_entry.get("description", "")
-        # Auto-populate description from AI title when user hasn't set one
-        if ai_title and not description and matched_key:
+        # Always keep description in sync with the latest AI-generated title
+        if ai_title and ai_title != description and matched_key:
             from dashboard import registry as _registry
             _registry.upsert_session(matched_key, {"description": ai_title})
             description = ai_title
