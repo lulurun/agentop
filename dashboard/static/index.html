@@ -173,6 +173,8 @@
     border-radius: 3px;
   }
   .dirty { color: var(--amber); }
+  .copy-icon { cursor: pointer; opacity: 0.4; font-size: 13px; user-select: none; }
+  .copy-icon:hover { opacity: 1; }
 
   /* Tag */
   .tag {
@@ -561,7 +563,29 @@ function escHtml(s) {
 
 function tmuxInfo(tmux) {
   if (!tmux) return '—';
-  return `<span class="mono">${escHtml(tmux.session)}:${escHtml(tmux.window)}.${escHtml(tmux.pane)}</span>`;
+  const cmd = `tmux a -t ${tmux.session}`;
+  const sname = escHtml(JSON.stringify(cmd));
+  return `<span class="mono">${escHtml(tmux.session)}:${escHtml(tmux.window)}.${escHtml(tmux.pane)}</span> <span class="copy-icon" title="Copy attach command" onclick="event.stopPropagation();copyTmux(${sname})">⎘</span>`;
+}
+
+function copyTmux(cmd) {
+  navigator.clipboard.writeText(cmd).then(() => {
+    showToast(cmd + ' copied to clipboard');
+  });
+}
+
+function showToast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'toast';
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface2,#333);color:var(--text,#fff);padding:8px 18px;border-radius:6px;font-size:13px;z-index:9999;pointer-events:none;transition:opacity .3s';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.style.opacity = '1';
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2500);
 }
 
 // ---------------------------------------------------------------------------
