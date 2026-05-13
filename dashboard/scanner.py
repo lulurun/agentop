@@ -399,7 +399,7 @@ def _auto_accept_trust(tmux_session: str) -> None:
 
 
 def start_session_with_tool(tool: str, cwd: str) -> dict:
-    """Start a tmux session, launch the tool inside it, wait for its PID, then rename to {tool}-{pid}.
+    """Start a tmux session, launch the tool inside it, wait for its PID, then rename to agentop_{tool}_{pid}.
 
     Returns {"ok": True, "name": ..., "pid": ..., "tmux_session": ...} or {"ok": False, "error": ...}.
     """
@@ -408,7 +408,7 @@ def start_session_with_tool(tool: str, cwd: str) -> dict:
     import time
 
     rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
-    temp_name = f"{tool}-tmp-{rand_id}"
+    temp_name = f"agentop_{tool}_tmp_{rand_id}"
 
     # Create detached tmux session
     try:
@@ -464,7 +464,7 @@ def start_session_with_tool(tool: str, cwd: str) -> dict:
                 break
 
     if tool_pid:
-        final_name = f"{tool}-{tool_pid}"
+        final_name = f"agentop_{tool}_{tool_pid}"
         try:
             subprocess.run(
                 ["tmux", "rename-session", "-t", temp_name, final_name],
