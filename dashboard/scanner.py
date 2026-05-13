@@ -554,44 +554,27 @@ def get_recent_project_files(cwd: str, limit: int = 10) -> list[str]:
         return []
 
 
-def build_sessions(registry: dict) -> list[dict]:
-    """Combine process scan + tmux + git + registry into unified session list."""
+def build_sessions(descriptions: dict | None = None) -> list[dict]:
+    """Derive session list from live processes and .claude/.codex files. Fully stateless.
+
+    descriptions: optional {name: description} for user-saved notes on managed sessions.
+    """
+    if descriptions is None:
+        descriptions = {}
     procs = scan_processes()
     tmux_panes = scan_tmux()
-    reg_sessions = registry.get("sessions", {})
 
-    auto_sessions = []
-    matched_registry_keys: set[str] = set()
-
+    sessions = []
     for proc in procs:
         tmux = map_process_to_tmux(proc["pid"], tmux_panes)
         git = get_git_info(proc["cwd"]) if proc["cwd"] else None
 
-        # Find matching registry entry (each registry entry is claimed by at most one process)
-        matched_key = None
-        for key, entry in reg_sessions.items():
-            if key in matched_registry_keys:
-                continue
-            # Match by tmux session name — always prefer this when available
-            if tmux and (tmux["session"] == key or entry.get("tmux_session") == tmux["session"]):
-                matched_key = key
-                break
-            # CWD fallback only when neither the process nor the entry has tmux info
-            if not tmux and not entry.get("tmux_session"):
-                reg_cwd = entry.get("cwd", "")
-                if reg_cwd:
-                    expanded = os.path.expanduser(reg_cwd)
-                    if proc["cwd"] and os.path.normpath(expanded) == os.path.normpath(proc["cwd"]):
-                        matched_key = key
-                        break
+        # A session is managed by agentop when its tmux session name starts with "agentop_"
+        managed = bool(tmux and tmux["session"].startswith("agentop_"))
 
-        reg_entry = reg_sessions.get(matched_key, {}) if matched_key else {}
-        if matched_key:
-            matched_registry_keys.add(matched_key)
-
-        # Determine display name
-        if matched_key:
-            name = matched_key
+        # Name: managed → tmux session name; otherwise tmux name (if agent-like) or {tool}-{pid}
+        if managed:
+            name = tmux["session"]
         elif tmux:
             tmux_name = tmux["session"]
             if any(p in tmux_name.lower() for p in AGENT_PATTERNS):
@@ -603,39 +586,19 @@ def build_sessions(registry: dict) -> list[dict]:
 
         ai_title = get_claude_ai_title(proc["pid"], proc["cwd"] or "") if proc.get("cwd") else None
         remote_meta = get_claude_remote_meta(proc["pid"]) if proc.get("tool") == "claude" else {}
-        description = reg_entry.get("description", "")
-        # Always keep description in sync with the latest AI-generated title
-        if ai_title and ai_title != description and matched_key:
-            from dashboard import registry as _registry
-            _registry.upsert_session(matched_key, {"description": ai_title})
-            description = ai_title
 
-        session = {
+        description = descriptions.get(name) or ai_title or ""
+
+        sessions.append({
             **proc,
             "name": name,
             "tmux": tmux,
             "git": git,
             "ai_title": ai_title,
             "description": description,
-            "cwd": reg_entry.get("cwd") or proc.get("cwd") or "",
-            "registry_key": matched_key,
+            "cwd": proc.get("cwd") or "",
+            "managed": managed,
             **remote_meta,
-        }
-        auto_sessions.append(session)
+        })
 
-    # Clean up registry entries with no live process
-    from dashboard import registry as _registry
-    for key, entry in reg_sessions.items():
-        if key in matched_registry_keys:
-            continue
-        # Kill tmux session if still alive
-        tmux_name = entry.get("tmux_session") or key
-        try:
-            r = subprocess.run(["tmux", "has-session", "-t", tmux_name], capture_output=True, timeout=3)
-            if r.returncode == 0:
-                subprocess.run(["tmux", "kill-session", "-t", tmux_name], capture_output=True, timeout=5)
-        except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
-            pass
-        _registry.delete_session(key)
-
-    return auto_sessions
+    return sessions

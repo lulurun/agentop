@@ -33,8 +33,9 @@ async def _refresh_loop():
     while True:
         try:
             reg = await asyncio.get_event_loop().run_in_executor(None, registry.load)
+            descriptions = {k: v.get("description", "") for k, v in reg.get("sessions", {}).items() if v.get("description")}
             sessions = await asyncio.get_event_loop().run_in_executor(
-                None, scanner.build_sessions, reg
+                None, scanner.build_sessions, descriptions
             )
             files = await asyncio.get_event_loop().run_in_executor(
                 None, scanner.scan_agent_dirs
@@ -108,47 +109,23 @@ async def create_and_start_session(body: dict):
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
     name = result["name"]
-    registry.upsert_session(name, {
-        "tool": tool,
-        "cwd": cwd,
-        "description": description,
-        "tmux_session": result["tmux_session"],
-    })
+    if description:
+        registry.upsert_session(name, {"description": description})
     return {"ok": True, "name": name, "pid": result.get("pid")}
-
-
-@app.post("/api/sessions/{name}/start")
-async def start_session(name: str, body: dict):
-    allowed = {"tool", "cwd", "description", "tmux_session"}
-    filtered = {k: v for k, v in body.items() if k in allowed}
-    registry.upsert_session(name, filtered)
-    cwd = os.path.expanduser(filtered.get("cwd", ""))
-    tmux_name = filtered.get("tmux_session") or name
-    if cwd:
-        await asyncio.get_event_loop().run_in_executor(
-            None, scanner.start_tmux_session, tmux_name, cwd
-        )
-    return {"ok": True}
 
 
 @app.post("/api/sessions/{name}/stop")
 async def stop_session(name: str):
-    entry = registry.get_session(name)
-    if entry is not None:
-        cwd = os.path.expanduser(entry.get("cwd", ""))
-        tmux_name = entry.get("tmux_session") or name
-    else:
-        # Auto-detected session — look up in live cache
-        async with _cache_lock:
-            cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
-        if cached is None:
-            raise HTTPException(status_code=404, detail="Session not found")
-        cwd = cached.get("cwd", "")
-        tmux_name = (cached.get("tmux") or {}).get("session") or name
+    async with _cache_lock:
+        cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not cached.get("managed"):
+        raise HTTPException(status_code=403, detail="Cannot stop an unmanaged session")
+    tmux_name = (cached.get("tmux") or {}).get("session") or name
     result = await asyncio.get_event_loop().run_in_executor(
-        None, scanner.stop_session, cwd, tmux_name
+        None, scanner.stop_session, cached.get("cwd", ""), tmux_name
     )
-    registry.delete_session(name)
     return {"ok": True, **result}
 
 
@@ -159,16 +136,13 @@ async def send_to_session(name: str, body: dict):
         raise HTTPException(status_code=400, detail="text is required")
     async with _cache_lock:
         cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
-    if cached is not None:
-        tmux_info = cached.get("tmux") or {}
-        tmux_name = tmux_info.get("session")
-    else:
-        tmux_name = None
+    if cached is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not cached.get("managed"):
+        raise HTTPException(status_code=403, detail="Cannot send to an unmanaged session")
+    tmux_name = (cached.get("tmux") or {}).get("session")
     if not tmux_name:
-        entry = registry.get_session(name)
-        if entry is None:
-            raise HTTPException(status_code=404, detail="Session not found")
-        tmux_name = entry.get("tmux_session") or name
+        raise HTTPException(status_code=404, detail="No tmux session found")
     result = await asyncio.get_event_loop().run_in_executor(
         None, scanner.send_to_session, tmux_name, text
     )
@@ -200,17 +174,9 @@ async def get_session(name: str):
 
 @app.post("/api/sessions/{name:path}")
 async def update_session(name: str, body: dict):
-    allowed = {"tool", "cwd", "description", "tmux_session"}
-    filtered = {k: v for k, v in body.items() if k in allowed}
-    registry.upsert_session(name, filtered)
-    return {"ok": True}
-
-
-@app.delete("/api/sessions/{name:path}")
-async def delete_session(name: str):
-    deleted = registry.delete_session(name)
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Session not found in registry")
+    description = body.get("description")
+    if description is not None:
+        registry.upsert_session(name, {"description": description})
     return {"ok": True}
 
 

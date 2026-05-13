@@ -708,7 +708,7 @@ function renderDetail(s) {
   }
 
   const sessionName = s.name;
-  if (s.tmux) {
+  if (s.managed) {
     const sname = escHtml(JSON.stringify(s.name));
     html += `<div class="detail-section">
       <div class="detail-section-title">Send Prompt</div>
@@ -717,20 +717,17 @@ function renderDetail(s) {
         <button class="btn" id="send-btn" onclick="sendToSession(${sname})">▶ Send</button>
       </div>
     </div>`;
-  }
-  if (s.pid) {
+    html += `<div class="detail-section">
+      <div class="detail-section-title">Description</div>
+      <div class="edit-form" id="meta-form">
+        <textarea id="meta-description" placeholder="What is this session doing? Any notes…">${escHtml(s.description || '')}</textarea>
+        <button class="btn" onclick="saveMeta(${escHtml(JSON.stringify(sessionName))})">Save</button>
+      </div>
+    </div>`;
     html += `<div class="detail-section">
       <button class="btn btn-danger" style="width:100%" onclick="stopSession(${escHtml(JSON.stringify(s.name))})">■ Stop Session</button>
     </div>`;
   }
-  html += `<div class="detail-section">
-    <div class="detail-section-title">Metadata</div>
-    <div class="edit-form" id="meta-form">
-      <label>Description</label>
-      <textarea id="meta-description" placeholder="What is this session doing? Any notes…">${escHtml(s.description || '')}</textarea>
-      <button class="btn" onclick="saveMeta(${escHtml(JSON.stringify(sessionName))})">Save</button>
-    </div>
-  </div>`;
 
   document.getElementById('detail-body').innerHTML = html;
 }
