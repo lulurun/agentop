@@ -1,28 +1,46 @@
 """Agent definitions: base class + per-tool implementations.
 
-Each agent encapsulates the behaviour specific to one CLI tool:
-  - process detection (matches)
-  - launch command
-  - session metadata (ai title, remote info, …)
-  - post-start hook (e.g. accepting trust prompts)
+BaseAgent defines the shared interface and provides the generic tmux session
+start logic.  Each subclass overrides only what is tool-specific:
 
-Add a new tool by subclassing BaseAgent and appending an instance to AGENTS.
+  - matches()         — process detection
+  - launch_cmd        — shell command to run inside tmux
+  - get_ai_title()    — read the AI-generated conversation title from disk
+  - get_extra_meta()  — any additional tool-specific fields (e.g. remote-control info)
+  - post_start_hook() — first-run setup after the process appears (e.g. trust prompt)
+
+get_session_meta() is implemented once in BaseAgent and calls get_ai_title() +
+get_extra_meta() so subclasses never have to remember to populate "ai_title".
+
+start_session() is also implemented once in BaseAgent: it handles the generic
+tmux lifecycle (create temp session → send launch_cmd → wait for PID → rename
+→ call post_start_hook).
+
+To add a new tool: subclass BaseAgent, override what differs, append an instance
+to AGENTS.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import random
 import socket
+import string
 import subprocess
 import time
 from pathlib import Path
 from typing import Optional
 
+import psutil
+
 
 class BaseAgent:
-    """Interface every agent tool must implement."""
+    """Interface and shared implementation for every supported agent tool."""
 
-    name: str = ""  # e.g. "claude", "codex", "gemini"
+    name: str = ""  # "claude", "codex", "gemini", …
+
+    # ------------------------------------------------------------------ detection
 
     def matches(self, proc_name: str, cmdline: str) -> bool:
         """Return True if this process belongs to this agent type."""
@@ -38,26 +56,124 @@ class BaseAgent:
                 return True
         return False
 
+    # ------------------------------------------------------------------ session lifecycle
+
     @property
     def launch_cmd(self) -> str:
         """Shell command to launch the agent inside a tmux pane."""
         return self.name
 
-    def get_session_meta(self, pid: int, cwd: str) -> dict:
-        """Return agent-specific fields to merge into the session dict.
-
-        Common keys: ai_title, bridge_session_id, bridge_url, …
-        Return {} if this agent has no extra metadata.
-        """
-        return {}
-
     def post_start_hook(self, tmux_session: str) -> None:
-        """Called after the agent process starts in tmux.
+        """Called once after the agent process appears in tmux.
 
         Override to handle first-run prompts, auth flows, etc.
         """
         pass
 
+    def start_session(self, cwd: str) -> dict:
+        """Create a tmux session, launch the agent, wait for its PID, then
+        rename the session to agentop_{name}_{pid}.
+
+        Returns {"ok": True, "name": …, "pid": …, "tmux_session": …}
+             or {"ok": False, "error": …}.
+        """
+        rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
+        temp_name = f"agentop_{self.name}_tmp_{rand_id}"
+
+        try:
+            r = subprocess.run(
+                ["tmux", "new-session", "-d", "-s", temp_name, "-c", cwd],
+                capture_output=True, timeout=5,
+            )
+            if r.returncode != 0:
+                return {"ok": False, "error": r.stderr.decode().strip() or "tmux failed"}
+        except FileNotFoundError:
+            return {"ok": False, "error": "tmux is not installed"}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "error": "tmux timed out"}
+
+        subprocess.run(
+            ["tmux", "send-keys", "-t", temp_name, self.launch_cmd, "Enter"],
+            capture_output=True, timeout=5,
+        )
+
+        # Resolve the shell PID of the new pane
+        pane_pid: Optional[int] = None
+        try:
+            r = subprocess.run(
+                ["tmux", "list-panes", "-t", temp_name, "-F", "#{pane_pid}"],
+                capture_output=True, text=True, timeout=3,
+            )
+            pid_str = r.stdout.strip()
+            if pid_str.isdigit():
+                pane_pid = int(pid_str)
+        except subprocess.TimeoutExpired:
+            pass
+
+        # Poll up to 5 s for the agent process to appear as a child of the pane
+        tool_pid: Optional[int] = None
+        if pane_pid:
+            for _ in range(20):
+                time.sleep(0.25)
+                try:
+                    for child in psutil.Process(pane_pid).children(recursive=True):
+                        try:
+                            if self.matches(child.name(), " ".join(child.cmdline() or [])):
+                                tool_pid = child.pid
+                                break
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    break
+                if tool_pid:
+                    break
+
+        if tool_pid:
+            final_name = f"agentop_{self.name}_{tool_pid}"
+            try:
+                subprocess.run(
+                    ["tmux", "rename-session", "-t", temp_name, final_name],
+                    capture_output=True, timeout=3,
+                )
+            except subprocess.TimeoutExpired:
+                final_name = temp_name
+            self.post_start_hook(final_name)
+            return {"ok": True, "name": final_name, "pid": tool_pid, "tmux_session": final_name}
+
+        self.post_start_hook(temp_name)
+        return {"ok": True, "name": temp_name, "pid": None, "tmux_session": temp_name}
+
+    # ------------------------------------------------------------------ metadata
+
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Return the AI-generated conversation title for this session, or None.
+
+        Each agent reads from its own storage format.
+        """
+        return None
+
+    def get_extra_meta(self, pid: int, cwd: str) -> dict:
+        """Return additional tool-specific fields to include in the session dict.
+
+        Override for things like remote-control bridge info.
+        """
+        return {}
+
+    def get_session_meta(self, pid: int, cwd: str) -> dict:
+        """Merge get_ai_title() and get_extra_meta() into one dict.
+
+        Subclasses should override get_ai_title / get_extra_meta, not this method.
+        """
+        meta = self.get_extra_meta(pid, cwd)
+        title = self.get_ai_title(pid, cwd)
+        if title:
+            meta["ai_title"] = title
+        return meta
+
+
+# ---------------------------------------------------------------------------
+# Claude
+# ---------------------------------------------------------------------------
 
 class ClaudeAgent(BaseAgent):
     name = "claude"
@@ -66,17 +182,9 @@ class ClaudeAgent(BaseAgent):
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions --remote-control"
 
-    def get_session_meta(self, pid: int, cwd: str) -> dict:
-        meta: dict = {}
-        title = self._ai_title(pid, cwd)
-        if title:
-            meta["ai_title"] = title
-        meta.update(self._remote_meta(pid))
-        return meta
-
     def post_start_hook(self, tmux_session: str) -> None:
         """Accept Claude's trust / safety-check prompt automatically."""
-        for _ in range(40):  # poll up to 10 s
+        for _ in range(40):
             time.sleep(0.25)
             try:
                 r = subprocess.run(
@@ -94,9 +202,8 @@ class ClaudeAgent(BaseAgent):
             except (subprocess.TimeoutExpired, subprocess.SubprocessError):
                 continue
 
-    # ------------------------------------------------------------------ helpers
-
-    def _ai_title(self, pid: int, cwd: str) -> Optional[str]:
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Read the AI-generated title from ~/.claude/projects/{slug}/{session_id}.jsonl."""
         session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
         if not session_file.exists():
             return None
@@ -123,7 +230,8 @@ class ClaudeAgent(BaseAgent):
         except (OSError, json.JSONDecodeError):
             return None
 
-    def _remote_meta(self, pid: int) -> dict:
+    def get_extra_meta(self, pid: int, cwd: str) -> dict:
+        """Read remote-control bridge info from ~/.claude/sessions/{pid}.json."""
         session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
         if not session_file.exists():
             return {}
@@ -148,6 +256,10 @@ class ClaudeAgent(BaseAgent):
             return {}
 
 
+# ---------------------------------------------------------------------------
+# Codex
+# ---------------------------------------------------------------------------
+
 class CodexAgent(BaseAgent):
     name = "codex"
 
@@ -155,6 +267,62 @@ class CodexAgent(BaseAgent):
     def launch_cmd(self) -> str:
         return "codex"
 
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Read the thread name from ~/.codex/session_index.jsonl.
+
+        Codex writes a session_meta entry (with id + cwd) as the first line of
+        each rollout-*.jsonl file under ~/.codex/sessions/.  We find the most
+        recent file whose cwd matches, then look up the thread_name in the index.
+        """
+        sessions_base = Path("~/.codex/sessions").expanduser()
+        if not sessions_base.exists():
+            return None
+        try:
+            session_files = sorted(
+                sessions_base.rglob("rollout-*.jsonl"),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            return None
+
+        session_id: Optional[str] = None
+        for session_file in session_files[:30]:
+            try:
+                with open(session_file) as f:
+                    first_line = f.readline()
+                obj = json.loads(first_line)
+                if obj.get("type") == "session_meta":
+                    payload = obj.get("payload", {})
+                    if os.path.normpath(payload.get("cwd", "")) == os.path.normpath(cwd):
+                        session_id = payload.get("id")
+                        break
+            except (OSError, json.JSONDecodeError):
+                continue
+
+        if not session_id:
+            return None
+
+        index_file = Path("~/.codex/session_index.jsonl").expanduser()
+        if not index_file.exists():
+            return None
+        try:
+            with open(index_file) as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                        if entry.get("id") == session_id:
+                            return entry.get("thread_name")
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            return None
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Gemini CLI
+# ---------------------------------------------------------------------------
 
 class GeminiAgent(BaseAgent):
     name = "gemini"
@@ -175,13 +343,21 @@ class GeminiAgent(BaseAgent):
     def launch_cmd(self) -> str:
         return "gemini"
 
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Gemini CLI does not currently persist conversation titles to disk."""
+        return None
+
+
+# ---------------------------------------------------------------------------
+# OpenClaw
+# ---------------------------------------------------------------------------
 
 class OpenClawAgent(BaseAgent):
     name = "openclaw"
 
 
 # ---------------------------------------------------------------------------
-# Registry — order matters: more specific agents first
+# Registry — order matters: more specific entries first
 # ---------------------------------------------------------------------------
 
 AGENTS: list[BaseAgent] = [
