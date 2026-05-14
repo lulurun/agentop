@@ -1,6 +1,5 @@
 """Process, tmux, git, and file scanning for agent sessions."""
 
-import json
 import os
 import subprocess
 import time
@@ -9,11 +8,7 @@ from typing import Optional
 
 import psutil
 
-AGENT_PATTERNS = ["claude", "codex", "openclaw"]
-
-TOOL_LAUNCH_CMD = {
-    "claude": "claude --dangerously-skip-permissions --remote-control",
-}
+from dashboard.agents import AGENTS, get_agent
 
 IGNORE_CMDLINE_PATTERNS = [
     "grep",
@@ -35,17 +30,9 @@ AGENT_DIRS = [
 
 
 def _detect_tool(name: str, cmdline: str) -> Optional[str]:
-    name_lower = name.lower()
-    cmd_lower = cmdline.lower()
-    for pattern in AGENT_PATTERNS:
-        if name_lower == pattern or name_lower.startswith(pattern + "-"):
-            return pattern
-        # Match when the pattern is the first token or a path component ending in the pattern
-        tokens = cmd_lower.split()
-        if tokens:
-            first = tokens[0].split("/")[-1]
-            if first == pattern or first.startswith(pattern):
-                return pattern
+    for agent in AGENTS:
+        if agent.matches(name, cmdline):
+            return agent.name
     return None
 
 
@@ -310,61 +297,6 @@ def get_process_tree(pid: int) -> list[dict]:
     return chain
 
 
-def get_claude_remote_meta(pid: int) -> dict:
-    """Read remote-control bridge info from ~/.claude/sessions/{pid}.json."""
-    import socket
-    session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
-    if not session_file.exists():
-        return {}
-    try:
-        with open(session_file) as f:
-            meta = json.load(f)
-        bridge_id = meta.get("bridgeSessionId")
-        if not bridge_id:
-            return {}
-        hostname = socket.gethostname()
-        raw = bridge_id.replace("session_", "")
-        remote_name = f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
-        return {
-            "bridge_session_id": bridge_id,
-            "bridge_url": f"https://claude.ai/code/{bridge_id}",
-            "remote_name": remote_name,
-            "claude_status": meta.get("status"),
-        }
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def get_claude_ai_title(pid: int, cwd: str) -> Optional[str]:
-    """Read the AI-generated conversation title for a Claude Code session."""
-    sessions_dir = Path("~/.claude/sessions").expanduser()
-    session_file = sessions_dir / f"{pid}.json"
-    if not session_file.exists():
-        return None
-    try:
-        with open(session_file) as f:
-            meta = json.load(f)
-        session_id = meta.get("sessionId")
-        if not session_id:
-            return None
-        slug = cwd.replace("/", "-")
-        jsonl_path = Path(f"~/.claude/projects/{slug}/{session_id}.jsonl").expanduser()
-        if not jsonl_path.exists():
-            return None
-        last_title = None
-        with open(jsonl_path) as f:
-            for line in f:
-                try:
-                    obj = json.loads(line)
-                    if obj.get("type") == "ai-title":
-                        last_title = obj.get("aiTitle")
-                except json.JSONDecodeError:
-                    continue
-        return last_title
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
 def start_tmux_session(name: str, cwd: str) -> bool:
     """Create a detached tmux session. Returns True if created, False if already exists or unavailable."""
     try:
@@ -375,27 +307,6 @@ def start_tmux_session(name: str, cwd: str) -> bool:
         return True
     except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
         return False
-
-
-def _auto_accept_trust(tmux_session: str) -> None:
-    """Poll the tmux pane until Claude's trust prompt appears, then press Enter to accept."""
-    for _ in range(40):  # up to 10 s
-        time.sleep(0.25)
-        try:
-            r = subprocess.run(
-                ["tmux", "capture-pane", "-t", tmux_session, "-p"],
-                capture_output=True, text=True, timeout=3,
-            )
-            content = r.stdout.lower()
-            if "trust" in content or "safety check" in content:
-                time.sleep(0.1)
-                subprocess.run(
-                    ["tmux", "send-keys", "-t", tmux_session, "Enter"],
-                    capture_output=True, timeout=3,
-                )
-                return
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-            continue
 
 
 def start_session_with_tool(tool: str, cwd: str) -> dict:
@@ -424,7 +335,8 @@ def start_session_with_tool(tool: str, cwd: str) -> dict:
         return {"ok": False, "error": "tmux timed out"}
 
     # Send the tool command
-    launch_cmd = TOOL_LAUNCH_CMD.get(tool, tool)
+    agent = get_agent(tool)
+    launch_cmd = agent.launch_cmd if agent else tool
     subprocess.run(
         ["tmux", "send-keys", "-t", temp_name, launch_cmd, "Enter"],
         capture_output=True, timeout=5,
@@ -472,11 +384,13 @@ def start_session_with_tool(tool: str, cwd: str) -> dict:
             )
         except subprocess.TimeoutExpired:
             final_name = temp_name  # keep temp name if rename fails
-        _auto_accept_trust(final_name)
+        if agent:
+            agent.post_start_hook(final_name)
         return {"ok": True, "name": final_name, "pid": tool_pid, "tmux_session": final_name}
 
     # Couldn't detect PID — leave tmux session alive with temp name
-    _auto_accept_trust(temp_name)
+    if agent:
+        agent.post_start_hook(temp_name)
     return {"ok": True, "name": temp_name, "pid": None, "tmux_session": temp_name}
 
 
@@ -577,28 +491,31 @@ def build_sessions(descriptions: dict | None = None) -> list[dict]:
             name = tmux["session"]
         elif tmux:
             tmux_name = tmux["session"]
-            if any(p in tmux_name.lower() for p in AGENT_PATTERNS):
+            if any(a.name in tmux_name.lower() for a in AGENTS):
                 name = tmux_name
             else:
                 name = f"{proc['tool']}-{proc['pid']}"
         else:
             name = f"{proc['tool']}-{proc['pid']}"
 
-        ai_title = get_claude_ai_title(proc["pid"], proc["cwd"] or "") if proc.get("cwd") else None
-        remote_meta = get_claude_remote_meta(proc["pid"]) if proc.get("tool") == "claude" else {}
+        agent = get_agent(proc["tool"])
+        session_meta = (
+            agent.get_session_meta(proc["pid"], proc["cwd"] or "")
+            if agent and proc.get("cwd")
+            else {}
+        )
 
-        description = descriptions.get(name) or ai_title or ""
+        description = descriptions.get(name) or session_meta.get("ai_title") or ""
 
         sessions.append({
             **proc,
             "name": name,
             "tmux": tmux,
             "git": git,
-            "ai_title": ai_title,
             "description": description,
             "cwd": proc.get("cwd") or "",
             "managed": managed,
-            **remote_meta,
+            **session_meta,
         })
 
     return sessions
