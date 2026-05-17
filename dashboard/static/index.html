@@ -321,6 +321,20 @@ thead th {
   background: var(--bg2);
   text-align: left;
 }
+thead th[data-sort] {
+  cursor: pointer;
+  user-select: none;
+}
+thead th[data-sort]:hover { color: var(--text); }
+thead th.sort-active     { color: var(--text); }
+.sort-arrow {
+  display: inline-block;
+  margin-left: 3px;
+  font-size: 9px;
+  color: var(--text3);
+  vertical-align: middle;
+}
+thead th.sort-active .sort-arrow { color: var(--accent); }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -898,16 +912,16 @@ td.muted { color: var(--text2); }
             <table id="sessions-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Tool</th>
-                  <th>Status</th>
-                  <th>Description</th>
-                  <th>cwd</th>
-                  <th class="col-tokens">Tokens</th>
-                  <th class="col-pid">PID</th>
-                  <th class="col-runtime">Runtime</th>
-                  <th class="col-mem">Mem</th>
-                  <th class="col-tmux">Tmux</th>
+                  <th data-sort="name"        onclick="setSort('name')">Name <span class="sort-arrow"></span></th>
+                  <th data-sort="tool"        onclick="setSort('tool')">Tool <span class="sort-arrow"></span></th>
+                  <th data-sort="status"      onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
+                  <th data-sort="description" onclick="setSort('description')">Description <span class="sort-arrow"></span></th>
+                  <th data-sort="cwd"         onclick="setSort('cwd')">cwd <span class="sort-arrow"></span></th>
+                  <th data-sort="tokens"      onclick="setSort('tokens')" class="col-tokens">Tokens <span class="sort-arrow"></span></th>
+                  <th data-sort="pid"         onclick="setSort('pid')" class="col-pid">PID <span class="sort-arrow"></span></th>
+                  <th data-sort="runtime"     onclick="setSort('runtime')" class="col-runtime">Runtime <span class="sort-arrow"></span></th>
+                  <th data-sort="memory"      onclick="setSort('memory')" class="col-mem">Mem <span class="sort-arrow"></span></th>
+                  <th data-sort="tmux"        onclick="setSort('tmux')" class="col-tmux">Tmux <span class="sort-arrow"></span></th>
                 </tr>
               </thead>
               <tbody id="sessions-body">
@@ -1032,6 +1046,8 @@ let refreshTimer = null;
 let lastUpdatedAt = null;
 let countdownSec = 5;
 const REFRESH_INTERVAL = 5000;
+let sortKey = 'runtime';
+let sortDir = 'desc';
 
 // ============================================================
 // Theme
@@ -1202,12 +1218,68 @@ function updateLiveIndicator(ok, err) {
   info.textContent = lastUpdatedAt ? 'Updated ' + fmtTime(lastUpdatedAt) : 'Live';
 }
 
+// ============================================================
+// Sorting
+// ============================================================
+function getSortVal(s, key) {
+  switch (key) {
+    case 'name':        return (s.name || '').toLowerCase();
+    case 'tool':        return (s.tool || '').toLowerCase();
+    case 'status':      return (s.claude_status || s.status || '').toLowerCase();
+    case 'description': return (s.description || s.ai_title || '').toLowerCase();
+    case 'cwd':         return (s.cwd || '').toLowerCase();
+    case 'tokens': {
+      const u = s.token_usage;
+      return u ? (u.input_tokens||0)+(u.output_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0) : 0;
+    }
+    case 'pid':         return s.pid || 0;
+    case 'runtime':     return s.runtime_seconds || 0;
+    case 'memory':      return s.memory_mb || 0;
+    case 'tmux':        return s.tmux ? s.tmux.session.toLowerCase() : '';
+    default:            return '';
+  }
+}
+
+function sortSessions(list) {
+  return [...list].sort((a, b) => {
+    const av = getSortVal(a, sortKey), bv = getSortVal(b, sortKey);
+    const cmp = typeof av === 'number' ? av - bv : av.localeCompare(bv);
+    return sortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
+function setSort(key) {
+  if (sortKey === key) {
+    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    sortKey = key;
+    sortDir = 'asc';
+  }
+  renderSessions(sessions);
+}
+
+function updateSortHeaders() {
+  document.querySelectorAll('#sessions-table thead th[data-sort]').forEach(th => {
+    const key = th.dataset.sort;
+    const arrow = th.querySelector('.sort-arrow');
+    if (key === sortKey) {
+      th.classList.add('sort-active');
+      arrow.textContent = sortDir === 'asc' ? '▲' : '▼';
+    } else {
+      th.classList.remove('sort-active');
+      arrow.textContent = '';
+    }
+  });
+}
+
 function renderSessions(list) {
+  updateSortHeaders();
+  const sorted = sortSessions(list);
   const count = document.getElementById('sessions-count');
-  count.textContent = list.length || '0';
+  count.textContent = sorted.length || '0';
 
   const tbody = document.getElementById('sessions-body');
-  if (!list.length) {
+  if (!sorted.length) {
     tbody.innerHTML = `<tr><td colspan="10">
       <div class="empty-state">
         <div class="empty-icon">🤖</div>
@@ -1218,7 +1290,7 @@ function renderSessions(list) {
     return;
   }
 
-  tbody.innerHTML = list.map(s => {
+  tbody.innerHTML = sorted.map(s => {
     const selected = selectedSession && selectedSession.name === s.name ? ' selected' : '';
     const managedPill = s.managed ? ' <span class="managed-pill">managed</span>' : '';
     const desc = s.description || s.ai_title;
