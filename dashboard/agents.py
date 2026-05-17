@@ -26,6 +26,7 @@ import json
 import os
 import random
 import socket
+import sqlite3
 import string
 import subprocess
 import time
@@ -311,101 +312,56 @@ class ClaudeAgent(BaseAgent):
 class CodexAgent(BaseAgent):
     name = "codex"
 
+    # Tolerance for matching process start time to thread created_at_ms (30 seconds)
+    _START_TOLERANCE_MS = 30_000
+
     @property
     def launch_cmd(self) -> str:
         return "codex"
 
-    def _find_rollout_file(self, cwd: str) -> Optional[Path]:
-        """Return the most-recent rollout-*.jsonl whose session_meta cwd matches."""
-        sessions_base = Path("~/.codex/sessions").expanduser()
-        if not sessions_base.exists():
-            return None
-        try:
-            session_files = sorted(
-                sessions_base.rglob("rollout-*.jsonl"),
-                key=lambda f: f.stat().st_mtime,
-                reverse=True,
-            )
-        except OSError:
-            return None
+    def _find_thread(self, pid: int, cwd: str) -> Optional[dict]:
+        """Query state_5.sqlite for the thread matching this process by cwd + start time.
 
-        for session_file in session_files[:30]:
-            try:
-                with open(session_file) as f:
-                    first_line = f.readline()
-                obj = json.loads(first_line)
-                if obj.get("type") == "session_meta":
-                    payload = obj.get("payload", {})
-                    if os.path.normpath(payload.get("cwd", "")) == os.path.normpath(cwd):
-                        return session_file
-            except (OSError, json.JSONDecodeError):
-                continue
-        return None
-
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Read the thread name for this session.
-
-        Tries session_index.jsonl first (written when a session ends).
-        Falls back to the first user message in history.jsonl for live sessions
-        that haven't been indexed yet.
+        Returns a dict with title, first_user_message, tokens_used, rollout_path,
+        or None if no close match is found.
         """
-        rollout_file = self._find_rollout_file(cwd)
-        if not rollout_file:
-            return None
-
-        try:
-            with open(rollout_file) as f:
-                first_line = f.readline()
-            session_id = json.loads(first_line).get("payload", {}).get("id")
-        except (OSError, json.JSONDecodeError):
-            return None
-
-        if not session_id:
-            return None
-
-        # Primary: session_index.jsonl (available after session ends)
-        index_file = Path("~/.codex/session_index.jsonl").expanduser()
-        if index_file.exists():
-            try:
-                with open(index_file) as f:
-                    for line in f:
-                        try:
-                            entry = json.loads(line)
-                            if entry.get("id") == session_id:
-                                return entry.get("thread_name")
-                        except json.JSONDecodeError:
-                            continue
-            except OSError:
-                pass
-
-        # Fallback: first user message from history.jsonl (available during live session)
-        history_file = Path("~/.codex/history.jsonl").expanduser()
-        if not history_file.exists():
+        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        if not db_path.exists():
             return None
         try:
-            with open(history_file) as f:
-                for line in f:
-                    try:
-                        entry = json.loads(line)
-                        if entry.get("session_id") == session_id:
-                            text = entry.get("text", "").strip()
-                            if text:
-                                return text[:80] + ("…" if len(text) > 80 else "")
-                    except json.JSONDecodeError:
-                        continue
-        except OSError:
-            pass
-        return None
-
-    def get_extra_meta(self, pid: int, cwd: str) -> dict:
-        """Read token usage from the most-recent Codex rollout file for this cwd."""
-        rollout_file = self._find_rollout_file(cwd)
-        if not rollout_file:
-            return {}
-
-        last_usage: Optional[dict] = None
+            start_ms = int(psutil.Process(pid).create_time() * 1000)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return None
         try:
-            with open(rollout_file) as f:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2) as conn:
+                conn.row_factory = sqlite3.Row
+                cur = conn.execute(
+                    """
+                    SELECT title, first_user_message, tokens_used, rollout_path, created_at_ms
+                    FROM threads
+                    WHERE cwd = ? AND (archived IS NULL OR archived = 0)
+                    ORDER BY ABS(created_at_ms - ?) ASC
+                    LIMIT 1
+                    """,
+                    (os.path.normpath(cwd), start_ms),
+                )
+                row = cur.fetchone()
+        except sqlite3.Error:
+            return None
+        if row is None:
+            return None
+        if abs(row["created_at_ms"] - start_ms) > self._START_TOLERANCE_MS:
+            return None
+        return dict(row)
+
+    def _read_rollout_token_usage(self, rollout_path: str) -> Optional[dict]:
+        """Scan a rollout JSONL for the last token_count event and return token usage."""
+        try:
+            path = Path(rollout_path)
+            if not path.exists():
+                return None
+            last_usage: Optional[dict] = None
+            with open(path) as f:
                 for line in f:
                     line = line.strip()
                     if not line:
@@ -419,18 +375,38 @@ class CodexAgent(BaseAgent):
                                 last_usage = total
                     except json.JSONDecodeError:
                         continue
+            if not last_usage:
+                return None
+            return {
+                "input_tokens": last_usage.get("input_tokens", 0),
+                "output_tokens": last_usage.get("output_tokens", 0),
+                "cache_read_input_tokens": last_usage.get("cached_input_tokens", 0),
+                "cache_creation_input_tokens": 0,
+            }
         except OSError:
-            return {}
+            return None
 
-        if not last_usage:
-            return {}
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Read the thread title from state_5.sqlite, matched by PID start time."""
+        thread = self._find_thread(pid, cwd)
+        if not thread:
+            return None
+        title = thread.get("title")
+        if title:
+            return title
+        first_msg = (thread.get("first_user_message") or "").strip()
+        if first_msg:
+            return first_msg[:80] + ("…" if len(first_msg) > 80 else "")
+        return None
 
-        token_usage = {
-            "input_tokens": last_usage.get("input_tokens", 0),
-            "output_tokens": last_usage.get("output_tokens", 0),
-            "cache_read_input_tokens": last_usage.get("cached_input_tokens", 0),
-            "cache_creation_input_tokens": 0,
-        }
+    def get_extra_meta(self, pid: int, cwd: str) -> dict:
+        """Read token usage from the rollout file identified via state_5.sqlite."""
+        thread = self._find_thread(pid, cwd)
+        if not thread or not thread.get("rollout_path"):
+            return {}
+        token_usage = self._read_rollout_token_usage(thread["rollout_path"])
+        if not token_usage:
+            return {}
         return {"token_usage": token_usage}
 
 

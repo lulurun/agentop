@@ -110,11 +110,9 @@ Each agent reads from its own storage format to surface the AI-generated convers
 - `cwd_slug` = cwd with `/` replaced by `-`.
 
 **Codex:**
-- Scan `~/.codex/sessions/**/rollout-*.jsonl` sorted by mtime (newest first, up to 30).
-- First line of each file is a `session_meta` object with `payload.cwd` and `payload.id`.
-- Find the file whose `cwd` matches the session's cwd → extract `session_id`.
-- Primary: scan `~/.codex/session_index.jsonl` for a line with matching `id` → return `thread_name`. This file is only written when a session ends, so it is empty for live sessions.
-- Fallback: scan `~/.codex/history.jsonl` (written in real time) for the first entry with matching `session_id` → use its `text` field (truncated to 80 chars) as a provisional title.
+- Query `~/.codex/state_5.sqlite` `threads` table. Match by `cwd` and correlate `created_at_ms` to `psutil.Process(pid).create_time() * 1000` within a 30-second tolerance window. This correctly identifies the specific session for a given PID even when multiple Codex processes share the same cwd.
+- Return `title` if set; otherwise fall back to `first_user_message[:80]`.
+- The `rollout_path` column in the matched thread row points to the session's rollout JSONL for token breakdown.
 
 **Gemini:**
 - Does not persist conversation titles to disk. Returns `None`.
@@ -141,7 +139,7 @@ This is stored at the top level of the session dict as `session["token_usage"]`.
 - Sum `input_tokens`, `output_tokens`, `cache_creation_input_tokens`, `cache_read_input_tokens`.
 
 **Codex:**
-- Locate rollout file via `_find_rollout_file(cwd)` (see §2.4).
+- Locate the rollout file via `state_5.sqlite` `threads.rollout_path` (matched by PID start time, same query as `get_ai_title`).
 - Scan for `event_msg` lines where `payload.type == "token_count"`.
 - Use the **last** occurrence's `payload.info.total_token_usage` (Codex keeps a running total).
 - Map: `cached_input_tokens` → `cache_read_input_tokens`; `cache_creation_input_tokens` = 0.
