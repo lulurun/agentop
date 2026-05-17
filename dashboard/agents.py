@@ -343,7 +343,12 @@ class CodexAgent(BaseAgent):
         return None
 
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Read the thread name from ~/.codex/session_index.jsonl."""
+        """Read the thread name for this session.
+
+        Tries session_index.jsonl first (written when a session ends).
+        Falls back to the first user message in history.jsonl for live sessions
+        that haven't been indexed yet.
+        """
         rollout_file = self._find_rollout_file(cwd)
         if not rollout_file:
             return None
@@ -358,20 +363,38 @@ class CodexAgent(BaseAgent):
         if not session_id:
             return None
 
+        # Primary: session_index.jsonl (available after session ends)
         index_file = Path("~/.codex/session_index.jsonl").expanduser()
-        if not index_file.exists():
+        if index_file.exists():
+            try:
+                with open(index_file) as f:
+                    for line in f:
+                        try:
+                            entry = json.loads(line)
+                            if entry.get("id") == session_id:
+                                return entry.get("thread_name")
+                        except json.JSONDecodeError:
+                            continue
+            except OSError:
+                pass
+
+        # Fallback: first user message from history.jsonl (available during live session)
+        history_file = Path("~/.codex/history.jsonl").expanduser()
+        if not history_file.exists():
             return None
         try:
-            with open(index_file) as f:
+            with open(history_file) as f:
                 for line in f:
                     try:
                         entry = json.loads(line)
-                        if entry.get("id") == session_id:
-                            return entry.get("thread_name")
+                        if entry.get("session_id") == session_id:
+                            text = entry.get("text", "").strip()
+                            if text:
+                                return text[:80] + ("…" if len(text) > 80 else "")
                     except json.JSONDecodeError:
                         continue
         except OSError:
-            return None
+            pass
         return None
 
     def get_extra_meta(self, pid: int, cwd: str) -> dict:
