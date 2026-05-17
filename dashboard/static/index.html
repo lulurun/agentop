@@ -1,518 +1,1107 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agentop</title>
 <style>
-  :root {
-    --bg: #0f1117;
-    --bg2: #1a1d27;
-    --bg3: #22253a;
-    --border: #2a2d3d;
-    --text: #e2e8f0;
-    --text2: #94a3b8;
-    --accent: #6366f1;
-    --accent-hover: #4f52c9;
-    --green: #10b981;
-    --red: #ef4444;
-    --amber: #f59e0b;
-    --blue: #3b82f6;
-    --purple: #a855f7;
-    --mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-  }
-  /* Header */
-  header {
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    height: 56px;
-  }
-  header h1 {
-    font-size: 16px;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--text);
-  }
-  header h1 span { color: var(--accent); }
-  .header-right {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .refresh-info {
-    font-size: 12px;
-    color: var(--text2);
-  }
-  button.btn {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  button.btn:hover { background: var(--accent-hover); }
-  button.btn-ghost {
-    background: transparent;
-    color: var(--text2);
-    border: 1px solid var(--border);
-  }
-  button.btn-ghost:hover { color: var(--text); border-color: var(--text2); background: var(--bg3); }
+/* ============================================================
+   Design tokens — dark (default) + light override
+   ============================================================ */
+:root {
+  --bg:          #0d1117;
+  --bg2:         #161b22;
+  --bg3:         #21262d;
+  --bg4:         #2d333b;
+  --border:      #30363d;
+  --border2:     #3d444d;
+  --text:        #e6edf3;
+  --text2:       #7d8590;
+  --text3:       #586069;
+  --accent:      #6366f1;
+  --accent-dim:  rgba(99,102,241,.12);
+  --accent-hover:#4f52c9;
+  --green:       #3fb950;
+  --green-dim:   rgba(63,185,80,.12);
+  --red:         #f85149;
+  --red-dim:     rgba(248,81,73,.12);
+  --amber:       #d29922;
+  --amber-dim:   rgba(210,153,34,.12);
+  --blue:        #58a6ff;
+  --blue-dim:    rgba(88,166,255,.12);
+  --purple:      #bc8cff;
+  --purple-dim:  rgba(188,140,255,.12);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.4);
+  --shadow-md:   0 4px 12px rgba(0,0,0,.5);
+  --mono:        'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+}
 
-  /* Tabs */
-  .tabs {
-    display: flex;
-    gap: 0;
-    background: var(--bg2);
-    border-bottom: 1px solid var(--border);
-    padding: 0 24px;
-  }
-  .tab {
-    padding: 12px 18px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text2);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: color 0.15s, border-color 0.15s;
-    user-select: none;
-  }
-  .tab:hover { color: var(--text); }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+[data-theme="light"] {
+  --bg:          #f6f8fa;
+  --bg2:         #ffffff;
+  --bg3:         #f0f3f6;
+  --bg4:         #e8edf2;
+  --border:      #d0d7de;
+  --border2:     #c3cbd4;
+  --text:        #1f2328;
+  --text2:       #636c76;
+  --text3:       #9198a1;
+  --accent:      #5b5fcf;
+  --accent-dim:  rgba(91,95,207,.1);
+  --accent-hover:#4a4eb8;
+  --green:       #1a7f37;
+  --green-dim:   rgba(26,127,55,.1);
+  --red:         #cf222e;
+  --red-dim:     rgba(207,34,46,.1);
+  --amber:       #9a6700;
+  --amber-dim:   rgba(154,103,0,.1);
+  --blue:        #0969da;
+  --blue-dim:    rgba(9,105,218,.1);
+  --purple:      #8250df;
+  --purple-dim:  rgba(130,80,223,.1);
+  --shadow-sm:   0 1px 3px rgba(0,0,0,.08);
+  --shadow-md:   0 4px 12px rgba(0,0,0,.12);
+}
 
-  /* Main layout */
-  .main { padding: 20px 24px; }
+/* ============================================================
+   Reset + base
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-  /* Table */
-  .table-wrap { overflow-x: auto; }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 13px;
-  }
-  thead th {
-    text-align: left;
-    padding: 8px 12px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--text2);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-  }
-  tbody tr {
-    border-bottom: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-  tbody tr:hover { background: var(--bg3); }
-  tbody tr.selected { background: rgba(99,102,241,0.1); }
-  td {
-    padding: 10px 12px;
-    color: var(--text);
-    vertical-align: middle;
-    white-space: nowrap;
-  }
-  td.wrap { white-space: normal; max-width: 260px; }
-  .mono { font-family: var(--mono); font-size: 12px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  font-size: 14px;
+  line-height: 1.5;
+  transition: background .2s, color .2s;
+}
 
-  /* Badges */
-  .badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  .badge-running  { background: rgba(16,185,129,.15); color: var(--green); }
-  .badge-stopped  { background: rgba(239,68,68,.15);  color: var(--red); }
-  .badge-waiting  { background: rgba(245,158,11,.15); color: var(--amber); }
-  .badge-done     { background: rgba(148,163,184,.15); color: var(--text2); }
-  .badge-unknown  { background: rgba(99,102,241,.15); color: var(--accent); }
-  .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* ============================================================
+   Header
+   ============================================================ */
+header {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 52px;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  box-shadow: var(--shadow-sm);
+}
 
-  .tool-badge {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-  .tool-claude   { background: rgba(168,85,247,.2); color: var(--purple); }
-  .tool-codex    { background: rgba(59,130,246,.2); color: var(--blue); }
-  .tool-openclaw { background: rgba(16,185,129,.2); color: var(--green); }
-  .tool-unknown  { background: rgba(148,163,184,.15); color: var(--text2); }
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
 
-  .branch-badge {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text2);
-    background: var(--bg3);
-    padding: 1px 6px;
-    border-radius: 3px;
-  }
-  .dirty { color: var(--amber); }
-  .copy-icon { cursor: pointer; opacity: 0.4; font-size: 13px; user-select: none; }
-  .copy-icon:hover { opacity: 1; }
+.logo-icon {
+  width: 28px;
+  height: 28px;
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
 
-  /* Tag */
-  .tag {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 10px;
-    background: var(--bg3);
-    color: var(--text2);
-    border: 1px solid var(--border);
-    margin-right: 3px;
-  }
+.logo-text {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.logo-text span { color: var(--accent); }
 
-  /* Detail panel */
-  .layout {
-    display: flex;
-    gap: 20px;
-    align-items: flex-start;
-  }
-  .session-table-col {
-    flex: 1;
-    min-width: 0;
-  }
+.header-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+}
+
+.header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Status indicator */
+.live-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text2);
+  padding: 4px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.live-dot.stale { background: var(--amber); animation: none; }
+.live-dot.error { background: var(--red); animation: none; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: .4; }
+}
+
+/* ============================================================
+   Buttons
+   ============================================================ */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s, opacity .15s;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
+
+.btn-secondary {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border2);
+  background: var(--bg3);
+}
+
+.btn-danger {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(248,81,73,.25);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--red);
+  color: #fff;
+  border-color: var(--red);
+}
+
+.btn-icon {
+  padding: 6px;
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.btn-icon:hover { color: var(--text); background: var(--bg3); border-color: var(--border2); }
+
+/* ============================================================
+   Tabs
+   ============================================================ */
+.tab-bar {
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  padding: 0 20px;
+  display: flex;
+  gap: 0;
+}
+
+.tab {
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text2);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tab:hover { color: var(--text); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+.tab-count {
+  background: var(--bg4);
+  color: var(--text2);
+  border-radius: 999px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+}
+.tab.active .tab-count {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ============================================================
+   Page content
+   ============================================================ */
+.main {
+  padding: 16px 20px;
+  max-width: 1600px;
+}
+
+/* ============================================================
+   Layout — table + side panel
+   ============================================================ */
+.layout {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.session-table-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ============================================================
+   Table
+   ============================================================ */
+.table-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.table-wrap { overflow-x: auto; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+thead th {
+  padding: 9px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+  background: var(--bg2);
+  text-align: left;
+}
+
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background .1s;
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--bg3); }
+tbody tr.selected { background: var(--accent-dim); }
+tbody tr.selected:hover { background: var(--accent-dim); }
+
+td {
+  padding: 9px 12px;
+  color: var(--text);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+td.wrap { white-space: normal; max-width: 240px; }
+td.muted { color: var(--text2); }
+
+.mono { font-family: var(--mono); font-size: 12px; }
+
+/* ============================================================
+   Badges
+   ============================================================ */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.badge-running  { background: var(--green-dim);  color: var(--green); }
+.badge-stopped  { background: var(--red-dim);    color: var(--red); }
+.badge-waiting  { background: var(--amber-dim);  color: var(--amber); }
+.badge-busy     { background: var(--blue-dim);   color: var(--blue); }
+.badge-done     { background: var(--bg4);        color: var(--text2); }
+.badge-unknown  { background: var(--accent-dim); color: var(--accent); }
+
+.badge-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+.badge-dot.animated { animation: pulse 1.5s ease-in-out infinite; }
+
+/* Tool badges */
+.tool-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.tool-claude   { background: var(--purple-dim); color: var(--purple); }
+.tool-codex    { background: var(--blue-dim);   color: var(--blue); }
+.tool-gemini   { background: var(--blue-dim);   color: var(--blue); }
+.tool-openclaw { background: var(--green-dim);  color: var(--green); }
+.tool-unknown  { background: var(--bg4);        color: var(--text2); }
+
+/* Branch badge */
+.branch-badge {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+.dirty { color: var(--amber); }
+
+/* Copy icon */
+.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--text3);
+  padding: 2px 4px;
+  border-radius: 3px;
+  transition: color .15s, background .15s;
+  font-size: 13px;
+  user-select: none;
+  vertical-align: middle;
+}
+.copy-btn:hover { color: var(--accent); background: var(--accent-dim); }
+
+/* Tag */
+.tag {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+  background: var(--bg3);
+  color: var(--text2);
+  border: 1px solid var(--border);
+  margin-right: 3px;
+}
+
+/* Managed pill */
+.managed-pill {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 1px solid rgba(99,102,241,.2);
+}
+
+/* ============================================================
+   Detail panel
+   ============================================================ */
+.detail-panel {
+  width: 400px;
+  flex-shrink: 0;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: none;
+  box-shadow: var(--shadow-md);
+  /* Sticky inside the layout */
+  position: sticky;
+  top: 68px;
+  max-height: calc(100vh - 84px);
+  overflow-y: auto;
+}
+.detail-panel.open { display: flex; flex-direction: column; }
+
+.detail-header {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 1;
+}
+
+.detail-header-info { flex: 1; min-width: 0; }
+
+.detail-name {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mono);
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.detail-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+
+.detail-close {
+  background: none;
+  border: none;
+  color: var(--text2);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px;
+  border-radius: 3px;
+  transition: color .15s, background .15s;
+  flex-shrink: 0;
+}
+.detail-close:hover { color: var(--text); background: var(--bg3); }
+
+.detail-body {
+  padding: 14px 16px;
+  flex: 1;
+}
+
+/* Sections */
+.detail-section { margin-bottom: 18px; }
+.detail-section:last-child { margin-bottom: 0; }
+
+.section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* KV grid */
+.kv-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 5px 10px;
+  font-size: 12px;
+}
+.kv-key { color: var(--text2); padding-top: 1px; }
+.kv-val { color: var(--text); font-family: var(--mono); word-break: break-all; }
+
+/* File list */
+.file-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.file-list li {
+  font-size: 11px;
+  font-family: var(--mono);
+  color: var(--text2);
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background .1s, color .1s;
+  cursor: default;
+}
+.file-list li:hover { color: var(--text); background: var(--bg3); }
+
+/* Process tree */
+.proc-tree-item {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text2);
+  padding: 2px 0;
+}
+.proc-tree-item.active { color: var(--text); }
+
+/* Notes/text areas */
+.notes-box {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  font-size: 12px;
+  color: var(--text2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Forms */
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 11px; font-weight: 500; color: var(--text2); }
+
+.form-input, .form-textarea, .form-select {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  width: 100%;
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.form-input::placeholder, .form-textarea::placeholder { color: var(--text3); }
+.form-textarea { resize: vertical; min-height: 70px; }
+.form-select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%237d8590' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+
+/* Edit form stack */
+.edit-form { display: flex; flex-direction: column; gap: 10px; }
+
+/* Send prompt box */
+.prompt-area {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  transition: border-color .15s, box-shadow .15s;
+}
+.prompt-area:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+.prompt-textarea {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 9px 10px 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  min-height: 72px;
+}
+.prompt-textarea::placeholder { color: var(--text3); }
+.prompt-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+}
+.prompt-hint { font-size: 11px; color: var(--text3); }
+
+/* Danger zone */
+.danger-zone {
+  border: 1px solid rgba(248,81,73,.2);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  background: var(--red-dim);
+}
+.danger-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--red);
+  margin-bottom: 8px;
+}
+.danger-desc {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 10px;
+}
+
+/* ============================================================
+   Files tab
+   ============================================================ */
+#files-tab td { white-space: nowrap; }
+#files-tab .path-cell {
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.size-cell { text-align: right; font-family: var(--mono); font-size: 12px; }
+
+/* ============================================================
+   Modal
+   ============================================================ */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  backdrop-filter: blur(2px);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal-overlay.open { display: flex; }
+
+.modal {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 440px;
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-header h3 { font-size: 14px; font-weight: 600; }
+
+.modal-body { padding: 16px; }
+
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   Empty states
+   ============================================================ */
+.empty-state {
+  padding: 56px 24px;
+  text-align: center;
+  color: var(--text2);
+}
+.empty-icon {
+  font-size: 32px;
+  margin-bottom: 12px;
+  opacity: .5;
+}
+.empty-state h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 6px;
+}
+.empty-state p { font-size: 13px; }
+
+/* ============================================================
+   Spinner
+   ============================================================ */
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.65s linear infinite;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+#toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg4);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 8px 16px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s;
+  box-shadow: var(--shadow-md);
+  white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+
+/* ============================================================
+   Link
+   ============================================================ */
+.link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 12px;
+}
+.link:hover { text-decoration: underline; }
+
+/* ============================================================
+   Responsive — mobile
+   ============================================================ */
+@media (max-width: 860px) {
   .detail-panel {
-    width: 420px;
-    flex-shrink: 0;
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    display: none;
-  }
-  .detail-panel.open { display: block; }
-  .detail-header {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
-  .detail-header h2 {
-    font-size: 14px;
-    font-weight: 600;
-    font-family: var(--mono);
-    flex: 1;
-    word-break: break-all;
-  }
-  .detail-close {
-    background: none;
-    border: none;
-    color: var(--text2);
-    cursor: pointer;
-    font-size: 18px;
-    line-height: 1;
-    padding: 0 2px;
-  }
-  .detail-close:hover { color: var(--text); }
-  .detail-body { padding: 16px; overflow-y: auto; max-height: calc(100vh - 220px); }
-  .detail-section { margin-bottom: 16px; }
-  .detail-section-title {
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text2);
-    margin-bottom: 8px;
-  }
-  .kv-grid {
-    display: grid;
-    grid-template-columns: 90px 1fr;
-    gap: 4px 8px;
-    font-size: 12px;
-  }
-  .kv-key { color: var(--text2); }
-  .kv-val { color: var(--text); font-family: var(--mono); word-break: break-all; }
-  .file-list { list-style: none; }
-  .file-list li {
-    font-size: 11px;
-    font-family: var(--mono);
-    color: var(--text2);
-    padding: 2px 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .file-list li:hover { color: var(--text); }
-  .notes-box {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 10px;
-    font-size: 12px;
-    color: var(--text2);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .edit-form { display: flex; flex-direction: column; gap: 8px; }
-  .edit-form input, .edit-form textarea {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 10px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
-    width: 100%;
-    outline: none;
-    transition: border-color 0.15s;
-  }
-  .edit-form input:focus, .edit-form textarea:focus { border-color: var(--accent); }
-  .edit-form textarea { resize: vertical; min-height: 60px; }
-  .edit-form label { font-size: 11px; color: var(--text2); }
-
-  /* Files tab */
-  #files-tab table td { white-space: nowrap; }
-  #files-tab table td.path-cell {
-    max-width: 380px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-  .size-cell { text-align: right; }
-
-  /* Modal */
-  .modal-overlay {
-    display: none;
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,0.6);
-    z-index: 100;
-    align-items: center;
-    justify-content: center;
-  }
-  .modal-overlay.open { display: flex; }
-  .modal {
-    background: var(--bg2);
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    width: 440px;
-    overflow: hidden;
-  }
-  .modal-header {
-    padding: 14px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .modal-header h3 { font-size: 14px; font-weight: 600; }
-  .modal-body { padding: 16px; }
-  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 12px; }
-  .edit-form select {
-    background: var(--bg3);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 7px 10px;
-    color: var(--text);
-    font-size: 12px;
-    font-family: inherit;
     width: 100%;
-    outline: none;
-    transition: border-color 0.15s;
-    appearance: none;
+    max-width: 100%;
+    border-radius: 0;
+    z-index: 60;
+    top: 0;
+    max-height: 100vh;
   }
-  .edit-form select:focus { border-color: var(--accent); }
-  .btn-danger { background: var(--red) !important; }
-  .btn-danger:hover { background: #c53030 !important; }
 
-  /* Empty state */
-  .empty {
-    padding: 60px 0;
-    text-align: center;
-    color: var(--text2);
-    font-size: 14px;
-  }
-  .empty h3 { font-size: 16px; margin-bottom: 6px; color: var(--text); }
+  .layout { flex-direction: column; }
 
-  /* Spinner */
-  @keyframes spin { to { transform: rotate(360deg); } }
-  .spinner {
-    display: inline-block;
-    width: 14px; height: 14px;
-    border: 2px solid var(--border);
-    border-top-color: var(--accent);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite;
-    vertical-align: middle;
-  }
+  .live-indicator .live-label { display: none; }
+
+  header { padding: 0 12px; gap: 8px; }
+  .main  { padding: 12px; }
+  .tab-bar { padding: 0 12px; }
+
+  /* Hide less critical columns on small screens */
+  .col-pid, .col-cpu, .col-mem, .col-runtime, .col-tokens { display: none; }
+}
+
+@media (max-width: 560px) {
+  .col-tmux { display: none; }
+  .header-divider { display: none; }
+}
 </style>
 </head>
 <body>
 
+<!-- ============================================================
+     Header
+     ============================================================ -->
 <header>
-  <h1><span>Agent</span>op</h1>
+  <div class="logo">
+    <div class="logo-icon">A</div>
+    <span class="logo-text"><span>Agent</span>op</span>
+  </div>
+
+  <div class="header-divider"></div>
+
   <div class="header-right">
-    <span class="refresh-info" id="refresh-info">Loading…</span>
-    <button class="btn btn-ghost" onclick="manualRefresh()">↻ Refresh</button>
-    <button class="btn" onclick="openNewSession()">+ New Session</button>
+    <div class="live-indicator" id="live-indicator">
+      <span class="live-dot" id="live-dot"></span>
+      <span id="refresh-info" class="live-label">Loading…</span>
+    </div>
+    <button class="btn btn-secondary" onclick="manualRefresh()" title="Refresh now">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.26-3.74L9 7h6V1l-1.35 1.35z"/></svg>
+      Refresh
+    </button>
+    <button class="btn btn-primary" onclick="openNewSession()">
+      <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 0 1 1 1v5h5a1 1 0 0 1 0 2H9v5a1 1 0 0 1-2 0V9H2a1 1 0 0 1 0-2h5V2a1 1 0 0 1 1-1z"/></svg>
+      New Session
+    </button>
+    <button class="btn-icon" onclick="toggleTheme()" title="Toggle light/dark mode" id="theme-btn">
+      <svg id="theme-icon-dark" width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M6 .278a.768.768 0 0 1 .08.858 7.208 7.208 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277.527 0 1.04-.055 1.533-.16a.787.787 0 0 1 .81.316.733.733 0 0 1-.031.893A8.349 8.349 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.752.752 0 0 1 6 .278z"/></svg>
+      <svg id="theme-icon-light" width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="display:none"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0zm0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13zm8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5zM3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8zm10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0zm-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0zm9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707zM4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708z"/></svg>
+    </button>
   </div>
 </header>
 
-<div class="tabs">
-  <div class="tab active" onclick="switchTab('sessions')" id="tab-sessions">Sessions</div>
-  <div class="tab" onclick="switchTab('files')" id="tab-files">Agent Files</div>
+<!-- ============================================================
+     Tabs
+     ============================================================ -->
+<div class="tab-bar">
+  <div class="tab active" onclick="switchTab('sessions')" id="tab-sessions">
+    Sessions
+    <span class="tab-count" id="sessions-count">—</span>
+  </div>
+  <div class="tab" onclick="switchTab('files')" id="tab-files">
+    Agent Files
+  </div>
 </div>
 
+<!-- ============================================================
+     Main content
+     ============================================================ -->
 <div class="main">
 
   <!-- Sessions tab -->
   <div id="sessions-tab">
     <div class="layout">
+
+      <!-- Session table -->
       <div class="session-table-col">
-        <div class="table-wrap">
-          <table id="sessions-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Tool</th>
-                <th>cwd</th>
-                <th>Status</th>
-                <th>Description</th>
-                <th>PID</th>
-                <th>Runtime</th>
-                <th>CPU</th>
-                <th>Mem</th>
-                <th>Tmux</th>
-              </tr>
-            </thead>
-            <tbody id="sessions-body">
-              <tr><td colspan="10" class="empty"><span class="spinner"></span></td></tr>
-            </tbody>
-          </table>
+        <div class="table-card">
+          <div class="table-wrap">
+            <table id="sessions-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Tool</th>
+                  <th>Status</th>
+                  <th>Description</th>
+                  <th>cwd</th>
+                  <th class="col-tokens">Tokens</th>
+                  <th class="col-pid">PID</th>
+                  <th class="col-runtime">Runtime</th>
+                  <th class="col-cpu">CPU</th>
+                  <th class="col-mem">Mem</th>
+                  <th class="col-tmux">Tmux</th>
+                </tr>
+              </thead>
+              <tbody id="sessions-body">
+                <tr>
+                  <td colspan="11">
+                    <div class="empty-state">
+                      <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
+                      <p>Loading sessions…</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
       <!-- Detail panel -->
       <div class="detail-panel" id="detail-panel">
         <div class="detail-header">
-          <div>
-            <h2 id="detail-name">—</h2>
-            <div style="margin-top:4px;display:flex;gap:6px;align-items:center" id="detail-badges"></div>
+          <div class="detail-header-info">
+            <div class="detail-name" id="detail-name">—</div>
+            <div class="detail-meta-row" id="detail-badges"></div>
           </div>
-          <button class="detail-close" onclick="closeDetail()">✕</button>
+          <button class="detail-close" onclick="closeDetail()" title="Close">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854z"/></svg>
+          </button>
         </div>
-        <div class="detail-body" id="detail-body"></div>
+        <div class="detail-body" id="detail-body">
+          <div style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
+            <span class="spinner"></span> Loading…
+          </div>
+        </div>
       </div>
+
     </div>
   </div>
 
   <!-- Files tab -->
   <div id="files-tab" style="display:none">
-    <div class="table-wrap">
-      <table id="files-table">
-        <thead>
-          <tr>
-            <th>Tool</th>
-            <th>Type</th>
-            <th>File</th>
-            <th style="text-align:right">Size</th>
-            <th>Modified</th>
-          </tr>
-        </thead>
-        <tbody id="files-body">
-          <tr><td colspan="5" class="empty"><span class="spinner"></span></td></tr>
-        </tbody>
-      </table>
+    <div class="table-card">
+      <div class="table-wrap">
+        <table id="files-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Type</th>
+              <th>File</th>
+              <th style="text-align:right">Size</th>
+              <th>Modified</th>
+            </tr>
+          </thead>
+          <tbody id="files-body">
+            <tr>
+              <td colspan="5">
+                <div class="empty-state">
+                  <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
+                  <p>Loading files…</p>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
 </div>
 
-<!-- New Session Modal -->
+<!-- ============================================================
+     New Session Modal
+     ============================================================ -->
 <div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
   <div class="modal">
     <div class="modal-header">
       <h3>New Session</h3>
-      <button class="detail-close" onclick="closeModal()">✕</button>
+      <button class="detail-close" onclick="closeModal()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854z"/></svg>
+      </button>
     </div>
     <div class="modal-body">
       <div class="edit-form">
-        <label>Tool</label>
-        <select id="new-tool">
-          <option value="claude">Claude</option>
-          <option value="codex">Codex</option>
-          <option value="openclaw">OpenClaw</option>
-        </select>
-        <label>Working Directory</label>
-        <input type="text" id="new-cwd" placeholder="/home/user/repos/myproject">
-        <label>Description <span style="color:var(--text2);font-weight:400">(optional)</span></label>
-        <input type="text" id="new-description" placeholder="What will this session do?">
+        <div class="form-group">
+          <label class="form-label">Agent Tool</label>
+          <select id="new-tool" class="form-select">
+            <option value="claude">Claude</option>
+            <option value="codex">Codex</option>
+            <option value="gemini">Gemini</option>
+            <option value="openclaw">OpenClaw</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Working Directory</label>
+          <input type="text" id="new-cwd" class="form-input" placeholder="/home/user/repos/myproject">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Description <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+          <input type="text" id="new-description" class="form-input" placeholder="What will this session do?">
+        </div>
         <div class="modal-footer">
-          <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-          <button class="btn" id="modal-start-btn" onclick="submitNewSession()">Start</button>
+          <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" id="modal-start-btn" onclick="submitNewSession()">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1v14l11-7z"/></svg>
+            Start Session
+          </button>
         </div>
       </div>
     </div>
   </div>
 </div>
 
+<!-- Toast -->
+<div id="toast"></div>
+
 <script>
-// ---------------------------------------------------------------------------
+// ============================================================
 // State
-// ---------------------------------------------------------------------------
+// ============================================================
 let sessions = [];
 let selectedSession = null;
 let refreshTimer = null;
-let countdown = 5;
+let lastUpdatedAt = null;
+let countdownSec = 5;
 const REFRESH_INTERVAL = 5000;
 
-// ---------------------------------------------------------------------------
+// ============================================================
+// Theme
+// ============================================================
+function initTheme() {
+  const saved = localStorage.getItem('agentop-theme');
+  const preferred = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+  applyTheme(saved || preferred);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  const dark = document.getElementById('theme-icon-dark');
+  const light = document.getElementById('theme-icon-light');
+  if (theme === 'dark') {
+    dark.style.display = '';
+    light.style.display = 'none';
+  } else {
+    dark.style.display = 'none';
+    light.style.display = '';
+  }
+  localStorage.setItem('agentop-theme', theme);
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+}
+
+// ============================================================
 // Tab management
-// ---------------------------------------------------------------------------
+// ============================================================
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('sessions-tab').style.display = name === 'sessions' ? '' : 'none';
-  document.getElementById('files-tab').style.display = name === 'files' ? '' : 'none';
+  document.getElementById('files-tab').style.display   = name === 'files'    ? '' : 'none';
   if (name === 'files') fetchFiles();
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================
 // Utilities
-// ---------------------------------------------------------------------------
+// ============================================================
 function fmtRuntime(sec) {
   if (!sec) return '—';
   const h = Math.floor(sec / 3600);
   const m = Math.floor((sec % 3600) / 60);
   const s = sec % 60;
-  return [h, m, s].map(n => String(n).padStart(2,'0')).join(':');
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+function fmtTokens(usage) {
+  if (!usage) return '—';
+  const total = (usage.input_tokens || 0) + (usage.output_tokens || 0)
+              + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+  if (!total) return '—';
+  if (total < 1000)       return total.toString();
+  if (total < 1000000)    return (total / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
+  return (total / 1000000).toFixed(2).replace(/\.?0+$/, '') + 'M';
 }
 
 function fmtBytes(b) {
   if (b == null) return '—';
-  if (b < 1024) return b + ' B';
-  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
-  if (b < 1024*1024*1024) return (b/(1024*1024)).toFixed(1) + ' MB';
-  return (b/(1024*1024*1024)).toFixed(2) + ' GB';
+  if (b < 1024)            return b + ' B';
+  if (b < 1024 * 1024)     return (b / 1024).toFixed(1) + ' KB';
+  if (b < 1024 * 1024 * 1024) return (b / (1024 * 1024)).toFixed(1) + ' MB';
+  return (b / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
 }
 
 function fmtDate(ts) {
@@ -523,141 +1112,164 @@ function fmtDate(ts) {
 
 function fmtProject(p) {
   if (!p) return '—';
-  const home = '/home/' + (location.hostname === 'localhost' ? '' : '');
   return p.replace(/^\/home\/[^/]+/, '~');
 }
 
-function statusBadge(status) {
-  const map = {
-    running: 'badge-running',
-    stopped: 'badge-stopped',
-    waiting: 'badge-waiting',
-    done: 'badge-done',
-  };
-  const cls = map[status] || 'badge-unknown';
-  return `<span class="badge ${cls}"><span class="dot"></span>${status || 'unknown'}</span>`;
+function fmtTime(d) {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function statusBadge(s) {
+  // s is a session object; show bridge status if available, else infer from process
+  if (s.bridge_session_id) {
+    const isBusy = s.claude_status === 'busy';
+    const cls = isBusy ? 'badge-busy' : 'badge-waiting';
+    const dot = isBusy ? 'animated' : '';
+    const label = s.claude_status || 'idle';
+    return `<span class="badge ${cls}"><span class="badge-dot ${dot}"></span>${escHtml(label)}</span>`;
+  }
+  const cls = { running: 'badge-running', stopped: 'badge-stopped', waiting: 'badge-waiting', done: 'badge-done' }[s.status] || 'badge-unknown';
+  const animated = s.status === 'running' ? 'animated' : '';
+  return `<span class="badge ${cls}"><span class="badge-dot ${animated}"></span>${s.status || 'unknown'}</span>`;
 }
 
 function toolBadge(tool) {
-  const map = { claude: 'tool-claude', codex: 'tool-codex', openclaw: 'tool-openclaw' };
-  const cls = map[tool] || 'tool-unknown';
-  return `<span class="tool-badge ${cls}">${tool || '?'}</span>`;
+  const cls = { claude: 'tool-claude', codex: 'tool-codex', gemini: 'tool-gemini', openclaw: 'tool-openclaw' }[tool] || 'tool-unknown';
+  return `<span class="tool-badge ${cls}">${escHtml(tool || '?')}</span>`;
 }
 
 function branchBadge(git) {
   if (!git || !git.branch) return '—';
-  const dirty = git.dirty ? ' <span class="dirty">*</span>' : '';
-  return `<span class="branch-badge">${escHtml(git.branch)}${dirty}</span>`;
-}
-
-function remoteBadge(s) {
-  if (!s.bridge_session_id) return '<span style="color:var(--text2)">—</span>';
-  const statusCls = s.claude_status === 'busy' ? 'badge-running' : 'badge-waiting';
-  return `<span class="badge ${statusCls}" style="font-size:10px;padding:1px 5px"><span class="dot"></span>${escHtml(s.claude_status || '')}</span>`;
+  const dirty = git.dirty ? ' <span class="dirty" title="Uncommitted changes">*</span>' : '';
+  return `<span class="branch-badge" title="${escHtml(git.repo_root || '')}">${escHtml(git.branch)}${dirty}</span>`;
 }
 
 function escHtml(s) {
   if (s == null) return '';
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 function tmuxInfo(tmux) {
-  if (!tmux) return '—';
+  if (!tmux) return '<span style="color:var(--text3)">—</span>';
   const cmd = `tmux a -t ${tmux.session}`;
   const sname = escHtml(JSON.stringify(cmd));
-  return `<span class="mono">${escHtml(tmux.session)}:${escHtml(tmux.window)}.${escHtml(tmux.pane)}</span> <span class="copy-icon" title="Copy attach command" onclick="event.stopPropagation();copyTmux(${sname})">⎘</span>`;
+  return `<span class="mono" style="color:var(--text2)">${escHtml(tmux.session)}</span> <span class="copy-btn" title="Copy attach command" onclick="event.stopPropagation();copyText(${sname})">⎘</span>`;
 }
 
-function copyTmux(cmd) {
-  navigator.clipboard.writeText(cmd).then(() => {
-    showToast(cmd + ' copied to clipboard');
-  });
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
 }
 
 function showToast(msg) {
-  let el = document.getElementById('toast');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'toast';
-    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--surface2,#333);color:var(--text,#fff);padding:8px 18px;border-radius:6px;font-size:13px;z-index:9999;pointer-events:none;transition:opacity .3s';
-    document.body.appendChild(el);
-  }
+  const el = document.getElementById('toast');
   el.textContent = msg;
-  el.style.opacity = '1';
+  el.classList.add('show');
   clearTimeout(el._t);
-  el._t = setTimeout(() => { el.style.opacity = '0'; }, 2500);
+  el._t = setTimeout(() => el.classList.remove('show'), 2500);
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================
 // Sessions fetch + render
-// ---------------------------------------------------------------------------
+// ============================================================
 async function fetchSessions() {
   try {
     const r = await fetch('/api/sessions');
     sessions = await r.json();
     renderSessions(sessions);
-    // Re-render detail if open
     if (selectedSession) {
       const updated = sessions.find(s => s.name === selectedSession.name);
       if (updated) selectedSession = updated;
     }
-    document.getElementById('refresh-info').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    lastUpdatedAt = new Date();
+    updateLiveIndicator(true);
   } catch (e) {
-    document.getElementById('refresh-info').textContent = 'Error: ' + e.message;
+    updateLiveIndicator(false, e.message);
   }
 }
 
-function renderSessions(list) {
-  const tbody = document.getElementById('sessions-body');
-  if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="empty"><h3>No agent sessions detected</h3>Start a Claude or Codex session to see it here.</div></td></tr>';
+function updateLiveIndicator(ok, err) {
+  const dot  = document.getElementById('live-dot');
+  const info = document.getElementById('refresh-info');
+  if (!ok) {
+    dot.className = 'live-dot error';
+    info.textContent = 'Error: ' + err;
     return;
   }
+  dot.className = 'live-dot';
+  info.textContent = lastUpdatedAt ? 'Updated ' + fmtTime(lastUpdatedAt) : 'Live';
+}
+
+function renderSessions(list) {
+  const count = document.getElementById('sessions-count');
+  count.textContent = list.length || '0';
+
+  const tbody = document.getElementById('sessions-body');
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="11">
+      <div class="empty-state">
+        <div class="empty-icon">🤖</div>
+        <h3>No agent sessions detected</h3>
+        <p>Start a Claude, Codex, or Gemini session to see it here.</p>
+      </div>
+    </td></tr>`;
+    return;
+  }
+
   tbody.innerHTML = list.map(s => {
     const selected = selectedSession && selectedSession.name === s.name ? ' selected' : '';
-    return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))})">
-      <td><span class="mono">${escHtml(s.name)}</span></td>
+    const managedPill = s.managed ? ' <span class="managed-pill">managed</span>' : '';
+    const desc = s.description || s.ai_title;
+    return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))}, this)">
+      <td><span class="mono" style="font-size:12px">${escHtml(s.name)}</span>${managedPill}</td>
       <td>${toolBadge(s.tool)}</td>
-      <td class="wrap" title="${escHtml(s.cwd || '')}">${escHtml(fmtProject(s.cwd))}</td>
-      <td>${remoteBadge(s)}</td>
-      <td class="wrap">${escHtml(s.description || s.ai_title) || '<span style="color:var(--text2)">—</span>'}</td>
-      <td class="mono">${s.pid || '—'}</td>
-      <td class="mono">${fmtRuntime(s.runtime_seconds)}</td>
-      <td class="mono">${s.cpu_percent != null ? s.cpu_percent + '%' : '—'}</td>
-      <td class="mono">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</td>
-      <td>${tmuxInfo(s.tmux)}</td>
+      <td>${statusBadge(s)}</td>
+      <td class="wrap">${desc ? escHtml(desc) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="wrap muted" title="${escHtml(s.cwd || '')}" style="font-size:12px">${escHtml(fmtProject(s.cwd))}</td>
+      <td class="col-tokens muted mono" title="${s.token_usage ? 'in:' + (s.token_usage.input_tokens||0) + ' out:' + (s.token_usage.output_tokens||0) + ' cache_r:' + (s.token_usage.cache_read_input_tokens||0) + ' cache_w:' + (s.token_usage.cache_creation_input_tokens||0) : ''}">${fmtTokens(s.token_usage)}</td>
+      <td class="col-pid muted mono">${s.pid || '—'}</td>
+      <td class="col-runtime muted mono">${fmtRuntime(s.runtime_seconds)}</td>
+      <td class="col-cpu muted mono">${s.cpu_percent != null ? s.cpu_percent + '%' : '—'}</td>
+      <td class="col-mem muted mono">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</td>
+      <td class="col-tmux">${tmuxInfo(s.tmux)}</td>
     </tr>`;
   }).join('');
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================
 // Detail panel
-// ---------------------------------------------------------------------------
-async function selectSession(name) {
+// ============================================================
+async function selectSession(name, rowEl) {
   const s = sessions.find(x => x.name === name);
   if (!s) return;
 
-  // Mark selected
   document.querySelectorAll('#sessions-body tr').forEach(tr => tr.classList.remove('selected'));
-  event.currentTarget.classList.add('selected');
+  rowEl.classList.add('selected');
 
-  document.getElementById('detail-panel').classList.add('open');
+  const panel = document.getElementById('detail-panel');
+  panel.classList.add('open');
+
   document.getElementById('detail-name').textContent = s.name;
 
   const badges = document.getElementById('detail-badges');
-  badges.innerHTML = toolBadge(s.tool);
+  badges.innerHTML = toolBadge(s.tool) + ' ' + statusBadge(s);
 
-  // Show skeleton
-  document.getElementById('detail-body').innerHTML = '<div style="color:var(--text2);font-size:12px;padding:8px 0"><span class="spinner"></span> Loading…</div>';
+  document.getElementById('detail-body').innerHTML = `
+    <div style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
+      <span class="spinner"></span> Loading…
+    </div>`;
 
-  // Fetch full detail
   try {
     const r = await fetch('/api/sessions/' + encodeURIComponent(name));
     const detail = await r.json();
     selectedSession = detail;
     renderDetail(detail);
   } catch (e) {
-    document.getElementById('detail-body').innerHTML = `<div style="color:var(--red)">${escHtml(e.message)}</div>`;
+    document.getElementById('detail-body').innerHTML =
+      `<div style="color:var(--red);font-size:13px">${escHtml(e.message)}</div>`;
   }
 }
 
@@ -668,88 +1280,161 @@ function closeDetail() {
 }
 
 function renderDetail(s) {
+  const sname = escHtml(JSON.stringify(s.name));
   let html = '';
 
-  // Basic info
+  // ---- Process section ----
   html += `<div class="detail-section">
-    <div class="detail-section-title">Process</div>
+    <div class="section-title">Process</div>
     <div class="kv-grid">
-      <span class="kv-key">PID</span><span class="kv-val">${escHtml(String(s.pid || '—'))}</span>
-      <span class="kv-key">Runtime</span><span class="kv-val">${fmtRuntime(s.runtime_seconds)}</span>
-      <span class="kv-key">CPU</span><span class="kv-val">${s.cpu_percent != null ? s.cpu_percent + '%' : '—'}</span>
-      <span class="kv-key">Memory</span><span class="kv-val">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</span>
-      <span class="kv-key">CWD</span><span class="kv-val">${escHtml(s.cwd || '—')}</span>
-      <span class="kv-key">Command</span><span class="kv-val">${escHtml(s.cmdline || '—')}</span>
+      <span class="kv-key">PID</span>
+      <span class="kv-val">${escHtml(String(s.pid || '—'))}</span>
+      <span class="kv-key">Runtime</span>
+      <span class="kv-val">${fmtRuntime(s.runtime_seconds)}</span>
+      <span class="kv-key">CPU</span>
+      <span class="kv-val">${s.cpu_percent != null ? s.cpu_percent + '%' : '—'}</span>
+      <span class="kv-key">Memory</span>
+      <span class="kv-val">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</span>
+      <span class="kv-key">CWD</span>
+      <span class="kv-val">${escHtml(fmtProject(s.cwd || '—'))}</span>
+      <span class="kv-key">Command</span>
+      <span class="kv-val">${escHtml(s.cmdline || '—')}</span>
     </div>
   </div>`;
 
-  // Git
+  // ---- Token usage section ----
+  if (s.token_usage) {
+    const u = s.token_usage;
+    const totalTok = (u.input_tokens||0) + (u.output_tokens||0)
+                   + (u.cache_creation_input_tokens||0) + (u.cache_read_input_tokens||0);
+    html += `<div class="detail-section">
+      <div class="section-title">Token Usage</div>
+      <div class="kv-grid">
+        <span class="kv-key">Total</span>
+        <span class="kv-val mono">${totalTok.toLocaleString()}</span>
+        <span class="kv-key">Output</span>
+        <span class="kv-val mono">${(u.output_tokens||0).toLocaleString()}</span>
+        <span class="kv-key">Input</span>
+        <span class="kv-val mono">${(u.input_tokens||0).toLocaleString()}</span>
+        <span class="kv-key">Cache read</span>
+        <span class="kv-val mono">${(u.cache_read_input_tokens||0).toLocaleString()}</span>
+        <span class="kv-key">Cache write</span>
+        <span class="kv-val mono">${(u.cache_creation_input_tokens||0).toLocaleString()}</span>
+      </div>
+    </div>`;
+  }
+
+  // ---- Git section ----
   if (s.git) {
     const g = s.git;
     html += `<div class="detail-section">
-      <div class="detail-section-title">Git</div>
+      <div class="section-title">Git</div>
       <div class="kv-grid">
-        <span class="kv-key">Branch</span><span class="kv-val">${escHtml(g.branch || '—')}${g.dirty ? ' <span class="dirty">(dirty)</span>' : ''}</span>
-        <span class="kv-key">Repo</span><span class="kv-val">${escHtml(g.repo_root || '—')}</span>
-        <span class="kv-key">Latest</span><span class="kv-val">${escHtml(g.latest_commit || '—')}</span>
+        <span class="kv-key">Branch</span>
+        <span class="kv-val">${branchBadge(g)}</span>
+        <span class="kv-key">Repo</span>
+        <span class="kv-val">${escHtml(fmtProject(g.repo_root || '—'))}</span>
+        <span class="kv-key">Latest</span>
+        <span class="kv-val">${escHtml(g.latest_commit || '—')}</span>
       </div>
     </div>`;
   }
 
-  // Tmux
+  // ---- Remote bridge section (Claude only) ----
+  if (s.bridge_session_id) {
+    html += `<div class="detail-section">
+      <div class="section-title">Remote Bridge</div>
+      <div class="kv-grid">
+        <span class="kv-key">Status</span>
+        <span class="kv-val">${statusBadge(s)}</span>
+        <span class="kv-key">Session</span>
+        <span class="kv-val">${escHtml(s.remote_name || s.bridge_session_id)}</span>
+        <span class="kv-key">URL</span>
+        <span class="kv-val"><a class="link" href="${escHtml(s.bridge_url || '')}" target="_blank" rel="noopener">${escHtml(s.bridge_url || '—')}</a></span>
+      </div>
+    </div>`;
+  }
+
+  // ---- Tmux section ----
   if (s.tmux) {
+    const attachCmd = `tmux a -t ${s.tmux.session}`;
     html += `<div class="detail-section">
-      <div class="detail-section-title">Tmux</div>
+      <div class="section-title">Tmux</div>
       <div class="kv-grid">
-        <span class="kv-key">Session</span><span class="kv-val">${escHtml(s.tmux.session)}</span>
-        <span class="kv-key">Window</span><span class="kv-val">${escHtml(s.tmux.window)}</span>
-        <span class="kv-key">Pane</span><span class="kv-val">${escHtml(s.tmux.pane)}</span>
+        <span class="kv-key">Session</span>
+        <span class="kv-val">${escHtml(s.tmux.session)} <span class="copy-btn" title="Copy attach command" onclick="copyText(${escHtml(JSON.stringify(attachCmd))})">⎘</span></span>
+        <span class="kv-key">Window</span>
+        <span class="kv-val">${escHtml(s.tmux.window)}</span>
+        <span class="kv-key">Pane</span>
+        <span class="kv-val">${escHtml(s.tmux.pane)}</span>
       </div>
     </div>`;
   }
 
-  // Process tree
+  // ---- Process tree section ----
   if (s.process_tree && s.process_tree.length) {
+    const lastIdx = s.process_tree.length - 1;
     html += `<div class="detail-section">
-      <div class="detail-section-title">Process Tree</div>
-      <ul class="file-list">`;
+      <div class="section-title">Process Tree</div>
+      <div style="font-size:12px">`;
     s.process_tree.forEach((p, i) => {
-      const indent = '  '.repeat(i);
-      html += `<li>${escHtml(indent + (i > 0 ? '└ ' : '') + p.pid + ' ' + p.name)}</li>`;
+      const isLast = i === lastIdx;
+      const prefix = i === 0 ? '' : ('  '.repeat(i - 1) + (isLast ? '└ ' : '├ '));
+      const cls = isLast ? 'proc-tree-item active' : 'proc-tree-item';
+      html += `<div class="${cls}">${escHtml(prefix + p.pid + ' ' + p.name)}</div>`;
     });
-    html += '</ul></div>';
+    html += `</div></div>`;
   }
 
-  // Recent project files
+  // ---- Recent project files ----
   if (s.recent_project_files && s.recent_project_files.length) {
     html += `<div class="detail-section">
-      <div class="detail-section-title">Recent Project Files</div>
+      <div class="section-title">Recent Files</div>
       <ul class="file-list">`;
     s.recent_project_files.forEach(f => {
-      html += `<li title="${escHtml(f)}">${escHtml(f.replace(/^\/home\/[^/]+/, '~'))}</li>`;
+      html += `<li title="${escHtml(f)}">${escHtml(fmtProject(f))}</li>`;
     });
-    html += '</ul></div>';
+    html += `</ul></div>`;
   }
 
-  const sessionName = s.name;
+  // ---- Managed-only actions ----
   if (s.managed) {
-    const sname = escHtml(JSON.stringify(s.name));
+    // Send prompt
     html += `<div class="detail-section">
-      <div class="detail-section-title">Send Prompt</div>
+      <div class="section-title">Send Prompt</div>
+      <div class="prompt-area">
+        <textarea id="send-text" class="prompt-textarea"
+          placeholder="Type a prompt… (Ctrl+Enter to send)"
+          onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){sendToSession(${sname});event.preventDefault();}"></textarea>
+        <div class="prompt-footer">
+          <span class="prompt-hint">Ctrl+Enter to send</span>
+          <button class="btn btn-primary" id="send-btn" style="padding:4px 12px;font-size:12px" onclick="sendToSession(${sname})">
+            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083l6-15Zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471-.47 1.178Z"/></svg>
+            Send
+          </button>
+        </div>
+      </div>
+    </div>`;
+
+    // Description / notes
+    html += `<div class="detail-section">
+      <div class="section-title">Notes</div>
       <div class="edit-form">
-        <textarea id="send-text" placeholder="Type a prompt to send…" style="min-height:80px" onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){sendToSession(${sname});event.preventDefault();}"></textarea>
-        <button class="btn" id="send-btn" onclick="sendToSession(${sname})">▶ Send</button>
+        <textarea id="meta-description" class="form-textarea" placeholder="Add notes about what this session is doing…">${escHtml(s.description || '')}</textarea>
+        <button class="btn btn-secondary" style="align-self:flex-end" onclick="saveMeta(${sname})">Save Notes</button>
       </div>
     </div>`;
+
+    // Danger zone
     html += `<div class="detail-section">
-      <div class="detail-section-title">Description</div>
-      <div class="edit-form" id="meta-form">
-        <textarea id="meta-description" placeholder="What is this session doing? Any notes…">${escHtml(s.description || '')}</textarea>
-        <button class="btn" onclick="saveMeta(${escHtml(JSON.stringify(sessionName))})">Save</button>
+      <div class="danger-zone">
+        <div class="danger-title">Danger Zone</div>
+        <div class="danger-desc">Sends <code style="font-family:var(--mono);font-size:11px;background:var(--bg4);padding:1px 4px;border-radius:3px">/exit</code> to the agent, then kills the tmux session.</div>
+        <button class="btn btn-danger" style="width:100%" onclick="stopSession(${sname})">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>
+          Stop Session
+        </button>
       </div>
-    </div>`;
-    html += `<div class="detail-section">
-      <button class="btn btn-danger" style="width:100%" onclick="stopSession(${escHtml(JSON.stringify(s.name))})">■ Stop Session</button>
     </div>`;
   }
 
@@ -758,12 +1443,12 @@ function renderDetail(s) {
 
 async function saveMeta(name) {
   const description = document.getElementById('meta-description').value;
-
   await fetch('/api/sessions/' + encodeURIComponent(name), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ description }),
   });
+  showToast('Notes saved');
   await fetchSessions();
   if (selectedSession && selectedSession.name === name) {
     const r = await fetch('/api/sessions/' + encodeURIComponent(name));
@@ -772,67 +1457,71 @@ async function saveMeta(name) {
   }
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================
 // Files tab
-// ---------------------------------------------------------------------------
+// ============================================================
 async function fetchFiles() {
   try {
     const r = await fetch('/api/files/recent');
     const files = await r.json();
     renderFiles(files);
   } catch (e) {
-    document.getElementById('files-body').innerHTML = `<tr><td colspan="5" class="empty">${escHtml(e.message)}</td></tr>`;
+    document.getElementById('files-body').innerHTML =
+      `<tr><td colspan="5"><div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div></td></tr>`;
   }
 }
 
 function renderFiles(files) {
   const tbody = document.getElementById('files-body');
   if (!files.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><div class="empty"><h3>No agent files found</h3>Agent directories (~/.claude, ~/.codex) appear empty.</div></td></tr>';
+    tbody.innerHTML = `<tr><td colspan="5">
+      <div class="empty-state">
+        <div class="empty-icon">📂</div>
+        <h3>No agent files found</h3>
+        <p>Agent directories (~/.claude, ~/.codex) appear empty.</p>
+      </div>
+    </td></tr>`;
     return;
   }
-  tbody.innerHTML = files.map(f => {
-    return `<tr>
-      <td>${toolBadge(f.tool)}</td>
-      <td><span class="mono" style="color:var(--text2)">${escHtml(f.type)}</span></td>
-      <td class="path-cell" title="${escHtml(f.path)}">${escHtml(f.path.replace(/^\/home\/[^/]+/, '~'))}</td>
-      <td class="mono size-cell">${fmtBytes(f.size_bytes)}</td>
-      <td class="mono" style="color:var(--text2)">${fmtDate(f.modified_time)}</td>
-    </tr>`;
-  }).join('');
+  tbody.innerHTML = files.map(f => `<tr>
+    <td>${toolBadge(f.tool)}</td>
+    <td><span class="mono muted">${escHtml(f.type)}</span></td>
+    <td class="path-cell" title="${escHtml(f.path)}">${escHtml(fmtProject(f.path))}</td>
+    <td class="size-cell muted">${fmtBytes(f.size_bytes)}</td>
+    <td class="mono muted" style="font-size:12px">${fmtDate(f.modified_time)}</td>
+  </tr>`).join('');
 }
 
-// ---------------------------------------------------------------------------
-// Auto-refresh
-// ---------------------------------------------------------------------------
+// ============================================================
+// Auto-refresh with live countdown
+// ============================================================
 function startRefresh() {
   fetchSessions();
+  countdownSec = REFRESH_INTERVAL / 1000;
   refreshTimer = setInterval(() => {
-    countdown--;
-    if (countdown <= 0) {
-      countdown = 5;
+    countdownSec--;
+    if (countdownSec <= 0) {
+      countdownSec = REFRESH_INTERVAL / 1000;
       fetchSessions();
-    } else {
+    } else if (lastUpdatedAt) {
       const info = document.getElementById('refresh-info');
-      const t = info.textContent.split(' — ')[0];
-      info.textContent = t + ' — refresh in ' + countdown + 's';
+      info.textContent = 'Updated ' + fmtTime(lastUpdatedAt) + ' · ' + countdownSec + 's';
     }
   }, 1000);
 }
 
 function manualRefresh() {
-  countdown = 5;
+  countdownSec = REFRESH_INTERVAL / 1000;
   fetchSessions();
   if (document.getElementById('files-tab').style.display !== 'none') fetchFiles();
 }
 
-// ---------------------------------------------------------------------------
+// ============================================================
 // New Session modal
-// ---------------------------------------------------------------------------
+// ============================================================
 async function openNewSession() {
   document.getElementById('new-description').value = '';
   document.getElementById('modal-overlay').classList.add('open');
-  // Pre-fill cwd with the dashboard user's home dir
   try {
     const r = await fetch('/api/info');
     const data = await r.json();
@@ -846,12 +1535,13 @@ function closeModal() {
 }
 
 async function submitNewSession() {
-  const tool = document.getElementById('new-tool').value;
-  const cwd = document.getElementById('new-cwd').value.trim();
+  const tool        = document.getElementById('new-tool').value;
+  const cwd         = document.getElementById('new-cwd').value.trim();
   const description = document.getElementById('new-description').value.trim();
-  if (!cwd) { alert('Working directory is required.'); return; }
+  if (!cwd) { showToast('Working directory is required'); return; }
   const btn = document.getElementById('modal-start-btn');
-  btn.textContent = 'Starting…';
+  const originalHTML = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span> Starting…';
   btn.disabled = true;
   try {
     const r = await fetch('/api/sessions/start', {
@@ -863,36 +1553,40 @@ async function submitNewSession() {
     if (!r.ok) throw new Error(data.detail || 'Failed to start session');
     closeModal();
     await fetchSessions();
+    showToast('Session started: ' + data.name);
   } catch (e) {
-    alert('Error: ' + e.message);
+    showToast('Error: ' + e.message);
   } finally {
-    btn.textContent = 'Start';
+    btn.innerHTML = originalHTML;
     btn.disabled = false;
   }
 }
 
-// ---------------------------------------------------------------------------
-// Stop session (sends "exit" — Claude exits gracefully, tmux cleans up naturally)
-// ---------------------------------------------------------------------------
+// ============================================================
+// Stop session
+// ============================================================
 async function stopSession(name) {
+  if (!confirm(`Stop session "${name}"?\n\nThis will send /exit to the agent and kill the tmux session.`)) return;
   await fetch('/api/sessions/' + encodeURIComponent(name) + '/send', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text: 'exit' }),
   });
+  showToast('Stop signal sent to ' + name);
   closeDetail();
   await fetchSessions();
 }
 
-// ---------------------------------------------------------------------------
-// Send prompt to session
-// ---------------------------------------------------------------------------
+// ============================================================
+// Send prompt
+// ============================================================
 async function sendToSession(name) {
   const textEl = document.getElementById('send-text');
-  const btnEl = document.getElementById('send-btn');
-  const text = textEl.value.trim();
+  const btnEl  = document.getElementById('send-btn');
+  const text   = textEl.value.trim();
   if (!text) return;
-  btnEl.textContent = 'Sending…';
+  const originalHTML = btnEl.innerHTML;
+  btnEl.innerHTML = '<span class="spinner"></span>';
   btnEl.disabled = true;
   try {
     const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/send', {
@@ -903,15 +1597,32 @@ async function sendToSession(name) {
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'Failed to send');
     textEl.value = '';
+    showToast('Prompt sent');
   } catch (e) {
-    alert('Error: ' + e.message);
+    showToast('Error: ' + e.message);
   } finally {
-    btnEl.textContent = '▶ Send';
+    btnEl.innerHTML = originalHTML;
     btnEl.disabled = false;
   }
 }
 
-// Start
+// ============================================================
+// Keyboard shortcut: Escape closes detail / modal
+// ============================================================
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('modal-overlay').classList.contains('open')) {
+      closeModal();
+    } else if (document.getElementById('detail-panel').classList.contains('open')) {
+      closeDetail();
+    }
+  }
+});
+
+// ============================================================
+// Init
+// ============================================================
+initTheme();
 startRefresh();
 </script>
 </body>
