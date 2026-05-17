@@ -114,7 +114,8 @@ Each agent reads from its own storage format to surface the AI-generated convers
 - Scan `~/.codex/sessions/**/rollout-*.jsonl` sorted by mtime (newest first, up to 30).
 - First line of each file is a `session_meta` object with `payload.cwd` and `payload.id`.
 - Find the file whose `cwd` matches the session's cwd → extract `session_id`.
-- Scan `~/.codex/session_index.jsonl` for a line with matching `id` → return `thread_name`.
+- Primary: scan `~/.codex/session_index.jsonl` for a line with matching `id` → return `thread_name`. This file is only written when a session ends, so it is empty for live sessions.
+- Fallback: scan `~/.codex/history.jsonl` (written in real time) for the first entry with matching `session_id` → use its `text` field (truncated to 80 chars) as a provisional title.
 
 **Gemini:**
 - Does not persist conversation titles to disk. Returns `None`.
