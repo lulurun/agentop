@@ -165,6 +165,12 @@ header {
 
 .live-dot.stale { background: var(--amber); animation: none; }
 .live-dot.error { background: var(--red); animation: none; }
+.live-sec {
+  display: inline-block;
+  min-width: 2ch;
+  font-family: monospace;
+  font-variant-numeric: tabular-nums;
+}
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
@@ -1215,7 +1221,9 @@ function updateLiveIndicator(ok, err) {
     return;
   }
   dot.className = 'live-dot';
-  info.textContent = lastUpdatedAt ? 'Updated ' + fmtTime(lastUpdatedAt) : 'Live';
+  info.innerHTML = lastUpdatedAt
+    ? 'Updated ' + fmtTime(lastUpdatedAt) + ' · <span class="live-sec">' + countdownSec + 's</span>'
+    : 'Live';
 }
 
 // ============================================================
@@ -1573,7 +1581,7 @@ function startRefresh() {
       fetchSessions();
     } else if (lastUpdatedAt) {
       const info = document.getElementById('refresh-info');
-      info.textContent = 'Updated ' + fmtTime(lastUpdatedAt) + ' · ' + countdownSec + 's';
+      info.innerHTML = 'Updated ' + fmtTime(lastUpdatedAt) + ' · <span class="live-sec">' + countdownSec + 's</span>';
     }
   }, 1000);
 }
