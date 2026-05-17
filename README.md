@@ -1,6 +1,6 @@
 # agentop
 
-A local dashboard for monitoring running AI agent sessions — Claude Code, Codex, Gemini, and others.
+A local dashboard for monitoring running AI agent sessions — Claude Code, Codex, and Gemini CLI.
 
 ![agentop dashboard](https://raw.githubusercontent.com/lulurun/agentop/main/docs/screenshot.png)
 
