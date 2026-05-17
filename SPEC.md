@@ -41,7 +41,6 @@ The following operations are available from **both the CLI and the web UI**:
 | Claude Code | `claude` | Process name or first cmdline token is `claude` |
 | Codex | `codex` | Process name or first cmdline token is `codex` |
 | Gemini CLI | `gemini` | Any cmdline token basename is `gemini` or `gemini-*` (handles `node /path/bin/gemini`) |
-| OpenClaw | `openclaw` | Process name or first cmdline token is `openclaw` |
 
 Adding a new agent requires subclassing `BaseAgent` and appending an instance to `AGENTS`.
 
@@ -271,7 +270,7 @@ Clicking a session row opens a side panel. All sessions show:
 
 The **+ New Session** button opens a modal with:
 
-- **Agent Tool** selector (Claude, Codex, Gemini, OpenClaw).
+- **Agent Tool** selector (Claude, Codex, Gemini).
 - **Working Directory** text input.
 - **Description** text input (optional).
 

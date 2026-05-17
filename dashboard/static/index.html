@@ -412,7 +412,6 @@ td.muted { color: var(--text2); }
 .tool-claude   { background: var(--purple-dim); color: var(--purple); }
 .tool-codex    { background: var(--blue-dim);   color: var(--blue); }
 .tool-gemini   { background: var(--blue-dim);   color: var(--blue); }
-.tool-openclaw { background: var(--green-dim);  color: var(--green); }
 .tool-unknown  { background: var(--bg4);        color: var(--text2); }
 
 /* Branch badge */
@@ -1018,7 +1017,6 @@ td.muted { color: var(--text2); }
             <option value="claude">Claude</option>
             <option value="codex">Codex</option>
             <option value="gemini">Gemini</option>
-            <option value="openclaw">OpenClaw</option>
           </select>
         </div>
         <div class="form-group">
@@ -1159,7 +1157,7 @@ function statusBadge(s) {
 }
 
 function toolBadge(tool) {
-  const cls = { claude: 'tool-claude', codex: 'tool-codex', gemini: 'tool-gemini', openclaw: 'tool-openclaw' }[tool] || 'tool-unknown';
+  const cls = { claude: 'tool-claude', codex: 'tool-codex', gemini: 'tool-gemini' }[tool] || 'tool-unknown';
   return `<span class="tool-badge ${cls}">${escHtml(tool || '?')}</span>`;
 }
 

@@ -15,7 +15,7 @@ COMMANDS
   start --tool <tool> --cwd <path> [--description <text>]
     Launch a new agent session inside a managed tmux session.
     The session is named  agentop_<tool>_<pid>  automatically.
-    Supported tools: claude, codex, gemini, openclaw
+    Supported tools: claude, codex, gemini
     After starting, attach with:  tmux attach-session -t <name>
 
   stop <name>
@@ -68,7 +68,7 @@ EXIT CODES
 SESSION FIELDS (--json)
 -----------------------
   name            Unique session identifier (also the tmux session name)
-  tool            Agent type: claude | codex | gemini | openclaw
+  tool            Agent type: claude | codex | gemini
   status          Process status (always "running" for live sessions)
   claude_status   Claude-specific status from session file: busy | idle
   pid             Agent process PID
@@ -263,7 +263,7 @@ def main():
             "After starting, attach with:  tmux attach-session -t <name>"
         ),
     )
-    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini", "openclaw"])
+    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini"])
     p_start.add_argument("--cwd", default=None, help="Working directory (default: cwd)")
     p_start.add_argument("--description", default="", help="Optional note")
 

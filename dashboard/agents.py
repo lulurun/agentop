@@ -536,14 +536,6 @@ class GeminiAgent(BaseAgent):
 
 
 # ---------------------------------------------------------------------------
-# OpenClaw
-# ---------------------------------------------------------------------------
-
-class OpenClawAgent(BaseAgent):
-    name = "openclaw"
-
-
-# ---------------------------------------------------------------------------
 # Registry — order matters: more specific entries first
 # ---------------------------------------------------------------------------
 
@@ -551,7 +543,6 @@ AGENTS: list[BaseAgent] = [
     ClaudeAgent(),
     CodexAgent(),
     GeminiAgent(),
-    OpenClawAgent(),
 ]
 
 
