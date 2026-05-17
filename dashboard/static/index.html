@@ -827,7 +827,7 @@ td.muted { color: var(--text2); }
   .tab-bar { padding: 0 12px; }
 
   /* Hide less critical columns on small screens */
-  .col-pid, .col-cpu, .col-mem, .col-runtime, .col-tokens { display: none; }
+  .col-pid, .col-mem, .col-runtime, .col-tokens { display: none; }
 }
 
 @media (max-width: 560px) {
@@ -906,14 +906,13 @@ td.muted { color: var(--text2); }
                   <th class="col-tokens">Tokens</th>
                   <th class="col-pid">PID</th>
                   <th class="col-runtime">Runtime</th>
-                  <th class="col-cpu">CPU</th>
                   <th class="col-mem">Mem</th>
                   <th class="col-tmux">Tmux</th>
                 </tr>
               </thead>
               <tbody id="sessions-body">
                 <tr>
-                  <td colspan="11">
+                  <td colspan="10">
                     <div class="empty-state">
                       <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
                       <p>Loading sessions…</p>
@@ -1209,7 +1208,7 @@ function renderSessions(list) {
 
   const tbody = document.getElementById('sessions-body');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="11">
+    tbody.innerHTML = `<tr><td colspan="10">
       <div class="empty-state">
         <div class="empty-icon">🤖</div>
         <h3>No agent sessions detected</h3>
@@ -1232,7 +1231,6 @@ function renderSessions(list) {
       <td class="col-tokens muted mono" title="${s.token_usage ? 'in:' + (s.token_usage.input_tokens||0) + ' out:' + (s.token_usage.output_tokens||0) + ' cache_r:' + (s.token_usage.cache_read_input_tokens||0) + ' cache_w:' + (s.token_usage.cache_creation_input_tokens||0) : ''}">${fmtTokens(s.token_usage)}</td>
       <td class="col-pid muted mono">${s.pid || '—'}</td>
       <td class="col-runtime muted mono">${fmtRuntime(s.runtime_seconds)}</td>
-      <td class="col-cpu muted mono">${s.cpu_percent != null ? s.cpu_percent + '%' : '—'}</td>
       <td class="col-mem muted mono">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</td>
       <td class="col-tmux">${tmuxInfo(s.tmux)}</td>
     </tr>`;
