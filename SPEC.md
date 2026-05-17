@@ -29,7 +29,7 @@ The following operations are available from **both the CLI and the web UI**:
 | Operation | CLI | UI |
 |---|---|---|
 | List all sessions | `agentop list` | Sessions tab |
-| Start a new session | `agentop start <name> --tool <tool> --cwd <dir>` | New Session button |
+| Start a new session | `agentop start --tool <tool> --cwd <dir>` | New Session button |
 | Stop a session | `agentop stop <name>` | Stop button in detail panel |
 | Set session description | `agentop set-description <name> <text>` | Edit in detail panel |
 | Send a prompt | `agentop send <name> <text>` | Send button in detail panel |
@@ -302,7 +302,7 @@ The CLI is a thin wrapper over `ops.py` providing the same operations as the web
 
 ```
 agentop list                                        — table of all sessions
-agentop start <name> --tool <tool> --cwd <dir>      — start new managed session
+agentop start --tool <tool> --cwd <dir>              — start new managed session
 agentop stop <name>                                 — stop managed session
 agentop set-description <name> <text>               — update description
 agentop send <name> <text>                          — send text to session
