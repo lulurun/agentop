@@ -401,7 +401,7 @@ def build_sessions(descriptions: dict | None = None) -> list[dict]:
         agent = get_agent(proc["tool"])
         session_meta = agent.get_session_meta(proc["pid"], proc["cwd"] or "") if agent and proc.get("cwd") else {}
 
-        description = descriptions.get(name) or session_meta.get("ai_title") or ""
+        description = descriptions.get(name) or ""
 
         sessions.append(
             {

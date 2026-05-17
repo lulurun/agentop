@@ -1236,7 +1236,7 @@ function getSortVal(s, key) {
     case 'name':        return (s.name || '').toLowerCase();
     case 'tool':        return (s.tool || '').toLowerCase();
     case 'status':      return (s.claude_status || s.status || '').toLowerCase();
-    case 'description': return (s.description || s.ai_title || '').toLowerCase();
+    case 'description': return (s.ai_title || s.description || '').toLowerCase();
     case 'cwd':         return (s.cwd || '').toLowerCase();
     case 'tokens': {
       const u = s.token_usage;
@@ -1303,7 +1303,7 @@ function renderSessions(list) {
   tbody.innerHTML = sorted.map(s => {
     const selected = selectedSession && selectedSession.name === s.name ? ' selected' : '';
     const managedPill = s.managed ? ' <span class="managed-pill">managed</span>' : '';
-    const desc = s.description || s.ai_title;
+    const desc = s.ai_title || s.description;
     return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))}, this)">
       <td><span class="mono" style="font-size:12px">${escHtml(s.name)}</span>${managedPill}</td>
       <td>${toolBadge(s.tool)}</td>
