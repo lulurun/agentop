@@ -1289,8 +1289,6 @@ function renderDetail(s) {
       <span class="kv-val">${escHtml(String(s.pid || '—'))}</span>
       <span class="kv-key">Runtime</span>
       <span class="kv-val">${fmtRuntime(s.runtime_seconds)}</span>
-      <span class="kv-key">CPU</span>
-      <span class="kv-val">${s.cpu_percent != null ? s.cpu_percent + '%' : '—'}</span>
       <span class="kv-key">Memory</span>
       <span class="kv-val">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</span>
       <span class="kv-key">CWD</span>

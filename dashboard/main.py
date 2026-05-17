@@ -21,8 +21,6 @@ _cache: dict[str, Any] = {
     "sessions": [],
     "files": [],
     "last_updated": 0,
-    # pid -> cpu_percent initialised flag (first call returns 0)
-    "_cpu_init": set(),
 }
 _cache_lock = asyncio.Lock()
 
@@ -40,15 +38,6 @@ async def _refresh_loop():
             files = await asyncio.get_event_loop().run_in_executor(
                 None, scanner.scan_agent_dirs
             )
-
-            # Refresh CPU readings (second call gives real values)
-            live_pids = [s["pid"] for s in sessions if s["pid"]]
-            cpu_map = await asyncio.get_event_loop().run_in_executor(
-                None, scanner.refresh_cpu_percent, live_pids
-            )
-            for s in sessions:
-                if s["pid"] and s["pid"] in cpu_map:
-                    s["cpu_percent"] = round(cpu_map[s["pid"]], 1)
 
             async with _cache_lock:
                 _cache["sessions"] = sessions

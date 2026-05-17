@@ -47,7 +47,7 @@ def scan_processes() -> list[dict]:
     """Return list of detected agent process dicts."""
     results = []
     for proc in psutil.process_iter(
-        ["pid", "ppid", "name", "cmdline", "create_time", "cpu_percent", "memory_info"]
+        ["pid", "ppid", "name", "cmdline", "create_time", "memory_info"]
     ):
         try:
             info = proc.info
@@ -79,7 +79,6 @@ def scan_processes() -> list[dict]:
                     "cmdline": cmdline,
                     "cwd": cwd,
                     "runtime_seconds": runtime_seconds,
-                    "cpu_percent": info.get("cpu_percent") or 0.0,
                     "memory_mb": memory_mb,
                     "status": "running",
                 }
@@ -88,17 +87,6 @@ def scan_processes() -> list[dict]:
             continue
     return results
 
-
-def refresh_cpu_percent(pids: list[int]) -> dict[int, float]:
-    """Non-blocking CPU percent for a set of PIDs (returns 0 on first call per PID)."""
-    result = {}
-    for pid in pids:
-        try:
-            proc = psutil.Process(pid)
-            result[pid] = proc.cpu_percent(interval=None)
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            result[pid] = 0.0
-    return result
 
 
 def scan_tmux() -> list[dict]:
