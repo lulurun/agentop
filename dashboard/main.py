@@ -5,10 +5,10 @@ import os
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from dashboard import registry, scanner
@@ -31,13 +31,11 @@ async def _refresh_loop():
     while True:
         try:
             reg = await asyncio.get_event_loop().run_in_executor(None, registry.load)
-            descriptions = {k: v.get("description", "") for k, v in reg.get("sessions", {}).items() if v.get("description")}
-            sessions = await asyncio.get_event_loop().run_in_executor(
-                None, scanner.build_sessions, descriptions
-            )
-            files = await asyncio.get_event_loop().run_in_executor(
-                None, scanner.scan_agent_dirs
-            )
+            descriptions = {
+                k: v.get("description", "") for k, v in reg.get("sessions", {}).items() if v.get("description")
+            }
+            sessions = await asyncio.get_event_loop().run_in_executor(None, scanner.build_sessions, descriptions)
+            files = await asyncio.get_event_loop().run_in_executor(None, scanner.scan_agent_dirs)
 
             async with _cache_lock:
                 _cache["sessions"] = sessions
@@ -92,9 +90,7 @@ async def create_and_start_session(body: dict):
     description = body.get("description", "")
     if not cwd:
         raise HTTPException(status_code=400, detail="cwd is required")
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, scanner.start_session_with_tool, tool, cwd
-    )
+    result = await asyncio.get_event_loop().run_in_executor(None, scanner.start_session_with_tool, tool, cwd)
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
     name = result["name"]
@@ -132,9 +128,7 @@ async def send_to_session(name: str, body: dict):
     tmux_name = (cached.get("tmux") or {}).get("session")
     if not tmux_name:
         raise HTTPException(status_code=404, detail="No tmux session found")
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, scanner.send_to_session, tmux_name, text
-    )
+    result = await asyncio.get_event_loop().run_in_executor(None, scanner.send_to_session, tmux_name, text)
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to send"))
     return {"ok": True}

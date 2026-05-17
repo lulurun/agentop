@@ -1,7 +1,6 @@
 """Manual session registry backed by ~/.agent-dashboard/sessions.json."""
 
 import json
-import os
 from pathlib import Path
 
 REGISTRY_PATH = Path("~/.agent-dashboard/sessions.json").expanduser()

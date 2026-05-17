@@ -22,6 +22,7 @@ REGISTRY_PATH = Path("~/.agent-dashboard/sessions.json").expanduser()
 # Registry helpers
 # ---------------------------------------------------------------------------
 
+
 def _load():
     REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
     if not REGISTRY_PATH.exists():
@@ -46,9 +47,11 @@ def _save(data):
 # Process helpers
 # ---------------------------------------------------------------------------
 
+
 def _is_process_running(pid: int) -> bool:
     try:
         import psutil
+
         return psutil.pid_exists(pid) and psutil.Process(pid).status() != "zombie"
     except ImportError:
         try:
@@ -63,6 +66,7 @@ def _find_agent_processes():
     results = []
     try:
         import psutil
+
         for proc in psutil.process_iter(["pid", "name", "cmdline", "cwd", "create_time"]):
             try:
                 info = proc.info
@@ -74,12 +78,14 @@ def _find_agent_processes():
                             cwd = proc.cwd()
                         except Exception:
                             cwd = None
-                        results.append({
-                            "pid": info["pid"],
-                            "tool": pattern,
-                            "cmdline": cmd,
-                            "cwd": cwd,
-                        })
+                        results.append(
+                            {
+                                "pid": info["pid"],
+                                "tool": pattern,
+                                "cmdline": cmd,
+                                "cwd": cwd,
+                            }
+                        )
                         break
             except Exception:
                 continue
@@ -92,7 +98,8 @@ def _tmux_has_session(name: str) -> bool:
     try:
         r = subprocess.run(
             ["tmux", "has-session", "-t", name],
-            capture_output=True, timeout=3,
+            capture_output=True,
+            timeout=3,
         )
         return r.returncode == 0
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -106,6 +113,7 @@ def _in_tmux() -> bool:
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
 
 def cmd_start(args):
     name = args.name
@@ -166,10 +174,7 @@ def cmd_list(args):
 
     # Print unregistered live processes
     unregistered = []
-    reg_cwds = {
-        os.path.expanduser(e.get("cwd", ""))
-        for e in sessions.values()
-    }
+    reg_cwds = {os.path.expanduser(e.get("cwd", "")) for e in sessions.values()}
     for p in procs:
         if p["cwd"] and p["cwd"] not in reg_cwds:
             unregistered.append(p)
@@ -278,6 +283,7 @@ def cmd_stop(args):
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
+
 
 def main():
     parser = argparse.ArgumentParser(

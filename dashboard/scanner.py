@@ -46,9 +46,7 @@ def _should_ignore(cmdline: str) -> bool:
 def scan_processes() -> list[dict]:
     """Return list of detected agent process dicts."""
     results = []
-    for proc in psutil.process_iter(
-        ["pid", "ppid", "name", "cmdline", "create_time", "memory_info"]
-    ):
+    for proc in psutil.process_iter(["pid", "ppid", "name", "cmdline", "create_time", "memory_info"]):
         try:
             info = proc.info
             cmdline_parts = info["cmdline"] or []
@@ -86,7 +84,6 @@ def scan_processes() -> list[dict]:
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             continue
     return results
-
 
 
 def scan_tmux() -> list[dict]:
@@ -272,7 +269,9 @@ def get_process_tree(pid: int) -> list[dict]:
         current = proc
         while True:
             try:
-                chain.append({"pid": current.pid, "name": current.name(), "cmdline": " ".join(current.cmdline() or [])})
+                chain.append(
+                    {"pid": current.pid, "name": current.name(), "cmdline": " ".join(current.cmdline() or [])}
+                )
                 parent = current.parent()
                 if parent is None or parent.pid == current.pid or parent.pid == 0:
                     break
@@ -283,7 +282,6 @@ def get_process_tree(pid: int) -> list[dict]:
         pass
     chain.reverse()
     return chain
-
 
 
 def start_session_with_tool(tool: str, cwd: str) -> dict:
@@ -299,7 +297,8 @@ def send_to_session(tmux_session: str, text: str) -> dict:
     try:
         r = subprocess.run(
             ["tmux", "send-keys", "-t", tmux_session, text, "Enter"],
-            capture_output=True, timeout=5,
+            capture_output=True,
+            timeout=5,
         )
         if r.returncode != 0:
             return {"ok": False, "error": r.stderr.decode().strip() or "tmux send-keys failed"}
@@ -321,7 +320,8 @@ def stop_session(cwd: str, tmux_name: str) -> dict:
             if r.returncode == 0:
                 subprocess.run(
                     ["tmux", "send-keys", "-t", tmux_name, "/exit", "Enter"],
-                    capture_output=True, timeout=5,
+                    capture_output=True,
+                    timeout=5,
                 )
                 sent_exit = True
                 time.sleep(3)
@@ -399,23 +399,21 @@ def build_sessions(descriptions: dict | None = None) -> list[dict]:
             name = f"{proc['tool']}-{proc['pid']}"
 
         agent = get_agent(proc["tool"])
-        session_meta = (
-            agent.get_session_meta(proc["pid"], proc["cwd"] or "")
-            if agent and proc.get("cwd")
-            else {}
-        )
+        session_meta = agent.get_session_meta(proc["pid"], proc["cwd"] or "") if agent and proc.get("cwd") else {}
 
         description = descriptions.get(name) or session_meta.get("ai_title") or ""
 
-        sessions.append({
-            **proc,
-            "name": name,
-            "tmux": tmux,
-            "git": git,
-            "description": description,
-            "cwd": proc.get("cwd") or "",
-            "managed": managed,
-            **session_meta,
-        })
+        sessions.append(
+            {
+                **proc,
+                "name": name,
+                "tmux": tmux,
+                "git": git,
+                "description": description,
+                "cwd": proc.get("cwd") or "",
+                "managed": managed,
+                **session_meta,
+            }
+        )
 
     return sessions
