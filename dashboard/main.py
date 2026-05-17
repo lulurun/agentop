@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from dashboard import registry, scanner
+from dashboard import ops, scanner
 
 # ---------------------------------------------------------------------------
 # Cache refreshed by background task
@@ -30,13 +30,8 @@ REFRESH_INTERVAL = 5  # seconds
 async def _refresh_loop():
     while True:
         try:
-            reg = await asyncio.get_event_loop().run_in_executor(None, registry.load)
-            descriptions = {
-                k: v.get("description", "") for k, v in reg.get("sessions", {}).items() if v.get("description")
-            }
-            sessions = await asyncio.get_event_loop().run_in_executor(None, scanner.build_sessions, descriptions)
+            sessions = await asyncio.get_event_loop().run_in_executor(None, ops.get_sessions)
             files = await asyncio.get_event_loop().run_in_executor(None, scanner.scan_agent_dirs)
-
             async with _cache_lock:
                 _cache["sessions"] = sessions
                 _cache["files"] = files
@@ -90,28 +85,29 @@ async def create_and_start_session(body: dict):
     description = body.get("description", "")
     if not cwd:
         raise HTTPException(status_code=400, detail="cwd is required")
-    result = await asyncio.get_event_loop().run_in_executor(None, scanner.start_session_with_tool, tool, cwd)
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, ops.start, tool, cwd, description
+    )
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
-    name = result["name"]
-    if description:
-        registry.upsert_session(name, {"description": description})
-    return {"ok": True, "name": name, "pid": result.get("pid")}
+    return {"ok": True, "name": result["name"], "pid": result.get("pid")}
 
 
 @app.post("/api/sessions/{name}/stop")
 async def stop_session(name: str):
     async with _cache_lock:
-        cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
-    if cached is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if not cached.get("managed"):
-        raise HTTPException(status_code=403, detail="Cannot stop an unmanaged session")
-    tmux_name = (cached.get("tmux") or {}).get("session") or name
+        cached_sessions = list(_cache["sessions"])
     result = await asyncio.get_event_loop().run_in_executor(
-        None, scanner.stop_session, cached.get("cwd", ""), tmux_name
+        None, ops.stop, name, cached_sessions
     )
-    return {"ok": True, **result}
+    if not result.get("ok"):
+        error = result["error"]
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        if "not a managed" in error.lower():
+            raise HTTPException(status_code=403, detail=error)
+        raise HTTPException(status_code=500, detail=error)
+    return result
 
 
 @app.post("/api/sessions/{name}/send")
@@ -120,17 +116,17 @@ async def send_to_session(name: str, body: dict):
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
     async with _cache_lock:
-        cached = next((s for s in _cache["sessions"] if s["name"] == name), None)
-    if cached is None:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if not cached.get("managed"):
-        raise HTTPException(status_code=403, detail="Cannot send to an unmanaged session")
-    tmux_name = (cached.get("tmux") or {}).get("session")
-    if not tmux_name:
-        raise HTTPException(status_code=404, detail="No tmux session found")
-    result = await asyncio.get_event_loop().run_in_executor(None, scanner.send_to_session, tmux_name, text)
+        cached_sessions = list(_cache["sessions"])
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, ops.send, name, text, cached_sessions
+    )
     if not result.get("ok"):
-        raise HTTPException(status_code=500, detail=result.get("error", "Failed to send"))
+        error = result["error"]
+        if "not found" in error.lower():
+            raise HTTPException(status_code=404, detail=error)
+        if "not a managed" in error.lower():
+            raise HTTPException(status_code=403, detail=error)
+        raise HTTPException(status_code=500, detail=error)
     return {"ok": True}
 
 
@@ -139,7 +135,6 @@ async def get_session(name: str):
     async with _cache_lock:
         for s in _cache["sessions"]:
             if s["name"] == name:
-                # Enrich with process tree and recent files on demand
                 result = dict(s)
                 if result.get("pid"):
                     result["process_tree"] = await asyncio.get_event_loop().run_in_executor(
@@ -159,7 +154,9 @@ async def get_session(name: str):
 async def update_session(name: str, body: dict):
     description = body.get("description")
     if description is not None:
-        registry.upsert_session(name, {"description": description})
+        await asyncio.get_event_loop().run_in_executor(
+            None, ops.set_description, name, description
+        )
     return {"ok": True}
 
 

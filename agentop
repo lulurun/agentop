@@ -99,44 +99,21 @@ import argparse
 import json
 import os
 import sys
-from pathlib import Path
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-
-def _import_dashboard():
-    """Import dashboard modules, with a clear error if the package is missing."""
+def _ops():
     try:
-        from dashboard import registry
-        from dashboard import scanner
-        return registry, scanner
+        from dashboard import ops
+        return ops
     except ImportError as exc:
         print(f"Error: cannot import dashboard package: {exc}", file=sys.stderr)
         print("Run agentop from the repo root directory.", file=sys.stderr)
         sys.exit(1)
 
 
-def _get_sessions(scanner, registry):
-    reg = registry.load()
-    descriptions = {
-        k: v.get("description", "")
-        for k, v in reg.get("sessions", {}).items()
-        if v.get("description")
-    }
-    return scanner.build_sessions(descriptions)
-
-
-def _find_session(sessions, name):
-    s = next((s for s in sessions if s["name"] == name), None)
-    if s is None:
-        print(f"Session '{name}' not found.", file=sys.stderr)
-        print("Run 'agentop list' to see available sessions.", file=sys.stderr)
-        sys.exit(1)
-    return s
-
+# ---------------------------------------------------------------------------
+# Formatting helpers (presentation only)
+# ---------------------------------------------------------------------------
 
 def _fmt_runtime(sec):
     if not sec:
@@ -178,10 +155,8 @@ def _shorten(path):
 # Commands
 # ---------------------------------------------------------------------------
 
-
 def cmd_list(args):
-    registry, scanner = _import_dashboard()
-    sessions = _get_sessions(scanner, registry)
+    sessions = _ops().get_sessions()
 
     if args.json:
         print(json.dumps(sessions, indent=2, default=str))
@@ -208,20 +183,13 @@ def cmd_list(args):
 
 
 def cmd_start(args):
-    registry, scanner = _import_dashboard()
     cwd = os.path.expanduser(args.cwd) if args.cwd else os.getcwd()
-    description = args.description or ""
-
     print(f"Starting {args.tool} session in {cwd} …")
-    result = scanner.start_session_with_tool(args.tool, cwd)
+    result = _ops().start(args.tool, cwd, args.description or "")
     if not result.get("ok"):
         print(f"Error: {result.get('error', 'Failed to start session')}", file=sys.stderr)
         sys.exit(1)
-
     name = result["name"]
-    if description:
-        registry.upsert_session(name, {"description": description})
-
     print(f"Started:  {name}")
     if result.get("pid"):
         print(f"  PID:    {result['pid']}")
@@ -231,18 +199,13 @@ def cmd_start(args):
 
 
 def cmd_stop(args):
-    registry, scanner = _import_dashboard()
-    sessions = _get_sessions(scanner, registry)
-    s = _find_session(sessions, args.name)
-
-    if not s.get("managed"):
-        print(f"Session '{args.name}' is not managed by agentop.", file=sys.stderr)
-        print("Only sessions started with 'agentop start' can be stopped.", file=sys.stderr)
+    result = _ops().stop(args.name)
+    if not result.get("ok"):
+        print(f"Error: {result['error']}", file=sys.stderr)
+        if "not found" in result["error"].lower():
+            print("Run 'agentop list' to see available sessions.", file=sys.stderr)
         sys.exit(1)
-
-    tmux_name = (s.get("tmux") or {}).get("session") or args.name
     print(f"Stopping '{args.name}' …")
-    result = scanner.stop_session(s.get("cwd", ""), tmux_name)
     if result.get("sent_exit"):
         print("  Sent /exit to agent.")
     if result.get("tmux_killed"):
@@ -251,37 +214,23 @@ def cmd_stop(args):
 
 
 def cmd_send(args):
-    registry, scanner = _import_dashboard()
-    sessions = _get_sessions(scanner, registry)
-    s = _find_session(sessions, args.name)
-
-    if not s.get("managed"):
-        print(f"Session '{args.name}' is not managed by agentop.", file=sys.stderr)
-        print("Only sessions started with 'agentop start' accept prompts.", file=sys.stderr)
-        sys.exit(1)
-
-    tmux_name = (s.get("tmux") or {}).get("session")
-    if not tmux_name:
-        print(f"No tmux session found for '{args.name}'.", file=sys.stderr)
-        sys.exit(1)
-
-    result = scanner.send_to_session(tmux_name, args.text)
+    result = _ops().send(args.name, args.text)
     if not result.get("ok"):
-        print(f"Error: {result.get('error', 'send failed')}", file=sys.stderr)
+        print(f"Error: {result['error']}", file=sys.stderr)
+        if "not found" in result["error"].lower():
+            print("Run 'agentop list' to see available sessions.", file=sys.stderr)
         sys.exit(1)
     print(f"Sent to '{args.name}'.")
 
 
 def cmd_describe(args):
-    registry, _ = _import_dashboard()
-    registry.upsert_session(args.name, {"description": args.text})
+    _ops().set_description(args.name, args.text)
     print(f"Description for '{args.name}' updated.")
 
 
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
-
 
 def main():
     parser = argparse.ArgumentParser(
@@ -302,10 +251,7 @@ def main():
             "Use --json for full machine-readable output."
         ),
     )
-    p_list.add_argument(
-        "--json", action="store_true",
-        help="Output full session data as a JSON array",
-    )
+    p_list.add_argument("--json", action="store_true", help="Output as JSON array")
 
     # start
     p_start = sub.add_parser(
@@ -317,27 +263,16 @@ def main():
             "After starting, attach with:  tmux attach-session -t <name>"
         ),
     )
-    p_start.add_argument(
-        "--tool", required=True,
-        choices=["claude", "codex", "gemini", "openclaw"],
-        help="Agent tool to run",
-    )
-    p_start.add_argument(
-        "--cwd", default=None,
-        help="Working directory (default: current directory)",
-    )
-    p_start.add_argument(
-        "--description", default="",
-        help="Optional note saved with the session",
-    )
+    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini", "openclaw"])
+    p_start.add_argument("--cwd", default=None, help="Working directory (default: cwd)")
+    p_start.add_argument("--description", default="", help="Optional note")
 
     # stop
     p_stop = sub.add_parser(
         "stop",
         help="Gracefully stop a managed session",
         description=(
-            "Stop a managed session: sends /exit to the agent, waits 3 s,\n"
-            "then kills the tmux session.\n"
+            "Send /exit to the agent, wait 3 s, then kill the tmux session.\n"
             "Only sessions started with 'agentop start' can be stopped."
         ),
     )
@@ -348,8 +283,7 @@ def main():
         "send",
         help="Send a prompt to a running session",
         description=(
-            "Send a text prompt to a running agent session via tmux.\n"
-            "The text is delivered followed by Enter, as if typed at the terminal.\n"
+            "Deliver text to a running agent via tmux send-keys + Enter.\n"
             "Only managed sessions (started with 'agentop start') accept prompts."
         ),
     )
@@ -361,10 +295,7 @@ def main():
         "describe",
         aliases=["set-description"],
         help="Save a description or notes for a session",
-        description=(
-            "Attach a human-readable note to a session.\n"
-            "Visible in 'agentop list' and the dashboard UI."
-        ),
+        description="Attach a human-readable note to a session (visible in list and UI).",
     )
     p_desc.add_argument("name", help="Session name")
     p_desc.add_argument("text", help="Description text")
@@ -374,15 +305,14 @@ def main():
         parser.print_help()
         sys.exit(0)
 
-    dispatch = {
+    {
         "list": cmd_list,
         "start": cmd_start,
         "stop": cmd_stop,
         "send": cmd_send,
         "describe": cmd_describe,
         "set-description": cmd_describe,
-    }
-    dispatch[args.command](args)
+    }[args.command](args)
 
 
 if __name__ == "__main__":
