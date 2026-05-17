@@ -477,38 +477,39 @@ class GeminiAgent(BaseAgent):
         if not session_files:
             return {}
 
-        totals = {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_read_input_tokens": 0,
-            "cache_creation_input_tokens": 0,
-        }
-        try:
-            session_file = session_files[0]
-            if session_file.suffix == ".jsonl":
-                # New format: each line after the first header is a message object
-                messages = []
-                with open(session_file) as f:
-                    for i, line in enumerate(f):
-                        if i == 0:
-                            continue  # skip header line
-                        line = line.strip()
-                        if line:
-                            messages.append(json.loads(line))
-            else:
-                # Old format: single JSON object with a messages array
-                with open(session_file) as f:
-                    messages = json.load(f).get("messages", [])
+        for session_file in session_files:
+            try:
+                if session_file.suffix == ".jsonl":
+                    messages = []
+                    with open(session_file) as f:
+                        for i, line in enumerate(f):
+                            if i == 0:
+                                continue  # skip header line
+                            line = line.strip()
+                            if line:
+                                messages.append(json.loads(line))
+                else:
+                    with open(session_file) as f:
+                        messages = json.load(f).get("messages", [])
+            except (OSError, json.JSONDecodeError):
+                continue
 
+            totals = {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_read_input_tokens": 0,
+                "cache_creation_input_tokens": 0,
+            }
             for msg in messages:
                 t = msg.get("tokens") or {}
                 totals["input_tokens"] += t.get("input", 0)
                 totals["output_tokens"] += t.get("output", 0) + t.get("thoughts", 0) + t.get("tool", 0)
                 totals["cache_read_input_tokens"] += t.get("cached", 0)
-        except (OSError, json.JSONDecodeError):
-            return {}
 
-        return {"token_usage": totals} if any(totals.values()) else {}
+            if any(totals.values()):
+                return {"token_usage": totals}
+
+        return {}
 
 
 # ---------------------------------------------------------------------------
