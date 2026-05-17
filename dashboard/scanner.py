@@ -416,4 +416,11 @@ def build_sessions(descriptions: dict | None = None) -> list[dict]:
             }
         )
 
-    return sessions
+    # Deduplicate by name: tools like Gemini spawn a child node process that also
+    # matches; keep only the oldest (lowest PID) entry per name.
+    seen: dict[str, dict] = {}
+    for s in sessions:
+        n = s["name"]
+        if n not in seen or s["pid"] < seen[n]["pid"]:
+            seen[n] = s
+    return list(seen.values())

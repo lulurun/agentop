@@ -315,13 +315,8 @@ class CodexAgent(BaseAgent):
     def launch_cmd(self) -> str:
         return "codex"
 
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Read the thread name from ~/.codex/session_index.jsonl.
-
-        Codex writes a session_meta entry (with id + cwd) as the first line of
-        each rollout-*.jsonl file under ~/.codex/sessions/.  We find the most
-        recent file whose cwd matches, then look up the thread_name in the index.
-        """
+    def _find_rollout_file(self, cwd: str) -> Optional[Path]:
+        """Return the most-recent rollout-*.jsonl whose session_meta cwd matches."""
         sessions_base = Path("~/.codex/sessions").expanduser()
         if not sessions_base.exists():
             return None
@@ -334,7 +329,6 @@ class CodexAgent(BaseAgent):
         except OSError:
             return None
 
-        session_id: Optional[str] = None
         for session_file in session_files[:30]:
             try:
                 with open(session_file) as f:
@@ -343,10 +337,23 @@ class CodexAgent(BaseAgent):
                 if obj.get("type") == "session_meta":
                     payload = obj.get("payload", {})
                     if os.path.normpath(payload.get("cwd", "")) == os.path.normpath(cwd):
-                        session_id = payload.get("id")
-                        break
+                        return session_file
             except (OSError, json.JSONDecodeError):
                 continue
+        return None
+
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Read the thread name from ~/.codex/session_index.jsonl."""
+        rollout_file = self._find_rollout_file(cwd)
+        if not rollout_file:
+            return None
+
+        try:
+            with open(rollout_file) as f:
+                first_line = f.readline()
+            session_id = json.loads(first_line).get("payload", {}).get("id")
+        except (OSError, json.JSONDecodeError):
+            return None
 
         if not session_id:
             return None
@@ -367,6 +374,42 @@ class CodexAgent(BaseAgent):
             return None
         return None
 
+    def get_extra_meta(self, pid: int, cwd: str) -> dict:
+        """Read token usage from the most-recent Codex rollout file for this cwd."""
+        rollout_file = self._find_rollout_file(cwd)
+        if not rollout_file:
+            return {}
+
+        last_usage: Optional[dict] = None
+        try:
+            with open(rollout_file) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        payload = obj.get("payload") or {}
+                        if obj.get("type") == "event_msg" and payload.get("type") == "token_count":
+                            total = (payload.get("info") or {}).get("total_token_usage")
+                            if total:
+                                last_usage = total
+                    except json.JSONDecodeError:
+                        continue
+        except OSError:
+            return {}
+
+        if not last_usage:
+            return {}
+
+        token_usage = {
+            "input_tokens": last_usage.get("input_tokens", 0),
+            "output_tokens": last_usage.get("output_tokens", 0),
+            "cache_read_input_tokens": last_usage.get("cached_input_tokens", 0),
+            "cache_creation_input_tokens": 0,
+        }
+        return {"token_usage": token_usage}
+
 
 # ---------------------------------------------------------------------------
 # Gemini CLI
@@ -380,10 +423,10 @@ class GeminiAgent(BaseAgent):
         cmd_lower = cmdline.lower()
         if name_lower in ("gemini", "gemini-cli") or name_lower.startswith("gemini"):
             return True
-        tokens = cmd_lower.split()
-        if tokens:
-            first = tokens[0].split("/")[-1]
-            if first in ("gemini", "gemini-cli") or first.startswith("gemini"):
+        # Gemini CLI runs as `node /path/to/bin/gemini`, so check all tokens
+        for token in cmd_lower.split():
+            base = token.split("/")[-1]
+            if base in ("gemini", "gemini-cli") or base.startswith("gemini-"):
                 return True
         return False
 
