@@ -434,9 +434,81 @@ class GeminiAgent(BaseAgent):
     def launch_cmd(self) -> str:
         return "gemini"
 
+    def _find_project_dir(self, cwd: str) -> Optional[Path]:
+        """Return ~/.gemini/tmp/<name>/ whose .project_root matches cwd."""
+        tmp_base = Path("~/.gemini/tmp").expanduser()
+        if not tmp_base.exists():
+            return None
+        try:
+            for project_dir in tmp_base.iterdir():
+                root_file = project_dir / ".project_root"
+                if not root_file.exists():
+                    continue
+                try:
+                    root = root_file.read_text().strip()
+                    if os.path.normpath(root) == os.path.normpath(cwd):
+                        return project_dir
+                except OSError:
+                    continue
+        except OSError:
+            pass
+        return None
+
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
         """Gemini CLI does not currently persist conversation titles to disk."""
         return None
+
+    def get_extra_meta(self, pid: int, cwd: str) -> dict:
+        """Read token usage from the most-recent Gemini chat session for this cwd."""
+        project_dir = self._find_project_dir(cwd)
+        if not project_dir:
+            return {}
+        chats_dir = project_dir / "chats"
+        if not chats_dir.exists():
+            return {}
+        try:
+            session_files = sorted(
+                list(chats_dir.glob("session-*.json")) + list(chats_dir.glob("session-*.jsonl")),
+                key=lambda f: f.stat().st_mtime,
+                reverse=True,
+            )
+        except OSError:
+            return {}
+        if not session_files:
+            return {}
+
+        totals = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+        }
+        try:
+            session_file = session_files[0]
+            if session_file.suffix == ".jsonl":
+                # New format: each line after the first header is a message object
+                messages = []
+                with open(session_file) as f:
+                    for i, line in enumerate(f):
+                        if i == 0:
+                            continue  # skip header line
+                        line = line.strip()
+                        if line:
+                            messages.append(json.loads(line))
+            else:
+                # Old format: single JSON object with a messages array
+                with open(session_file) as f:
+                    messages = json.load(f).get("messages", [])
+
+            for msg in messages:
+                t = msg.get("tokens") or {}
+                totals["input_tokens"] += t.get("input", 0)
+                totals["output_tokens"] += t.get("output", 0) + t.get("thoughts", 0) + t.get("tool", 0)
+                totals["cache_read_input_tokens"] += t.get("cached", 0)
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        return {"token_usage": totals} if any(totals.values()) else {}
 
 
 # ---------------------------------------------------------------------------

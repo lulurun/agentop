@@ -22,8 +22,10 @@ IGNORE_CMDLINE_PATTERNS = [
 AGENT_DIRS = [
     "~/.claude",
     "~/.codex",
+    "~/.gemini",
     "~/.config/claude",
     "~/.config/codex",
+    "~/.config/gemini",
     "~/.local/share/claude",
     "~/.local/share/codex",
 ]
@@ -226,7 +228,13 @@ def scan_agent_dirs(limit: int = 60) -> list[dict]:
         dir_path = Path(dir_pattern).expanduser()
         if not dir_path.exists():
             continue
-        tool = "claude" if "claude" in str(dir_path) else "codex"
+        p = str(dir_path)
+        if "claude" in p:
+            tool = "claude"
+        elif "gemini" in p:
+            tool = "gemini"
+        else:
+            tool = "codex"
         try:
             for f in dir_path.rglob("*"):
                 if not f.is_file():

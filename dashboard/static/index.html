@@ -329,12 +329,12 @@ thead th {
   background: var(--bg2);
   text-align: left;
 }
-thead th[data-sort] {
+thead th[data-sort], thead th[data-fsort] {
   cursor: pointer;
   user-select: none;
 }
-thead th[data-sort]:hover { color: var(--text); }
-thead th.sort-active     { color: var(--text); }
+thead th[data-sort]:hover, thead th[data-fsort]:hover { color: var(--text); }
+thead th.sort-active, thead th.fsort-active { color: var(--text); }
 .sort-arrow {
   display: inline-block;
   margin-left: 3px;
@@ -342,7 +342,7 @@ thead th.sort-active     { color: var(--text); }
   color: var(--text3);
   vertical-align: middle;
 }
-thead th.sort-active .sort-arrow { color: var(--accent); }
+thead th.sort-active .sort-arrow, thead th.fsort-active .sort-arrow { color: var(--accent); }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -975,11 +975,11 @@ td.muted { color: var(--text2); }
         <table id="files-table">
           <thead>
             <tr>
-              <th>Tool</th>
-              <th>Type</th>
-              <th>File</th>
-              <th style="text-align:right">Size</th>
-              <th>Modified</th>
+              <th data-fsort="tool"     onclick="setFilesSort('tool')">Tool <span class="sort-arrow"></span></th>
+              <th data-fsort="type"     onclick="setFilesSort('type')">Type <span class="sort-arrow"></span></th>
+              <th data-fsort="path"     onclick="setFilesSort('path')">File <span class="sort-arrow"></span></th>
+              <th data-fsort="size"     onclick="setFilesSort('size')" style="text-align:right">Size <span class="sort-arrow"></span></th>
+              <th data-fsort="modified" onclick="setFilesSort('modified')" class="fsort-active">Modified <span class="sort-arrow"></span></th>
             </tr>
           </thead>
           <tbody id="files-body">
@@ -1056,6 +1056,8 @@ let countdownSec = 5;
 const REFRESH_INTERVAL = 5000;
 let sortKey = 'runtime';
 let sortDir = 'desc';
+let filesSortKey = 'modified';
+let filesSortDir = 'desc';
 
 // ============================================================
 // Theme
@@ -1549,25 +1551,61 @@ async function fetchFiles() {
   }
 }
 
+function setFilesSort(key) {
+  if (filesSortKey === key) {
+    filesSortDir = filesSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    filesSortKey = key;
+    filesSortDir = key === 'modified' || key === 'size' ? 'desc' : 'asc';
+  }
+  updateFilesSortUI();
+  if (window._lastFiles) renderFiles(window._lastFiles);
+}
+
+function updateFilesSortUI() {
+  document.querySelectorAll('#files-table thead th[data-fsort]').forEach(th => {
+    const key = th.dataset.fsort;
+    th.classList.toggle('fsort-active', key === filesSortKey);
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = key === filesSortKey ? (filesSortDir === 'asc' ? '↑' : '↓') : '';
+  });
+}
+
+function sortFiles(list) {
+  return [...list].sort((a, b) => {
+    let av, bv;
+    if (filesSortKey === 'modified') { av = a.modified_time; bv = b.modified_time; }
+    else if (filesSortKey === 'size') { av = a.size_bytes; bv = b.size_bytes; }
+    else if (filesSortKey === 'tool') { av = a.tool; bv = b.tool; }
+    else if (filesSortKey === 'type') { av = a.type; bv = b.type; }
+    else { av = a.path; bv = b.path; }
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return filesSortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
 function renderFiles(files) {
+  window._lastFiles = files;
   const tbody = document.getElementById('files-body');
   if (!files.length) {
     tbody.innerHTML = `<tr><td colspan="5">
       <div class="empty-state">
         <div class="empty-icon">📂</div>
         <h3>No agent files found</h3>
-        <p>Agent directories (~/.claude, ~/.codex) appear empty.</p>
+        <p>Agent directories (~/.claude, ~/.codex, ~/.gemini) appear empty.</p>
       </div>
     </td></tr>`;
     return;
   }
-  tbody.innerHTML = files.map(f => `<tr>
+  const sorted = sortFiles(files);
+  tbody.innerHTML = sorted.map(f => `<tr>
     <td>${toolBadge(f.tool)}</td>
     <td><span class="mono muted">${escHtml(f.type)}</span></td>
     <td class="path-cell" title="${escHtml(f.path)}">${escHtml(fmtProject(f.path))}</td>
     <td class="size-cell muted">${fmtBytes(f.size_bytes)}</td>
     <td class="mono muted" style="font-size:12px">${fmtDate(f.modified_time)}</td>
   </tr>`).join('');
+  updateFilesSortUI();
 }
 
 // ============================================================
