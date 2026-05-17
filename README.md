@@ -46,10 +46,10 @@ kill $(cat dashboard.pid)
 
 ## CLI
 
-Start a named session (creates a tmux session):
+Start a session (creates a tmux session, auto-named `agentop_<tool>_<pid>`):
 
 ```bash
-./agentop start claude-myproject --tool claude --cwd ~/repos/myproject --description "Refactor auth module"
+./agentop start --tool claude --cwd ~/repos/myproject --description "Refactor auth module"
 ```
 
 List sessions:
@@ -61,13 +61,13 @@ List sessions:
 Update description:
 
 ```bash
-./agentop set-description claude-myproject "Now debugging the token refresh flow"
+./agentop set-description agentop_claude_12345 "Now debugging the token refresh flow"
 ```
 
 Stop a session:
 
 ```bash
-./agentop stop claude-myproject
+./agentop stop agentop_claude_12345
 ```
 
 ## License
