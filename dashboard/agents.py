@@ -202,8 +202,8 @@ class ClaudeAgent(BaseAgent):
             except (subprocess.TimeoutExpired, subprocess.SubprocessError):
                 continue
 
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Read the AI-generated title from ~/.claude/projects/{slug}/{session_id}.jsonl."""
+    def _get_jsonl_path(self, pid: int, cwd: str) -> Optional[Path]:
+        """Resolve the JSONL conversation file for a Claude session, or None."""
         session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
         if not session_file.exists():
             return None
@@ -215,8 +215,49 @@ class ClaudeAgent(BaseAgent):
                 return None
             slug = cwd.replace("/", "-")
             jsonl_path = Path(f"~/.claude/projects/{slug}/{session_id}.jsonl").expanduser()
-            if not jsonl_path.exists():
-                return None
+            return jsonl_path if jsonl_path.exists() else None
+        except (OSError, json.JSONDecodeError):
+            return None
+
+    def _read_token_usage(self, jsonl_path: Path) -> Optional[dict]:
+        """Sum token usage across unique assistant messages in a JSONL file."""
+        try:
+            seen_ids: set = set()
+            totals = {
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cache_creation_input_tokens": 0,
+                "cache_read_input_tokens": 0,
+            }
+            with open(jsonl_path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        if obj.get("type") != "assistant":
+                            continue
+                        msg = obj.get("message", {})
+                        msg_id = msg.get("id")
+                        if not msg_id or msg_id in seen_ids:
+                            continue
+                        seen_ids.add(msg_id)
+                        usage = msg.get("usage", {})
+                        for k in totals:
+                            totals[k] += usage.get(k, 0)
+                    except json.JSONDecodeError:
+                        continue
+            return totals if seen_ids else None
+        except OSError:
+            return None
+
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Read the AI-generated title from ~/.claude/projects/{slug}/{session_id}.jsonl."""
+        jsonl_path = self._get_jsonl_path(pid, cwd)
+        if not jsonl_path:
+            return None
+        try:
             last_title = None
             with open(jsonl_path) as f:
                 for line in f:
@@ -227,33 +268,40 @@ class ClaudeAgent(BaseAgent):
                     except json.JSONDecodeError:
                         continue
             return last_title
-        except (OSError, json.JSONDecodeError):
+        except OSError:
             return None
 
     def get_extra_meta(self, pid: int, cwd: str) -> dict:
-        """Read remote-control bridge info from ~/.claude/sessions/{pid}.json."""
+        """Read remote-control bridge info and token usage from ~/.claude/sessions/{pid}.json."""
         session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
-        if not session_file.exists():
-            return {}
-        try:
-            with open(session_file) as f:
-                meta = json.load(f)
-            bridge_id = meta.get("bridgeSessionId")
-            if not bridge_id:
-                return {}
-            hostname = socket.gethostname()
-            raw = bridge_id.replace("session_", "")
-            remote_name = (
-                f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
-            )
-            return {
-                "bridge_session_id": bridge_id,
-                "bridge_url": f"https://claude.ai/code/{bridge_id}",
-                "remote_name": remote_name,
-                "claude_status": meta.get("status"),
-            }
-        except (OSError, json.JSONDecodeError):
-            return {}
+        result: dict = {}
+        if session_file.exists():
+            try:
+                with open(session_file) as f:
+                    meta = json.load(f)
+                bridge_id = meta.get("bridgeSessionId")
+                if bridge_id:
+                    hostname = socket.gethostname()
+                    raw = bridge_id.replace("session_", "")
+                    remote_name = (
+                        f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
+                    )
+                    result.update({
+                        "bridge_session_id": bridge_id,
+                        "bridge_url": f"https://claude.ai/code/{bridge_id}",
+                        "remote_name": remote_name,
+                        "claude_status": meta.get("status"),
+                    })
+            except (OSError, json.JSONDecodeError):
+                pass
+
+        jsonl_path = self._get_jsonl_path(pid, cwd)
+        if jsonl_path:
+            token_usage = self._read_token_usage(jsonl_path)
+            if token_usage:
+                result["token_usage"] = token_usage
+
+        return result
 
 
 # ---------------------------------------------------------------------------
