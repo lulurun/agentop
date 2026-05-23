@@ -165,7 +165,8 @@ def cmd_list(args):
         mem = f"{s['memory_mb']}MB" if s.get("memory_mb") else "—"
         tokens = _fmt_tokens(s.get("token_usage"))
         cwd = _shorten(s.get("cwd"))
-        print(col.format(s["name"], s.get("tool", "?"), status, pid, runtime, mem, tokens, cwd))
+        name = s["name"] if s.get("managed") else f"[external] {s['name']}"
+        print(col.format(name, s.get("tool", "?"), status, pid, runtime, mem, tokens, cwd))
         if s.get("ai_title"):
             print(f"  └─ {s['ai_title']}")
 
