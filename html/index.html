@@ -433,15 +433,18 @@ td.muted { color: var(--text2); }
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--text3);
-  padding: 2px 4px;
-  border-radius: 3px;
-  transition: color .15s, background .15s;
-  font-size: 13px;
+  color: var(--text2);
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color .15s, background .15s, border-color .15s;
+  font-size: 12px;
   user-select: none;
   vertical-align: middle;
+  line-height: 1.4;
 }
-.copy-btn:hover { color: var(--accent); background: var(--accent-dim); }
+.copy-btn:hover { color: var(--accent); background: var(--accent-dim); border-color: var(--accent); }
 
 /* Tag */
 .tag {
