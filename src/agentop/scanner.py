@@ -8,7 +8,7 @@ from typing import Optional
 
 import psutil
 
-from dashboard.agents import AGENTS, get_agent
+from agentop.agents import AGENTS, get_agent
 
 IGNORE_CMDLINE_PATTERNS = [
     "grep",
@@ -292,12 +292,12 @@ def get_process_tree(pid: int) -> list[dict]:
     return chain
 
 
-def start_session_with_tool(tool: str, cwd: str) -> dict:
+def start_session_with_tool(tool: str, cwd: str, short_name: str = "") -> dict:
     """Delegate to the agent's start_session() method."""
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}
-    return agent.start_session(cwd)
+    return agent.start_session(cwd, short_name)
 
 
 def send_to_session(tmux_session: str, text: str) -> dict:
@@ -376,13 +376,16 @@ def get_recent_project_files(cwd: str, limit: int = 10) -> list[str]:
         return []
 
 
-def build_sessions(descriptions: dict | None = None) -> list[dict]:
+def build_sessions(descriptions: dict | None = None, managed_names: set | None = None) -> list[dict]:
     """Derive session list from live processes and .claude/.codex files. Fully stateless.
 
-    descriptions: optional {name: description} for user-saved notes on managed sessions.
+    descriptions:   optional {name: description} for user-saved notes on managed sessions.
+    managed_names:  set of session names registered as managed in the registry.
     """
     if descriptions is None:
         descriptions = {}
+    if managed_names is None:
+        managed_names = set()
     procs = scan_processes()
     tmux_panes = scan_tmux()
 
@@ -391,8 +394,11 @@ def build_sessions(descriptions: dict | None = None) -> list[dict]:
         tmux = map_process_to_tmux(proc["pid"], tmux_panes)
         git = get_git_info(proc["cwd"]) if proc["cwd"] else None
 
-        # A session is managed by agentop when its tmux session name starts with "agentop_"
-        managed = bool(tmux and tmux["session"].startswith("agentop_"))
+        tmux_session = (tmux or {}).get("session", "")
+        managed = bool(
+            tmux_session.startswith("agentop_")
+            or tmux_session in managed_names
+        )
 
         # Name: managed → tmux session name; otherwise tmux name (if agent-like) or {tool}-{pid}
         if managed:

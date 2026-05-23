@@ -4,10 +4,10 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-# Install dependencies if needed
-if ! python3 -c "import fastapi, uvicorn, psutil" 2>/dev/null; then
-  echo "Installing dependencies..."
-  pip3 install -r requirements.txt
+# Install package (editable) if not already installed
+if ! python3 -c "import agentop" 2>/dev/null; then
+  echo "Installing agentop..."
+  pip3 install -e .
 fi
 
 PID_FILE="$SCRIPT_DIR/dashboard.pid"
@@ -20,7 +20,7 @@ fi
 echo "Starting Agentop Dashboard at http://127.0.0.1:8765"
 echo "Logging to $SCRIPT_DIR/dashboard.log"
 
-nohup python3 -m uvicorn dashboard.main:app --host 127.0.0.1 --port 8765 \
+nohup python3 "$SCRIPT_DIR/src/api.py" \
   > "$SCRIPT_DIR/dashboard.log" 2>&1 &
 
 echo $! > "$PID_FILE"

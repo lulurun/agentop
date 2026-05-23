@@ -103,7 +103,7 @@ import sys
 
 def _ops():
     try:
-        from dashboard import ops
+        from agentop import ops
         return ops
     except ImportError as exc:
         print(f"Error: cannot import dashboard package: {exc}", file=sys.stderr)

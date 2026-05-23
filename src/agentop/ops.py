@@ -2,29 +2,31 @@
 
 from __future__ import annotations
 
-from dashboard import registry, scanner
+from agentop import registry, scanner
 
 
 def get_sessions() -> list[dict]:
     """Return all live agent sessions enriched with registry descriptions."""
     reg = registry.load()
+    reg_sessions = reg.get("sessions", {})
     descriptions = {
         k: v.get("description", "")
-        for k, v in reg.get("sessions", {}).items()
+        for k, v in reg_sessions.items()
         if v.get("description")
     }
-    return scanner.build_sessions(descriptions)
+    managed_names = {k for k, v in reg_sessions.items() if v.get("managed")}
+    return scanner.build_sessions(descriptions, managed_names)
 
 
-def start(tool: str, cwd: str, description: str = "") -> dict:
+def start(tool: str, cwd: str, short_name: str = "") -> dict:
     """Launch a new managed agent session.
 
     Returns {"ok": True, "name": …, "pid": …}
          or {"ok": False, "error": …}.
     """
-    result = scanner.start_session_with_tool(tool, cwd)
-    if result.get("ok") and description:
-        registry.upsert_session(result["name"], {"description": description})
+    result = scanner.start_session_with_tool(tool, cwd, short_name)
+    if result.get("ok"):
+        registry.upsert_session(result["name"], {"managed": True})
     return result
 
 

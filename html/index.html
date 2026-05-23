@@ -919,7 +919,7 @@ td.muted { color: var(--text2); }
             <table id="sessions-table">
               <thead>
                 <tr>
-                  <th data-sort="name"        onclick="setSort('name')">Name <span class="sort-arrow"></span></th>
+                  <th data-sort="name"        onclick="setSort('name')">Session <span class="sort-arrow"></span></th>
                   <th data-sort="tool"        onclick="setSort('tool')">Tool <span class="sort-arrow"></span></th>
                   <th data-sort="status"      onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
                   <th data-sort="description" onclick="setSort('description')">Description <span class="sort-arrow"></span></th>
@@ -1012,6 +1012,10 @@ td.muted { color: var(--text2); }
     <div class="modal-body">
       <div class="edit-form">
         <div class="form-group">
+          <label class="form-label">Session Name <span style="color:var(--text3);font-weight:400">(&lt;32 chars)</span></label>
+          <input type="text" id="new-short-name" class="form-input" placeholder="my-project" maxlength="31">
+        </div>
+        <div class="form-group">
           <label class="form-label">Agent Tool</label>
           <select id="new-tool" class="form-select">
             <option value="claude">Claude</option>
@@ -1022,10 +1026,6 @@ td.muted { color: var(--text2); }
         <div class="form-group">
           <label class="form-label">Working Directory</label>
           <input type="text" id="new-cwd" class="form-input" placeholder="/home/user/repos/myproject">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Description <span style="color:var(--text3);font-weight:400">(optional)</span></label>
-          <input type="text" id="new-description" class="form-input" placeholder="What will this session do?">
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
@@ -1634,14 +1634,14 @@ function manualRefresh() {
 // New Session modal
 // ============================================================
 async function openNewSession() {
-  document.getElementById('new-description').value = '';
+  document.getElementById('new-short-name').value = '';
   document.getElementById('modal-overlay').classList.add('open');
   try {
     const r = await fetch('/api/info');
     const data = await r.json();
     document.getElementById('new-cwd').value = data.home || '';
   } catch (_) {}
-  document.getElementById('new-cwd').focus();
+  document.getElementById('new-short-name').focus();
 }
 
 function closeModal() {
@@ -1649,9 +1649,11 @@ function closeModal() {
 }
 
 async function submitNewSession() {
-  const tool        = document.getElementById('new-tool').value;
-  const cwd         = document.getElementById('new-cwd').value.trim();
-  const description = document.getElementById('new-description').value.trim();
+  const tool       = document.getElementById('new-tool').value;
+  const cwd        = document.getElementById('new-cwd').value.trim();
+  const short_name = document.getElementById('new-short-name').value.trim();
+  if (!short_name) { showToast('Session name is required'); return; }
+  if (short_name.length >= 32) { showToast('Session name must be under 32 characters'); return; }
   if (!cwd) { showToast('Working directory is required'); return; }
   const btn = document.getElementById('modal-start-btn');
   const originalHTML = btn.innerHTML;
@@ -1661,7 +1663,7 @@ async function submitNewSession() {
     const r = await fetch('/api/sessions/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tool, cwd, description }),
+      body: JSON.stringify({ tool, cwd, short_name }),
     });
     const data = await r.json();
     if (!r.ok) throw new Error(data.detail || 'Failed to start session');

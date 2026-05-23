@@ -1,0 +1,112 @@
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+from pathlib import Path
+from typing import Optional
+
+import psutil
+
+from agentop.agents.base import BaseAgent
+
+
+class CodexAgent(BaseAgent):
+    name = "codex"
+
+    # Tolerance for matching process start time to thread created_at_ms (30 seconds)
+    _START_TOLERANCE_MS = 30_000
+
+    @property
+    def launch_cmd(self) -> str:
+        return "codex"
+
+    def _find_thread(self, pid: int, cwd: str) -> Optional[dict]:
+        """Query state_5.sqlite for the thread matching this process by cwd + start time.
+
+        Returns a dict with title, first_user_message, tokens_used, rollout_path,
+        or None if no close match is found.
+        """
+        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        if not db_path.exists():
+            return None
+        try:
+            start_ms = int(psutil.Process(pid).create_time() * 1000)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return None
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2) as conn:
+                conn.row_factory = sqlite3.Row
+                cur = conn.execute(
+                    """
+                    SELECT title, first_user_message, tokens_used, rollout_path, created_at_ms
+                    FROM threads
+                    WHERE cwd = ? AND (archived IS NULL OR archived = 0)
+                    ORDER BY ABS(created_at_ms - ?) ASC
+                    LIMIT 1
+                    """,
+                    (os.path.normpath(cwd), start_ms),
+                )
+                row = cur.fetchone()
+        except sqlite3.Error:
+            return None
+        if row is None:
+            return None
+        if abs(row["created_at_ms"] - start_ms) > self._START_TOLERANCE_MS:
+            return None
+        return dict(row)
+
+    def _read_rollout_token_usage(self, rollout_path: str) -> Optional[dict]:
+        """Scan a rollout JSONL for the last token_count event and return token usage."""
+        try:
+            path = Path(rollout_path)
+            if not path.exists():
+                return None
+            last_usage: Optional[dict] = None
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        obj = json.loads(line)
+                        payload = obj.get("payload") or {}
+                        if obj.get("type") == "event_msg" and payload.get("type") == "token_count":
+                            total = (payload.get("info") or {}).get("total_token_usage")
+                            if total:
+                                last_usage = total
+                    except json.JSONDecodeError:
+                        continue
+            if not last_usage:
+                return None
+            return {
+                "input_tokens": last_usage.get("input_tokens", 0),
+                "output_tokens": last_usage.get("output_tokens", 0),
+                "cache_read_input_tokens": last_usage.get("cached_input_tokens", 0),
+                "cache_creation_input_tokens": 0,
+            }
+        except OSError:
+            return None
+
+    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
+        """Read the thread title from state_5.sqlite, matched by PID start time."""
+        thread = self._find_thread(pid, cwd)
+        if not thread:
+            return None
+        title = thread.get("title")
+        if title:
+            return title
+        first_msg = (thread.get("first_user_message") or "").strip()
+        if first_msg:
+            return first_msg[:80] + ("…" if len(first_msg) > 80 else "")
+        return None
+
+    def get_extra_meta(self, pid: int, cwd: str) -> dict:
+        """Read token usage from the rollout file identified via state_5.sqlite."""
+        thread = self._find_thread(pid, cwd)
+        if not thread or not thread.get("rollout_path"):
+            return {}
+        token_usage = self._read_rollout_token_usage(thread["rollout_path"])
+        if not token_usage:
+            return {}
+        return {"token_usage": token_usage}

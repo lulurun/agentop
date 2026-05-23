@@ -2,3 +2,5 @@
 dashboard.pid
 __pycache__/
 *.pyc
+.claude
+.vscode

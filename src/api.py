@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from dashboard import ops, scanner
+from agentop import ops, scanner
 
 # ---------------------------------------------------------------------------
 # Cache refreshed by background task
@@ -26,6 +26,8 @@ _cache_lock = asyncio.Lock()
 
 REFRESH_INTERVAL = 5  # seconds
 
+STATIC_DIR = Path(__file__).parent.parent / "html"
+
 
 async def _refresh_loop():
     while True:
@@ -37,7 +39,7 @@ async def _refresh_loop():
                 _cache["files"] = files
                 _cache["last_updated"] = time.time()
         except Exception as exc:  # noqa: BLE001
-            print(f"[dashboard] refresh error: {exc}")
+            print(f"[agentop] refresh error: {exc}")
         await asyncio.sleep(REFRESH_INTERVAL)
 
 
@@ -53,8 +55,6 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Agent Session Dashboard", lifespan=lifespan)
-
-STATIC_DIR = Path(__file__).parent / "static"
 
 
 # ---------------------------------------------------------------------------
@@ -82,11 +82,15 @@ async def list_sessions():
 async def create_and_start_session(body: dict):
     tool = body.get("tool", "claude")
     cwd = os.path.expanduser(body.get("cwd", ""))
-    description = body.get("description", "")
+    short_name = body.get("short_name", "").strip()
     if not cwd:
         raise HTTPException(status_code=400, detail="cwd is required")
+    if not short_name:
+        raise HTTPException(status_code=400, detail="short_name is required")
+    if len(short_name) >= 32:
+        raise HTTPException(status_code=400, detail="short_name must be under 32 characters")
     result = await asyncio.get_event_loop().run_in_executor(
-        None, ops.start, tool, cwd, description
+        None, ops.start, tool, cwd, short_name
     )
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
@@ -187,9 +191,4 @@ app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(
-        "dashboard.main:app",
-        host="127.0.0.1",
-        port=8765,
-        reload=False,
-    )
+    uvicorn.run(app, host="127.0.0.1", port=8765)
