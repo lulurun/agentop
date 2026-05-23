@@ -7,33 +7,30 @@ A local dashboard for monitoring running AI agent sessions — Claude Code, Code
 ## What it does
 
 - Detects running Claude Code, Codex, and Gemini CLI processes
-- Shows PID, runtime, memory, working directory, and token usage
-- Maps processes to tmux sessions
+- Shows session, tool, status, PID, runtime, memory, token usage, and working directory
 - Reads AI-generated conversation titles from Claude Code and Codex sessions
 - Shows token usage (input, output, cache) per session
 - Shows git branch and dirty status for each session's project
-- Manual per-session description and status
 - Auto-refreshing web UI at `http://127.0.0.1:8765`
 - `agentop` CLI for starting and managing named sessions
-- Agent Files tab showing recently modified files across all agent directories
 
 ## Requirements
 
-- Python 3.10+
-- `tmux` (optional, but recommended)
+- Python 3.11+
+- `tmux`
 
 ## Install
 
 ```bash
 git clone git@github.com:lulurun/agentop.git
 cd agentop
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ## Start the dashboard
 
 ```bash
-./run.sh
+./run_app.sh
 ```
 
 Open [http://127.0.0.1:8765](http://127.0.0.1:8765) in your browser.
@@ -46,28 +43,24 @@ kill $(cat dashboard.pid)
 
 ## CLI
 
-Start a session (creates a tmux session, auto-named `agentop_<tool>_<pid>`):
-
-```bash
-./agentop start --tool claude --cwd ~/repos/myproject --description "Refactor auth module"
-```
-
 List sessions:
 
 ```bash
-./agentop list
+agentop list
+agentop list --json
 ```
 
-Update description:
+Start a session (tmux session named `<session_name>-<pid>`):
 
 ```bash
-./agentop set-description agentop_claude_12345 "Now debugging the token refresh flow"
+agentop start myapp --tool claude
+agentop start myapp --tool claude --cwd ~/projects/myapp
 ```
 
 Stop a session:
 
 ```bash
-./agentop stop agentop_claude_12345
+agentop stop myapp-12345
 ```
 
 ## License

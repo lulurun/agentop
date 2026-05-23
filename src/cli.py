@@ -8,17 +8,18 @@ COMMANDS
 --------
   list [--json]
     Show all running agent sessions detected on this machine.
-    Columns: name, tool, status, pid, runtime, mem, tokens, cwd.
+    Columns: session, tool, status, pid, runtime, mem, tokens, cwd.
     --json outputs the full session objects as a JSON array, which
     includes token breakdown, git info, tmux details, and bridge URL.
 
-  start --tool <tool> --cwd <path>
+  start <session_name> --tool <tool> [--cwd <path>]
     Launch a new agent session inside a managed tmux session.
-    The session is named  {short_name}-{pid}  automatically.
+    session_name must be less than 32 characters.
+    The tmux session is named  {session_name}-{pid}  automatically.
     Supported tools: claude, codex, gemini
-    After starting, attach with:  tmux attach-session -t <name>
+    After starting, attach with:  tmux attach-session -t <session>
 
-  stop <name>
+  stop <session>
     Gracefully stop a managed session: sends /exit to the agent,
     waits up to 3 s for it to exit, then kills the tmux session.
     Only sessions started by agentop can be stopped.
@@ -36,11 +37,12 @@ EXAMPLES
           print(s['name'], s.get('claude_status'), s.get('cwd'))
   "
 
-  # Start a session
-  agentop start --tool claude --cwd ~/projects/myapp
+  # Start a session (cwd defaults to home directory)
+  agentop start myapp --tool claude
+  agentop start myapp --tool claude --cwd ~/projects/myapp
 
   # Stop a session
-  agentop stop myproject-12345
+  agentop stop myapp-12345
 
 EXIT CODES
 ----------
@@ -156,7 +158,7 @@ def cmd_list(args):
         return
 
     col = "{:<36} {:<8} {:<8} {:<8} {:<9} {:<8} {:<7} {}"
-    print(col.format("NAME", "TOOL", "STATUS", "PID", "RUNTIME", "MEM", "TOKENS", "CWD"))
+    print(col.format("SESSION", "TOOL", "STATUS", "PID", "RUNTIME", "MEM", "TOKENS", "CWD"))
     print("─" * 110)
     for s in sessions:
         status = s.get("claude_status") or s.get("status") or "—"
@@ -172,9 +174,9 @@ def cmd_list(args):
 
 
 def cmd_start(args):
-    cwd = os.path.expanduser(args.cwd) if args.cwd else os.getcwd()
-    print(f"Starting {args.tool} session in {cwd} …")
-    result = _ops().start(args.tool, cwd)
+    cwd = os.path.expanduser(args.cwd)
+    print(f"Starting {args.tool} session '{args.session_name}' in {cwd} …")
+    result = _ops().start(args.tool, cwd, args.session_name)
     if not result.get("ok"):
         print(f"Error: {result.get('error', 'Failed to start session')}", file=sys.stderr)
         sys.exit(1)
@@ -229,16 +231,23 @@ def main():
     p_list.add_argument("--json", action="store_true", help="Output as JSON array")
 
     # start
+    def _session_name_type(val):
+        if len(val) >= 32:
+            raise argparse.ArgumentTypeError("session name must be less than 32 characters")
+        return val
+
     p_start = sub.add_parser(
         "start",
         help="Launch a new agent session in tmux",
         description=(
             "Start a new agent session in a managed tmux session.\n"
-            "After starting, attach with:  tmux attach-session -t <name>"
+            "The tmux session is named {session_name}-{pid} automatically.\n"
+            "After starting, attach with:  tmux attach-session -t <session>"
         ),
     )
+    p_start.add_argument("session_name", type=_session_name_type, help="Session name (max 31 chars)")
     p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini"])
-    p_start.add_argument("--cwd", default=None, help="Working directory (default: cwd)")
+    p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
 
     # stop
     p_stop = sub.add_parser(
