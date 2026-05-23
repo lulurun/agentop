@@ -6,16 +6,11 @@ from agentop import registry, scanner
 
 
 def get_sessions() -> list[dict]:
-    """Return all live agent sessions enriched with registry descriptions."""
+    """Return all live agent sessions enriched with managed-session registry data."""
     reg = registry.load()
     reg_sessions = reg.get("sessions", {})
-    descriptions = {
-        k: v.get("description", "")
-        for k, v in reg_sessions.items()
-        if v.get("description")
-    }
     managed_names = {k for k, v in reg_sessions.items() if v.get("managed")}
-    return scanner.build_sessions(descriptions, managed_names)
+    return scanner.build_sessions(managed_names)
 
 
 def start(tool: str, cwd: str, short_name: str = "") -> dict:
@@ -64,8 +59,3 @@ def send(name: str, text: str, sessions: list[dict] | None = None) -> dict:
     if not tmux_name:
         return {"ok": False, "error": "No tmux session found"}
     return scanner.send_to_session(tmux_name, text)
-
-
-def set_description(name: str, text: str) -> None:
-    """Save a description for a session."""
-    registry.upsert_session(name, {"description": text})

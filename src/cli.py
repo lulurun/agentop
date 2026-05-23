@@ -12,26 +12,21 @@ COMMANDS
     --json outputs the full session objects as a JSON array, which
     includes token breakdown, git info, tmux details, and bridge URL.
 
-  start --tool <tool> --cwd <path> [--description <text>]
+  start --tool <tool> --cwd <path>
     Launch a new agent session inside a managed tmux session.
-    The session is named  agentop_<tool>_<pid>  automatically.
+    The session is named  {short_name}-{pid}  automatically.
     Supported tools: claude, codex, gemini
     After starting, attach with:  tmux attach-session -t <name>
 
   stop <name>
     Gracefully stop a managed session: sends /exit to the agent,
     waits up to 3 s for it to exit, then kills the tmux session.
-    Only sessions started by agentop (name starts with 'agentop_')
-    can be stopped.
+    Only sessions started by agentop can be stopped.
 
   send <name> <text>
     Send a prompt to a running agent session via tmux send-keys.
     The text is delivered followed by Enter, exactly as if you typed
     it at the terminal.  Only managed sessions accept prompts.
-
-  describe <name> <text>
-    Save a human-readable note for a session.  Shown in 'agentop list'
-    and in the dashboard UI.  Alias: set-description
 
 EXAMPLES
 --------
@@ -48,17 +43,13 @@ EXAMPLES
 
   # Start a session
   agentop start --tool claude --cwd ~/projects/myapp
-  agentop start --tool claude --cwd ~/projects/myapp --description "Fix login bug"
 
   # Stop a session
-  agentop stop agentop_claude_12345
+  agentop stop myproject-12345
 
   # Send a prompt
-  agentop send agentop_claude_12345 "please summarise what you have done so far"
-  agentop send agentop_claude_12345 "run the tests and fix any failures"
-
-  # Set a description
-  agentop describe agentop_claude_12345 "Refactoring auth module"
+  agentop send myproject-12345 "please summarise what you have done so far"
+  agentop send myproject-12345 "run the tests and fix any failures"
 
 EXIT CODES
 ----------
@@ -78,8 +69,7 @@ SESSION FIELDS (--json)
                   cache_creation_input_tokens, cache_read_input_tokens
                   (Claude only, read from ~/.claude/projects/)
   cwd             Working directory of the agent process
-  description     User-set note (via 'agentop describe')
-  ai_title        AI-generated conversation title (Claude only)
+  ai_title        AI-generated conversation title (from the agent)
   managed         true if started by agentop; only managed sessions can
                   be stopped or sent prompts
   tmux            Object: {session, window, pane}
@@ -89,7 +79,7 @@ SESSION FIELDS (--json)
 NOTES
 -----
   * Requires psutil and tmux.
-  * The dashboard package must be importable; run from the repo root or
+  * The agentop package must be importable; run from the repo root or
     install the package.
   * Token usage is read by scanning ~/.claude/projects/<slug>/<id>.jsonl
     and deduplicating by message ID — reflects actual API calls made.
@@ -106,7 +96,7 @@ def _ops():
         from agentop import ops
         return ops
     except ImportError as exc:
-        print(f"Error: cannot import dashboard package: {exc}", file=sys.stderr)
+        print(f"Error: cannot import agentop package: {exc}", file=sys.stderr)
         print("Run agentop from the repo root directory.", file=sys.stderr)
         sys.exit(1)
 
@@ -177,15 +167,14 @@ def cmd_list(args):
         tokens = _fmt_tokens(s.get("token_usage"))
         cwd = _shorten(s.get("cwd"))
         print(col.format(s["name"], s.get("tool", "?"), status, pid, runtime, mem, tokens, cwd))
-        desc = s.get("ai_title") or s.get("description")
-        if desc:
-            print(f"  └─ {desc}")
+        if s.get("ai_title"):
+            print(f"  └─ {s['ai_title']}")
 
 
 def cmd_start(args):
     cwd = os.path.expanduser(args.cwd) if args.cwd else os.getcwd()
     print(f"Starting {args.tool} session in {cwd} …")
-    result = _ops().start(args.tool, cwd, args.description or "")
+    result = _ops().start(args.tool, cwd)
     if not result.get("ok"):
         print(f"Error: {result.get('error', 'Failed to start session')}", file=sys.stderr)
         sys.exit(1)
@@ -223,11 +212,6 @@ def cmd_send(args):
     print(f"Sent to '{args.name}'.")
 
 
-def cmd_describe(args):
-    _ops().set_description(args.name, args.text)
-    print(f"Description for '{args.name}' updated.")
-
-
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
@@ -247,7 +231,7 @@ def main():
         help="Show all running agent sessions",
         description=(
             "List all running agent sessions detected on this machine.\n"
-            "Scans live processes and enriches with token usage, git info, and registry notes.\n"
+            "Scans live processes and enriches with token usage and git info.\n"
             "Use --json for full machine-readable output."
         ),
     )
@@ -259,13 +243,11 @@ def main():
         help="Launch a new agent session in tmux",
         description=(
             "Start a new agent session in a managed tmux session.\n"
-            "Session is named agentop_<tool>_<pid> automatically.\n"
             "After starting, attach with:  tmux attach-session -t <name>"
         ),
     )
     p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini"])
     p_start.add_argument("--cwd", default=None, help="Working directory (default: cwd)")
-    p_start.add_argument("--description", default="", help="Optional note")
 
     # stop
     p_stop = sub.add_parser(
@@ -290,16 +272,6 @@ def main():
     p_send.add_argument("name", help="Session name (from 'agentop list')")
     p_send.add_argument("text", help="Prompt text to send")
 
-    # describe / set-description
-    p_desc = sub.add_parser(
-        "describe",
-        aliases=["set-description"],
-        help="Save a description or notes for a session",
-        description="Attach a human-readable note to a session (visible in list and UI).",
-    )
-    p_desc.add_argument("name", help="Session name")
-    p_desc.add_argument("text", help="Description text")
-
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -310,8 +282,6 @@ def main():
         "start": cmd_start,
         "stop": cmd_stop,
         "send": cmd_send,
-        "describe": cmd_describe,
-        "set-description": cmd_describe,
     }[args.command](args)
 
 

@@ -376,14 +376,11 @@ def get_recent_project_files(cwd: str, limit: int = 10) -> list[str]:
         return []
 
 
-def build_sessions(descriptions: dict | None = None, managed_names: set | None = None) -> list[dict]:
+def build_sessions(managed_names: set | None = None) -> list[dict]:
     """Derive session list from live processes and .claude/.codex files. Fully stateless.
 
-    descriptions:   optional {name: description} for user-saved notes on managed sessions.
     managed_names:  set of session names registered as managed in the registry.
     """
-    if descriptions is None:
-        descriptions = {}
     if managed_names is None:
         managed_names = set()
     procs = scan_processes()
@@ -415,15 +412,12 @@ def build_sessions(descriptions: dict | None = None, managed_names: set | None =
         agent = get_agent(proc["tool"])
         session_meta = agent.get_session_meta(proc["pid"], proc["cwd"] or "") if agent and proc.get("cwd") else {}
 
-        description = descriptions.get(name) or ""
-
         sessions.append(
             {
                 **proc,
                 "name": name,
                 "tmux": tmux,
                 "git": git,
-                "description": description,
                 "cwd": proc.get("cwd") or "",
                 "managed": managed,
                 **session_meta,

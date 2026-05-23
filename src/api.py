@@ -154,16 +154,6 @@ async def get_session(name: str):
     raise HTTPException(status_code=404, detail="Session not found")
 
 
-@app.post("/api/sessions/{name:path}")
-async def update_session(name: str, body: dict):
-    description = body.get("description")
-    if description is not None:
-        await asyncio.get_event_loop().run_in_executor(
-            None, ops.set_description, name, description
-        )
-    return {"ok": True}
-
-
 @app.get("/api/files/recent")
 async def recent_files():
     async with _cache_lock:

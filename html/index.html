@@ -922,7 +922,6 @@ td.muted { color: var(--text2); }
                   <th data-sort="name"        onclick="setSort('name')">Session <span class="sort-arrow"></span></th>
                   <th data-sort="tool"        onclick="setSort('tool')">Tool <span class="sort-arrow"></span></th>
                   <th data-sort="status"      onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
-                  <th data-sort="description" onclick="setSort('description')">Description <span class="sort-arrow"></span></th>
                   <th data-sort="cwd"         onclick="setSort('cwd')">cwd <span class="sort-arrow"></span></th>
                   <th data-sort="tokens"      onclick="setSort('tokens')" class="col-tokens">Tokens <span class="sort-arrow"></span></th>
                   <th data-sort="pid"         onclick="setSort('pid')" class="col-pid">PID <span class="sort-arrow"></span></th>
@@ -933,7 +932,7 @@ td.muted { color: var(--text2); }
               </thead>
               <tbody id="sessions-body">
                 <tr>
-                  <td colspan="10">
+                  <td colspan="9">
                     <div class="empty-state">
                       <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
                       <p>Loading sessions…</p>
@@ -1236,7 +1235,6 @@ function getSortVal(s, key) {
     case 'name':        return (s.name || '').toLowerCase();
     case 'tool':        return (s.tool || '').toLowerCase();
     case 'status':      return (s.claude_status || s.status || '').toLowerCase();
-    case 'description': return (s.ai_title || s.description || '').toLowerCase();
     case 'cwd':         return (s.cwd || '').toLowerCase();
     case 'tokens': {
       const u = s.token_usage;
@@ -1303,12 +1301,10 @@ function renderSessions(list) {
   tbody.innerHTML = sorted.map(s => {
     const selected = selectedSession && selectedSession.name === s.name ? ' selected' : '';
     const managedPill = s.managed ? ' <span class="managed-pill">managed</span>' : '';
-    const desc = s.ai_title || s.description;
     return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))}, this)">
       <td><span class="mono" style="font-size:12px">${escHtml(s.name)}</span>${managedPill}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
-      <td class="wrap">${desc ? escHtml(desc) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="wrap muted" title="${escHtml(s.cwd || '')}" style="font-size:12px">${escHtml(fmtProject(s.cwd))}</td>
       <td class="col-tokens muted mono" title="${s.token_usage ? 'in:' + (s.token_usage.input_tokens||0) + ' out:' + (s.token_usage.output_tokens||0) + ' cache_r:' + (s.token_usage.cache_read_input_tokens||0) + ' cache_w:' + (s.token_usage.cache_creation_input_tokens||0) : ''}">${fmtTokens(s.token_usage)}</td>
       <td class="col-pid muted mono">${s.pid || '—'}</td>
@@ -1494,15 +1490,6 @@ function renderDetail(s) {
       </div>
     </div>`;
 
-    // Description / notes
-    html += `<div class="detail-section">
-      <div class="section-title">Notes</div>
-      <div class="edit-form">
-        <textarea id="meta-description" class="form-textarea" placeholder="Add notes about what this session is doing…">${escHtml(s.description || '')}</textarea>
-        <button class="btn btn-secondary" style="align-self:flex-end" onclick="saveMeta(${sname})">Save Notes</button>
-      </div>
-    </div>`;
-
     // Danger zone
     html += `<div class="detail-section">
       <div class="danger-zone">
@@ -1517,22 +1504,6 @@ function renderDetail(s) {
   }
 
   document.getElementById('detail-body').innerHTML = html;
-}
-
-async function saveMeta(name) {
-  const description = document.getElementById('meta-description').value;
-  await fetch('/api/sessions/' + encodeURIComponent(name), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ description }),
-  });
-  showToast('Notes saved');
-  await fetchSessions();
-  if (selectedSession && selectedSession.name === name) {
-    const r = await fetch('/api/sessions/' + encodeURIComponent(name));
-    selectedSession = await r.json();
-    renderDetail(selectedSession);
-  }
 }
 
 // ============================================================
