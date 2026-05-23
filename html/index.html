@@ -818,7 +818,6 @@ td.muted { color: var(--text2); }
 }
 
 @media (max-width: 560px) {
-  .col-tmux { display: none; }
   .header-divider { display: none; }
 }
 </style>
@@ -894,12 +893,11 @@ td.muted { color: var(--text2); }
                   <th data-sort="pid"         onclick="setSort('pid')" class="col-pid">PID <span class="sort-arrow"></span></th>
                   <th data-sort="runtime"     onclick="setSort('runtime')" class="col-runtime">Runtime <span class="sort-arrow"></span></th>
                   <th data-sort="memory"      onclick="setSort('memory')" class="col-mem">Mem <span class="sort-arrow"></span></th>
-                  <th data-sort="tmux"        onclick="setSort('tmux')" class="col-tmux">Tmux <span class="sort-arrow"></span></th>
                 </tr>
               </thead>
               <tbody id="sessions-body">
                 <tr>
-                  <td colspan="10">
+                  <td colspan="9">
                     <div class="empty-state">
                       <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
                       <p>Loading sessions…</p>
@@ -1256,7 +1254,7 @@ function renderSessions(list) {
 
   const tbody = document.getElementById('sessions-body');
   if (!sorted.length) {
-    tbody.innerHTML = `<tr><td colspan="10">
+    tbody.innerHTML = `<tr><td colspan="9">
       <div class="empty-state">
         <div class="empty-icon">🤖</div>
         <h3>No agent sessions detected</h3>
@@ -1268,9 +1266,12 @@ function renderSessions(list) {
 
   tbody.innerHTML = sorted.map(s => {
     const selected = selectedSession && selectedSession.name === s.name ? ' selected' : '';
-    const managedPill = s.managed ? ' <span class="managed-pill">managed</span>' : '';
+    const attachCmd = `tmux a -t ${s.name}`;
+    const sessionCell = s.managed
+      ? `<span class="mono" style="font-size:12px">${escHtml(s.name)}</span> <span class="copy-btn" title="Copy attach command" onclick="event.stopPropagation();copyText(${escHtml(JSON.stringify(attachCmd))})">⎘</span>`
+      : `<span style="color:var(--text3);font-size:11px;font-weight:600">[external]</span> <span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`;
     return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))}, this)">
-      <td><span class="mono" style="font-size:12px">${escHtml(s.name)}</span>${managedPill}</td>
+      <td>${sessionCell}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
       <td class="wrap">${s.ai_title ? escHtml(s.ai_title) : '<span style="color:var(--text3)">—</span>'}</td>
@@ -1279,7 +1280,6 @@ function renderSessions(list) {
       <td class="col-pid muted mono">${s.pid || '—'}</td>
       <td class="col-runtime muted mono">${fmtRuntime(s.runtime_seconds)}</td>
       <td class="col-mem muted mono">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</td>
-      <td class="col-tmux">${tmuxInfo(s.tmux)}</td>
     </tr>`;
   }).join('');
 }
