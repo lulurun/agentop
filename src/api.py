@@ -89,9 +89,7 @@ async def create_and_start_session(body: dict):
         raise HTTPException(status_code=400, detail="short_name is required")
     if len(short_name) >= 32:
         raise HTTPException(status_code=400, detail="short_name must be under 32 characters")
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, ops.start, tool, cwd, short_name
-    )
+    result = await asyncio.get_event_loop().run_in_executor(None, ops.start, tool, cwd, short_name)
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
     return {"ok": True, "name": result["name"], "pid": result.get("pid")}
@@ -101,9 +99,7 @@ async def create_and_start_session(body: dict):
 async def stop_session(name: str):
     async with _cache_lock:
         cached_sessions = list(_cache["sessions"])
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, ops.stop, name, cached_sessions
-    )
+    result = await asyncio.get_event_loop().run_in_executor(None, ops.stop, name, cached_sessions)
     if not result.get("ok"):
         error = result["error"]
         if "not found" in error.lower():
