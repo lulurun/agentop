@@ -85,6 +85,7 @@ import sys
 def _ops():
     try:
         from agentop import ops
+
         return ops
     except ImportError as exc:
         print(f"Error: cannot import agentop package: {exc}", file=sys.stderr)
@@ -95,6 +96,7 @@ def _ops():
 # ---------------------------------------------------------------------------
 # Formatting helpers (presentation only)
 # ---------------------------------------------------------------------------
+
 
 def _fmt_runtime(sec):
     if not sec:
@@ -112,10 +114,15 @@ def _fmt_runtime(sec):
 def _fmt_tokens(usage):
     if not usage:
         return "—"
-    total = sum(usage.get(k, 0) for k in (
-        "input_tokens", "output_tokens",
-        "cache_creation_input_tokens", "cache_read_input_tokens",
-    ))
+    total = sum(
+        usage.get(k, 0)
+        for k in (
+            "input_tokens",
+            "output_tokens",
+            "cache_creation_input_tokens",
+            "cache_read_input_tokens",
+        )
+    )
     if not total:
         return "—"
     if total < 1_000:
@@ -129,12 +136,13 @@ def _shorten(path):
     if not path:
         return "—"
     home = os.path.expanduser("~")
-    return "~" + path[len(home):] if path.startswith(home) else path
+    return "~" + path[len(home) :] if path.startswith(home) else path
 
 
 # ---------------------------------------------------------------------------
 # Commands
 # ---------------------------------------------------------------------------
+
 
 def cmd_list(args):
     sessions = _ops().get_sessions()
@@ -197,6 +205,7 @@ def cmd_stop(args):
 # Argument parsing
 # ---------------------------------------------------------------------------
 
+
 def main():
     parser = argparse.ArgumentParser(
         prog="agentop",
@@ -250,7 +259,9 @@ def main():
         "list": cmd_list,
         "start": cmd_start,
         "stop": cmd_stop,
-    }[args.command](args)
+    }[
+        args.command
+    ](args)
 
 
 if __name__ == "__main__":

@@ -392,10 +392,7 @@ def build_sessions(managed_names: set | None = None) -> list[dict]:
         git = get_git_info(proc["cwd"]) if proc["cwd"] else None
 
         tmux_session = (tmux or {}).get("session", "")
-        managed = bool(
-            tmux_session.startswith("agentop_")
-            or tmux_session in managed_names
-        )
+        managed = bool(tmux_session.startswith("agentop_") or tmux_session in managed_names)
 
         # Name: managed → tmux session name; otherwise tmux name (if agent-like) or {tool}-{pid}
         if managed:

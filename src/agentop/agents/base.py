@@ -57,7 +57,8 @@ class BaseAgent:
         try:
             r = subprocess.run(
                 ["tmux", "new-session", "-d", "-s", temp_name, "-c", cwd],
-                capture_output=True, timeout=5,
+                capture_output=True,
+                timeout=5,
             )
             if r.returncode != 0:
                 return {"ok": False, "error": r.stderr.decode().strip() or "tmux failed"}
@@ -68,7 +69,8 @@ class BaseAgent:
 
         subprocess.run(
             ["tmux", "send-keys", "-t", temp_name, self.launch_cmd, "Enter"],
-            capture_output=True, timeout=5,
+            capture_output=True,
+            timeout=5,
         )
 
         # Resolve the shell PID of the new pane
@@ -76,7 +78,9 @@ class BaseAgent:
         try:
             r = subprocess.run(
                 ["tmux", "list-panes", "-t", temp_name, "-F", "#{pane_pid}"],
-                capture_output=True, text=True, timeout=3,
+                capture_output=True,
+                text=True,
+                timeout=3,
             )
             pid_str = r.stdout.strip()
             if pid_str.isdigit():
@@ -108,7 +112,8 @@ class BaseAgent:
             try:
                 subprocess.run(
                     ["tmux", "rename-session", "-t", temp_name, final_name],
-                    capture_output=True, timeout=3,
+                    capture_output=True,
+                    timeout=3,
                 )
             except subprocess.TimeoutExpired:
                 final_name = temp_name

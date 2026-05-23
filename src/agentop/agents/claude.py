@@ -24,14 +24,17 @@ class ClaudeAgent(BaseAgent):
             try:
                 r = subprocess.run(
                     ["tmux", "capture-pane", "-t", tmux_session, "-p"],
-                    capture_output=True, text=True, timeout=3,
+                    capture_output=True,
+                    text=True,
+                    timeout=3,
                 )
                 content = r.stdout.lower()
                 if "trust" in content or "safety check" in content:
                     time.sleep(0.1)
                     subprocess.run(
                         ["tmux", "send-keys", "-t", tmux_session, "Enter"],
-                        capture_output=True, timeout=3,
+                        capture_output=True,
+                        timeout=3,
                     )
                     return
             except (subprocess.TimeoutExpired, subprocess.SubprocessError):
@@ -118,15 +121,15 @@ class ClaudeAgent(BaseAgent):
                 if bridge_id:
                     hostname = socket.gethostname()
                     raw = bridge_id.replace("session_", "")
-                    remote_name = (
-                        f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
+                    remote_name = f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
+                    result.update(
+                        {
+                            "bridge_session_id": bridge_id,
+                            "bridge_url": f"https://claude.ai/code/{bridge_id}",
+                            "remote_name": remote_name,
+                            "claude_status": meta.get("status"),
+                        }
                     )
-                    result.update({
-                        "bridge_session_id": bridge_id,
-                        "bridge_url": f"https://claude.ai/code/{bridge_id}",
-                        "remote_name": remote_name,
-                        "claude_status": meta.get("status"),
-                    })
             except (OSError, json.JSONDecodeError):
                 pass
 
