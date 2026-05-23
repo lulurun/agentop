@@ -23,11 +23,6 @@ COMMANDS
     waits up to 3 s for it to exit, then kills the tmux session.
     Only sessions started by agentop can be stopped.
 
-  send <name> <text>
-    Send a prompt to a running agent session via tmux send-keys.
-    The text is delivered followed by Enter, exactly as if you typed
-    it at the terminal.  Only managed sessions accept prompts.
-
 EXAMPLES
 --------
   # List all sessions
@@ -46,10 +41,6 @@ EXAMPLES
 
   # Stop a session
   agentop stop myproject-12345
-
-  # Send a prompt
-  agentop send myproject-12345 "please summarise what you have done so far"
-  agentop send myproject-12345 "run the tests and fix any failures"
 
 EXIT CODES
 ----------
@@ -202,16 +193,6 @@ def cmd_stop(args):
     print("Done.")
 
 
-def cmd_send(args):
-    result = _ops().send(args.name, args.text)
-    if not result.get("ok"):
-        print(f"Error: {result['error']}", file=sys.stderr)
-        if "not found" in result["error"].lower():
-            print("Run 'agentop list' to see available sessions.", file=sys.stderr)
-        sys.exit(1)
-    print(f"Sent to '{args.name}'.")
-
-
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
@@ -260,18 +241,6 @@ def main():
     )
     p_stop.add_argument("name", help="Session name (from 'agentop list')")
 
-    # send
-    p_send = sub.add_parser(
-        "send",
-        help="Send a prompt to a running session",
-        description=(
-            "Deliver text to a running agent via tmux send-keys + Enter.\n"
-            "Only managed sessions (started with 'agentop start') accept prompts."
-        ),
-    )
-    p_send.add_argument("name", help="Session name (from 'agentop list')")
-    p_send.add_argument("text", help="Prompt text to send")
-
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -281,7 +250,6 @@ def main():
         "list": cmd_list,
         "start": cmd_start,
         "stop": cmd_stop,
-        "send": cmd_send,
     }[args.command](args)
 
 

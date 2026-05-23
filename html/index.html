@@ -639,40 +639,6 @@ td.muted { color: var(--text2); }
 /* Edit form stack */
 .edit-form { display: flex; flex-direction: column; gap: 10px; }
 
-/* Send prompt box */
-.prompt-area {
-  background: var(--bg3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-  transition: border-color .15s, box-shadow .15s;
-}
-.prompt-area:focus-within {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
-}
-.prompt-textarea {
-  width: 100%;
-  background: transparent;
-  border: none;
-  padding: 9px 10px 6px;
-  color: var(--text);
-  font-size: 13px;
-  font-family: inherit;
-  resize: none;
-  outline: none;
-  min-height: 72px;
-}
-.prompt-textarea::placeholder { color: var(--text3); }
-.prompt-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 6px 10px;
-  border-top: 1px solid var(--border);
-}
-.prompt-hint { font-size: 11px; color: var(--text3); }
-
 /* Danger zone */
 .danger-zone {
   border: 1px solid rgba(248,81,73,.2);
@@ -922,6 +888,7 @@ td.muted { color: var(--text2); }
                   <th data-sort="name"        onclick="setSort('name')">Session <span class="sort-arrow"></span></th>
                   <th data-sort="tool"        onclick="setSort('tool')">Tool <span class="sort-arrow"></span></th>
                   <th data-sort="status"      onclick="setSort('status')">Status <span class="sort-arrow"></span></th>
+                  <th data-sort="description" onclick="setSort('description')">Description <span class="sort-arrow"></span></th>
                   <th data-sort="cwd"         onclick="setSort('cwd')">cwd <span class="sort-arrow"></span></th>
                   <th data-sort="tokens"      onclick="setSort('tokens')" class="col-tokens">Tokens <span class="sort-arrow"></span></th>
                   <th data-sort="pid"         onclick="setSort('pid')" class="col-pid">PID <span class="sort-arrow"></span></th>
@@ -932,7 +899,7 @@ td.muted { color: var(--text2); }
               </thead>
               <tbody id="sessions-body">
                 <tr>
-                  <td colspan="9">
+                  <td colspan="10">
                     <div class="empty-state">
                       <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
                       <p>Loading sessions…</p>
@@ -1235,6 +1202,7 @@ function getSortVal(s, key) {
     case 'name':        return (s.name || '').toLowerCase();
     case 'tool':        return (s.tool || '').toLowerCase();
     case 'status':      return (s.claude_status || s.status || '').toLowerCase();
+    case 'description': return (s.ai_title || '').toLowerCase();
     case 'cwd':         return (s.cwd || '').toLowerCase();
     case 'tokens': {
       const u = s.token_usage;
@@ -1305,6 +1273,7 @@ function renderSessions(list) {
       <td><span class="mono" style="font-size:12px">${escHtml(s.name)}</span>${managedPill}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
+      <td class="wrap">${s.ai_title ? escHtml(s.ai_title) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="wrap muted" title="${escHtml(s.cwd || '')}" style="font-size:12px">${escHtml(fmtProject(s.cwd))}</td>
       <td class="col-tokens muted mono" title="${s.token_usage ? 'in:' + (s.token_usage.input_tokens||0) + ' out:' + (s.token_usage.output_tokens||0) + ' cache_r:' + (s.token_usage.cache_read_input_tokens||0) + ' cache_w:' + (s.token_usage.cache_creation_input_tokens||0) : ''}">${fmtTokens(s.token_usage)}</td>
       <td class="col-pid muted mono">${s.pid || '—'}</td>
@@ -1473,23 +1442,6 @@ function renderDetail(s) {
 
   // ---- Managed-only actions ----
   if (s.managed) {
-    // Send prompt
-    html += `<div class="detail-section">
-      <div class="section-title">Send Prompt</div>
-      <div class="prompt-area">
-        <textarea id="send-text" class="prompt-textarea"
-          placeholder="Type a prompt… (Ctrl+Enter to send)"
-          onkeydown="if(event.key==='Enter'&&(event.metaKey||event.ctrlKey)){sendToSession(${sname});event.preventDefault();}"></textarea>
-        <div class="prompt-footer">
-          <span class="prompt-hint">Ctrl+Enter to send</span>
-          <button class="btn btn-primary" id="send-btn" style="padding:4px 12px;font-size:12px" onclick="sendToSession(${sname})">
-            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M15.964.686a.5.5 0 0 0-.65-.65L.767 5.855H.766l-.452.18a.5.5 0 0 0-.082.887l.41.26.001.002 4.995 3.178 3.178 4.995.002.002.26.41a.5.5 0 0 0 .886-.083l6-15Zm-1.833 1.89L6.637 10.07l-.215-.338a.5.5 0 0 0-.154-.154l-.338-.215 7.494-7.494 1.178-.471-.47 1.178Z"/></svg>
-            Send
-          </button>
-        </div>
-      </div>
-    </div>`;
-
     // Danger zone
     html += `<div class="detail-section">
       <div class="danger-zone">
@@ -1654,43 +1606,14 @@ async function submitNewSession() {
 // ============================================================
 async function stopSession(name) {
   if (!confirm(`Stop session "${name}"?\n\nThis will send /exit to the agent and kill the tmux session.`)) return;
-  await fetch('/api/sessions/' + encodeURIComponent(name) + '/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text: 'exit' }),
-  });
-  showToast('Stop signal sent to ' + name);
-  closeDetail();
-  await fetchSessions();
-}
-
-// ============================================================
-// Send prompt
-// ============================================================
-async function sendToSession(name) {
-  const textEl = document.getElementById('send-text');
-  const btnEl  = document.getElementById('send-btn');
-  const text   = textEl.value.trim();
-  if (!text) return;
-  const originalHTML = btnEl.innerHTML;
-  btnEl.innerHTML = '<span class="spinner"></span>';
-  btnEl.disabled = true;
   try {
-    const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text }),
-    });
-    const data = await r.json();
-    if (!r.ok) throw new Error(data.detail || 'Failed to send');
-    textEl.value = '';
-    showToast('Prompt sent');
+    await fetch('/api/sessions/' + encodeURIComponent(name) + '/stop', { method: 'POST' });
+    showToast('Stopped ' + name);
   } catch (e) {
     showToast('Error: ' + e.message);
-  } finally {
-    btnEl.innerHTML = originalHTML;
-    btnEl.disabled = false;
   }
+  closeDetail();
+  await fetchSessions();
 }
 
 // ============================================================

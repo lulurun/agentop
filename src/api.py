@@ -114,26 +114,6 @@ async def stop_session(name: str):
     return result
 
 
-@app.post("/api/sessions/{name}/send")
-async def send_to_session(name: str, body: dict):
-    text = body.get("text", "").strip()
-    if not text:
-        raise HTTPException(status_code=400, detail="text is required")
-    async with _cache_lock:
-        cached_sessions = list(_cache["sessions"])
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, ops.send, name, text, cached_sessions
-    )
-    if not result.get("ok"):
-        error = result["error"]
-        if "not found" in error.lower():
-            raise HTTPException(status_code=404, detail=error)
-        if "not a managed" in error.lower():
-            raise HTTPException(status_code=403, detail=error)
-        raise HTTPException(status_code=500, detail=error)
-    return {"ok": True}
-
-
 @app.get("/api/sessions/{name:path}")
 async def get_session(name: str):
     async with _cache_lock:
