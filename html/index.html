@@ -329,12 +329,12 @@ thead th {
   background: var(--bg2);
   text-align: left;
 }
-thead th[data-sort], thead th[data-fsort] {
+thead th[data-sort], thead th[data-fsort], thead th[data-hsort] {
   cursor: pointer;
   user-select: none;
 }
-thead th[data-sort]:hover, thead th[data-fsort]:hover { color: var(--text); }
-thead th.sort-active, thead th.fsort-active { color: var(--text); }
+thead th[data-sort]:hover, thead th[data-fsort]:hover, thead th[data-hsort]:hover { color: var(--text); }
+thead th.sort-active, thead th.fsort-active, thead th.hsort-active { color: var(--text); }
 .sort-arrow {
   display: inline-block;
   margin-left: 3px;
@@ -342,7 +342,7 @@ thead th.sort-active, thead th.fsort-active { color: var(--text); }
   color: var(--text3);
   vertical-align: middle;
 }
-thead th.sort-active .sort-arrow, thead th.fsort-active .sort-arrow { color: var(--accent); }
+thead th.sort-active .sort-arrow, thead th.fsort-active .sort-arrow, thead th.hsort-active .sort-arrow { color: var(--accent); }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -945,10 +945,10 @@ td.muted { color: var(--text2); }
         <table id="history-table">
           <thead>
             <tr>
-              <th>Tool</th>
-              <th>Title / First Prompt</th>
-              <th>CWD</th>
-              <th>Last Active</th>
+              <th data-hsort="tool"        onclick="setHistSort('tool')">Tool <span class="sort-arrow"></span></th>
+              <th data-hsort="title"       onclick="setHistSort('title')">Title / First Prompt <span class="sort-arrow"></span></th>
+              <th data-hsort="cwd"         onclick="setHistSort('cwd')">CWD <span class="sort-arrow"></span></th>
+              <th data-hsort="last_active" onclick="setHistSort('last_active')" class="hsort-active">Last Active <span class="sort-arrow">↓</span></th>
               <th style="text-align:right">Action</th>
             </tr>
           </thead>
@@ -1092,6 +1092,8 @@ let sortKey = 'runtime';
 let sortDir = 'desc';
 let filesSortKey = 'modified';
 let filesSortDir = 'desc';
+let histSortKey = 'last_active';
+let histSortDir = 'desc';
 
 // ============================================================
 // Theme
@@ -1702,6 +1704,7 @@ async function fetchHistory() {
   try {
     const r = await fetch('/api/saved-sessions?limit=100');
     const data = await r.json();
+    window._lastHistory = data;
     renderHistory(data);
   } catch (e) {
     document.getElementById('history-body').innerHTML =
@@ -1709,8 +1712,41 @@ async function fetchHistory() {
   }
 }
 
+function setHistSort(key) {
+  if (histSortKey === key) {
+    histSortDir = histSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    histSortKey = key;
+    histSortDir = key === 'last_active' ? 'desc' : 'asc';
+  }
+  updateHistSortUI();
+  if (window._lastHistory) renderHistory(window._lastHistory);
+}
+
+function updateHistSortUI() {
+  document.querySelectorAll('#history-table thead th[data-hsort]').forEach(th => {
+    const key = th.dataset.hsort;
+    th.classList.toggle('hsort-active', key === histSortKey);
+    const arrow = th.querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = key === histSortKey ? (histSortDir === 'asc' ? '↑' : '↓') : '';
+  });
+}
+
+function sortHistory(list) {
+  return [...list].sort((a, b) => {
+    let av, bv;
+    if (histSortKey === 'last_active') { av = a.last_active || 0; bv = b.last_active || 0; }
+    else if (histSortKey === 'tool')   { av = a.tool || ''; bv = b.tool || ''; }
+    else if (histSortKey === 'title')  { av = (a.title || '').toLowerCase(); bv = (b.title || '').toLowerCase(); }
+    else                               { av = (a.cwd || '').toLowerCase(); bv = (b.cwd || '').toLowerCase(); }
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return histSortDir === 'asc' ? cmp : -cmp;
+  });
+}
+
 function renderHistory(list) {
   const tbody = document.getElementById('history-body');
+  updateHistSortUI();
   if (!list.length) {
     tbody.innerHTML = `<tr><td colspan="5">
       <div class="empty-state">
@@ -1721,7 +1757,8 @@ function renderHistory(list) {
     </td></tr>`;
     return;
   }
-  tbody.innerHTML = list.map(s => {
+  const sorted = sortHistory(list);
+  tbody.innerHTML = sorted.map(s => {
     const title = s.title || '<span style="color:var(--text3)">—</span>';
     const age = s.last_active ? fmtDate(s.last_active) : '—';
     const resumable = !!s.resume_cmd;

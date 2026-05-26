@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agentop — manage AI agent sessions (Claude, Codex, Gemini) from the command line.
+"""agentop — manage AI agent sessions (Claude, Codex, Gemini, Antigravity) from the command line.
 
 No dashboard server required. All commands work directly via tmux and
 the local filesystem.
@@ -12,11 +12,16 @@ COMMANDS
     --json outputs the full session objects as a JSON array, which
     includes token breakdown, git info, tmux details, and bridge URL.
 
+  history [--json] [--tool <tool>] [--limit N]
+    Show saved/historical sessions that can be resumed.
+    Excludes sessions that are currently active.
+    Columns: tool, title, last active, cwd.
+
   start <session_name> --tool <tool> [--cwd <path>]
     Launch a new agent session inside a managed tmux session.
     session_name must be less than 32 characters.
     The tmux session is named  {session_name}-{pid}  automatically.
-    Supported tools: claude, codex, gemini
+    Supported tools: claude, codex, gemini, antigravity
     After starting, attach with:  tmux attach-session -t <session>
 
   stop <session>
@@ -189,6 +194,31 @@ def cmd_start(args):
     print(f"  Attach: tmux attach-session -t {name}")
 
 
+def cmd_history(args):
+    from datetime import datetime
+    sessions = _ops().get_saved_sessions(tool=args.tool or None, limit=args.limit)
+
+    if args.json:
+        print(json.dumps(sessions, indent=2, default=str))
+        return
+
+    if not sessions:
+        print("No saved sessions found.")
+        return
+
+    col = "{:<12} {:<46} {:<18} {}"
+    print(col.format("TOOL", "TITLE", "LAST ACTIVE", "CWD"))
+    print("─" * 110)
+    for s in sessions:
+        tool = s.get("tool", "?")
+        raw_title = s.get("title") or ""
+        title = raw_title[:45] + ("…" if len(raw_title) > 45 else "") if raw_title else "—"
+        ts = s.get("last_active", 0)
+        last = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M") if ts else "—"
+        cwd = _shorten(s.get("cwd", ""))
+        print(col.format(tool, title, last, cwd))
+
+
 def cmd_stop(args):
     result = _ops().stop(args.name)
     if not result.get("ok"):
@@ -246,8 +276,22 @@ def main():
         ),
     )
     p_start.add_argument("session_name", type=_session_name_type, help="Session name (max 31 chars)")
-    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini"])
+    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini", "antigravity"])
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
+
+    # history
+    p_history = sub.add_parser(
+        "history",
+        help="Show saved/historical sessions",
+        description=(
+            "List saved sessions from Claude, Codex, Gemini, and Antigravity.\n"
+            "Currently active sessions are excluded.\n"
+            "Use --json for full machine-readable output."
+        ),
+    )
+    p_history.add_argument("--json", action="store_true", help="Output as JSON array")
+    p_history.add_argument("--tool", choices=["claude", "codex", "gemini", "antigravity"], help="Filter by tool")
+    p_history.add_argument("--limit", type=int, default=50, help="Maximum number of results (default: 50)")
 
     # stop
     p_stop = sub.add_parser(
@@ -267,6 +311,7 @@ def main():
 
     {
         "list": cmd_list,
+        "history": cmd_history,
         "start": cmd_start,
         "stop": cmd_stop,
     }[

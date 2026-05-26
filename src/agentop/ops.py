@@ -49,7 +49,14 @@ def stop(name: str, sessions: list[dict] | None = None) -> dict:
 
 
 def get_saved_sessions(tool: str | None = None, limit: int = 50) -> list[dict]:
-    """Return saved/historical sessions across all (or one) agent tool."""
+    """Return saved/historical sessions across all (or one) agent tool, excluding active ones."""
+    live = get_sessions()
+    active_keys = {
+        (s["tool"], s.get("cwd", ""))
+        for s in live
+        if s.get("tool") and s.get("cwd")
+    }
+
     from agentop.agents import AGENTS, get_agent
     agents = [get_agent(tool)] if tool else AGENTS
     results = []
@@ -60,8 +67,10 @@ def get_saved_sessions(tool: str | None = None, limit: int = 50) -> list[dict]:
             per_agent = limit if tool else max(limit // len(AGENTS), 10)
             sessions = agent.get_saved_sessions(limit=per_agent)
             for s in sessions:
+                if (s.get("tool"), s.get("cwd", "")) in active_keys:
+                    continue
                 s["resume_cmd"] = agent.get_resume_cmd(s["session_id"]) or ""
-            results.extend(sessions)
+                results.append(s)
         except Exception:
             continue
     results.sort(key=lambda x: x["last_active"], reverse=True)
