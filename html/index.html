@@ -226,6 +226,17 @@ header {
   border-color: var(--red);
 }
 
+.btn-warning {
+  background: var(--amber-dim);
+  color: var(--amber);
+  border: 1px solid rgba(210,153,34,.25);
+}
+.btn-warning:hover:not(:disabled) { background: var(--amber); color: #fff; border-color: var(--amber); }
+
+.btn-sm { padding: 3px 10px; font-size: 11px; }
+.text-dim { color: var(--text3); }
+.tab-panel[hidden] { display: none; }
+
 .btn-icon {
   padding: 6px;
   background: transparent;
@@ -329,12 +340,12 @@ thead th {
   background: var(--bg2);
   text-align: left;
 }
-thead th[data-sort], thead th[data-fsort], thead th[data-hsort] {
+thead th[data-sort] {
   cursor: pointer;
   user-select: none;
 }
-thead th[data-sort]:hover, thead th[data-fsort]:hover, thead th[data-hsort]:hover { color: var(--text); }
-thead th.sort-active, thead th.fsort-active, thead th.hsort-active { color: var(--text); }
+thead th[data-sort]:hover { color: var(--text); }
+thead th.sort-active { color: var(--text); }
 .sort-arrow {
   display: inline-block;
   margin-left: 3px;
@@ -342,7 +353,7 @@ thead th.sort-active, thead th.fsort-active, thead th.hsort-active { color: var(
   color: var(--text3);
   vertical-align: middle;
 }
-thead th.sort-active .sort-arrow, thead th.fsort-active .sort-arrow, thead th.hsort-active .sort-arrow { color: var(--accent); }
+thead th.sort-active .sort-arrow { color: var(--accent); }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
@@ -881,7 +892,7 @@ td.muted { color: var(--text2); }
 <div class="main">
 
   <!-- Sessions tab -->
-  <div id="sessions-tab">
+  <div id="sessions-tab" class="tab-panel">
     <div class="layout">
 
       <!-- Session table -->
@@ -939,16 +950,16 @@ td.muted { color: var(--text2); }
   </div>
 
   <!-- History tab -->
-  <div id="history-tab" style="display:none">
+  <div id="history-tab" class="tab-panel" hidden>
     <div class="table-card">
       <div class="table-wrap">
         <table id="history-table">
           <thead>
             <tr>
-              <th data-hsort="tool"        onclick="setHistSort('tool')">Tool <span class="sort-arrow"></span></th>
-              <th data-hsort="title"       onclick="setHistSort('title')">Title / First Prompt <span class="sort-arrow"></span></th>
-              <th data-hsort="cwd"         onclick="setHistSort('cwd')">CWD <span class="sort-arrow"></span></th>
-              <th data-hsort="last_active" onclick="setHistSort('last_active')" class="hsort-active">Last Active <span class="sort-arrow">↓</span></th>
+              <th data-sort="tool"        onclick="setHistSort('tool')">Tool <span class="sort-arrow"></span></th>
+              <th data-sort="title"       onclick="setHistSort('title')">Title / First Prompt <span class="sort-arrow"></span></th>
+              <th data-sort="cwd"         onclick="setHistSort('cwd')">CWD <span class="sort-arrow"></span></th>
+              <th data-sort="last_active" onclick="setHistSort('last_active')" class="sort-active">Last Active <span class="sort-arrow">↓</span></th>
               <th style="text-align:right">Action</th>
             </tr>
           </thead>
@@ -966,17 +977,17 @@ td.muted { color: var(--text2); }
   </div>
 
   <!-- Files tab -->
-  <div id="files-tab" style="display:none">
+  <div id="files-tab" class="tab-panel" hidden>
     <div class="table-card">
       <div class="table-wrap">
         <table id="files-table">
           <thead>
             <tr>
-              <th data-fsort="tool"     onclick="setFilesSort('tool')">Tool <span class="sort-arrow"></span></th>
-              <th data-fsort="type"     onclick="setFilesSort('type')">Type <span class="sort-arrow"></span></th>
-              <th data-fsort="path"     onclick="setFilesSort('path')">File <span class="sort-arrow"></span></th>
-              <th data-fsort="size"     onclick="setFilesSort('size')" style="text-align:right">Size <span class="sort-arrow"></span></th>
-              <th data-fsort="modified" onclick="setFilesSort('modified')" class="fsort-active">Modified <span class="sort-arrow"></span></th>
+              <th data-sort="tool"     onclick="setFilesSort('tool')">Tool <span class="sort-arrow"></span></th>
+              <th data-sort="type"     onclick="setFilesSort('type')">Type <span class="sort-arrow"></span></th>
+              <th data-sort="path"     onclick="setFilesSort('path')">File <span class="sort-arrow"></span></th>
+              <th data-sort="size"     onclick="setFilesSort('size')" style="text-align:right">Size <span class="sort-arrow"></span></th>
+              <th data-sort="modified" onclick="setFilesSort('modified')" class="sort-active">Modified <span class="sort-arrow">↓</span></th>
             </tr>
           </thead>
           <tbody id="files-body">
@@ -1082,18 +1093,45 @@ td.muted { color: var(--text2); }
 // ============================================================
 // State
 // ============================================================
-let sessions = [];
+let sessions      = [];
 let selectedSession = null;
-let refreshTimer = null;
+let refreshTimer  = null;
 let lastUpdatedAt = null;
-let countdownSec = 5;
+let countdownSec  = 5;
+let homeDir       = '';
+let lastFiles     = [];
+let lastHistory   = [];
 const REFRESH_INTERVAL = 5000;
-let sortKey = 'runtime';
-let sortDir = 'desc';
-let filesSortKey = 'modified';
-let filesSortDir = 'desc';
-let histSortKey = 'last_active';
-let histSortDir = 'desc';
+
+// ============================================================
+// Sort controller factory
+// ============================================================
+function makeSortCtrl(tableId, defaultKey, defaultDir, descKeys = []) {
+  let key = defaultKey, dir = defaultDir;
+  function set(newKey) {
+    if (key === newKey) dir = dir === 'asc' ? 'desc' : 'asc';
+    else { key = newKey; dir = descKeys.includes(newKey) ? 'desc' : 'asc'; }
+  }
+  function sort(list, getVal) {
+    return [...list].sort((a, b) => {
+      const av = getVal(a, key), bv = getVal(b, key);
+      const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
+      return dir === 'asc' ? cmp : -cmp;
+    });
+  }
+  function updateUI() {
+    document.querySelectorAll(`#${tableId} thead th[data-sort]`).forEach(th => {
+      th.classList.toggle('sort-active', th.dataset.sort === key);
+      const arrow = th.querySelector('.sort-arrow');
+      if (arrow) arrow.textContent = th.dataset.sort === key ? (dir === 'asc' ? '↑' : '↓') : '';
+    });
+  }
+  return { set, sort, updateUI };
+}
+
+const sessionsSort = makeSortCtrl('sessions-table', 'runtime',     'desc', ['runtime', 'tokens', 'memory', 'pid']);
+const filesSort    = makeSortCtrl('files-table',    'modified',    'desc', ['modified', 'size']);
+const histSort     = makeSortCtrl('history-table',  'last_active', 'desc', ['last_active']);
 
 // ============================================================
 // Theme
@@ -1106,21 +1144,13 @@ function initTheme() {
 
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
-  const dark = document.getElementById('theme-icon-dark');
-  const light = document.getElementById('theme-icon-light');
-  if (theme === 'dark') {
-    dark.style.display = '';
-    light.style.display = 'none';
-  } else {
-    dark.style.display = 'none';
-    light.style.display = '';
-  }
+  document.getElementById('theme-icon-dark').style.display  = theme === 'dark'  ? '' : 'none';
+  document.getElementById('theme-icon-light').style.display = theme === 'light' ? '' : 'none';
   localStorage.setItem('agentop-theme', theme);
 }
 
 function toggleTheme() {
-  const current = document.documentElement.getAttribute('data-theme');
-  applyTheme(current === 'dark' ? 'light' : 'dark');
+  applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 }
 
 // ============================================================
@@ -1129,9 +1159,7 @@ function toggleTheme() {
 function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
-  document.getElementById('sessions-tab').style.display = name === 'sessions' ? '' : 'none';
-  document.getElementById('history-tab').style.display  = name === 'history'  ? '' : 'none';
-  document.getElementById('files-tab').style.display    = name === 'files'    ? '' : 'none';
+  document.querySelectorAll('.tab-panel').forEach(el => { el.hidden = el.id !== `${name}-tab`; });
   if (name === 'files')   fetchFiles();
   if (name === 'history') fetchHistory();
 }
@@ -1169,13 +1197,16 @@ function fmtBytes(b) {
 
 function fmtDate(ts) {
   if (!ts) return '—';
-  const d = new Date(ts * 1000);
-  return d.toLocaleString();
+  return new Date(ts * 1000).toLocaleString([], {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
 }
 
 function fmtProject(p) {
   if (!p) return '—';
-  return p.replace(/^\/home\/[^/]+/, '~');
+  if (homeDir && (p === homeDir || p.startsWith(homeDir + '/'))) return '~' + p.slice(homeDir.length);
+  return p;
 }
 
 function fmtTime(d) {
@@ -1217,10 +1248,10 @@ function escHtml(s) {
 }
 
 function tmuxInfo(tmux) {
-  if (!tmux) return '<span style="color:var(--text3)">—</span>';
+  if (!tmux) return '<span class="text-dim">—</span>';
   const cmd = `tmux a -t ${tmux.session}`;
-  const sname = escHtml(JSON.stringify(cmd));
-  return `<span class="mono" style="color:var(--text2)">${escHtml(tmux.session)}</span> <span class="copy-btn" title="Copy attach command" onclick="event.stopPropagation();copyText(${sname})">⎘</span>`;
+  return `<span class="mono" style="color:var(--text2)">${escHtml(tmux.session)}</span>`
+       + ` <span class="copy-btn" title="Copy attach command" data-cmd="${escHtml(cmd)}" onclick="event.stopPropagation();copyText(this.dataset.cmd)">⎘</span>`;
 }
 
 function copyText(text) {
@@ -1269,9 +1300,9 @@ function updateLiveIndicator(ok, err) {
 }
 
 // ============================================================
-// Sorting
+// Sort value extractors
 // ============================================================
-function getSortVal(s, key) {
+function getSessionSortVal(s, key) {
   switch (key) {
     case 'name':        return (s.name || '').toLowerCase();
     case 'tool':        return (s.tool || '').toLowerCase();
@@ -1282,51 +1313,40 @@ function getSortVal(s, key) {
       const u = s.token_usage;
       return u ? (u.input_tokens||0)+(u.output_tokens||0)+(u.cache_creation_input_tokens||0)+(u.cache_read_input_tokens||0) : 0;
     }
-    case 'pid':         return s.pid || 0;
-    case 'runtime':     return s.runtime_seconds || 0;
-    case 'memory':      return s.memory_mb || 0;
-    case 'tmux':        return s.tmux ? s.tmux.session.toLowerCase() : '';
-    default:            return '';
+    case 'pid':     return s.pid || 0;
+    case 'runtime': return s.runtime_seconds || 0;
+    case 'memory':  return s.memory_mb || 0;
+    default:        return '';
   }
 }
 
-function sortSessions(list) {
-  return [...list].sort((a, b) => {
-    const av = getSortVal(a, sortKey), bv = getSortVal(b, sortKey);
-    const cmp = typeof av === 'number' ? av - bv : av.localeCompare(bv);
-    return sortDir === 'asc' ? cmp : -cmp;
-  });
-}
-
-function setSort(key) {
-  if (sortKey === key) {
-    sortDir = sortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    sortKey = key;
-    sortDir = 'asc';
+function getFileSortVal(f, key) {
+  switch (key) {
+    case 'modified': return f.modified_time;
+    case 'size':     return f.size_bytes;
+    case 'tool':     return f.tool;
+    case 'type':     return f.type;
+    default:         return f.path;
   }
-  renderSessions(sessions);
 }
 
-function updateSortHeaders() {
-  document.querySelectorAll('#sessions-table thead th[data-sort]').forEach(th => {
-    const key = th.dataset.sort;
-    const arrow = th.querySelector('.sort-arrow');
-    if (key === sortKey) {
-      th.classList.add('sort-active');
-      arrow.textContent = sortDir === 'asc' ? '▲' : '▼';
-    } else {
-      th.classList.remove('sort-active');
-      arrow.textContent = '';
-    }
-  });
+function getHistSortVal(h, key) {
+  switch (key) {
+    case 'last_active': return h.last_active || 0;
+    case 'tool':        return h.tool || '';
+    case 'title':       return (h.title || '').toLowerCase();
+    default:            return (h.cwd || '').toLowerCase();
+  }
 }
+
+function setSort(key)      { sessionsSort.set(key); renderSessions(sessions); }
+function setFilesSort(key) { filesSort.set(key);    renderFiles(lastFiles); }
+function setHistSort(key)  { histSort.set(key);     renderHistory(lastHistory); }
 
 function renderSessions(list) {
-  updateSortHeaders();
-  const sorted = sortSessions(list);
-  const count = document.getElementById('sessions-count');
-  count.textContent = sorted.length || '0';
+  sessionsSort.updateUI();
+  const sorted = sessionsSort.sort(list, getSessionSortVal);
+  document.getElementById('sessions-count').textContent = sorted.length || '0';
 
   const tbody = document.getElementById('sessions-body');
   if (!sorted.length) {
@@ -1341,18 +1361,23 @@ function renderSessions(list) {
   }
 
   tbody.innerHTML = sorted.map(s => {
-    const selected = selectedSession && selectedSession.name === s.name ? ' selected' : '';
-    const attachCmd = `tmux a -t ${s.name}`;
+    const selected   = selectedSession && selectedSession.name === s.name ? ' selected' : '';
+    const attachCmd  = `tmux a -t ${s.name}`;
+    const tokTitle   = s.token_usage
+      ? `in:${s.token_usage.input_tokens||0} out:${s.token_usage.output_tokens||0} cache_r:${s.token_usage.cache_read_input_tokens||0} cache_w:${s.token_usage.cache_creation_input_tokens||0}`
+      : '';
     const sessionCell = s.managed
-      ? `<span class="mono" style="font-size:12px">${escHtml(s.name)}</span> <span class="copy-btn" title="Copy attach command" onclick="event.stopPropagation();copyText(${escHtml(JSON.stringify(attachCmd))})">⎘</span>`
-      : `<span style="color:var(--text3);font-size:11px;font-weight:600">[external]</span> <span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`;
-    return `<tr class="${selected}" onclick="selectSession(${escHtml(JSON.stringify(s.name))}, this)">
+      ? `<span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`
+        + ` <span class="copy-btn" title="Copy attach command" data-cmd="${escHtml(attachCmd)}" onclick="event.stopPropagation();copyText(this.dataset.cmd)">⎘</span>`
+      : `<span class="text-dim" style="font-size:11px;font-weight:600">[external]</span>`
+        + ` <span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`;
+    return `<tr class="${selected}" data-name="${escHtml(s.name)}" onclick="selectSession(this.dataset.name, this)">
       <td>${sessionCell}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
-      <td class="wrap">${(s.description || s.ai_title) ? escHtml(s.description || s.ai_title) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="wrap">${(s.description || s.ai_title) ? escHtml(s.description || s.ai_title) : '<span class="text-dim">—</span>'}</td>
       <td class="wrap muted" title="${escHtml(s.cwd || '')}" style="font-size:12px">${escHtml(fmtProject(s.cwd))}</td>
-      <td class="col-tokens muted mono" title="${s.token_usage ? 'in:' + (s.token_usage.input_tokens||0) + ' out:' + (s.token_usage.output_tokens||0) + ' cache_r:' + (s.token_usage.cache_read_input_tokens||0) + ' cache_w:' + (s.token_usage.cache_creation_input_tokens||0) : ''}">${fmtTokens(s.token_usage)}</td>
+      <td class="col-tokens muted mono" title="${escHtml(tokTitle)}">${fmtTokens(s.token_usage)}</td>
       <td class="col-pid muted mono">${s.pid || '—'}</td>
       <td class="col-runtime muted mono">${fmtRuntime(s.runtime_seconds)}</td>
       <td class="col-mem muted mono">${s.memory_mb ? s.memory_mb + ' MB' : '—'}</td>
@@ -1401,7 +1426,6 @@ function closeDetail() {
 }
 
 function renderDetail(s) {
-  const sname = escHtml(JSON.stringify(s.name));
   let html = '';
 
   // ---- Description section ----
@@ -1412,13 +1436,13 @@ function renderDetail(s) {
       <div class="section-title">Description</div>
       <div id="desc-view" style="display:flex;align-items:flex-start;gap:8px">
         <span id="desc-text" style="flex:1;font-size:13px;color:${desc ? 'var(--text)' : 'var(--text3)'}">${desc ? escHtml(desc) : 'No description set'}${desc ? '' : aiTitle}</span>
-        <button class="btn btn-secondary" style="padding:3px 8px;font-size:11px;flex-shrink:0" onclick="editDesc(${sname})">Edit</button>
+        <button class="btn btn-secondary" style="padding:3px 8px;font-size:11px;flex-shrink:0" onclick="editDesc()">Edit</button>
       </div>
       <div id="desc-edit" style="display:none;flex-direction:column;gap:6px">
         <textarea id="desc-input" class="form-textarea" rows="2" style="min-height:unset" placeholder="Describe what this session is doing…">${escHtml(desc)}</textarea>
         <div style="display:flex;gap:6px;justify-content:flex-end">
           <button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" onclick="cancelDesc()">Cancel</button>
-          <button class="btn btn-primary"   style="padding:3px 10px;font-size:12px" onclick="saveDesc(${sname})">Save</button>
+          <button class="btn btn-primary"   style="padding:3px 10px;font-size:12px" onclick="saveDesc()">Save</button>
         </div>
       </div>
     </div>`;
@@ -1501,7 +1525,7 @@ function renderDetail(s) {
       <div class="section-title">Tmux</div>
       <div class="kv-grid">
         <span class="kv-key">Session</span>
-        <span class="kv-val">${escHtml(s.tmux.session)} <span class="copy-btn" title="Copy attach command" onclick="copyText(${escHtml(JSON.stringify(attachCmd))})">⎘</span></span>
+        <span class="kv-val">${escHtml(s.tmux.session)} <span class="copy-btn" title="Copy attach command" data-cmd="${escHtml(attachCmd)}" onclick="copyText(this.dataset.cmd)">⎘</span></span>
         <span class="kv-key">Window</span>
         <span class="kv-val">${escHtml(s.tmux.window)}</span>
         <span class="kv-key">Pane</span>
@@ -1543,7 +1567,7 @@ function renderDetail(s) {
       <div class="danger-zone">
         <div class="danger-title">Danger Zone</div>
         <div class="danger-desc">Sends <code style="font-family:var(--mono);font-size:11px;background:var(--bg4);padding:1px 4px;border-radius:3px">/exit</code> to the agent, then kills the tmux session.</div>
-        <button class="btn btn-danger" style="width:100%" onclick="stopSession(${sname})">
+        <button class="btn btn-danger" style="width:100%" data-name="${escHtml(s.name)}" onclick="stopSession(this)">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M5 3.5h6A1.5 1.5 0 0 1 12.5 5v6a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 11V5A1.5 1.5 0 0 1 5 3.5z"/></svg>
           Stop Session
         </button>
@@ -1560,49 +1584,16 @@ function renderDetail(s) {
 async function fetchFiles() {
   try {
     const r = await fetch('/api/files/recent');
-    const files = await r.json();
-    renderFiles(files);
+    lastFiles = await r.json();
+    renderFiles(lastFiles);
   } catch (e) {
     document.getElementById('files-body').innerHTML =
       `<tr><td colspan="5"><div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div></td></tr>`;
   }
 }
 
-function setFilesSort(key) {
-  if (filesSortKey === key) {
-    filesSortDir = filesSortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    filesSortKey = key;
-    filesSortDir = key === 'modified' || key === 'size' ? 'desc' : 'asc';
-  }
-  updateFilesSortUI();
-  if (window._lastFiles) renderFiles(window._lastFiles);
-}
-
-function updateFilesSortUI() {
-  document.querySelectorAll('#files-table thead th[data-fsort]').forEach(th => {
-    const key = th.dataset.fsort;
-    th.classList.toggle('fsort-active', key === filesSortKey);
-    const arrow = th.querySelector('.sort-arrow');
-    if (arrow) arrow.textContent = key === filesSortKey ? (filesSortDir === 'asc' ? '↑' : '↓') : '';
-  });
-}
-
-function sortFiles(list) {
-  return [...list].sort((a, b) => {
-    let av, bv;
-    if (filesSortKey === 'modified') { av = a.modified_time; bv = b.modified_time; }
-    else if (filesSortKey === 'size') { av = a.size_bytes; bv = b.size_bytes; }
-    else if (filesSortKey === 'tool') { av = a.tool; bv = b.tool; }
-    else if (filesSortKey === 'type') { av = a.type; bv = b.type; }
-    else { av = a.path; bv = b.path; }
-    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-    return filesSortDir === 'asc' ? cmp : -cmp;
-  });
-}
-
 function renderFiles(files) {
-  window._lastFiles = files;
+  filesSort.updateUI();
   const tbody = document.getElementById('files-body');
   if (!files.length) {
     tbody.innerHTML = `<tr><td colspan="5">
@@ -1614,7 +1605,7 @@ function renderFiles(files) {
     </td></tr>`;
     return;
   }
-  const sorted = sortFiles(files);
+  const sorted = filesSort.sort(files, getFileSortVal);
   tbody.innerHTML = sorted.map(f => `<tr>
     <td>${toolBadge(f.tool)}</td>
     <td><span class="mono muted">${escHtml(f.type)}</span></td>
@@ -1622,7 +1613,6 @@ function renderFiles(files) {
     <td class="size-cell muted">${fmtBytes(f.size_bytes)}</td>
     <td class="mono muted" style="font-size:12px">${fmtDate(f.modified_time)}</td>
   </tr>`).join('');
-  updateFilesSortUI();
 }
 
 // ============================================================
@@ -1646,20 +1636,16 @@ function startRefresh() {
 function manualRefresh() {
   countdownSec = REFRESH_INTERVAL / 1000;
   fetchSessions();
-  if (document.getElementById('files-tab').style.display !== 'none') fetchFiles();
+  if (!document.getElementById('files-tab').hidden) fetchFiles();
 }
 
 // ============================================================
 // New Session modal
 // ============================================================
-async function openNewSession() {
+function openNewSession() {
   document.getElementById('new-short-name').value = '';
+  document.getElementById('new-cwd').value = homeDir;
   document.getElementById('modal-overlay').classList.add('open');
-  try {
-    const r = await fetch('/api/info');
-    const data = await r.json();
-    document.getElementById('new-cwd').value = data.home || '';
-  } catch (_) {}
   document.getElementById('new-short-name').focus();
 }
 
@@ -1703,50 +1689,17 @@ async function submitNewSession() {
 async function fetchHistory() {
   try {
     const r = await fetch('/api/saved-sessions?limit=100');
-    const data = await r.json();
-    window._lastHistory = data;
-    renderHistory(data);
+    lastHistory = await r.json();
+    renderHistory(lastHistory);
   } catch (e) {
     document.getElementById('history-body').innerHTML =
       `<tr><td colspan="5"><div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div></td></tr>`;
   }
 }
 
-function setHistSort(key) {
-  if (histSortKey === key) {
-    histSortDir = histSortDir === 'asc' ? 'desc' : 'asc';
-  } else {
-    histSortKey = key;
-    histSortDir = key === 'last_active' ? 'desc' : 'asc';
-  }
-  updateHistSortUI();
-  if (window._lastHistory) renderHistory(window._lastHistory);
-}
-
-function updateHistSortUI() {
-  document.querySelectorAll('#history-table thead th[data-hsort]').forEach(th => {
-    const key = th.dataset.hsort;
-    th.classList.toggle('hsort-active', key === histSortKey);
-    const arrow = th.querySelector('.sort-arrow');
-    if (arrow) arrow.textContent = key === histSortKey ? (histSortDir === 'asc' ? '↑' : '↓') : '';
-  });
-}
-
-function sortHistory(list) {
-  return [...list].sort((a, b) => {
-    let av, bv;
-    if (histSortKey === 'last_active') { av = a.last_active || 0; bv = b.last_active || 0; }
-    else if (histSortKey === 'tool')   { av = a.tool || ''; bv = b.tool || ''; }
-    else if (histSortKey === 'title')  { av = (a.title || '').toLowerCase(); bv = (b.title || '').toLowerCase(); }
-    else                               { av = (a.cwd || '').toLowerCase(); bv = (b.cwd || '').toLowerCase(); }
-    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
-    return histSortDir === 'asc' ? cmp : -cmp;
-  });
-}
-
 function renderHistory(list) {
+  histSort.updateUI();
   const tbody = document.getElementById('history-body');
-  updateHistSortUI();
   if (!list.length) {
     tbody.innerHTML = `<tr><td colspan="5">
       <div class="empty-state">
@@ -1757,21 +1710,24 @@ function renderHistory(list) {
     </td></tr>`;
     return;
   }
-  const sorted = sortHistory(list);
+  const sorted = histSort.sort(list, getHistSortVal);
   tbody.innerHTML = sorted.map(s => {
-    const title = s.title || '<span style="color:var(--text3)">—</span>';
+    const title = s.title ? escHtml(s.title) : '<span class="text-dim">—</span>';
     const age = s.last_active ? fmtDate(s.last_active) : '—';
-    const resumable = !!s.resume_cmd;
-    const btnHtml = resumable
-      ? `<button class="btn btn-secondary" style="padding:3px 10px;font-size:11px"
-           onclick="openResumeModal(${escHtml(JSON.stringify(s))})">
+    const btnHtml = s.resume_cmd
+      ? `<button class="btn btn-secondary btn-sm"
+           data-session-id="${escHtml(s.session_id || '')}"
+           data-tool="${escHtml(s.tool || '')}"
+           data-cwd="${escHtml(s.cwd || '')}"
+           data-title="${escHtml(s.title || s.session_id || '')}"
+           onclick="openResumeModal(this)">
            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1v14l11-7z"/></svg>
            Resume
          </button>`
-      : `<span style="color:var(--text3);font-size:11px">—</span>`;
+      : `<span class="text-dim" style="font-size:11px">—</span>`;
     return `<tr>
       <td>${toolBadge(s.tool)}</td>
-      <td class="wrap" style="max-width:320px">${typeof title === 'string' && s.title ? escHtml(s.title) : title}</td>
+      <td class="wrap" style="max-width:320px">${title}</td>
       <td class="muted" style="font-size:12px;font-family:var(--mono)">${escHtml(fmtProject(s.cwd))}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap">${age}</td>
       <td style="text-align:right">${btnHtml}</td>
@@ -1782,13 +1738,14 @@ function renderHistory(list) {
 // ============================================================
 // Resume modal
 // ============================================================
-function openResumeModal(s) {
-  document.getElementById('resume-session-id').value = s.session_id;
-  document.getElementById('resume-tool').value = s.tool;
-  document.getElementById('resume-cwd').value = s.cwd || '';
-  document.getElementById('resume-short-name').value = '';
-  document.getElementById('resume-title').textContent =
-    (s.title || s.session_id) + (s.tool ? ` [${s.tool}]` : '');
+function openResumeModal(btn) {
+  document.getElementById('resume-session-id').value = btn.dataset.sessionId || '';
+  document.getElementById('resume-tool').value        = btn.dataset.tool || '';
+  document.getElementById('resume-cwd').value         = btn.dataset.cwd || '';
+  document.getElementById('resume-short-name').value  = '';
+  const t = btn.dataset.title || btn.dataset.sessionId || '';
+  const tool = btn.dataset.tool || '';
+  document.getElementById('resume-title').textContent = t + (tool ? ` [${tool}]` : '');
   document.getElementById('resume-modal-overlay').classList.add('open');
   document.getElementById('resume-short-name').focus();
 }
@@ -1830,7 +1787,7 @@ async function submitResume() {
 // ============================================================
 // Description editing
 // ============================================================
-function editDesc(name) {
+function editDesc() {
   document.getElementById('desc-view').style.display = 'none';
   document.getElementById('desc-edit').style.display = 'flex';
   document.getElementById('desc-input').focus();
@@ -1841,7 +1798,9 @@ function cancelDesc() {
   document.getElementById('desc-view').style.display = 'flex';
 }
 
-async function saveDesc(name) {
+async function saveDesc() {
+  const name = selectedSession && selectedSession.name;
+  if (!name) return;
   const text = document.getElementById('desc-input').value.trim();
   try {
     const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/description', {
@@ -1867,16 +1826,29 @@ async function saveDesc(name) {
 // ============================================================
 // Stop session
 // ============================================================
-async function stopSession(name) {
-  if (!confirm(`Stop session "${name}"?\n\nThis will send /exit to the agent and kill the tmux session.`)) return;
+async function stopSession(btn) {
+  const name = btn.dataset.name;
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1';
+    btn.classList.replace('btn-danger', 'btn-warning');
+    btn.textContent = 'Confirm Stop?';
+    setTimeout(() => {
+      if (btn.isConnected && btn.dataset.confirming && selectedSession) renderDetail(selectedSession);
+    }, 4000);
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Stopping…';
   try {
-    await fetch('/api/sessions/' + encodeURIComponent(name) + '/stop', { method: 'POST' });
+    const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/stop', { method: 'POST' });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Stop failed');
     showToast('Stopped ' + name);
+    closeDetail();
+    await fetchSessions();
   } catch (e) {
     showToast('Error: ' + e.message);
+    if (selectedSession) renderDetail(selectedSession);
   }
-  closeDetail();
-  await fetchSessions();
 }
 
 // ============================================================
@@ -1898,6 +1870,7 @@ document.addEventListener('keydown', e => {
 // Init
 // ============================================================
 initTheme();
+fetch('/api/info').then(r => r.json()).then(d => { homeDir = d.home || ''; }).catch(() => {});
 startRefresh();
 </script>
 </body>
