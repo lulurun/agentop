@@ -48,6 +48,38 @@ def stop(name: str, sessions: list[dict] | None = None) -> dict:
     return {"ok": True, **result}
 
 
+def get_saved_sessions(tool: str | None = None, limit: int = 50) -> list[dict]:
+    """Return saved/historical sessions across all (or one) agent tool."""
+    from agentop.agents import AGENTS, get_agent
+    agents = [get_agent(tool)] if tool else AGENTS
+    results = []
+    for agent in agents:
+        if agent is None:
+            continue
+        try:
+            per_agent = limit if tool else max(limit // len(AGENTS), 10)
+            sessions = agent.get_saved_sessions(limit=per_agent)
+            for s in sessions:
+                s["resume_cmd"] = agent.get_resume_cmd(s["session_id"]) or ""
+            results.extend(sessions)
+        except Exception:
+            continue
+    results.sort(key=lambda x: x["last_active"], reverse=True)
+    return results[:limit]
+
+
+def resume_session(tool: str, session_id: str, cwd: str, short_name: str = "") -> dict:
+    """Resume a saved agent session in a new tmux window."""
+    from agentop.agents import get_agent
+    agent = get_agent(tool)
+    if not agent:
+        return {"ok": False, "error": f"Unknown tool: {tool}"}
+    result = agent.resume_session(session_id, cwd, short_name)
+    if result.get("ok"):
+        registry.upsert_session(result["name"], {"managed": True})
+    return result
+
+
 def set_description(name: str, description: str) -> dict:
     """Set or clear the user-defined description for a managed session."""
     data = registry.load()

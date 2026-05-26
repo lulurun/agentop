@@ -88,6 +88,41 @@ class CodexAgent(BaseAgent):
         except OSError:
             return None
 
+    def get_resume_cmd(self, session_id: str) -> str:
+        return f"codex resume {session_id}"
+
+    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        if not db_path.exists():
+            return []
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2) as conn:
+                conn.row_factory = sqlite3.Row
+                rows = conn.execute(
+                    """
+                    SELECT id, title, first_user_message, cwd, updated_at_ms, created_at_ms
+                    FROM threads
+                    WHERE archived IS NULL OR archived = 0
+                    ORDER BY COALESCE(updated_at_ms, created_at_ms) DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+        except sqlite3.Error:
+            return []
+        result = []
+        for row in rows:
+            title = row["title"] or row["first_user_message"] or None
+            ts_ms = row["updated_at_ms"] or row["created_at_ms"] or 0
+            result.append({
+                "session_id": row["id"],
+                "title": title[:80] + ("…" if title and len(title) > 80 else "") if title else None,
+                "cwd": row["cwd"] or "",
+                "tool": self.name,
+                "last_active": ts_ms / 1000,
+            })
+        return result
+
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
         """Read the thread title from state_5.sqlite, matched by PID start time."""
         thread = self._find_thread(pid, cwd)

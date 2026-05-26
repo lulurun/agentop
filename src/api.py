@@ -95,6 +95,31 @@ async def create_and_start_session(body: dict):
     return {"ok": True, "name": result["name"], "pid": result.get("pid")}
 
 
+@app.get("/api/saved-sessions")
+async def list_saved_sessions(tool: str | None = None, limit: int = 50):
+    return await asyncio.get_event_loop().run_in_executor(None, ops.get_saved_sessions, tool, limit)
+
+
+@app.post("/api/sessions/resume")
+async def resume_session(body: dict):
+    tool = body.get("tool", "")
+    session_id = body.get("session_id", "").strip()
+    cwd = os.path.expanduser(body.get("cwd", ""))
+    short_name = body.get("short_name", "").strip()
+    if not tool:
+        raise HTTPException(status_code=400, detail="tool is required")
+    if not session_id:
+        raise HTTPException(status_code=400, detail="session_id is required")
+    if not cwd:
+        raise HTTPException(status_code=400, detail="cwd is required")
+    result = await asyncio.get_event_loop().run_in_executor(
+        None, ops.resume_session, tool, session_id, cwd, short_name
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=500, detail=result.get("error", "Failed to resume session"))
+    return {"ok": True, "name": result["name"], "pid": result.get("pid")}
+
+
 @app.patch("/api/sessions/{name:path}/description")
 async def set_session_description(name: str, body: dict):
     description = (body.get("description") or "").strip()

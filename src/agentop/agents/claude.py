@@ -9,6 +9,8 @@ from typing import Optional
 
 from agentop.agents.base import BaseAgent
 
+_PROJECTS_DIR = Path("~/.claude/projects")
+
 
 class ClaudeAgent(BaseAgent):
     name = "claude"
@@ -16,6 +18,46 @@ class ClaudeAgent(BaseAgent):
     @property
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions --remote-control"
+
+    def get_resume_cmd(self, session_id: str) -> str:
+        return f"claude --resume {session_id} --dangerously-skip-permissions --remote-control"
+
+    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+        projects_dir = _PROJECTS_DIR.expanduser()
+        if not projects_dir.exists():
+            return []
+        sessions = []
+        for proj_dir in projects_dir.iterdir():
+            if not proj_dir.is_dir():
+                continue
+            for f in proj_dir.glob("*.jsonl"):
+                title = None
+                cwd = None
+                try:
+                    with open(f) as fp:
+                        for line in fp:
+                            try:
+                                obj = json.loads(line)
+                                t = obj.get("type")
+                                if t == "ai-title" and not title:
+                                    title = obj.get("aiTitle")
+                                if t in ("system", "user") and not cwd:
+                                    cwd = obj.get("cwd")
+                            except json.JSONDecodeError:
+                                continue
+                            if title and cwd:
+                                break
+                except OSError:
+                    continue
+                sessions.append({
+                    "session_id": f.stem,
+                    "title": title,
+                    "cwd": cwd or "",
+                    "tool": self.name,
+                    "last_active": f.stat().st_mtime,
+                })
+        sessions.sort(key=lambda x: x["last_active"], reverse=True)
+        return sessions[:limit]
 
     def post_start_hook(self, tmux_session: str) -> None:
         """Accept Claude's trust / safety-check prompt automatically."""

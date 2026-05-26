@@ -37,20 +37,16 @@ class BaseAgent:
         """Shell command to launch the agent inside a tmux pane."""
         return self.name
 
-    def post_start_hook(self, tmux_session: str) -> None:
-        """Called once after the agent process appears in tmux.
+    def get_resume_cmd(self, session_id: str) -> Optional[str]:
+        """Return the shell command to resume a saved session, or None if unsupported."""
+        return None
 
-        Override to handle first-run prompts, auth flows, etc.
-        """
+    def post_start_hook(self, tmux_session: str) -> None:
+        """Called once after the agent process appears in tmux."""
         pass
 
-    def start_session(self, cwd: str, short_name: str = "") -> dict:
-        """Create a tmux session, launch the agent, wait for its PID, then
-        rename the session to {short_name}-{pid}.
-
-        Returns {"ok": True, "name": …, "pid": …, "tmux_session": …}
-             or {"ok": False, "error": …}.
-        """
+    def _run_in_tmux(self, cmd: str, cwd: str, short_name: str = "") -> dict:
+        """Create a tmux session, run cmd, wait for the agent PID, rename the session."""
         rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         temp_name = f"agentop_tmp_{rand_id}"
 
@@ -68,12 +64,11 @@ class BaseAgent:
             return {"ok": False, "error": "tmux timed out"}
 
         subprocess.run(
-            ["tmux", "send-keys", "-t", temp_name, self.launch_cmd, "Enter"],
+            ["tmux", "send-keys", "-t", temp_name, cmd, "Enter"],
             capture_output=True,
             timeout=5,
         )
 
-        # Resolve the shell PID of the new pane
         pane_pid: Optional[int] = None
         try:
             r = subprocess.run(
@@ -88,7 +83,6 @@ class BaseAgent:
         except subprocess.TimeoutExpired:
             pass
 
-        # Poll up to 5 s for the agent process to appear as a child of the pane
         tool_pid: Optional[int] = None
         if pane_pid:
             for _ in range(20):
@@ -123,18 +117,32 @@ class BaseAgent:
         self.post_start_hook(temp_name)
         return {"ok": True, "name": temp_name, "pid": None, "tmux_session": temp_name}
 
+    def start_session(self, cwd: str, short_name: str = "") -> dict:
+        """Create a tmux session and launch the agent."""
+        return self._run_in_tmux(self.launch_cmd, cwd, short_name)
+
+    def resume_session(self, session_id: str, cwd: str, short_name: str = "") -> dict:
+        """Resume a saved session in a new tmux window."""
+        cmd = self.get_resume_cmd(session_id)
+        if not cmd:
+            return {"ok": False, "error": f"{self.name} does not support session resume"}
+        return self._run_in_tmux(cmd, cwd, short_name)
+
+    # ------------------------------------------------------------------ saved sessions
+
+    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+        """Return a list of saved/historical sessions that can be resumed."""
+        return []
+
     # ------------------------------------------------------------------ metadata
 
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Return the AI-generated conversation title for this session, or None."""
         return None
 
     def get_extra_meta(self, pid: int, cwd: str) -> dict:
-        """Return additional tool-specific fields to include in the session dict."""
         return {}
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:
-        """Merge get_ai_title() and get_extra_meta() into one dict."""
         meta = self.get_extra_meta(pid, cwd)
         title = self.get_ai_title(pid, cwd)
         if title:

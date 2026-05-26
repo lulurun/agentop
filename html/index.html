@@ -867,6 +867,9 @@ td.muted { color: var(--text2); }
     Sessions
     <span class="tab-count" id="sessions-count">—</span>
   </div>
+  <div class="tab" onclick="switchTab('history')" id="tab-history">
+    History
+  </div>
   <div class="tab" onclick="switchTab('files')" id="tab-files">
     Agent Files
   </div>
@@ -932,6 +935,33 @@ td.muted { color: var(--text2); }
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <!-- History tab -->
+  <div id="history-tab" style="display:none">
+    <div class="table-card">
+      <div class="table-wrap">
+        <table id="history-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Title / First Prompt</th>
+              <th>CWD</th>
+              <th>Last Active</th>
+              <th style="text-align:right">Action</th>
+            </tr>
+          </thead>
+          <tbody id="history-body">
+            <tr><td colspan="5">
+              <div class="empty-state">
+                <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
+                <p>Loading history…</p>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -1008,6 +1038,43 @@ td.muted { color: var(--text2); }
   </div>
 </div>
 
+<!-- Resume Session Modal -->
+<div class="modal-overlay" id="resume-modal-overlay" onclick="if(event.target===this)closeResumeModal()">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>Resume Session</h3>
+      <button class="detail-close" onclick="closeResumeModal()">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854z"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="edit-form">
+        <div class="form-group">
+          <label class="form-label">Session</label>
+          <div id="resume-title" style="font-size:13px;color:var(--text2);padding:4px 0"></div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Session Name <span style="color:var(--text3);font-weight:400">(&lt;32 chars)</span></label>
+          <input type="text" id="resume-short-name" class="form-input" placeholder="my-resumed-session" maxlength="31">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Working Directory</label>
+          <input type="text" id="resume-cwd" class="form-input">
+        </div>
+        <input type="hidden" id="resume-session-id">
+        <input type="hidden" id="resume-tool">
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="closeResumeModal()">Cancel</button>
+          <button class="btn btn-primary" id="resume-start-btn" onclick="submitResume()">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1v14l11-7z"/></svg>
+            Resume
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Toast -->
 <div id="toast"></div>
 
@@ -1061,8 +1128,10 @@ function switchTab(name) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab-' + name).classList.add('active');
   document.getElementById('sessions-tab').style.display = name === 'sessions' ? '' : 'none';
-  document.getElementById('files-tab').style.display   = name === 'files'    ? '' : 'none';
-  if (name === 'files') fetchFiles();
+  document.getElementById('history-tab').style.display  = name === 'history'  ? '' : 'none';
+  document.getElementById('files-tab').style.display    = name === 'files'    ? '' : 'none';
+  if (name === 'files')   fetchFiles();
+  if (name === 'history') fetchHistory();
 }
 
 // ============================================================
@@ -1627,6 +1696,101 @@ async function submitNewSession() {
 }
 
 // ============================================================
+// History tab
+// ============================================================
+async function fetchHistory() {
+  try {
+    const r = await fetch('/api/saved-sessions?limit=100');
+    const data = await r.json();
+    renderHistory(data);
+  } catch (e) {
+    document.getElementById('history-body').innerHTML =
+      `<tr><td colspan="5"><div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div></td></tr>`;
+  }
+}
+
+function renderHistory(list) {
+  const tbody = document.getElementById('history-body');
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="5">
+      <div class="empty-state">
+        <div class="empty-icon">🗂</div>
+        <h3>No saved sessions found</h3>
+        <p>Past Claude, Codex, Gemini and Antigravity sessions will appear here.</p>
+      </div>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(s => {
+    const title = s.title || '<span style="color:var(--text3)">—</span>';
+    const age = s.last_active ? fmtDate(s.last_active) : '—';
+    const resumable = !!s.resume_cmd;
+    const btnHtml = resumable
+      ? `<button class="btn btn-secondary" style="padding:3px 10px;font-size:11px"
+           onclick="openResumeModal(${escHtml(JSON.stringify(s))})">
+           <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1v14l11-7z"/></svg>
+           Resume
+         </button>`
+      : `<span style="color:var(--text3);font-size:11px">—</span>`;
+    return `<tr>
+      <td>${toolBadge(s.tool)}</td>
+      <td class="wrap" style="max-width:320px">${typeof title === 'string' && s.title ? escHtml(s.title) : title}</td>
+      <td class="muted" style="font-size:12px;font-family:var(--mono)">${escHtml(fmtProject(s.cwd))}</td>
+      <td class="muted" style="font-size:12px;white-space:nowrap">${age}</td>
+      <td style="text-align:right">${btnHtml}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ============================================================
+// Resume modal
+// ============================================================
+function openResumeModal(s) {
+  document.getElementById('resume-session-id').value = s.session_id;
+  document.getElementById('resume-tool').value = s.tool;
+  document.getElementById('resume-cwd').value = s.cwd || '';
+  document.getElementById('resume-short-name').value = '';
+  document.getElementById('resume-title').textContent =
+    (s.title || s.session_id) + (s.tool ? ` [${s.tool}]` : '');
+  document.getElementById('resume-modal-overlay').classList.add('open');
+  document.getElementById('resume-short-name').focus();
+}
+
+function closeResumeModal() {
+  document.getElementById('resume-modal-overlay').classList.remove('open');
+}
+
+async function submitResume() {
+  const session_id = document.getElementById('resume-session-id').value;
+  const tool       = document.getElementById('resume-tool').value;
+  const cwd        = document.getElementById('resume-cwd').value.trim();
+  const short_name = document.getElementById('resume-short-name').value.trim();
+  if (!cwd) { showToast('Working directory is required'); return; }
+  const btn = document.getElementById('resume-start-btn');
+  const orig = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span> Resuming…';
+  btn.disabled = true;
+  try {
+    const r = await fetch('/api/sessions/resume', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool, session_id, cwd, short_name }),
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.detail || 'Failed');
+    closeResumeModal();
+    switchTab('sessions');
+    await fetchSessions();
+    showToast('Resumed: ' + data.name);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  } finally {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+  }
+}
+
+// ============================================================
 // Description editing
 // ============================================================
 function editDesc(name) {
@@ -1683,7 +1847,9 @@ async function stopSession(name) {
 // ============================================================
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (document.getElementById('modal-overlay').classList.contains('open')) {
+    if (document.getElementById('resume-modal-overlay').classList.contains('open')) {
+      closeResumeModal();
+    } else if (document.getElementById('modal-overlay').classList.contains('open')) {
       closeModal();
     } else if (document.getElementById('detail-panel').classList.contains('open')) {
       closeDetail();

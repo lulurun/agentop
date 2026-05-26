@@ -47,6 +47,76 @@ class GeminiAgent(BaseAgent):
             pass
         return None
 
+    def get_resume_cmd(self, session_id: str) -> str:
+        return "gemini --resume latest"
+
+    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+        """Return the most-recent Gemini session per project directory."""
+        tmp_base = Path("~/.gemini/tmp").expanduser()
+        if not tmp_base.exists():
+            return []
+        sessions = []
+        try:
+            for project_dir in tmp_base.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                root_file = project_dir / ".project_root"
+                cwd = root_file.read_text().strip() if root_file.exists() else ""
+                chats_dir = project_dir / "chats"
+                if not chats_dir.exists():
+                    continue
+                chat_files = sorted(
+                    list(chats_dir.glob("session-*.json")) + list(chats_dir.glob("session-*.jsonl")),
+                    key=lambda f: f.stat().st_mtime,
+                    reverse=True,
+                )
+                if not chat_files:
+                    continue
+                # Only the most-recent session per project (resume always targets latest)
+                f = chat_files[0]
+                session_id = None
+                title = None
+                try:
+                    if f.suffix == ".jsonl":
+                        lines = open(f).readlines()
+                        if lines:
+                            header = json.loads(lines[0])
+                            session_id = header.get("sessionId")
+                        for line in lines[1:]:
+                            obj = json.loads(line)
+                            if obj.get("type") == "user":
+                                content = obj.get("content", "")
+                                if isinstance(content, list):
+                                    content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
+                                title = str(content).strip()[:80]
+                                break
+                    else:
+                        data = json.load(open(f))
+                        session_id = data.get("sessionId") or f.stem
+                        for msg in data.get("messages", data.get("history", [])):
+                            if msg.get("type") == "user":
+                                content = msg.get("content", "")
+                                if isinstance(content, list):
+                                    content = " ".join(
+                                        c.get("text", "") for c in content if isinstance(c, dict)
+                                    )
+                                title = str(content).strip()[:80]
+                                if title:
+                                    break
+                except (OSError, json.JSONDecodeError, KeyError):
+                    pass
+                sessions.append({
+                    "session_id": session_id or f.stem,
+                    "title": title or None,
+                    "cwd": cwd,
+                    "tool": self.name,
+                    "last_active": f.stat().st_mtime,
+                })
+        except OSError:
+            pass
+        sessions.sort(key=lambda x: x["last_active"], reverse=True)
+        return sessions[:limit]
+
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
         """Gemini CLI does not currently persist conversation titles to disk."""
         return None

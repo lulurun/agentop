@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from datetime import datetime
 from pathlib import Path
@@ -60,6 +61,81 @@ class AntigravityAgent(BaseAgent):
                 continue
 
         return best_file if best_diff <= _START_TOLERANCE_SEC else None
+
+    def get_resume_cmd(self, session_id: str) -> str:
+        return f"agy --conversation {session_id} --dangerously-skip-permissions"
+
+    def _conv_to_cwd_map(self) -> dict[str, str]:
+        """Scan log files to build a conversation_id → cwd mapping."""
+        log_dir = _LOG_DIR.expanduser()
+        projects_dir = Path("~/.gemini/config/projects").expanduser()
+        conv_to_proj: dict[str, str] = {}
+        proj_to_cwd: dict[str, str] = {}
+        _proj_re = re.compile(r"Conversation using project ID: (\S+)")
+        _conv_re = re.compile(r"Created conversation (\S+)")
+        if log_dir.exists():
+            for log_file in log_dir.glob("cli-*.log"):
+                current_proj = None
+                try:
+                    with open(log_file) as f:
+                        for line in f:
+                            m = _proj_re.search(line)
+                            if m:
+                                current_proj = m.group(1)
+                            m = _conv_re.search(line)
+                            if m and current_proj:
+                                conv_to_proj[m.group(1)] = current_proj
+                except OSError:
+                    continue
+        if projects_dir.exists():
+            for proj_file in projects_dir.glob("*.json"):
+                try:
+                    proj = json.loads(proj_file.read_text())
+                    cwd = proj.get("name", "")
+                    if cwd:
+                        proj_to_cwd[proj_file.stem] = cwd
+                except (OSError, json.JSONDecodeError):
+                    continue
+        return {c: proj_to_cwd[p] for c, p in conv_to_proj.items() if p in proj_to_cwd}
+
+    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+        """Return saved antigravity sessions from the brain transcript directory."""
+        brain_dir = Path("~/.gemini/antigravity-cli/brain").expanduser()
+        if not brain_dir.exists():
+            return []
+        cwd_map = self._conv_to_cwd_map()
+        sessions = []
+        for conv_dir in brain_dir.iterdir():
+            if not conv_dir.is_dir():
+                continue
+            session_id = conv_dir.name
+            transcript = conv_dir / ".system_generated/logs/transcript.jsonl"
+            if not transcript.exists():
+                continue
+            title = None
+            try:
+                with open(transcript) as f:
+                    for line in f:
+                        try:
+                            obj = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        if obj.get("type") == "USER_INPUT" and not title:
+                            raw = obj.get("content", "")
+                            text = re.sub(r"<[^>]+>", "", raw).strip()
+                            title = text[:80] + ("…" if len(text) > 80 else "")
+                            break
+            except OSError:
+                continue
+            sessions.append({
+                "session_id": session_id,
+                "title": title,
+                "cwd": cwd_map.get(session_id, ""),
+                "tool": self.name,
+                "last_active": transcript.stat().st_mtime,
+            })
+        sessions.sort(key=lambda x: x["last_active"], reverse=True)
+        return sessions[:limit]
 
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
         """Return the first user message from the session log as the title."""
