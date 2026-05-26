@@ -95,6 +95,23 @@ async def create_and_start_session(body: dict):
     return {"ok": True, "name": result["name"], "pid": result.get("pid")}
 
 
+@app.patch("/api/sessions/{name:path}/description")
+async def set_session_description(name: str, body: dict):
+    description = (body.get("description") or "").strip()
+    result = await asyncio.get_event_loop().run_in_executor(None, ops.set_description, name, description)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error"))
+    async with _cache_lock:
+        for s in _cache["sessions"]:
+            if s["name"] == name:
+                if description:
+                    s["description"] = description
+                else:
+                    s.pop("description", None)
+                break
+    return {"ok": True}
+
+
 @app.post("/api/sessions/{name}/stop")
 async def stop_session(name: str):
     async with _cache_lock:

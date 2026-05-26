@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from agentop.agents.antigravity import AntigravityAgent
 from agentop.agents.base import BaseAgent
 from agentop.agents.claude import ClaudeAgent
 from agentop.agents.codex import CodexAgent
@@ -12,6 +13,7 @@ AGENTS: list[BaseAgent] = [
     ClaudeAgent(),
     CodexAgent(),
     GeminiAgent(),
+    AntigravityAgent(),
 ]
 
 

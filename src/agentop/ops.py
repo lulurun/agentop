@@ -10,7 +10,12 @@ def get_sessions() -> list[dict]:
     reg = registry.load()
     reg_sessions = reg.get("sessions", {})
     managed_names = {k for k, v in reg_sessions.items() if v.get("managed")}
-    return scanner.build_sessions(managed_names)
+    sessions = scanner.build_sessions(managed_names)
+    for s in sessions:
+        reg_data = reg_sessions.get(s["name"], {})
+        if reg_data.get("description"):
+            s["description"] = reg_data["description"]
+    return sessions
 
 
 def start(tool: str, cwd: str, short_name: str = "") -> dict:
@@ -41,6 +46,19 @@ def stop(name: str, sessions: list[dict] | None = None) -> dict:
     tmux_name = (s.get("tmux") or {}).get("session") or name
     result = scanner.stop_session(s.get("cwd", ""), tmux_name)
     return {"ok": True, **result}
+
+
+def set_description(name: str, description: str) -> dict:
+    """Set or clear the user-defined description for a managed session."""
+    data = registry.load()
+    if name not in data.get("sessions", {}):
+        return {"ok": False, "error": "Session not found in registry"}
+    if description:
+        data["sessions"][name]["description"] = description
+    else:
+        data["sessions"][name].pop("description", None)
+    registry.save(data)
+    return {"ok": True}
 
 
 def send(name: str, text: str, sessions: list[dict] | None = None) -> dict:

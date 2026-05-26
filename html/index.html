@@ -409,10 +409,11 @@ td.muted { color: var(--text2); }
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
-.tool-claude   { background: var(--purple-dim); color: var(--purple); }
-.tool-codex    { background: var(--blue-dim);   color: var(--blue); }
-.tool-gemini   { background: var(--blue-dim);   color: var(--blue); }
-.tool-unknown  { background: var(--bg4);        color: var(--text2); }
+.tool-claude       { background: var(--purple-dim); color: var(--purple); }
+.tool-codex        { background: var(--blue-dim);   color: var(--blue); }
+.tool-gemini       { background: var(--blue-dim);   color: var(--blue); }
+.tool-antigravity  { background: var(--green-dim);  color: var(--green); }
+.tool-unknown      { background: var(--bg4);        color: var(--text2); }
 
 /* Branch badge */
 .branch-badge {
@@ -988,6 +989,7 @@ td.muted { color: var(--text2); }
             <option value="claude">Claude</option>
             <option value="codex">Codex</option>
             <option value="gemini">Gemini</option>
+            <option value="antigravity">Antigravity</option>
           </select>
         </div>
         <div class="form-group">
@@ -1124,7 +1126,7 @@ function statusBadge(s) {
 }
 
 function toolBadge(tool) {
-  const cls = { claude: 'tool-claude', codex: 'tool-codex', gemini: 'tool-gemini' }[tool] || 'tool-unknown';
+  const cls = { claude: 'tool-claude', codex: 'tool-codex', gemini: 'tool-gemini', antigravity: 'tool-antigravity' }[tool] || 'tool-unknown';
   return `<span class="tool-badge ${cls}">${escHtml(tool || '?')}</span>`;
 }
 
@@ -1203,7 +1205,7 @@ function getSortVal(s, key) {
     case 'name':        return (s.name || '').toLowerCase();
     case 'tool':        return (s.tool || '').toLowerCase();
     case 'status':      return (s.claude_status || s.status || '').toLowerCase();
-    case 'description': return (s.ai_title || '').toLowerCase();
+    case 'description': return (s.description || s.ai_title || '').toLowerCase();
     case 'cwd':         return (s.cwd || '').toLowerCase();
     case 'tokens': {
       const u = s.token_usage;
@@ -1277,7 +1279,7 @@ function renderSessions(list) {
       <td>${sessionCell}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
-      <td class="wrap">${s.ai_title ? escHtml(s.ai_title) : '<span style="color:var(--text3)">—</span>'}</td>
+      <td class="wrap">${(s.description || s.ai_title) ? escHtml(s.description || s.ai_title) : '<span style="color:var(--text3)">—</span>'}</td>
       <td class="wrap muted" title="${escHtml(s.cwd || '')}" style="font-size:12px">${escHtml(fmtProject(s.cwd))}</td>
       <td class="col-tokens muted mono" title="${s.token_usage ? 'in:' + (s.token_usage.input_tokens||0) + ' out:' + (s.token_usage.output_tokens||0) + ' cache_r:' + (s.token_usage.cache_read_input_tokens||0) + ' cache_w:' + (s.token_usage.cache_creation_input_tokens||0) : ''}">${fmtTokens(s.token_usage)}</td>
       <td class="col-pid muted mono">${s.pid || '—'}</td>
@@ -1330,6 +1332,26 @@ function closeDetail() {
 function renderDetail(s) {
   const sname = escHtml(JSON.stringify(s.name));
   let html = '';
+
+  // ---- Description section ----
+  if (s.managed) {
+    const desc = s.description || '';
+    const aiTitle = s.ai_title ? `<span style="color:var(--text3);font-size:11px"> (AI: ${escHtml(s.ai_title)})</span>` : '';
+    html += `<div class="detail-section" id="desc-section">
+      <div class="section-title">Description</div>
+      <div id="desc-view" style="display:flex;align-items:flex-start;gap:8px">
+        <span id="desc-text" style="flex:1;font-size:13px;color:${desc ? 'var(--text)' : 'var(--text3)'}">${desc ? escHtml(desc) : 'No description set'}${desc ? '' : aiTitle}</span>
+        <button class="btn btn-secondary" style="padding:3px 8px;font-size:11px;flex-shrink:0" onclick="editDesc(${sname})">Edit</button>
+      </div>
+      <div id="desc-edit" style="display:none;flex-direction:column;gap:6px">
+        <textarea id="desc-input" class="form-textarea" rows="2" style="min-height:unset" placeholder="Describe what this session is doing…">${escHtml(desc)}</textarea>
+        <div style="display:flex;gap:6px;justify-content:flex-end">
+          <button class="btn btn-secondary" style="padding:3px 10px;font-size:12px" onclick="cancelDesc()">Cancel</button>
+          <button class="btn btn-primary"   style="padding:3px 10px;font-size:12px" onclick="saveDesc(${sname})">Save</button>
+        </div>
+      </div>
+    </div>`;
+  }
 
   // ---- Process section ----
   html += `<div class="detail-section">
@@ -1601,6 +1623,43 @@ async function submitNewSession() {
   } finally {
     btn.innerHTML = originalHTML;
     btn.disabled = false;
+  }
+}
+
+// ============================================================
+// Description editing
+// ============================================================
+function editDesc(name) {
+  document.getElementById('desc-view').style.display = 'none';
+  document.getElementById('desc-edit').style.display = 'flex';
+  document.getElementById('desc-input').focus();
+}
+
+function cancelDesc() {
+  document.getElementById('desc-edit').style.display = 'none';
+  document.getElementById('desc-view').style.display = 'flex';
+}
+
+async function saveDesc(name) {
+  const text = document.getElementById('desc-input').value.trim();
+  try {
+    const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/description', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: text }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed');
+    // Update the cached session and re-render panel + table row
+    const s = sessions.find(x => x.name === name);
+    if (s) {
+      if (text) s.description = text; else delete s.description;
+      selectedSession = s;
+    }
+    renderDetail(selectedSession || { name, managed: true, description: text });
+    renderSessions(sessions);
+    showToast(text ? 'Description saved' : 'Description cleared');
+  } catch (e) {
+    showToast('Error: ' + e.message);
   }
 }
 
