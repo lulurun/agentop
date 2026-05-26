@@ -123,25 +123,21 @@ class CodexAgent(BaseAgent):
             })
         return result
 
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Read the thread title from state_5.sqlite, matched by PID start time."""
+    def get_session_meta(self, pid: int, cwd: str) -> dict:
+        """Override to query _find_thread once and derive both title and token usage."""
         thread = self._find_thread(pid, cwd)
+        meta: dict = {}
         if not thread:
-            return None
+            return meta
         title = thread.get("title")
+        if not title:
+            first_msg = (thread.get("first_user_message") or "").strip()
+            if first_msg:
+                title = first_msg[:80] + ("…" if len(first_msg) > 80 else "")
         if title:
-            return title
-        first_msg = (thread.get("first_user_message") or "").strip()
-        if first_msg:
-            return first_msg[:80] + ("…" if len(first_msg) > 80 else "")
-        return None
-
-    def get_extra_meta(self, pid: int, cwd: str) -> dict:
-        """Read token usage from the rollout file identified via state_5.sqlite."""
-        thread = self._find_thread(pid, cwd)
-        if not thread or not thread.get("rollout_path"):
-            return {}
-        token_usage = self._read_rollout_token_usage(thread["rollout_path"])
-        if not token_usage:
-            return {}
-        return {"token_usage": token_usage}
+            meta["ai_title"] = title
+        if thread.get("rollout_path"):
+            token_usage = self._read_rollout_token_usage(thread["rollout_path"])
+            if token_usage:
+                meta["token_usage"] = token_usage
+        return meta

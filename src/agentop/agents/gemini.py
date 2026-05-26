@@ -78,7 +78,8 @@ class GeminiAgent(BaseAgent):
                 title = None
                 try:
                     if f.suffix == ".jsonl":
-                        lines = open(f).readlines()
+                        with open(f) as fh:
+                            lines = fh.readlines()
                         if lines:
                             header = json.loads(lines[0])
                             session_id = header.get("sessionId")
@@ -91,7 +92,8 @@ class GeminiAgent(BaseAgent):
                                 title = str(content).strip()[:80]
                                 break
                     else:
-                        data = json.load(open(f))
+                        with open(f) as fh:
+                            data = json.load(fh)
                         session_id = data.get("sessionId") or f.stem
                         for msg in data.get("messages", data.get("history", [])):
                             if msg.get("type") == "user":

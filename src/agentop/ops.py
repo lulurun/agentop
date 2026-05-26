@@ -48,9 +48,16 @@ def stop(name: str, sessions: list[dict] | None = None) -> dict:
     return {"ok": True, **result}
 
 
-def get_saved_sessions(tool: str | None = None, limit: int = 50) -> list[dict]:
-    """Return saved/historical sessions across all (or one) agent tool, excluding active ones."""
-    live = get_sessions()
+def get_saved_sessions(
+    tool: str | None = None,
+    limit: int = 50,
+    _live_sessions: list[dict] | None = None,
+) -> list[dict]:
+    """Return saved/historical sessions across all (or one) agent tool, excluding active ones.
+
+    Pass _live_sessions to avoid a redundant process scan when the caller already has them.
+    """
+    live = _live_sessions if _live_sessions is not None else get_sessions()
     active_keys = {
         (s["tool"], s.get("cwd", ""))
         for s in live
@@ -71,7 +78,8 @@ def get_saved_sessions(tool: str | None = None, limit: int = 50) -> list[dict]:
                     continue
                 s["resume_cmd"] = agent.get_resume_cmd(s["session_id"]) or ""
                 results.append(s)
-        except Exception:
+        except Exception as exc:
+            print(f"[agentop] {agent.name} get_saved_sessions error: {exc}")
             continue
     results.sort(key=lambda x: x["last_active"], reverse=True)
     return results[:limit]
@@ -91,14 +99,9 @@ def resume_session(tool: str, session_id: str, cwd: str, short_name: str = "") -
 
 def set_description(name: str, description: str) -> dict:
     """Set or clear the user-defined description for a managed session."""
-    data = registry.load()
-    if name not in data.get("sessions", {}):
+    ok = registry.set_description(name, description)
+    if not ok:
         return {"ok": False, "error": "Session not found in registry"}
-    if description:
-        data["sessions"][name]["description"] = description
-    else:
-        data["sessions"][name].pop("description", None)
-    registry.save(data)
     return {"ok": True}
 
 

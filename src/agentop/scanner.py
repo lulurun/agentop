@@ -221,6 +221,29 @@ def get_git_info(cwd: str) -> Optional[dict]:
         return None
 
 
+_SCAN_MAX_DEPTH = 4
+
+
+def _walk_depth(root: Path, max_depth: int):
+    """Yield (Path, stat) for all files under root up to max_depth levels deep."""
+    def _recurse(path: Path, depth: int):
+        try:
+            for entry in path.iterdir():
+                try:
+                    if entry.is_symlink():
+                        continue
+                    if entry.is_file():
+                        yield entry, entry.stat()
+                    elif entry.is_dir() and depth < max_depth:
+                        yield from _recurse(entry, depth + 1)
+                except (PermissionError, OSError):
+                    continue
+        except (PermissionError, OSError):
+            pass
+
+    yield from _recurse(root, 0)
+
+
 def scan_agent_dirs(limit: int = 60) -> list[dict]:
     """Scan hidden agent directories and return recently modified file metadata."""
     files = []
@@ -235,36 +258,27 @@ def scan_agent_dirs(limit: int = 60) -> list[dict]:
             tool = "gemini"
         else:
             tool = "codex"
-        try:
-            for f in dir_path.rglob("*"):
-                if not f.is_file():
-                    continue
-                try:
-                    stat = f.stat()
-                    suffix = f.suffix.lower()
-                    if suffix == ".jsonl":
-                        ftype = "jsonl"
-                    elif suffix == ".json":
-                        ftype = "json"
-                    elif suffix in (".db", ".sqlite", ".sqlite3"):
-                        ftype = "sqlite"
-                    elif suffix == ".log":
-                        ftype = "log"
-                    else:
-                        ftype = suffix[1:] if suffix else "file"
-                    files.append(
-                        {
-                            "tool": tool,
-                            "path": str(f),
-                            "modified_time": stat.st_mtime,
-                            "size_bytes": stat.st_size,
-                            "type": ftype,
-                        }
-                    )
-                except (PermissionError, OSError):
-                    continue
-        except (PermissionError, OSError):
-            continue
+        for f, stat in _walk_depth(dir_path, _SCAN_MAX_DEPTH):
+            suffix = f.suffix.lower()
+            if suffix == ".jsonl":
+                ftype = "jsonl"
+            elif suffix == ".json":
+                ftype = "json"
+            elif suffix in (".db", ".sqlite", ".sqlite3"):
+                ftype = "sqlite"
+            elif suffix == ".log":
+                ftype = "log"
+            else:
+                ftype = suffix[1:] if suffix else "file"
+            files.append(
+                {
+                    "tool": tool,
+                    "path": str(f),
+                    "modified_time": stat.st_mtime,
+                    "size_bytes": stat.st_size,
+                    "type": ftype,
+                }
+            )
     files.sort(key=lambda x: x["modified_time"], reverse=True)
     return files[:limit]
 
@@ -353,27 +367,20 @@ def get_recent_project_files(cwd: str, limit: int = 10) -> list[str]:
     """Return paths of recently modified files in a project directory."""
     if not cwd or not os.path.isdir(cwd):
         return []
+    entries: list[tuple[float, str]] = []
     try:
-        result = subprocess.run(
-            ["find", cwd, "-type", "f", "-not", "-path", "*/.git/*", "-printf", "%T@ %p\n"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode != 0:
-            return []
-        entries = []
-        for line in result.stdout.splitlines():
-            parts = line.split(" ", 1)
-            if len(parts) == 2:
+        for dirpath, dirnames, filenames in os.walk(cwd):
+            dirnames[:] = [d for d in dirnames if d != ".git"]
+            for fname in filenames:
+                fpath = os.path.join(dirpath, fname)
                 try:
-                    entries.append((float(parts[0]), parts[1]))
-                except ValueError:
+                    entries.append((os.stat(fpath).st_mtime, fpath))
+                except OSError:
                     continue
-        entries.sort(reverse=True)
-        return [p for _, p in entries[:limit]]
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-        return []
+    except OSError:
+        pass
+    entries.sort(reverse=True)
+    return [p for _, p in entries[:limit]]
 
 
 def build_sessions(managed_names: set | None = None) -> list[dict]:

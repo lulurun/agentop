@@ -32,8 +32,8 @@ STATIC_DIR = Path(__file__).parent.parent / "html"
 async def _refresh_loop():
     while True:
         try:
-            sessions = await asyncio.get_event_loop().run_in_executor(None, ops.get_sessions)
-            files = await asyncio.get_event_loop().run_in_executor(None, scanner.scan_agent_dirs)
+            sessions = await asyncio.to_thread(ops.get_sessions)
+            files = await asyncio.to_thread(scanner.scan_agent_dirs)
             async with _cache_lock:
                 _cache["sessions"] = sessions
                 _cache["files"] = files
@@ -75,7 +75,7 @@ async def info():
 @app.get("/api/sessions")
 async def list_sessions():
     async with _cache_lock:
-        return _cache["sessions"]
+        return list(_cache["sessions"])
 
 
 @app.post("/api/sessions/start")
@@ -89,7 +89,7 @@ async def create_and_start_session(body: dict):
         raise HTTPException(status_code=400, detail="short_name is required")
     if len(short_name) >= 32:
         raise HTTPException(status_code=400, detail="short_name must be under 32 characters")
-    result = await asyncio.get_event_loop().run_in_executor(None, ops.start, tool, cwd, short_name)
+    result = await asyncio.to_thread(ops.start, tool, cwd, short_name)
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to start session"))
     return {"ok": True, "name": result["name"], "pid": result.get("pid")}
@@ -97,7 +97,9 @@ async def create_and_start_session(body: dict):
 
 @app.get("/api/saved-sessions")
 async def list_saved_sessions(tool: str | None = None, limit: int = 50):
-    return await asyncio.get_event_loop().run_in_executor(None, ops.get_saved_sessions, tool, limit)
+    async with _cache_lock:
+        live = list(_cache["sessions"])
+    return await asyncio.to_thread(ops.get_saved_sessions, tool, limit, live)
 
 
 @app.post("/api/sessions/resume")
@@ -112,9 +114,7 @@ async def resume_session(body: dict):
         raise HTTPException(status_code=400, detail="session_id is required")
     if not cwd:
         raise HTTPException(status_code=400, detail="cwd is required")
-    result = await asyncio.get_event_loop().run_in_executor(
-        None, ops.resume_session, tool, session_id, cwd, short_name
-    )
+    result = await asyncio.to_thread(ops.resume_session, tool, session_id, cwd, short_name)
     if not result.get("ok"):
         raise HTTPException(status_code=500, detail=result.get("error", "Failed to resume session"))
     return {"ok": True, "name": result["name"], "pid": result.get("pid")}
@@ -123,7 +123,7 @@ async def resume_session(body: dict):
 @app.patch("/api/sessions/{name:path}/description")
 async def set_session_description(name: str, body: dict):
     description = (body.get("description") or "").strip()
-    result = await asyncio.get_event_loop().run_in_executor(None, ops.set_description, name, description)
+    result = await asyncio.to_thread(ops.set_description, name, description)
     if not result.get("ok"):
         raise HTTPException(status_code=404, detail=result.get("error"))
     async with _cache_lock:
@@ -141,7 +141,7 @@ async def set_session_description(name: str, body: dict):
 async def stop_session(name: str):
     async with _cache_lock:
         cached_sessions = list(_cache["sessions"])
-    result = await asyncio.get_event_loop().run_in_executor(None, ops.stop, name, cached_sessions)
+    result = await asyncio.to_thread(ops.stop, name, cached_sessions)
     if not result.get("ok"):
         error = result["error"]
         if "not found" in error.lower():
@@ -159,11 +159,11 @@ async def get_session(name: str):
             if s["name"] == name:
                 result = dict(s)
                 if result.get("pid"):
-                    result["process_tree"] = await asyncio.get_event_loop().run_in_executor(
-                        None, scanner.get_process_tree, result["pid"]
+                    result["process_tree"] = await asyncio.to_thread(
+                        scanner.get_process_tree, result["pid"]
                     )
-                    result["recent_project_files"] = await asyncio.get_event_loop().run_in_executor(
-                        None, scanner.get_recent_project_files, result.get("cwd") or "", 15
+                    result["recent_project_files"] = await asyncio.to_thread(
+                        scanner.get_recent_project_files, result.get("cwd") or "", 15
                     )
                 else:
                     result["process_tree"] = []
@@ -175,7 +175,7 @@ async def get_session(name: str):
 @app.get("/api/files/recent")
 async def recent_files():
     async with _cache_lock:
-        return _cache["files"]
+        return list(_cache["files"])
 
 
 # ---------------------------------------------------------------------------
