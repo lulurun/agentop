@@ -134,6 +134,10 @@ class BaseAgent:
         """Return a list of saved/historical sessions that can be resumed."""
         return []
 
+    def delete_session(self, session_id: str) -> None:
+        """Permanently remove a saved session from its source storage."""
+        raise NotImplementedError(f"{self.name} does not support session deletion")
+
     # ------------------------------------------------------------------ metadata
 
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:

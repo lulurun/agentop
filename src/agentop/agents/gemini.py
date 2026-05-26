@@ -50,6 +50,34 @@ class GeminiAgent(BaseAgent):
     def get_resume_cmd(self, session_id: str) -> str:
         return "gemini --resume latest"
 
+    def delete_session(self, session_id: str) -> None:
+        tmp_base = Path("~/.gemini/tmp").expanduser()
+        if not tmp_base.exists():
+            raise FileNotFoundError("Gemini session directory not found")
+        for project_dir in tmp_base.iterdir():
+            if not project_dir.is_dir():
+                continue
+            chats_dir = project_dir / "chats"
+            if not chats_dir.exists():
+                continue
+            for f in chats_dir.glob("session-*"):
+                if f.stem == session_id:
+                    f.unlink()
+                    return
+                try:
+                    if f.suffix == ".jsonl":
+                        with open(f) as fh:
+                            sid = json.loads(fh.readline()).get("sessionId")
+                    else:
+                        with open(f) as fh:
+                            sid = json.load(fh).get("sessionId")
+                    if sid == session_id:
+                        f.unlink()
+                        return
+                except (OSError, json.JSONDecodeError):
+                    continue
+        raise FileNotFoundError(f"Session {session_id} not found in Gemini sessions")
+
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
         """Return the most-recent Gemini session per project directory."""
         tmp_base = Path("~/.gemini/tmp").expanduser()

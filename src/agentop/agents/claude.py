@@ -22,6 +22,13 @@ class ClaudeAgent(BaseAgent):
     def get_resume_cmd(self, session_id: str) -> str:
         return f"claude --resume {session_id} --dangerously-skip-permissions --remote-control"
 
+    def delete_session(self, session_id: str) -> None:
+        projects_dir = _PROJECTS_DIR.expanduser()
+        for f in projects_dir.glob(f"*/{session_id}.jsonl"):
+            f.unlink()
+            return
+        raise FileNotFoundError(f"Session {session_id} not found in ~/.claude/projects")
+
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
         projects_dir = _PROJECTS_DIR.expanduser()
         if not projects_dir.exists():

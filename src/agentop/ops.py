@@ -103,6 +103,21 @@ def resume_session(tool: str, session_id: str, cwd: str, short_name: str = "") -
     return result
 
 
+def delete_saved_session(tool: str, session_id: str) -> dict:
+    """Permanently delete a saved session from its source storage."""
+    from agentop.agents import get_agent
+    agent = get_agent(tool)
+    if not agent:
+        return {"ok": False, "error": f"Unknown tool: {tool}"}
+    try:
+        agent.delete_session(session_id)
+        return {"ok": True}
+    except (FileNotFoundError, NotImplementedError) as e:
+        return {"ok": False, "error": str(e)}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 def set_description(name: str, description: str) -> dict:
     """Set or clear the user-defined description for a managed session."""
     ok = registry.set_description(name, description)

@@ -1714,7 +1714,7 @@ function renderHistory(list) {
   tbody.innerHTML = sorted.map(s => {
     const title = s.title ? escHtml(s.title) : '<span class="text-dim">—</span>';
     const age = s.last_active ? fmtDate(s.last_active) : '—';
-    const btnHtml = s.resume_cmd
+    const resumeBtn = s.resume_cmd
       ? `<button class="btn btn-secondary btn-sm"
            data-session-id="${escHtml(s.session_id || '')}"
            data-tool="${escHtml(s.tool || '')}"
@@ -1724,15 +1724,63 @@ function renderHistory(list) {
            <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M4 1v14l11-7z"/></svg>
            Resume
          </button>`
-      : `<span class="text-dim" style="font-size:11px">—</span>`;
+      : '';
+    const deleteBtn = `<button class="btn btn-danger btn-sm"
+         data-session-id="${escHtml(s.session_id || '')}"
+         data-tool="${escHtml(s.tool || '')}"
+         onclick="deleteHistorySession(this)"
+         title="Delete session permanently">
+         <svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>
+       </button>`;
     return `<tr>
       <td>${toolBadge(s.tool)}</td>
       <td class="wrap" style="max-width:320px">${title}</td>
       <td class="muted" style="font-size:12px;font-family:var(--mono)">${escHtml(fmtProject(s.cwd))}</td>
       <td class="muted" style="font-size:12px;white-space:nowrap">${age}</td>
-      <td style="text-align:right">${btnHtml}</td>
+      <td style="text-align:right"><div style="display:flex;gap:4px;justify-content:flex-end">${resumeBtn}${deleteBtn}</div></td>
     </tr>`;
   }).join('');
+}
+
+// ============================================================
+// Delete history session
+// ============================================================
+async function deleteHistorySession(btn) {
+  const sessionId = btn.dataset.sessionId;
+  const tool      = btn.dataset.tool;
+  if (!btn.dataset.confirming) {
+    btn.dataset.confirming = '1';
+    btn.classList.replace('btn-danger', 'btn-warning');
+    const orig = btn.innerHTML;
+    btn.textContent = 'Delete?';
+    setTimeout(() => {
+      if (btn.isConnected && btn.dataset.confirming) {
+        delete btn.dataset.confirming;
+        btn.classList.replace('btn-warning', 'btn-danger');
+        btn.innerHTML = orig;
+      }
+    }, 4000);
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const r = await fetch(
+      `/api/saved-sessions/${encodeURIComponent(tool)}/${encodeURIComponent(sessionId)}`,
+      { method: 'DELETE' },
+    );
+    if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
+    showToast('Session deleted');
+    lastHistory = lastHistory.filter(s => !(s.session_id === sessionId && s.tool === tool));
+    renderHistory(lastHistory);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+    btn.disabled = false;
+    delete btn.dataset.confirming;
+    btn.classList.replace('btn-warning', 'btn-danger');
+    btn.textContent = '';
+    btn.innerHTML = `<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>`;
+  }
 }
 
 // ============================================================

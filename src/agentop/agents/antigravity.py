@@ -137,6 +137,13 @@ class AntigravityAgent(BaseAgent):
         sessions.sort(key=lambda x: x["last_active"], reverse=True)
         return sessions[:limit]
 
+    def delete_session(self, session_id: str) -> None:
+        import shutil
+        conv_dir = Path("~/.gemini/antigravity-cli/brain").expanduser() / session_id
+        if not conv_dir.exists():
+            raise FileNotFoundError(f"Session {session_id} not found in Antigravity brain")
+        shutil.rmtree(conv_dir)
+
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
         """Return the first user message from the session log as the title."""
         log_file = self._find_log_file(pid)

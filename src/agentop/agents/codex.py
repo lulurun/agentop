@@ -91,6 +91,16 @@ class CodexAgent(BaseAgent):
     def get_resume_cmd(self, session_id: str) -> str:
         return f"codex resume {session_id}"
 
+    def delete_session(self, session_id: str) -> None:
+        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        if not db_path.exists():
+            raise FileNotFoundError("Codex database not found")
+        with sqlite3.connect(str(db_path), timeout=5) as conn:
+            cur = conn.execute("UPDATE threads SET archived = 1 WHERE id = ?", (session_id,))
+            if cur.rowcount == 0:
+                raise FileNotFoundError(f"Session {session_id} not found in Codex database")
+            conn.commit()
+
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
         db_path = Path("~/.codex/state_5.sqlite").expanduser()
         if not db_path.exists():

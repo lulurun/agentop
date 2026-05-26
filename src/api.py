@@ -102,6 +102,14 @@ async def list_saved_sessions(tool: str | None = None, limit: int = 50):
     return await asyncio.to_thread(ops.get_saved_sessions, tool, limit, live)
 
 
+@app.delete("/api/saved-sessions/{tool}/{session_id:path}")
+async def delete_saved_session(tool: str, session_id: str):
+    result = await asyncio.to_thread(ops.delete_saved_session, tool, session_id)
+    if not result["ok"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+    return result
+
+
 @app.post("/api/sessions/resume")
 async def resume_session(body: dict):
     tool = body.get("tool", "")
