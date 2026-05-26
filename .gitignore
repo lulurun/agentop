@@ -2,5 +2,6 @@
 dashboard.pid
 __pycache__/
 *.pyc
+*.egg-info/
 .claude
 .vscode

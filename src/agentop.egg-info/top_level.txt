@@ -1,2 +1,0 @@
-agentop
-cli
