@@ -58,10 +58,14 @@ def get_saved_sessions(
     Pass _live_sessions to avoid a redundant process scan when the caller already has them.
     """
     live = _live_sessions if _live_sessions is not None else get_sessions()
+    # Prefer session_id matching (accurate); fall back to (tool, cwd) for agents
+    # that don't expose session_id in live session metadata.
+    active_session_ids = {s["session_id"] for s in live if s.get("session_id")}
+    agents_with_id = {s["tool"] for s in live if s.get("session_id")}
     active_keys = {
         (s["tool"], s.get("cwd", ""))
         for s in live
-        if s.get("tool") and s.get("cwd")
+        if s.get("tool") and s.get("cwd") and s["tool"] not in agents_with_id
     }
 
     from agentop.agents import AGENTS, get_agent
@@ -74,6 +78,8 @@ def get_saved_sessions(
             per_agent = limit if tool else max(limit // len(AGENTS), 10)
             sessions = agent.get_saved_sessions(limit=per_agent)
             for s in sessions:
+                if s.get("session_id") in active_session_ids:
+                    continue
                 if (s.get("tool"), s.get("cwd", "")) in active_keys:
                     continue
                 s["resume_cmd"] = agent.get_resume_cmd(s["session_id"]) or ""

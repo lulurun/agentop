@@ -159,6 +159,9 @@ class ClaudeAgent(BaseAgent):
             try:
                 with open(session_file) as f:
                     meta = json.load(f)
+                session_id = meta.get("sessionId")
+                if session_id:
+                    result["session_id"] = session_id
                 bridge_id = meta.get("bridgeSessionId")
                 if bridge_id:
                     hostname = socket.gethostname()

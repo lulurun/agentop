@@ -39,13 +39,13 @@ class CodexAgent(BaseAgent):
                 conn.row_factory = sqlite3.Row
                 cur = conn.execute(
                     """
-                    SELECT title, first_user_message, tokens_used, rollout_path, created_at_ms
+                    SELECT id, title, first_user_message, tokens_used, rollout_path, created_at_ms
                     FROM threads
-                    WHERE cwd = ? AND (archived IS NULL OR archived = 0)
+                    WHERE archived IS NULL OR archived = 0
                     ORDER BY ABS(created_at_ms - ?) ASC
                     LIMIT 1
                     """,
-                    (os.path.normpath(cwd), start_ms),
+                    (start_ms,),
                 )
                 row = cur.fetchone()
         except sqlite3.Error:
@@ -124,11 +124,13 @@ class CodexAgent(BaseAgent):
         return result
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:
-        """Override to query _find_thread once and derive both title and token usage."""
+        """Override to query _find_thread once and derive session_id, title, and token usage."""
         thread = self._find_thread(pid, cwd)
         meta: dict = {}
         if not thread:
             return meta
+        if thread.get("id"):
+            meta["session_id"] = thread["id"]
         title = thread.get("title")
         if not title:
             first_msg = (thread.get("first_user_message") or "").strip()
