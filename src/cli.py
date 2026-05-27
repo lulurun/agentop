@@ -143,7 +143,8 @@ def _shorten(path):
     if not path:
         return "—"
     home = os.path.expanduser("~")
-    return "~" + path[len(home) :] if path.startswith(home) else path
+    start = len(home)
+    return "~" + path[start:] if path.startswith(home) else path
 
 
 # ---------------------------------------------------------------------------
@@ -196,6 +197,7 @@ def cmd_start(args):
 
 def cmd_history(args):
     from datetime import datetime
+
     sessions = _ops().get_saved_sessions(tool=args.tool or None, limit=args.limit)
 
     if args.json:
