@@ -27,8 +27,10 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/home/lulurun/workspace/agentop
-ExecStart=/home/lulurun/.pyenv/shims/python3 /home/lulurun/workspace/agentop/src/api.py
-ExecStartPost=/bin/bash -c 'sleep 3 && agentop start general --tool claude --cwd /home/lulurun'
+Type=forking
+WorkingDirectory=/home/lulurun/workspace/agentop
+ExecStart=/bin/bash /home/lulurun/workspace/agentop/run_app.sh
+PIDFile=/home/lulurun/workspace/agentop/dashboard.pid
 Restart=on-failure
 RestartSec=5
 StandardOutput=append:/home/lulurun/workspace/agentop/dashboard.log
