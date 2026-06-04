@@ -1,20 +1,49 @@
 ## Dashboard server
 
-Start (or restart) the web dashboard:
+The dashboard runs as a systemd user service and starts automatically at boot.
 
 ```bash
-# kill stale pid if present, then start
-[ -f dashboard.pid ] && kill $(cat dashboard.pid) 2>/dev/null; rm -f dashboard.pid
-./run_app.sh
+# Status / restart / stop
+systemctl --user status agentop
+systemctl --user restart agentop
+systemctl --user stop agentop
+
+# Logs (live)
+journalctl --user -u agentop -f
 ```
 
-Stop:
+Runs at http://127.0.0.1:8765. Logs also written to `dashboard.log`.
+
+### First-time service setup
 
 ```bash
-kill $(cat dashboard.pid)
-```
+# Create service file
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/agentop.service << 'EOF'
+[Unit]
+Description=Agentop Dashboard
+After=network.target
 
-Logs: `dashboard.log`. Runs at http://127.0.0.1:8765.
+[Service]
+Type=simple
+WorkingDirectory=/home/lulurun/workspace/agentop
+ExecStart=/home/lulurun/.pyenv/shims/python3 /home/lulurun/workspace/agentop/src/api.py
+Restart=on-failure
+RestartSec=5
+StandardOutput=append:/home/lulurun/workspace/agentop/dashboard.log
+StandardError=append:/home/lulurun/workspace/agentop/dashboard.log
+
+[Install]
+WantedBy=default.target
+EOF
+
+systemctl --user daemon-reload
+systemctl --user enable agentop
+systemctl --user start agentop
+
+# Allow service to start at boot without login
+loginctl enable-linger lulurun
+```
 
 ## CLI
 
