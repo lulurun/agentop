@@ -134,6 +134,34 @@ header {
   background: var(--border);
 }
 
+.top-nav {
+  display: flex;
+  align-items: stretch;
+  height: 100%;
+}
+
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 12px;
+  color: var(--text2);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, background .15s, border-color .15s;
+  white-space: nowrap;
+}
+.nav-link:hover {
+  color: var(--text);
+  background: var(--bg3);
+}
+.nav-link.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
 .header-right {
   margin-left: auto;
   display: flex;
@@ -246,33 +274,6 @@ header {
 }
 .btn-icon:hover { color: var(--text); background: var(--bg3); border-color: var(--border2); }
 
-/* ============================================================
-   Tabs
-   ============================================================ */
-.tab-bar {
-  background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  padding: 0 20px;
-  display: flex;
-  gap: 0;
-}
-
-.tab {
-  padding: 11px 16px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text2);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color .15s, border-color .15s;
-  user-select: none;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.tab:hover { color: var(--text); }
-.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-
 .tab-count {
   background: var(--bg4);
   color: var(--text2);
@@ -283,7 +284,7 @@ header {
   min-width: 18px;
   text-align: center;
 }
-.tab.active .tab-count {
+.nav-link.active .tab-count {
   background: var(--accent-dim);
   color: var(--accent);
 }
@@ -292,21 +293,40 @@ header {
    Page content
    ============================================================ */
 .main {
-  padding: 16px 20px;
+  padding: 22px 20px;
   max-width: 1600px;
+  margin: 0 auto;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.page-subtitle {
+  color: var(--text2);
+  font-size: 12px;
+  margin-top: 4px;
 }
 
 /* ============================================================
-   Layout — table + side panel
+   Layout
    ============================================================ */
 .layout {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
+  width: 100%;
 }
 
 .session-table-col {
-  flex: 1;
   min-width: 0;
 }
 
@@ -357,13 +377,13 @@ thead th.sort-active .sort-arrow { color: var(--accent); }
 
 tbody tr {
   border-bottom: 1px solid var(--border);
-  cursor: pointer;
   transition: background .1s;
 }
 tbody tr:last-child { border-bottom: none; }
 tbody tr:hover { background: var(--bg3); }
 tbody tr.selected { background: var(--accent-dim); }
 tbody tr.selected:hover { background: var(--accent-dim); }
+tbody tr.clickable { cursor: pointer; }
 
 td {
   padding: 9px 12px;
@@ -483,42 +503,29 @@ td.muted { color: var(--text2); }
   border: 1px solid rgba(99,102,241,.2);
 }
 
-/* ============================================================
-   Detail panel
-   ============================================================ */
-.detail-panel {
-  width: 400px;
-  flex-shrink: 0;
+.detail-page {
   background: var(--bg2);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  display: none;
   box-shadow: var(--shadow-md);
-  /* Sticky inside the layout */
-  position: sticky;
-  top: 68px;
-  max-height: calc(100vh - 84px);
-  overflow-y: auto;
+  max-width: 1180px;
+  margin: 0 auto;
 }
-.detail-panel.open { display: flex; flex-direction: column; }
 
 .detail-header {
-  padding: 14px 16px 12px;
+  padding: 16px 18px;
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  position: sticky;
-  top: 0;
+  gap: 12px;
   background: var(--bg2);
-  z-index: 1;
 }
 
 .detail-header-info { flex: 1; min-width: 0; }
 
 .detail-name {
-  font-size: 13px;
+  font-size: 17px;
   font-weight: 600;
   font-family: var(--mono);
   color: var(--text);
@@ -549,13 +556,20 @@ td.muted { color: var(--text2); }
 .detail-close:hover { color: var(--text); background: var(--bg3); }
 
 .detail-body {
-  padding: 14px 16px;
-  flex: 1;
+  padding: 18px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
 /* Sections */
-.detail-section { margin-bottom: 18px; }
-.detail-section:last-child { margin-bottom: 0; }
+.detail-section {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg);
+  padding: 14px;
+}
+.detail-section.full-span { grid-column: 1 / -1; }
 
 .section-title {
   font-size: 10px;
@@ -809,24 +823,20 @@ td.muted { color: var(--text2); }
    Responsive — mobile
    ============================================================ */
 @media (max-width: 860px) {
-  .detail-panel {
-    position: fixed;
-    inset: 0;
-    width: 100%;
-    max-width: 100%;
-    border-radius: 0;
-    z-index: 60;
-    top: 0;
-    max-height: 100vh;
-  }
-
-  .layout { flex-direction: column; }
+  .detail-body { grid-template-columns: 1fr; }
 
   .live-indicator .live-label { display: none; }
 
-  header { padding: 0 12px; gap: 8px; }
+  header {
+    height: auto;
+    min-height: 52px;
+    padding: 0 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
   .main  { padding: 12px; }
-  .tab-bar { padding: 0 12px; }
+  .top-nav { order: 3; min-width: 100%; height: 42px; }
+  .nav-link { padding: 0 10px; }
 
   /* Hide less critical columns on small screens */
   .col-pid, .col-mem, .col-runtime, .col-tokens { display: none; }
@@ -850,15 +860,20 @@ td.muted { color: var(--text2); }
 
   <div class="header-divider"></div>
 
+  <nav class="top-nav" aria-label="Primary">
+    <a href="#sessions" class="nav-link active" id="nav-sessions">
+      Sessions
+      <span class="tab-count" id="sessions-count">—</span>
+    </a>
+    <a href="#history" class="nav-link" id="nav-history">History</a>
+    <a href="#files" class="nav-link" id="nav-files">Agent Files</a>
+  </nav>
+
   <div class="header-right">
     <div class="live-indicator" id="live-indicator">
       <span class="live-dot" id="live-dot"></span>
       <span id="refresh-info" class="live-label">Loading…</span>
     </div>
-    <button class="btn btn-secondary" onclick="manualRefresh()" title="Refresh now">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M13.65 2.35A8 8 0 1 0 15 8h-2a6 6 0 1 1-1.26-3.74L9 7h6V1l-1.35 1.35z"/></svg>
-      Refresh
-    </button>
     <button class="btn btn-primary" onclick="openNewSession()">
       <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M8 1a1 1 0 0 1 1 1v5h5a1 1 0 0 1 0 2H9v5a1 1 0 0 1-2 0V9H2a1 1 0 0 1 0-2h5V2a1 1 0 0 1 1-1z"/></svg>
       New Session
@@ -871,28 +886,18 @@ td.muted { color: var(--text2); }
 </header>
 
 <!-- ============================================================
-     Tabs
-     ============================================================ -->
-<div class="tab-bar">
-  <div class="tab active" onclick="switchTab('sessions')" id="tab-sessions">
-    Sessions
-    <span class="tab-count" id="sessions-count">—</span>
-  </div>
-  <div class="tab" onclick="switchTab('history')" id="tab-history">
-    History
-  </div>
-  <div class="tab" onclick="switchTab('files')" id="tab-files">
-    Agent Files
-  </div>
-</div>
-
-<!-- ============================================================
      Main content
      ============================================================ -->
 <div class="main">
 
   <!-- Sessions tab -->
   <div id="sessions-tab" class="tab-panel">
+    <div class="page-head">
+      <div>
+        <div class="page-title">Live Sessions</div>
+        <div class="page-subtitle">Running agent processes with tmux, git, and token metadata.</div>
+      </div>
+    </div>
     <div class="layout">
 
       <!-- Session table -->
@@ -928,29 +933,41 @@ td.muted { color: var(--text2); }
         </div>
       </div>
 
-      <!-- Detail panel -->
-      <div class="detail-panel" id="detail-panel">
-        <div class="detail-header">
-          <div class="detail-header-info">
-            <div class="detail-name" id="detail-name">—</div>
-            <div class="detail-meta-row" id="detail-badges"></div>
-          </div>
-          <button class="detail-close" onclick="closeDetail()" title="Close">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854z"/></svg>
-          </button>
-        </div>
-        <div class="detail-body" id="detail-body">
-          <div style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
-            <span class="spinner"></span> Loading…
-          </div>
+    </div>
+  </div>
+
+  <!-- Session detail page -->
+  <div id="session-tab" class="tab-panel" hidden>
+    <div class="page-head">
+      <div>
+        <div class="page-title">Session Detail</div>
+        <div class="page-subtitle">Process, git, tmux, and recent file context for one session.</div>
+      </div>
+      <a class="btn btn-secondary" href="#sessions">Back to Sessions</a>
+    </div>
+    <div class="detail-page" id="detail-page">
+      <div class="detail-header">
+        <div class="detail-header-info">
+          <div class="detail-name" id="detail-name">—</div>
+          <div class="detail-meta-row" id="detail-badges"></div>
         </div>
       </div>
-
+      <div class="detail-body" id="detail-body">
+        <div class="detail-section full-span" style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
+          <span class="spinner"></span> Loading…
+        </div>
+      </div>
     </div>
   </div>
 
   <!-- History tab -->
   <div id="history-tab" class="tab-panel" hidden>
+    <div class="page-head">
+      <div>
+        <div class="page-title">History</div>
+        <div class="page-subtitle">Saved sessions that can be resumed or removed.</div>
+      </div>
+    </div>
     <div class="table-card">
       <div class="table-wrap">
         <table id="history-table">
@@ -978,6 +995,12 @@ td.muted { color: var(--text2); }
 
   <!-- Files tab -->
   <div id="files-tab" class="tab-panel" hidden>
+    <div class="page-head">
+      <div>
+        <div class="page-title">Agent Files</div>
+        <div class="page-subtitle">Recently modified files from local agent state directories.</div>
+      </div>
+    </div>
     <div class="table-card">
       <div class="table-wrap">
         <table id="files-table">
@@ -1103,6 +1126,10 @@ let lastFiles     = [];
 let lastHistory   = [];
 const REFRESH_INTERVAL = 5000;
 
+function sessionHash(name) {
+  return '#session/' + encodeURIComponent(name);
+}
+
 // ============================================================
 // Sort controller factory
 // ============================================================
@@ -1154,14 +1181,40 @@ function toggleTheme() {
 }
 
 // ============================================================
-// Tab management
+// Hash routing
 // ============================================================
+function currentRoute() {
+  const raw = window.location.hash || '#sessions';
+  if (raw.startsWith('#session/')) {
+    return { page: 'session', sessionName: decodeURIComponent(raw.slice('#session/'.length)) };
+  }
+  if (raw === '#history') return { page: 'history' };
+  if (raw === '#files') return { page: 'files' };
+  return { page: 'sessions' };
+}
+
+function showPage(page) {
+  document.querySelectorAll('.tab-panel').forEach(el => { el.hidden = el.id !== `${page}-tab`; });
+  document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
+  const navPage = page === 'session' ? 'sessions' : page;
+  const nav = document.getElementById('nav-' + navPage);
+  if (nav) nav.classList.add('active');
+}
+
+function handleRoute() {
+  const route = currentRoute();
+  showPage(route.page);
+  if (route.page === 'files') fetchFiles();
+  if (route.page === 'history') fetchHistory();
+  if (route.page === 'session') selectSession(route.sessionName);
+  if (route.page === 'sessions') {
+    selectedSession = null;
+    renderSessions(sessions);
+  }
+}
+
 function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
-  document.querySelectorAll('.tab-panel').forEach(el => { el.hidden = el.id !== `${name}-tab`; });
-  if (name === 'files')   fetchFiles();
-  if (name === 'history') fetchHistory();
+  window.location.hash = name;
 }
 
 // ============================================================
@@ -1274,10 +1327,12 @@ async function fetchSessions() {
     const r = await fetch('/api/sessions');
     sessions = await r.json();
     renderSessions(sessions);
+    const route = currentRoute();
     if (selectedSession) {
       const updated = sessions.find(s => s.name === selectedSession.name);
       if (updated) selectedSession = updated;
     }
+    if (route.page === 'session' && route.sessionName) selectSession(route.sessionName);
     lastUpdatedAt = new Date();
     updateLiveIndicator(true);
   } catch (e) {
@@ -1361,7 +1416,8 @@ function renderSessions(list) {
   }
 
   tbody.innerHTML = sorted.map(s => {
-    const selected   = selectedSession && selectedSession.name === s.name ? ' selected' : '';
+    const route      = currentRoute();
+    const selected   = route.page === 'session' && route.sessionName === s.name ? ' selected' : '';
     const attachCmd  = `tmux a -t ${s.name}`;
     const tokTitle   = s.token_usage
       ? `in:${s.token_usage.input_tokens||0} out:${s.token_usage.output_tokens||0} cache_r:${s.token_usage.cache_read_input_tokens||0} cache_w:${s.token_usage.cache_creation_input_tokens||0}`
@@ -1371,7 +1427,7 @@ function renderSessions(list) {
         + ` <span class="copy-btn" title="Copy attach command" data-cmd="${escHtml(attachCmd)}" onclick="event.stopPropagation();copyText(this.dataset.cmd)">⎘</span>`
       : `<span class="text-dim" style="font-size:11px;font-weight:600">[external]</span>`
         + ` <span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`;
-    return `<tr class="${selected}" data-name="${escHtml(s.name)}" onclick="selectSession(this.dataset.name, this)">
+    return `<tr class="clickable${selected}" data-name="${escHtml(s.name)}" onclick="window.location.hash=sessionHash(this.dataset.name)">
       <td>${sessionCell}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
@@ -1386,27 +1442,31 @@ function renderSessions(list) {
 }
 
 // ============================================================
-// Detail panel
+// Detail page
 // ============================================================
-async function selectSession(name, rowEl) {
+async function selectSession(name) {
   const s = sessions.find(x => x.name === name);
-  if (!s) return;
-
-  document.querySelectorAll('#sessions-body tr').forEach(tr => tr.classList.remove('selected'));
-  rowEl.classList.add('selected');
-
-  const panel = document.getElementById('detail-panel');
-  panel.classList.add('open');
+  const keepContent = selectedSession && selectedSession.name === name;
+  if (!s) {
+    selectedSession = null;
+    document.getElementById('detail-name').textContent = name || 'Session not found';
+    document.getElementById('detail-badges').innerHTML = '';
+    document.getElementById('detail-body').innerHTML =
+      `<div class="detail-section full-span" style="color:var(--red);font-size:13px">Session not found. It may have stopped since the last refresh.</div>`;
+    return;
+  }
 
   document.getElementById('detail-name').textContent = s.name;
 
   const badges = document.getElementById('detail-badges');
   badges.innerHTML = toolBadge(s.tool) + ' ' + statusBadge(s);
 
-  document.getElementById('detail-body').innerHTML = `
-    <div style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
-      <span class="spinner"></span> Loading…
-    </div>`;
+  if (!keepContent) {
+    document.getElementById('detail-body').innerHTML = `
+      <div class="detail-section full-span" style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
+        <span class="spinner"></span> Loading…
+      </div>`;
+  }
 
   try {
     const r = await fetch('/api/sessions/' + encodeURIComponent(name));
@@ -1421,8 +1481,7 @@ async function selectSession(name, rowEl) {
 
 function closeDetail() {
   selectedSession = null;
-  document.getElementById('detail-panel').classList.remove('open');
-  document.querySelectorAll('#sessions-body tr').forEach(tr => tr.classList.remove('selected'));
+  window.location.hash = 'sessions';
 }
 
 function renderDetail(s) {
@@ -1620,23 +1679,21 @@ function renderFiles(files) {
 // ============================================================
 function startRefresh() {
   fetchSessions();
+  handleRoute();
   countdownSec = REFRESH_INTERVAL / 1000;
   refreshTimer = setInterval(() => {
     countdownSec--;
     if (countdownSec <= 0) {
       countdownSec = REFRESH_INTERVAL / 1000;
       fetchSessions();
+      const route = currentRoute();
+      if (route.page === 'files') fetchFiles();
+      if (route.page === 'history') fetchHistory();
     } else if (lastUpdatedAt) {
       const info = document.getElementById('refresh-info');
       info.innerHTML = 'Updated ' + fmtTime(lastUpdatedAt) + ' · <span class="live-sec">' + countdownSec + 's</span>';
     }
   }, 1000);
-}
-
-function manualRefresh() {
-  countdownSec = REFRESH_INTERVAL / 1000;
-  fetchSessions();
-  if (!document.getElementById('files-tab').hidden) fetchFiles();
 }
 
 // ============================================================
@@ -1908,7 +1965,7 @@ document.addEventListener('keydown', e => {
       closeResumeModal();
     } else if (document.getElementById('modal-overlay').classList.contains('open')) {
       closeModal();
-    } else if (document.getElementById('detail-panel').classList.contains('open')) {
+    } else if (currentRoute().page === 'session') {
       closeDetail();
     }
   }
@@ -1918,6 +1975,8 @@ document.addEventListener('keydown', e => {
 // Init
 // ============================================================
 initTheme();
+if (!window.location.hash) window.location.hash = 'sessions';
+window.addEventListener('hashchange', handleRoute);
 fetch('/api/info').then(r => r.json()).then(d => { homeDir = d.home || ''; }).catch(() => {});
 startRefresh();
 </script>
