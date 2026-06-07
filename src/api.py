@@ -167,9 +167,7 @@ async def get_session(name: str):
             if s["name"] == name:
                 result = dict(s)
                 if result.get("pid"):
-                    result["process_tree"] = await asyncio.to_thread(
-                        scanner.get_process_tree, result["pid"]
-                    )
+                    result["process_tree"] = await asyncio.to_thread(scanner.get_process_tree, result["pid"])
                     result["recent_project_files"] = await asyncio.to_thread(
                         scanner.get_recent_project_files, result.get("cwd") or "", 15
                     )
@@ -207,4 +205,4 @@ app.mount("/", StaticFiles(directory=str(STATIC_DIR), html=True), name="static")
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="127.0.0.1", port=8765)
+    uvicorn.run(app, host="127.0.0.1", port=9775)

@@ -20,7 +20,7 @@ if [ -f "$PID_FILE" ] && kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
   exit 1
 fi
 
-echo "Starting Agentop Dashboard at http://127.0.0.1:8765"
+echo "Starting Agentop Dashboard at http://127.0.0.1:9775"
 echo "Logging to $SCRIPT_DIR/dashboard.log"
 
 nohup "$PYTHON" "$SCRIPT_DIR/src/api.py" \
