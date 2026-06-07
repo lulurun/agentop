@@ -12,7 +12,7 @@ systemctl --user stop agentop
 journalctl --user -u agentop -f
 ```
 
-Runs at http://127.0.0.1:8765. Logs also written to `dashboard.log`.
+Runs at http://127.0.0.1:9775. Logs also written to `dashboard.log`.
 
 ### First-time service setup
 
