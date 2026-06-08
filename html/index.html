@@ -1113,6 +1113,9 @@ td.muted { color: var(--text2); }
 <div id="toast"></div>
 
 <script>
+// Base path — works at any mount point (direct :9775/ or nginx /agentop/)
+const API_BASE = window.location.pathname.replace(/\/$/, '');
+
 // ============================================================
 // State
 // ============================================================
@@ -1324,7 +1327,7 @@ function showToast(msg) {
 // ============================================================
 async function fetchSessions() {
   try {
-    const r = await fetch('/api/sessions');
+    const r = await fetch(API_BASE + '/api/sessions');
     sessions = await r.json();
     renderSessions(sessions);
     const route = currentRoute();
@@ -1469,7 +1472,7 @@ async function selectSession(name) {
   }
 
   try {
-    const r = await fetch('/api/sessions/' + encodeURIComponent(name));
+    const r = await fetch(API_BASE + '/api/sessions/' + encodeURIComponent(name));
     const detail = await r.json();
     selectedSession = detail;
     renderDetail(detail);
@@ -1642,7 +1645,7 @@ function renderDetail(s) {
 // ============================================================
 async function fetchFiles() {
   try {
-    const r = await fetch('/api/files/recent');
+    const r = await fetch(API_BASE + '/api/files/recent');
     lastFiles = await r.json();
     renderFiles(lastFiles);
   } catch (e) {
@@ -1722,7 +1725,7 @@ async function submitNewSession() {
   btn.innerHTML = '<span class="spinner"></span> Starting…';
   btn.disabled = true;
   try {
-    const r = await fetch('/api/sessions/start', {
+    const r = await fetch(API_BASE + '/api/sessions/start', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool, cwd, short_name }),
@@ -1745,7 +1748,7 @@ async function submitNewSession() {
 // ============================================================
 async function fetchHistory() {
   try {
-    const r = await fetch('/api/saved-sessions?limit=100');
+    const r = await fetch(API_BASE + '/api/saved-sessions?limit=100');
     lastHistory = await r.json();
     renderHistory(lastHistory);
   } catch (e) {
@@ -1823,7 +1826,7 @@ async function deleteHistorySession(btn) {
   btn.textContent = '…';
   try {
     const r = await fetch(
-      `/api/saved-sessions/${encodeURIComponent(tool)}/${encodeURIComponent(sessionId)}`,
+      API_BASE + `/api/saved-sessions/${encodeURIComponent(tool)}/${encodeURIComponent(sessionId)}`,
       { method: 'DELETE' },
     );
     if (!r.ok) throw new Error((await r.json()).detail || 'Delete failed');
@@ -1870,7 +1873,7 @@ async function submitResume() {
   btn.innerHTML = '<span class="spinner"></span> Resuming…';
   btn.disabled = true;
   try {
-    const r = await fetch('/api/sessions/resume', {
+    const r = await fetch(API_BASE + '/api/sessions/resume', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tool, session_id, cwd, short_name }),
@@ -1908,7 +1911,7 @@ async function saveDesc() {
   if (!name) return;
   const text = document.getElementById('desc-input').value.trim();
   try {
-    const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/description', {
+    const r = await fetch(API_BASE + '/api/sessions/' + encodeURIComponent(name) + '/description', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ description: text }),
@@ -1945,7 +1948,7 @@ async function stopSession(btn) {
   btn.disabled = true;
   btn.textContent = 'Stopping…';
   try {
-    const r = await fetch('/api/sessions/' + encodeURIComponent(name) + '/stop', { method: 'POST' });
+    const r = await fetch(API_BASE + '/api/sessions/' + encodeURIComponent(name) + '/stop', { method: 'POST' });
     if (!r.ok) throw new Error((await r.json()).detail || 'Stop failed');
     showToast('Stopped ' + name);
     closeDetail();
@@ -1977,7 +1980,7 @@ document.addEventListener('keydown', e => {
 initTheme();
 if (!window.location.hash) window.location.hash = 'sessions';
 window.addEventListener('hashchange', handleRoute);
-fetch('/api/info').then(r => r.json()).then(d => { homeDir = d.home || ''; }).catch(() => {});
+fetch(API_BASE + '/api/info').then(r => r.json()).then(d => { homeDir = d.home || ''; }).catch(() => {});
 startRefresh();
 </script>
 </body>
