@@ -4,7 +4,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-PYTHON="${PYENV_ROOT:-$HOME/.pyenv}/shims/python3"
+PYTHON="${PYENV_ROOT:-$HOME/.pyenv}/shims/python"
 AGENTOP="${PYENV_ROOT:-$HOME/.pyenv}/shims/agentop"
 
 # Install package (editable) if not already installed
