@@ -195,13 +195,6 @@ header {
 
 .live-dot.stale { background: var(--amber); animation: none; }
 .live-dot.error { background: var(--red); animation: none; }
-.live-sec {
-  display: inline-block;
-  min-width: 2ch;
-  font-family: monospace;
-  font-variant-numeric: tabular-nums;
-}
-
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: .4; }
@@ -1123,11 +1116,10 @@ let sessions      = [];
 let selectedSession = null;
 let refreshTimer  = null;
 let lastUpdatedAt = null;
-let countdownSec  = 5;
 let homeDir       = '';
 let lastFiles     = [];
 let lastHistory   = [];
-const REFRESH_INTERVAL = 5000;
+const REFRESH_INTERVAL = 30000;
 
 function sessionHash(name) {
   return '#session/' + encodeURIComponent(name);
@@ -1352,8 +1344,8 @@ function updateLiveIndicator(ok, err) {
     return;
   }
   dot.className = 'live-dot';
-  info.innerHTML = lastUpdatedAt
-    ? 'Updated ' + fmtTime(lastUpdatedAt) + ' · <span class="live-sec">' + countdownSec + 's</span>'
+  info.textContent = lastUpdatedAt
+    ? 'Updated ' + fmtTime(lastUpdatedAt)
     : 'Live';
 }
 
@@ -1678,25 +1670,17 @@ function renderFiles(files) {
 }
 
 // ============================================================
-// Auto-refresh with live countdown
+// Auto-refresh
 // ============================================================
 function startRefresh() {
   fetchSessions();
   handleRoute();
-  countdownSec = REFRESH_INTERVAL / 1000;
   refreshTimer = setInterval(() => {
-    countdownSec--;
-    if (countdownSec <= 0) {
-      countdownSec = REFRESH_INTERVAL / 1000;
-      fetchSessions();
-      const route = currentRoute();
-      if (route.page === 'files') fetchFiles();
-      if (route.page === 'history') fetchHistory();
-    } else if (lastUpdatedAt) {
-      const info = document.getElementById('refresh-info');
-      info.innerHTML = 'Updated ' + fmtTime(lastUpdatedAt) + ' · <span class="live-sec">' + countdownSec + 's</span>';
-    }
-  }, 1000);
+    fetchSessions();
+    const route = currentRoute();
+    if (route.page === 'files') fetchFiles();
+    if (route.page === 'history') fetchHistory();
+  }, REFRESH_INTERVAL);
 }
 
 // ============================================================
