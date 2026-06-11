@@ -108,17 +108,26 @@ class ClaudeCodeCapturer(AgentCapturer):
     idle_seconds: float = 5.0
 
     def _indicator_idx(self, lines: list[str]) -> int:
-        """Return index of the indicator line via structural search, or -1."""
+        """Return index of the indicator line via structural search, or -1.
+
+        Searches upward from the bottom for two ─── separator lines.
+        The indicator lives 2 lines above the second (upper) separator:
+
+          [indicator]          ← returned index  (may be multi-line if text wraps)
+          (empty or wrapped)
+          ──── separator ────  ← second sep (i)
+          ❯ prompt
+          ──── separator ────  ← first sep
+
+        The empty-line check is intentionally omitted: long indicator text
+        (e.g. token counts) can wrap, putting non-empty content at i-1.
+        """
         sep_count = 0
-        for i in range(len(lines) - 1, max(len(lines) - 25, -1), -1):
+        for i in range(len(lines) - 1, max(len(lines) - 40, -1), -1):
             if lines[i].startswith("─"):
                 sep_count += 1
                 if sep_count == 2:
-                    # i is the second (upper) separator.
-                    # Layout: [i-1] empty, [i-2] indicator.
-                    if i >= 2 and lines[i - 1].strip() == "":
-                        return i - 2
-                    break
+                    return max(0, i - 2)
         return -1
 
     def indicator_line(self, pane_lines: list[str]) -> str:
