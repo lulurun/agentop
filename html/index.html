@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Agentop</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.css">
+<script src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.js"></script>
 <style>
 /* ============================================================
    Design tokens — dark (default) + light override
@@ -813,6 +816,68 @@ td.muted { color: var(--text2); }
 .link:hover { text-decoration: underline; }
 
 /* ============================================================
+   Terminal modal
+   ============================================================ */
+.terminal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.75);
+  backdrop-filter: blur(3px);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.terminal-overlay.open { display: flex; }
+
+.terminal-modal {
+  background: #0d1117;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  width: 100%;
+  max-width: 1100px;
+  height: 70vh;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0,0,0,.7);
+  overflow: hidden;
+}
+
+.terminal-header {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg2);
+  flex-shrink: 0;
+}
+
+.terminal-header-title {
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--mono);
+  flex: 1;
+  color: var(--text);
+}
+
+.terminal-header-sub {
+  font-size: 11px;
+  color: var(--text3);
+}
+
+#terminal-container {
+  flex: 1;
+  min-height: 0;
+  padding: 6px;
+}
+
+/* Override xterm background to match our dark bg */
+#terminal-container .xterm-viewport { border-radius: 0; }
+
+/* ============================================================
    Responsive — mobile
    ============================================================ */
 @media (max-width: 860px) {
@@ -1104,6 +1169,21 @@ td.muted { color: var(--text2); }
 
 <!-- Toast -->
 <div id="toast"></div>
+
+<!-- Terminal Modal -->
+<div class="terminal-overlay" id="terminal-overlay" onclick="if(event.target===this)closeTerminal()">
+  <div class="terminal-modal">
+    <div class="terminal-header">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" style="color:var(--green);flex-shrink:0"><path d="M6 9a.5.5 0 0 1 .5-.5h3.793l-1.147-1.146a.5.5 0 0 1 .708-.708l2 2a.5.5 0 0 1 0 .708l-2 2a.5.5 0 0 1-.708-.708L10.293 9.5H6.5A.5.5 0 0 1 6 9z"/><path d="M3.854 2.146a.5.5 0 0 0-.708.708L4.793 4.5H1.5a.5.5 0 0 0 0 1h3.293L3.146 7.146a.5.5 0 1 0 .708.708l2-2a.5.5 0 0 0 0-.708l-2-2zM1 9.5A.5.5 0 0 1 1.5 9h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 1 9.5zm0 3A.5.5 0 0 1 1.5 12h4a.5.5 0 0 1 0 1h-4A.5.5 0 0 1 1 12.5z"/></svg>
+      <span class="terminal-header-title" id="terminal-title">Terminal</span>
+      <span class="terminal-header-sub" id="terminal-sub"></span>
+      <button class="detail-close" onclick="closeTerminal()" title="Close terminal (Escape)">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2.146 2.854a.5.5 0 1 1 .708-.708L8 7.293l5.146-5.147a.5.5 0 0 1 .708.708L8.707 8l5.147 5.146a.5.5 0 0 1-.708.708L8 8.707l-5.146 5.147a.5.5 0 0 1-.708-.708L7.293 8 2.146 2.854z"/></svg>
+      </button>
+    </div>
+    <div id="terminal-container"></div>
+  </div>
+</div>
 
 <script>
 // Base path — works at any mount point (direct :9775/ or nginx /agentop/)
@@ -1417,11 +1497,16 @@ function renderSessions(list) {
     const tokTitle   = s.token_usage
       ? `in:${s.token_usage.input_tokens||0} out:${s.token_usage.output_tokens||0} cache_r:${s.token_usage.cache_read_input_tokens||0} cache_w:${s.token_usage.cache_creation_input_tokens||0}`
       : '';
+    const termBtn = s.tmux
+      ? ` <span class="copy-btn" title="Open terminal" data-name="${escHtml(s.name)}" data-tmux="${escHtml((s.tmux||{}).session||s.name)}" onclick="event.stopPropagation();openTerminal(this.dataset.name,this.dataset.tmux)" style="cursor:pointer">▶</span>`
+      : '';
     const sessionCell = s.managed
       ? `<span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`
         + ` <span class="copy-btn" title="Copy attach command" data-cmd="${escHtml(attachCmd)}" onclick="event.stopPropagation();copyText(this.dataset.cmd)">⎘</span>`
+        + termBtn
       : `<span class="text-dim" style="font-size:11px;font-weight:600">[external]</span>`
-        + ` <span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`;
+        + ` <span class="mono" style="font-size:12px">${escHtml(s.name)}</span>`
+        + termBtn;
     return `<tr class="clickable${selected}" data-name="${escHtml(s.name)}" onclick="window.location.hash=sessionHash(this.dataset.name)">
       <td>${sessionCell}</td>
       <td>${toolBadge(s.tool)}</td>
@@ -1944,11 +2029,113 @@ async function stopSession(btn) {
 }
 
 // ============================================================
+// Terminal (xterm.js + WebSocket PTY)
+// ============================================================
+let _term = null;
+let _termFit = null;
+let _termWs = null;
+let _termResizeObs = null;
+
+function openTerminal(sessionName, tmuxSession) {
+  const overlay = document.getElementById('terminal-overlay');
+  document.getElementById('terminal-title').textContent = sessionName;
+  document.getElementById('terminal-sub').textContent = tmuxSession ? `tmux: ${tmuxSession}` : '';
+
+  overlay.classList.add('open');
+
+  // Tear down any existing terminal
+  if (_termWs) { try { _termWs.close(); } catch(_) {} _termWs = null; }
+  if (_termResizeObs) { _termResizeObs.disconnect(); _termResizeObs = null; }
+  if (_term) { _term.dispose(); _term = null; _termFit = null; }
+
+  const container = document.getElementById('terminal-container');
+  container.innerHTML = '';
+
+  _term = new Terminal({
+    theme: {
+      background: '#0d1117',
+      foreground: '#e6edf3',
+      cursor: '#e6edf3',
+      selectionBackground: 'rgba(99,102,241,0.3)',
+    },
+    fontFamily: "'JetBrains Mono','Fira Code','Cascadia Code',Consolas,monospace",
+    fontSize: 13,
+    lineHeight: 1.2,
+    cursorBlink: true,
+    allowTransparency: false,
+    scrollback: 5000,
+  });
+
+  _termFit = new FitAddon.FitAddon();
+  _term.loadAddon(_termFit);
+  _term.open(container);
+  _termFit.fit();
+
+  // Connect WebSocket
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const wsUrl = `${proto}://${location.host}${API_BASE}/ws/sessions/${encodeURIComponent(sessionName)}/terminal`;
+  _termWs = new WebSocket(wsUrl);
+  _termWs.binaryType = 'arraybuffer';
+
+  _termWs.onopen = () => {
+    // Send initial size
+    _termWs.send(JSON.stringify({ type: 'resize', cols: _term.cols, rows: _term.rows }));
+  };
+
+  _termWs.onmessage = (evt) => {
+    if (evt.data instanceof ArrayBuffer) {
+      _term.write(new Uint8Array(evt.data));
+    } else {
+      _term.write(evt.data);
+    }
+  };
+
+  _termWs.onclose = () => {
+    _term.write('\r\n\x1b[2m[connection closed]\x1b[0m\r\n');
+  };
+
+  _termWs.onerror = () => {
+    _term.write('\r\n\x1b[31m[WebSocket error]\x1b[0m\r\n');
+  };
+
+  // Keyboard input → WebSocket
+  _term.onData(data => {
+    if (_termWs && _termWs.readyState === WebSocket.OPEN) {
+      _termWs.send(new TextEncoder().encode(data));
+    }
+  });
+
+  // Resize → send to backend
+  _term.onResize(({ cols, rows }) => {
+    if (_termWs && _termWs.readyState === WebSocket.OPEN) {
+      _termWs.send(JSON.stringify({ type: 'resize', cols, rows }));
+    }
+  });
+
+  // Refit when container size changes
+  _termResizeObs = new ResizeObserver(() => { if (_termFit) _termFit.fit(); });
+  _termResizeObs.observe(container);
+
+  // Focus terminal
+  _term.focus();
+}
+
+function closeTerminal() {
+  document.getElementById('terminal-overlay').classList.remove('open');
+  if (_termWs) { try { _termWs.close(); } catch(_) {} _termWs = null; }
+  if (_termResizeObs) { _termResizeObs.disconnect(); _termResizeObs = null; }
+  if (_term) { _term.dispose(); _term = null; _termFit = null; }
+  document.getElementById('terminal-container').innerHTML = '';
+}
+
+// ============================================================
 // Keyboard shortcut: Escape closes detail / modal
 // ============================================================
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
-    if (document.getElementById('resume-modal-overlay').classList.contains('open')) {
+    if (document.getElementById('terminal-overlay').classList.contains('open')) {
+      closeTerminal();
+    } else if (document.getElementById('resume-modal-overlay').classList.contains('open')) {
       closeResumeModal();
     } else if (document.getElementById('modal-overlay').classList.contains('open')) {
       closeModal();

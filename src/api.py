@@ -1,13 +1,17 @@
 """Local Agent Session Dashboard — FastAPI backend."""
 
 import asyncio
+import fcntl
 import os
+import pty
+import struct
+import termios
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -182,6 +186,110 @@ async def get_session(name: str):
 async def recent_files():
     async with _cache_lock:
         return list(_cache["files"])
+
+
+# ---------------------------------------------------------------------------
+# Terminal WebSocket — PTY bridge to a tmux session
+# ---------------------------------------------------------------------------
+
+
+def _set_pty_size(fd: int, cols: int, rows: int) -> None:
+    packed = struct.pack("HHHH", rows, cols, 0, 0)
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, packed)
+
+
+@app.websocket("/ws/sessions/{name}/terminal")
+async def session_terminal(ws: WebSocket, name: str):
+    await ws.accept()
+
+    # Resolve tmux session name from cache
+    async with _cache_lock:
+        session = next((s for s in _cache["sessions"] if s["name"] == name), None)
+    if session is None:
+        await ws.send_text("Session not found.\r\n")
+        await ws.close()
+        return
+
+    tmux_name = (session.get("tmux") or {}).get("session") or name
+
+    master_fd, slave_fd = pty.openpty()
+    try:
+        _set_pty_size(master_fd, 220, 50)
+        proc = await asyncio.create_subprocess_exec(
+            "tmux", "attach-session", "-t", tmux_name,
+            stdin=slave_fd,
+            stdout=slave_fd,
+            stderr=slave_fd,
+            close_fds=True,
+        )
+    except Exception as exc:
+        os.close(master_fd)
+        os.close(slave_fd)
+        await ws.send_text(f"Failed to attach: {exc}\r\n")
+        await ws.close()
+        return
+
+    os.close(slave_fd)
+
+    loop = asyncio.get_event_loop()
+
+    async def pty_to_ws():
+        """Read PTY output and forward to WebSocket."""
+        while True:
+            try:
+                data = await loop.run_in_executor(None, os.read, master_fd, 4096)
+            except OSError:
+                break
+            try:
+                await ws.send_bytes(data)
+            except Exception:
+                break
+
+    async def ws_to_pty():
+        """Read WebSocket input and write to PTY (or handle resize JSON)."""
+        import json
+        while True:
+            try:
+                msg = await ws.receive()
+            except (WebSocketDisconnect, Exception):
+                break
+            if msg["type"] == "websocket.disconnect":
+                break
+            if "bytes" in msg and msg["bytes"] is not None:
+                try:
+                    os.write(master_fd, msg["bytes"])
+                except OSError:
+                    break
+            elif "text" in msg and msg["text"] is not None:
+                try:
+                    payload = json.loads(msg["text"])
+                    if payload.get("type") == "resize":
+                        cols = int(payload.get("cols", 80))
+                        rows = int(payload.get("rows", 24))
+                        _set_pty_size(master_fd, cols, rows)
+                except Exception:
+                    pass
+
+    try:
+        done, pending = await asyncio.wait(
+            [
+                asyncio.ensure_future(pty_to_ws()),
+                asyncio.ensure_future(ws_to_pty()),
+            ],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+    finally:
+        for t in pending:
+            t.cancel()
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+        os.close(master_fd)
+        try:
+            await ws.close()
+        except Exception:
+            pass
 
 
 # ---------------------------------------------------------------------------
