@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-from agentop.dialogue.capture import capture_pane, extract_new_content, wait_for_idle
+from agentop.dialogue.capture import capture_pane, wait_for_idle
 
 
 class Actor:
@@ -18,27 +18,24 @@ class Actor:
         self.cwd = cwd
         self._stop: threading.Event | None = None
         self._log: Path | None = None
-        self._baseline = ""
 
     def attach(self, stop_event: threading.Event, log: Path) -> Actor:
-        """Wire up runtime dependencies before entering the loop."""
         self._stop = stop_event
         self._log = log
         return self
 
     def send(self, text: str) -> None:
-        """Send text directly via tmux paste-buffer (preserves multi-line content)."""
         subprocess.run(["tmux", "load-buffer", "-"], input=text.encode(), capture_output=True, timeout=5)
         subprocess.run(["tmux", "paste-buffer", "-t", self.session], capture_output=True, timeout=5)
         subprocess.run(["tmux", "send-keys", "-t", self.session, "", "Enter"], capture_output=True, timeout=5)
-        time.sleep(1.0)
-        self._baseline = capture_pane(self.session)
 
     def receive(self) -> str | None:
+        snapshot = capture_pane(self.session)
         content = wait_for_idle(self.session, self._stop)
         if content is None:
             return None
-        msg = extract_new_content(self._baseline, content).strip() or None
+        new_lines = content.splitlines()[len(snapshot.splitlines()):]
+        msg = "\n".join(new_lines).strip() or None
         if msg:
             self._append_log(msg)
         return msg

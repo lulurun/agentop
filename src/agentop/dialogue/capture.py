@@ -52,23 +52,3 @@ def wait_for_idle(
     return None
 
 
-def extract_new_content(baseline: str, current: str) -> str:
-    """
-    Return lines from current that come after the end of baseline.
-    Uses the last non-empty line of baseline as an anchor in current.
-    """
-    baseline_lines = baseline.rstrip().splitlines()
-    current_lines = current.rstrip().splitlines()
-
-    anchor = next((l for l in reversed(baseline_lines) if l.strip()), None)
-    if not anchor:
-        return current.strip()
-
-    # Search backwards in current for the anchor line
-    for i in range(len(current_lines) - 1, -1, -1):
-        if anchor in current_lines[i]:
-            return "\n".join(current_lines[i + 1:]).strip()
-
-    # Fallback: lines beyond baseline length
-    excess = current_lines[len(baseline_lines):]
-    return "\n".join(excess).strip()
