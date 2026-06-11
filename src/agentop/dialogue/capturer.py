@@ -33,7 +33,7 @@ class AgentCapturer:
 
     def indicator_line(self, pane_lines: list[str]) -> str:
         """Return the line used to detect idle state (watched for stability)."""
-        raise NotImplementedError
+        return pane_lines[-1] if pane_lines else ""
 
     def content_end(self, lines: list[str]) -> int:
         """Return the index where UI chrome begins (content lives before this index)."""
@@ -94,25 +94,20 @@ class AgentCapturer:
 class ClaudeCodeCapturer(AgentCapturer):
     """Capturer for Claude Code (claude CLI) sessions running in tmux.
 
-    Claude Code pane structure (from bottom, searching upward):
-      (blank lines)
-      ⏵⏵ hint line
-      ──── first separator ────     ← sep1
-      ❯ prompt / echoed input
-      ──── second separator ────    ← sep2
-      (empty line)                  ← stable anchor  [sep2 - 1]
-      indicator line(s)             ← last one is at anchor - 1; may wrap upward
-      (response content above)
-
-    idle detection : watch a 5-line buffer above the anchor (handles wrapping)
-    content_end    : anchor - 1  (the last indicator line; content lives above it)
+    idle detection : last 20 lines as a block — simple and robust
+    content_end    : structural search for the empty anchor above sep2,
+                     so the chrome-only region is excluded without cutting
+                     into the response content
     """
 
     idle_seconds: float = 5.0
-    _INDICATOR_BUF = 5  # lines above anchor watched as indicator block
+
+    def indicator_line(self, pane_lines: list[str]) -> str:
+        """Last 20 lines joined — changes while agent is active, stable when done."""
+        return "\n".join(pane_lines[-20:])
 
     def _anchor(self, lines: list[str]) -> int:
-        """Return the index of the empty line above sep2 (stable anchor), or -1."""
+        """Index of the empty line above sep2 (stable structural anchor), or -1."""
         sep_count = 0
         for i in range(len(lines) - 1, max(len(lines) - 40, -1), -1):
             if lines[i].startswith("─"):
@@ -124,20 +119,12 @@ class ClaudeCodeCapturer(AgentCapturer):
                     return -1
         return -1
 
-    def indicator_line(self, pane_lines: list[str]) -> str:
-        """5-line block above the anchor, joined — stable when agent is idle."""
-        anchor = self._anchor(pane_lines)
-        if anchor < 0:
-            return ""
-        start = max(0, anchor - self._INDICATOR_BUF)
-        return "\n".join(pane_lines[start:anchor])
-
     def content_end(self, lines: list[str]) -> int:
-        """Cut just above the indicator: anchor - 1 excludes the indicator line(s)."""
+        """Cut just above the last indicator line (anchor - 1)."""
         anchor = self._anchor(lines)
-        if anchor < 0:
-            return max(0, len(lines) - 8)
-        return max(0, anchor - 1)
+        if anchor >= 0:
+            return max(0, anchor - 1)
+        return max(0, len(lines) - 8)
 
 
 def get_capturer(agent: str) -> AgentCapturer:
