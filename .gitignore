@@ -6,4 +6,5 @@ __pycache__/
 .claude
 .vscode
 .python-version
+briefs/
 
