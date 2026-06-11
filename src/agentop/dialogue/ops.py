@@ -1,4 +1,4 @@
-"""High-level dialogue operations: start, stop, status."""
+"""Dialogue operations: start and stop."""
 from __future__ import annotations
 
 import os
@@ -9,7 +9,8 @@ import uuid
 from pathlib import Path
 
 from agentop import ops as agent_ops
-from agentop.dialogue import model
+from agentop.dialogue.actor import Actor
+from agentop.dialogue.model import Dialogue
 
 
 def start_dialogue(
@@ -20,7 +21,6 @@ def start_dialogue(
     cwd_b: str,
     max_turns: int = 20,
 ) -> dict:
-    """Start two agent sessions and launch the dialogue orchestrator."""
     dialogue_id = uuid.uuid4().hex[:8]
 
     result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a")
@@ -31,22 +31,19 @@ def start_dialogue(
     if not result_b.get("ok"):
         return {"ok": False, "error": f"Failed to start agent B ({agent_b}): {result_b.get('error')}"}
 
-    d = model.create(
+    actor_a = Actor(id="a", session=result_a["name"], agent=agent_a, cwd=cwd_a)
+    actor_b = Actor(id="b", session=result_b["name"], agent=agent_b, cwd=cwd_b)
+
+    d = Dialogue.create(
         topic=topic,
-        agent_a=agent_a,
-        agent_b=agent_b,
-        session_a=result_a["name"],
-        session_b=result_b["name"],
-        cwd_a=cwd_a,
-        cwd_b=cwd_b,
+        actor_a=actor_a,
+        actor_b=actor_b,
         max_turns=max_turns,
         dialogue_id=dialogue_id,
     )
 
     runner = Path(__file__).parent / "runner.py"
-    runner_log = model.dialogue_dir(d.id) / "runner.log"
-
-    with open(runner_log, "w") as log_f:
+    with open(d.log_path().parent / "runner.log", "w") as log_f:
         proc = subprocess.Popen(
             [sys.executable, str(runner), d.id],
             stdout=log_f,
@@ -54,21 +51,19 @@ def start_dialogue(
             close_fds=True,
         )
 
-    d.pid = proc.pid
-    model.save(d)
+    d.update({"pid": proc.pid})
 
     return {
         "ok": True,
         "id": d.id,
-        "session_a": result_a["name"],
-        "session_b": result_b["name"],
+        "session_a": actor_a.session,
+        "session_b": actor_b.session,
         "orchestrator_pid": proc.pid,
     }
 
 
 def stop_dialogue(dialogue_id: str) -> dict:
-    """Stop a running dialogue orchestrator (leaves agent sessions alive)."""
-    d = model.load(dialogue_id)
+    d = Dialogue.load(dialogue_id)
     if not d:
         return {"ok": False, "error": f"Dialogue {dialogue_id!r} not found"}
     if d.pid:
@@ -76,27 +71,5 @@ def stop_dialogue(dialogue_id: str) -> dict:
             os.kill(d.pid, signal.SIGTERM)
         except ProcessLookupError:
             pass
-    d.status = "stopped"
-    d.pid = None
-    model.save(d)
+    d.update({"status": "stopped", "pid": None})
     return {"ok": True}
-
-
-def get_status(dialogue_id: str) -> dict | None:
-    d = model.load(dialogue_id)
-    if not d:
-        return None
-    return {
-        "id": d.id,
-        "topic": d.topic,
-        "status": d.status,
-        "agent_a": d.agent_a,
-        "agent_b": d.agent_b,
-        "session_a": d.session_a,
-        "session_b": d.session_b,
-        "turns": len(d.turns),
-        "max_turns": d.max_turns,
-        "error": d.error,
-        "created_at": d.created_at,
-        "pid": d.pid,
-    }

@@ -1,92 +1,113 @@
-"""Dialogue metadata model and folder-based persistence."""
+"""Dialogue: metadata, two actors, folder-based persistence."""
 from __future__ import annotations
 
 import json
 import time
 import uuid
-from dataclasses import asdict, dataclass, field
 from pathlib import Path
+
+from agentop.dialogue.actor import Actor
 
 DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
 
 
-@dataclass
 class Dialogue:
-    id: str
-    topic: str
-    agent_a: str
-    agent_b: str
-    session_a: str
-    session_b: str
-    cwd_a: str
-    cwd_b: str
-    status: str     # "starting" | "running" | "stopped" | "completed" | "error"
-    created_at: float = field(default_factory=time.time)
-    max_turns: int = 20
-    error: str | None = None
-    pid: int | None = None
+    def __init__(
+        self,
+        id: str,
+        topic: str,
+        actor_a: Actor,
+        actor_b: Actor,
+        status: str,
+        created_at: float = 0.0,
+        max_turns: int = 20,
+        error: str | None = None,
+        pid: int | None = None,
+    ):
+        self.id = id
+        self.topic = topic
+        self.actor_a = actor_a
+        self.actor_b = actor_b
+        self.status = status
+        self.created_at = created_at or time.time()
+        self.max_turns = max_turns
+        self.error = error
+        self.pid = pid
 
+    # ------------------------------------------------------------------
+    # Paths (private helpers exposed via log_path only)
 
-def dialogue_dir(dialogue_id: str) -> Path:
-    return DIALOGUES_DIR / dialogue_id
+    def _dir(self) -> Path:
+        return DIALOGUES_DIR / self.id
 
+    def _meta_path(self) -> Path:
+        return self._dir() / "meta.json"
 
-def meta_path(dialogue_id: str) -> Path:
-    return dialogue_dir(dialogue_id) / "meta.json"
+    def log_path(self) -> Path:
+        return self._dir() / "dialogue.log"
 
+    # ------------------------------------------------------------------
+    # Persistence
 
-def log_path(dialogue_id: str) -> Path:
-    return dialogue_dir(dialogue_id) / "dialogue.log"
+    def save(self) -> None:
+        self._dir().mkdir(parents=True, exist_ok=True)
+        self._meta_path().write_text(json.dumps({
+            "id": self.id,
+            "topic": self.topic,
+            "actor_a": self.actor_a.to_dict(),
+            "actor_b": self.actor_b.to_dict(),
+            "status": self.status,
+            "created_at": self.created_at,
+            "max_turns": self.max_turns,
+            "error": self.error,
+            "pid": self.pid,
+        }, indent=2))
 
+    def update(self, fields: dict) -> None:
+        for k, v in fields.items():
+            setattr(self, k, v)
+        self.save()
 
-def save(d: Dialogue) -> None:
-    dialogue_dir(d.id).mkdir(parents=True, exist_ok=True)
-    meta_path(d.id).write_text(json.dumps(asdict(d), indent=2))
+    # ------------------------------------------------------------------
+    # Classmethods
 
+    @classmethod
+    def create(
+        cls,
+        topic: str,
+        actor_a: Actor,
+        actor_b: Actor,
+        max_turns: int = 20,
+        dialogue_id: str | None = None,
+    ) -> Dialogue:
+        d = cls(
+            id=dialogue_id or uuid.uuid4().hex[:8],
+            topic=topic,
+            actor_a=actor_a,
+            actor_b=actor_b,
+            status="starting",
+            max_turns=max_turns,
+        )
+        d.save()
+        return d
 
-def load(dialogue_id: str) -> Dialogue | None:
-    p = meta_path(dialogue_id)
-    if not p.exists():
-        return None
-    try:
-        return Dialogue(**json.loads(p.read_text()))
-    except (json.JSONDecodeError, TypeError, KeyError):
-        return None
-
-
-def list_all() -> list[Dialogue]:
-    DIALOGUES_DIR.mkdir(parents=True, exist_ok=True)
-    results = []
-    for entry in sorted(DIALOGUES_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
-        if entry.is_dir():
-            d = load(entry.name)
-            if d:
-                results.append(d)
-    return results
-
-
-def create(
-    topic: str,
-    agent_a: str,
-    agent_b: str,
-    session_a: str,
-    session_b: str,
-    cwd_a: str,
-    cwd_b: str,
-    max_turns: int = 20,
-    dialogue_id: str | None = None,
-) -> Dialogue:
-    d = Dialogue(
-        id=dialogue_id or uuid.uuid4().hex[:8],
-        topic=topic,
-        agent_a=agent_a,
-        agent_b=agent_b,
-        session_a=session_a,
-        session_b=session_b,
-        cwd_a=cwd_a,
-        cwd_b=cwd_b,
-        status="starting",
-        max_turns=max_turns,
-    )
-    save(d)
-    return d
+    @classmethod
+    def load(cls, dialogue_id: str) -> Dialogue | None:
+        p = (DIALOGUES_DIR / dialogue_id) / "meta.json"
+        if not p.exists():
+            return None
+        try:
+            data = json.loads(p.read_text())
+            return cls(
+                id=data["id"],
+                topic=data["topic"],
+                actor_a=Actor.from_dict(data["actor_a"]),
+                actor_b=Actor.from_dict(data["actor_b"]),
+                status=data["status"],
+                created_at=data.get("created_at", 0.0),
+                max_turns=data.get("max_turns", 20),
+                error=data.get("error"),
+                pid=data.get("pid"),
+            )
+        except (json.JSONDecodeError, KeyError, TypeError):
+            return None

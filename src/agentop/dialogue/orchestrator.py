@@ -3,8 +3,7 @@ from __future__ import annotations
 
 import threading
 
-from agentop.dialogue import model
-from agentop.dialogue.actor import Actor
+from agentop.dialogue.model import Dialogue
 
 _PROMPT_A = """\
 Topic: {topic}
@@ -23,36 +22,30 @@ Please begin: state your goal and requirements for the topic above.
 
 
 class DialogueOrchestrator(threading.Thread):
-    def __init__(self, dialogue_id: str):
-        super().__init__(daemon=True, name=f"dialogue-{dialogue_id}")
-        self.dialogue_id = dialogue_id
+    def __init__(self, dialogue: Dialogue):
+        super().__init__(daemon=True, name=f"dialogue-{dialogue.id}")
+        self.dialogue = dialogue
         self._stop = threading.Event()
 
     def stop(self) -> None:
         self._stop.set()
 
     def run(self) -> None:
-        d = model.load(self.dialogue_id)
-        if not d:
-            return
-        d.status = "running"
-        model.save(d)
+        d = self.dialogue
+        d.update({"status": "running"})
         try:
             self._loop(d)
         except Exception as exc:
-            d = model.load(self.dialogue_id) or d
-            d.status = "error"
-            d.error = str(exc)
-            model.save(d)
+            d.update({"status": "error", "error": str(exc)})
 
-    def _loop(self, d: model.Dialogue) -> None:
-        log = model.log_path(d.id)
-        actor_a = Actor("a", d.session_a, d.agent_a, self._stop, log)
-        actor_b = Actor("b", d.session_b, d.agent_b, self._stop, log)
+    def _loop(self, d: Dialogue) -> None:
+        log = d.log_path()
+        d.actor_a.attach(self._stop, log)
+        d.actor_b.attach(self._stop, log)
 
-        actor_a.send(_PROMPT_A.format(topic=d.topic))
+        d.actor_a.send(_PROMPT_A.format(topic=d.topic))
 
-        actor, other = actor_a, actor_b
+        actor, other = d.actor_a, d.actor_b
 
         for _ in range(d.max_turns):
             if self._stop.is_set():
@@ -63,6 +56,4 @@ class DialogueOrchestrator(threading.Thread):
             other.send(msg)
             actor, other = other, actor
 
-        d = model.load(self.dialogue_id) or d
-        d.status = "stopped" if self._stop.is_set() else "completed"
-        model.save(d)
+        d.update({"status": "stopped" if self._stop.is_set() else "completed", "pid": None})

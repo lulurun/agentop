@@ -7,12 +7,17 @@ def main() -> None:
         print("Usage: runner.py <dialogue_id>", file=sys.stderr)
         sys.exit(1)
 
-    dialogue_id = sys.argv[1]
-
+    from agentop.dialogue.model import Dialogue
     from agentop.dialogue.orchestrator import DialogueOrchestrator
-    orch = DialogueOrchestrator(dialogue_id)
+
+    d = Dialogue.load(sys.argv[1])
+    if not d:
+        print(f"Dialogue {sys.argv[1]!r} not found", file=sys.stderr)
+        sys.exit(1)
+
+    orch = DialogueOrchestrator(d)
     orch.start()
-    orch.join()  # block until the dialogue finishes or is stopped
+    orch.join()
 
 
 if __name__ == "__main__":
