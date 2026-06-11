@@ -68,6 +68,14 @@ def start_dialogue(
     }
 
 
+def _session_alive(name: str) -> bool:
+    try:
+        r = subprocess.run(["tmux", "has-session", "-t", name], capture_output=True, timeout=3)
+        return r.returncode == 0
+    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+        return False
+
+
 def list_dialogues() -> list[dict]:
     if not DIALOGUES_DIR.exists():
         return []
@@ -81,6 +89,8 @@ def list_dialogues() -> list[dict]:
                 "topic": d.topic,
                 "session_a": d.actor_a.session,
                 "session_b": d.actor_b.session,
+                "session_a_alive": _session_alive(d.actor_a.session),
+                "session_b_alive": _session_alive(d.actor_b.session),
             })
     return result
 

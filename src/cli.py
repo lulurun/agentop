@@ -294,12 +294,14 @@ def cmd_dialogue_list(args):
     if not dialogues:
         print("No dialogues found.")
         return
-    id_w, status_w = 10, 10
-    print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'SESSION A':<22}  {'SESSION B':<22}  TOPIC")
-    print("-" * 100)
+    id_w, status_w, sess_w = 10, 10, 24
+    print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}  TOPIC")
+    print("-" * 110)
     for d in dialogues:
-        topic = d["topic"][:50] + ("…" if len(d["topic"]) > 50 else "")
-        print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {d['session_a']:<22}  {d['session_b']:<22}  {topic}")
+        topic = d["topic"][:48] + ("…" if len(d["topic"]) > 48 else "")
+        sa = d["session_a"] + (" [open]" if d["session_a_alive"] else "")
+        sb = d["session_b"] + (" [open]" if d["session_b_alive"] else "")
+        print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}  {topic}")
 
 
 def cmd_dialogue_stop(args):
