@@ -1,24 +1,13 @@
 """Actor: one participant in a dialogue, owning its data and tmux operations."""
 from __future__ import annotations
 
-import os
-import tempfile
+import subprocess
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 
 from agentop.dialogue.capture import capture_pane, extract_new_content, wait_for_idle
-from agentop.tmux import send_to_session
-
-_RELAY = "Please read and respond to the message in: {path}"
-
-
-def _write_file(content: str) -> str:
-    fd, path = tempfile.mkstemp(prefix="agentop_relay_", suffix=".txt")
-    with os.fdopen(fd, "w") as f:
-        f.write(content)
-    return path
 
 
 class Actor:
@@ -38,8 +27,10 @@ class Actor:
         return self
 
     def send(self, text: str) -> None:
-        path = _write_file(text)
-        send_to_session(self.session, _RELAY.format(path=path))
+        """Send text directly via tmux paste-buffer (preserves multi-line content)."""
+        subprocess.run(["tmux", "load-buffer", "-"], input=text.encode(), capture_output=True, timeout=5)
+        subprocess.run(["tmux", "paste-buffer", "-t", self.session], capture_output=True, timeout=5)
+        subprocess.run(["tmux", "send-keys", "-t", self.session, "", "Enter"], capture_output=True, timeout=5)
         time.sleep(1.0)
         self._baseline = capture_pane(self.session)
 
