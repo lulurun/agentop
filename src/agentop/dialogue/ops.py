@@ -23,8 +23,16 @@ def start_dialogue(
     cwd_a: str,
     cwd_b: str,
     max_turns: int = 20,
+    brief_file: str | None = None,
 ) -> dict:
     dialogue_id = uuid.uuid4().hex[:8]
+
+    # Create dialogue folder and copy brief file before starting agents
+    dialogue_dir = DIALOGUES_DIR / dialogue_id
+    dialogue_dir.mkdir(parents=True, exist_ok=True)
+    if brief_file:
+        import shutil
+        shutil.copy2(brief_file, dialogue_dir / "brief.md")
 
     result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a")
     if not result_a.get("ok"):

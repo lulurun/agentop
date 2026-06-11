@@ -255,17 +255,28 @@ def _dialogue_ops():
 def cmd_dialogue_start(args):
     cwd_a = os.path.expanduser(args.cwd_a)
     cwd_b = os.path.expanduser(args.cwd_b)
-    print(f"Starting dialogue on: {args.topic!r}")
+    brief_path = os.path.expanduser(args.brief)
+    if not os.path.isfile(brief_path):
+        print(f"Error: brief file not found: {brief_path!r}", file=sys.stderr)
+        sys.exit(1)
+    with open(brief_path) as f:
+        topic = f.read().strip()
+    if not topic:
+        print(f"Error: brief file is empty: {brief_path!r}", file=sys.stderr)
+        sys.exit(1)
+    first_line = next((l.strip().lstrip("#").strip() for l in topic.splitlines() if l.strip()), brief_path)
+    print(f"Starting dialogue: {first_line!r}")
     print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
     print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
     print(f"  Max turns: {args.max_turns}")
     result = _dialogue_ops().start_dialogue(
-        topic=args.topic,
+        topic=topic,
         agent_a=args.agent_a,
         agent_b=args.agent_b,
         cwd_a=cwd_a,
         cwd_b=cwd_b,
         max_turns=args.max_turns,
+        brief_file=brief_path,
     )
     if not result.get("ok"):
         print(f"Error: {result['error']}", file=sys.stderr)
@@ -298,7 +309,8 @@ def cmd_dialogue_list(args):
     print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}  TOPIC")
     print("-" * 110)
     for d in dialogues:
-        topic = d["topic"][:48] + ("…" if len(d["topic"]) > 48 else "")
+        first_line = next((l.strip().lstrip("#").strip() for l in d["topic"].splitlines() if l.strip()), "")
+        topic = first_line[:48] + ("…" if len(first_line) > 48 else "")
         sa = d["session_a"] + (" [open]" if d["session_a_alive"] else "")
         sb = d["session_b"] + (" [open]" if d["session_b_alive"] else "")
         print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}  {topic}")
@@ -397,7 +409,8 @@ def main():
     dsub = p_dialogue.add_subparsers(dest="dialogue_command", metavar="<subcommand>")
 
     p_dstart = dsub.add_parser("start", help="Start a new dialogue between two agents")
-    p_dstart.add_argument("--topic", required=True, help="Topic or problem for the agents to discuss")
+    p_dstart.add_argument("--brief", required=True, metavar="FILE",
+                          help="Path to a Markdown file describing the topic/goal for the dialogue")
     p_dstart.add_argument("--agent-a", dest="agent_a", default="claude", choices=_DIALOGUE_TOOLS,
                           help="Agent for session A (default: claude)")
     p_dstart.add_argument("--agent-b", dest="agent_b", default="claude", choices=_DIALOGUE_TOOLS,
