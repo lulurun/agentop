@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 
+from agentop.dialogue.actor import DIALOGUE_COMPLETE
 from agentop.dialogue.model import Dialogue
 
 LOG = logging.getLogger(__name__)
@@ -35,12 +36,16 @@ and ask for a revision. Hold {name_b} to a high standard.
 the output is correct and complete — update the progress file with a final summary \
 and tell {name_b} the dialogue is complete.
 
-DELIMITER RULE (mandatory): Every message you send must begin with exactly this \
-line (replace N with the current turn number, starting at 1):
+DELIMITER RULE (mandatory): Every message you send must begin with exactly one \
+of these two delimiter lines (replace N with the current turn number, starting at 1):
 
---- output from {name_a} turn:N ---
+* Normal turn — to continue the dialogue:
+    --- output from {name_a} turn:N ---
 
-{name_b} only receives content after this line. \
+* Final turn — when the goal is fully met and you are done:
+    --- complete from {name_a} turn:N ---
+
+{name_b} only receives content after the delimiter line. \
 Never write anything before it in your reply.
 
 Start now: define the goal, write the initial {progress_file}, \
@@ -109,6 +114,9 @@ class DialogueOrchestrator(threading.Thread):
                 break
             msg = actor.receive()
             if msg is None:
+                break
+            if msg is DIALOGUE_COMPLETE:
+                LOG.info("dialogue %s complete signal from %s", d.id, actor.name)
                 break
             # Prepend Bob's identity + delimiter rule to the very first message he receives
             if other is d.actor_b and not b_initialized:

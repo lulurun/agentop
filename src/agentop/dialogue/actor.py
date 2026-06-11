@@ -11,8 +11,11 @@ from agentop.dialogue.capturer import AgentCapturer, _capture_pane, get_capturer
 
 LOG = logging.getLogger(__name__)
 
-# Matches lines like:  --- output from Alex turn:3 ---
-_DELIMITER_RE = re.compile(r"---\s*output from (\w+)\s+turn:\d+\s*---", re.IGNORECASE)
+# Sentinel returned by receive() when the agent signals dialogue completion
+DIALOGUE_COMPLETE = "<<DIALOGUE_COMPLETE>>"
+
+_DELIMITER_RE = re.compile(r"---\s*output from \w+\s+turn:\d+\s*---", re.IGNORECASE)
+_COMPLETE_RE = re.compile(r"---\s*complete from \w+\s+turn:\d+\s*---", re.IGNORECASE)
 
 
 class Actor:
@@ -52,13 +55,15 @@ class Actor:
         return msg or None
 
     def _parse_output(self, raw: str) -> str:
-        """Return only the content after the delimiter line, or raw if absent."""
+        """Return content after the delimiter, DIALOGUE_COMPLETE, or raw if absent."""
         lines = raw.splitlines()
         for i, line in enumerate(lines):
+            if _COMPLETE_RE.search(line):
+                LOG.info("[%s] complete delimiter found on line %d", self.name, i)
+                return DIALOGUE_COMPLETE
             if _DELIMITER_RE.search(line):
-                start = i + 1
-                extracted = "\n".join(lines[start:]).strip()
-                LOG.info("[%s] delimiter found on line %d", self.name, i)
+                extracted = "\n".join(lines[i + 1 :]).strip()
+                LOG.info("[%s] output delimiter found on line %d", self.name, i)
                 return extracted
         LOG.warning("[%s] no delimiter found — using full raw response", self.name)
         return raw
