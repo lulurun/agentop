@@ -237,6 +237,108 @@ def cmd_stop(args):
 
 
 # ---------------------------------------------------------------------------
+# Dialogue commands
+# ---------------------------------------------------------------------------
+
+_DIALOGUE_TOOLS = ["claude", "codex", "gemini", "antigravity"]
+
+
+def _dialogue_ops():
+    try:
+        from agentop.dialogue import ops
+        return ops
+    except ImportError as exc:
+        print(f"Error: cannot import agentop.dialogue: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_dialogue_start(args):
+    cwd_a = os.path.expanduser(args.cwd_a)
+    cwd_b = os.path.expanduser(args.cwd_b)
+    print(f"Starting dialogue on: {args.topic!r}")
+    print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
+    print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
+    print(f"  Max turns: {args.max_turns}")
+    result = _dialogue_ops().start_dialogue(
+        topic=args.topic,
+        agent_a=args.agent_a,
+        agent_b=args.agent_b,
+        cwd_a=cwd_a,
+        cwd_b=cwd_b,
+        max_turns=args.max_turns,
+    )
+    if not result.get("ok"):
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+    did = result["id"]
+    print(f"\nDialogue started: {did}")
+    print(f"  Session A: {result['session_a']}")
+    print(f"    Attach:  tmux attach-session -t {result['session_a']}")
+    print(f"  Session B: {result['session_b']}")
+    print(f"    Attach:  tmux attach-session -t {result['session_b']}")
+    print(f"\n  Log:   agentop dialogue log {did}")
+    print(f"  Stop:  agentop dialogue stop {did}")
+
+
+def cmd_dialogue_list(args):
+    from datetime import datetime
+    from agentop.dialogue.model import list_all
+    dialogues = list_all()
+    if args.json:
+        from dataclasses import asdict
+        print(json.dumps([asdict(d) for d in dialogues], indent=2, default=str))
+        return
+    if not dialogues:
+        print("No dialogues found.")
+        return
+    col = "{:<10} {:<11} {:<9} {:<9} {:<7} {}"
+    print(col.format("ID", "STATUS", "AGENT-A", "AGENT-B", "TURNS", "TOPIC"))
+    print("─" * 90)
+    for d in dialogues:
+        topic = d.topic[:44] + ("…" if len(d.topic) > 44 else "")
+        turns = f"{len(d.turns)}/{d.max_turns}"
+        print(col.format(d.id, d.status, d.agent_a, d.agent_b, turns, topic))
+
+
+def cmd_dialogue_log(args):
+    from datetime import datetime
+    from agentop.dialogue.model import load
+    d = load(args.id)
+    if not d:
+        print(f"Dialogue {args.id!r} not found.", file=sys.stderr)
+        sys.exit(1)
+    created = datetime.fromtimestamp(d.created_at).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"Dialogue: {d.id}  [{d.status}]  started: {created}")
+    print(f"Topic:    {d.topic}")
+    print(f"Agent A:  {d.agent_a}  ({d.session_a})")
+    print(f"Agent B:  {d.agent_b}  ({d.session_b})")
+    print(f"Turns:    {len(d.turns)}/{d.max_turns}")
+    if d.error:
+        print(f"Error:    {d.error}")
+    if not d.turns:
+        print("\n(No turns yet.)")
+        return
+    print()
+    for i, t in enumerate(d.turns, 1):
+        label = f"Agent {'A' if t.speaker == 'a' else 'B'} ({t.agent})"
+        ts = datetime.fromtimestamp(t.timestamp).strftime("%H:%M:%S")
+        print(f"── Turn {i}  [{ts}]  {label} ──────────────────────────────────────────")
+        body = t.content
+        if len(body) > 3000:
+            body = body[:3000] + "\n… (truncated)"
+        print(body)
+        print()
+
+
+def cmd_dialogue_stop(args):
+    result = _dialogue_ops().stop_dialogue(args.id)
+    if not result.get("ok"):
+        print(f"Error: {result['error']}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Dialogue {args.id} stopped.")
+
+
+# ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
 
@@ -306,10 +408,55 @@ def main():
     )
     p_stop.add_argument("name", help="Session name (from 'agentop list')")
 
+    # dialogue
+    p_dialogue = sub.add_parser(
+        "dialogue",
+        help="Run a structured two-agent dialogue",
+        description=(
+            "Start a dialogue between two AI agents on a shared topic.\n"
+            "The orchestrator relays messages between them until they reach a conclusion."
+        ),
+    )
+    dsub = p_dialogue.add_subparsers(dest="dialogue_command", metavar="<subcommand>")
+
+    p_dstart = dsub.add_parser("start", help="Start a new dialogue between two agents")
+    p_dstart.add_argument("--topic", required=True, help="Topic or problem for the agents to discuss")
+    p_dstart.add_argument("--agent-a", dest="agent_a", default="claude", choices=_DIALOGUE_TOOLS,
+                          help="Agent for session A (default: claude)")
+    p_dstart.add_argument("--agent-b", dest="agent_b", default="claude", choices=_DIALOGUE_TOOLS,
+                          help="Agent for session B (default: claude)")
+    p_dstart.add_argument("--cwd-a", dest="cwd_a", default=os.path.expanduser("~"),
+                          help="Working directory for agent A (default: home)")
+    p_dstart.add_argument("--cwd-b", dest="cwd_b", default=os.path.expanduser("~"),
+                          help="Working directory for agent B (default: home)")
+    p_dstart.add_argument("--max-turns", dest="max_turns", type=int, default=20,
+                          help="Maximum relay turns before stopping (default: 20)")
+
+    p_dlist = dsub.add_parser("list", help="List all dialogues")
+    p_dlist.add_argument("--json", action="store_true", help="Output as JSON")
+
+    p_dlog = dsub.add_parser("log", help="Show the turn-by-turn log of a dialogue")
+    p_dlog.add_argument("id", help="Dialogue ID")
+
+    p_dstop = dsub.add_parser("stop", help="Stop a running dialogue orchestrator")
+    p_dstop.add_argument("id", help="Dialogue ID")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command == "dialogue":
+        if not args.dialogue_command:
+            p_dialogue.print_help()
+            sys.exit(0)
+        {
+            "start": cmd_dialogue_start,
+            "list": cmd_dialogue_list,
+            "log": cmd_dialogue_log,
+            "stop": cmd_dialogue_stop,
+        }[args.dialogue_command](args)
+        return
 
     {
         "list": cmd_list,

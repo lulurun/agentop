@@ -17,5 +17,5 @@ agentop = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["agentop"]
+packages = ["agentop", "agentop.agents", "agentop.dialogue"]
 py-modules = ["cli"]
