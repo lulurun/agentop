@@ -84,6 +84,7 @@ def create(
     max_turns: int = 20,
     dialogue_id: str | None = None,
 ) -> Dialogue:
+    _ensure_dir()
     d = Dialogue(
         id=dialogue_id or uuid.uuid4().hex[:8],
         topic=topic,
