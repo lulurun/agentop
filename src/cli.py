@@ -271,11 +271,18 @@ def cmd_dialogue_start(args):
         print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)
     did = result["id"]
+    sa, sb = result["session_a"], result["session_b"]
+    watch_cmd = (
+        f"tmux new-window -n 'dia-{did}' "
+        f"'tmux attach -t {sa}' \\; "
+        f"split-window -h "
+        f"'tmux attach -t {sb}'"
+    )
     print(f"\nDialogue started: {did}")
-    print(f"  Session A: {result['session_a']}")
-    print(f"    Attach:  tmux attach-session -t {result['session_a']}")
-    print(f"  Session B: {result['session_b']}")
-    print(f"    Attach:  tmux attach-session -t {result['session_b']}")
+    print(f"  Session A: {sa}")
+    print(f"  Session B: {sb}")
+    print(f"\n  Watch side-by-side:")
+    print(f"    {watch_cmd}")
     print(f"\n  Stop:  agentop dialogue stop {did}")
 
 
