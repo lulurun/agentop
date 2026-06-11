@@ -276,49 +276,7 @@ def cmd_dialogue_start(args):
     print(f"    Attach:  tmux attach-session -t {result['session_a']}")
     print(f"  Session B: {result['session_b']}")
     print(f"    Attach:  tmux attach-session -t {result['session_b']}")
-    print(f"\n  Log:   agentop dialogue log {did}")
-    print(f"  Stop:  agentop dialogue stop {did}")
-
-
-def cmd_dialogue_list(args):
-    from datetime import datetime
-    from agentop.dialogue.model import list_all
-    dialogues = list_all()
-    if args.json:
-        from dataclasses import asdict
-        print(json.dumps([asdict(d) for d in dialogues], indent=2, default=str))
-        return
-    if not dialogues:
-        print("No dialogues found.")
-        return
-    col = "{:<10} {:<11} {:<9} {:<9} {}"
-    print(col.format("ID", "STATUS", "AGENT-A", "AGENT-B", "TOPIC"))
-    print("─" * 90)
-    for d in dialogues:
-        topic = d.topic[:54] + ("…" if len(d.topic) > 54 else "")
-        print(col.format(d.id, d.status, d.agent_a, d.agent_b, topic))
-
-
-def cmd_dialogue_log(args):
-    from datetime import datetime
-    from agentop.dialogue.model import load, log_path
-    d = load(args.id)
-    if not d:
-        print(f"Dialogue {args.id!r} not found.", file=sys.stderr)
-        sys.exit(1)
-    created = datetime.fromtimestamp(d.created_at).strftime("%Y-%m-%d %H:%M:%S")
-    print(f"Dialogue: {d.id}  [{d.status}]  started: {created}")
-    print(f"Topic:    {d.topic}")
-    print(f"Agent A:  {d.agent_a}  ({d.session_a})")
-    print(f"Agent B:  {d.agent_b}  ({d.session_b})")
-    if d.error:
-        print(f"Error:    {d.error}")
-    print()
-    lp = log_path(d.id)
-    if not lp.exists():
-        print("(No messages yet.)")
-        return
-    print(lp.read_text())
+    print(f"\n  Stop:  agentop dialogue stop {did}")
 
 
 def cmd_dialogue_stop(args):
@@ -423,12 +381,6 @@ def main():
     p_dstart.add_argument("--max-turns", dest="max_turns", type=int, default=20,
                           help="Maximum relay turns before stopping (default: 20)")
 
-    p_dlist = dsub.add_parser("list", help="List all dialogues")
-    p_dlist.add_argument("--json", action="store_true", help="Output as JSON")
-
-    p_dlog = dsub.add_parser("log", help="Show the turn-by-turn log of a dialogue")
-    p_dlog.add_argument("id", help="Dialogue ID")
-
     p_dstop = dsub.add_parser("stop", help="Stop a running dialogue orchestrator")
     p_dstop.add_argument("id", help="Dialogue ID")
 
@@ -443,8 +395,6 @@ def main():
             sys.exit(0)
         {
             "start": cmd_dialogue_start,
-            "list": cmd_dialogue_list,
-            "log": cmd_dialogue_log,
             "stop": cmd_dialogue_stop,
         }[args.dialogue_command](args)
         return
