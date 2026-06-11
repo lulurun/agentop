@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import os
 import signal
 import subprocess
@@ -14,8 +13,6 @@ from pathlib import Path
 from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
 from agentop.dialogue.model import Dialogue
-
-LOG = logging.getLogger(__name__)
 
 
 def start_dialogue(
@@ -38,8 +35,8 @@ def start_dialogue(
 
     time.sleep(3)  # Give tmux sessions a moment to start up
 
-    actor_a = Actor(id="a", session=result_a["name"], agent=agent_a, cwd=cwd_a)
-    actor_b = Actor(id="b", session=result_b["name"], agent=agent_b, cwd=cwd_b)
+    actor_a = Actor(id="a", session=result_a["name"])
+    actor_b = Actor(id="b", session=result_b["name"])
 
     d = Dialogue.create(
         topic=topic,

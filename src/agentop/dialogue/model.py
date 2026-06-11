@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import time
-import uuid
 from pathlib import Path
 
 from agentop.dialogue.actor import Actor
@@ -23,8 +21,7 @@ class Dialogue:
         actor_a: Actor,
         actor_b: Actor,
         status: str,
-        created_at: float = 0.0,
-        max_turns: int = 20,
+        max_turns: int,
         error: str | None = None,
         pid: int | None = None,
     ):
@@ -33,13 +30,9 @@ class Dialogue:
         self.actor_a = actor_a
         self.actor_b = actor_b
         self.status = status
-        self.created_at = created_at or time.time()
         self.max_turns = max_turns
         self.error = error
         self.pid = pid
-
-    # ------------------------------------------------------------------
-    # Paths (private helpers exposed via log_path only)
 
     def _dir(self) -> Path:
         return DIALOGUES_DIR / self.id
@@ -49,9 +42,6 @@ class Dialogue:
 
     def log_path(self) -> Path:
         return self._dir() / "dialogue.log"
-
-    # ------------------------------------------------------------------
-    # Persistence
 
     def save(self) -> None:
         self._dir().mkdir(parents=True, exist_ok=True)
@@ -63,7 +53,6 @@ class Dialogue:
                     "actor_a": self.actor_a.to_dict(),
                     "actor_b": self.actor_b.to_dict(),
                     "status": self.status,
-                    "created_at": self.created_at,
                     "max_turns": self.max_turns,
                     "error": self.error,
                     "pid": self.pid,
@@ -75,27 +64,25 @@ class Dialogue:
     def update(self, fields: dict) -> None:
         for k, v in fields.items():
             setattr(self, k, v)
+        LOG.info("%s %s", self.id, self.status)
         self.save()
-
-    # ------------------------------------------------------------------
-    # Classmethods
 
     @classmethod
     def create(
         cls,
+        dialogue_id: str,
         topic: str,
         actor_a: Actor,
         actor_b: Actor,
-        max_turns: int = 20,
-        dialogue_id: str | None = None,
+        max_turns: int,
     ) -> Dialogue:
         d = cls(
-            id=dialogue_id or uuid.uuid4().hex[:8],
+            id=dialogue_id,
             topic=topic,
             actor_a=actor_a,
             actor_b=actor_b,
-            status="starting",
             max_turns=max_turns,
+            status="starting",
         )
         d.save()
         return d
@@ -112,9 +99,8 @@ class Dialogue:
                 topic=data["topic"],
                 actor_a=Actor.from_dict(data["actor_a"]),
                 actor_b=Actor.from_dict(data["actor_b"]),
+                max_turns=data["max_turns"],
                 status=data["status"],
-                created_at=data.get("created_at", 0.0),
-                max_turns=data.get("max_turns", 20),
                 error=data.get("error"),
                 pid=data.get("pid"),
             )

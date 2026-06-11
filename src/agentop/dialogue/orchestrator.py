@@ -35,24 +35,25 @@ class DialogueOrchestrator(threading.Thread):
         self._stop.set()
 
     def run(self) -> None:
-        d = self.dialogue
-        d.update({"status": "running"})
-        LOG.info("dialogue %s started: %s", d.id, d.topic)
+        self.dialogue.update({"status": "running"})
         try:
-            self._loop(d)
+            self._loop()
         except Exception as exc:
-            LOG.error("dialogue %s error: %s", d.id, exc)
-            d.update({"status": "error", "error": str(exc)})
+            LOG.error("Loop for dialogue %s error: %s", self.dialogue.id, exc)
+            self.dialogue.update({"status": "error", "error": str(exc)})
 
-    def _loop(self, d: Dialogue) -> None:
-        d.actor_a.attach(self._stop)
-        d.actor_b.attach(self._stop)
+        status = "stopped" if self._stop.is_set() else "completed"
+        self.dialogue.update({"status": status, "pid": None})
 
-        d.actor_a.send(_PROMPT_A.format(topic=d.topic))
+    def _loop(self) -> None:
+        self.dialogue.actor_a.attach(self._stop)
+        self.dialogue.actor_b.attach(self._stop)
 
-        actor, other = d.actor_a, d.actor_b
+        self.dialogue.actor_a.send(_PROMPT_A.format(topic=self.dialogue.topic))
 
-        for _ in range(d.max_turns):
+        actor, other = self.dialogue.actor_a, self.dialogue.actor_b
+
+        for _ in range(self.dialogue.max_turns):
             if self._stop.is_set():
                 break
             msg = actor.receive()
@@ -60,7 +61,3 @@ class DialogueOrchestrator(threading.Thread):
                 break
             other.send(msg)
             actor, other = other, actor
-
-        status = "stopped" if self._stop.is_set() else "completed"
-        LOG.info("dialogue %s %s", d.id, status)
-        d.update({"status": status, "pid": None})
