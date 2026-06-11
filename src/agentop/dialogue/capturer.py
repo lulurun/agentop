@@ -97,46 +97,47 @@ class ClaudeCodeCapturer(AgentCapturer):
     Claude Code pane structure (from bottom, searching upward):
       (blank lines)
       ⏵⏵ hint line
-      ──── first separator ────
-      ❯ prompt / echoed input   (ignored)
-      ──── second separator ────
-      (empty line)
-      indicator line            ← watched for idle detection; content ends here
+      ──── first separator ────     ← sep1
+      ❯ prompt / echoed input
+      ──── second separator ────    ← sep2
+      (empty line)                  ← stable anchor  [sep2 - 1]
+      indicator line(s)             ← last one is at anchor - 1; may wrap upward
       (response content above)
+
+    idle detection : watch a 5-line buffer above the anchor (handles wrapping)
+    content_end    : anchor - 1  (the last indicator line; content lives above it)
     """
 
     idle_seconds: float = 5.0
+    _INDICATOR_BUF = 5  # lines above anchor watched as indicator block
 
-    def _indicator_idx(self, lines: list[str]) -> int:
-        """Return index of the indicator line via structural search, or -1.
-
-        Searches upward from the bottom for two ─── separator lines.
-        The indicator lives 2 lines above the second (upper) separator:
-
-          [indicator]          ← returned index  (may be multi-line if text wraps)
-          (empty or wrapped)
-          ──── separator ────  ← second sep (i)
-          ❯ prompt
-          ──── separator ────  ← first sep
-
-        The empty-line check is intentionally omitted: long indicator text
-        (e.g. token counts) can wrap, putting non-empty content at i-1.
-        """
+    def _anchor(self, lines: list[str]) -> int:
+        """Return the index of the empty line above sep2 (stable anchor), or -1."""
         sep_count = 0
         for i in range(len(lines) - 1, max(len(lines) - 40, -1), -1):
             if lines[i].startswith("─"):
                 sep_count += 1
                 if sep_count == 2:
-                    return max(0, i - 2)
+                    empty_idx = i - 1
+                    if empty_idx >= 0 and lines[empty_idx].strip() == "":
+                        return empty_idx
+                    return -1
         return -1
 
     def indicator_line(self, pane_lines: list[str]) -> str:
-        idx = self._indicator_idx(pane_lines)
-        return pane_lines[idx] if idx >= 0 else ""
+        """5-line block above the anchor, joined — stable when agent is idle."""
+        anchor = self._anchor(pane_lines)
+        if anchor < 0:
+            return ""
+        start = max(0, anchor - self._INDICATOR_BUF)
+        return "\n".join(pane_lines[start:anchor])
 
     def content_end(self, lines: list[str]) -> int:
-        idx = self._indicator_idx(lines)
-        return idx if idx >= 0 else max(0, len(lines) - 8)
+        """Cut just above the indicator: anchor - 1 excludes the indicator line(s)."""
+        anchor = self._anchor(lines)
+        if anchor < 0:
+            return max(0, len(lines) - 8)
+        return max(0, anchor - 1)
 
 
 def get_capturer(agent: str) -> AgentCapturer:
