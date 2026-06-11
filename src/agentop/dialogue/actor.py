@@ -23,7 +23,7 @@ class Actor:
         name: str = "",
         capturer: AgentCapturer | None = None,
     ):
-        self.id = id        # "a" or "b"
+        self.id = id  # "a" or "b"
         self.session = session
         self.name = name or id.upper()
         self._capturer = capturer or get_capturer("claude")
@@ -56,7 +56,8 @@ class Actor:
         lines = raw.splitlines()
         for i, line in enumerate(lines):
             if _DELIMITER_RE.search(line):
-                extracted = "\n".join(lines[i + 1 :]).strip()
+                start = i + 1
+                extracted = "\n".join(lines[start:]).strip()
                 LOG.info("[%s] delimiter found on line %d", self.name, i)
                 return extracted
         LOG.warning("[%s] no delimiter found — using full raw response", self.name)
