@@ -46,6 +46,8 @@ class AgentCapturer:
         last_indicator = self.indicator_line(last_content.splitlines())
         last_change = time.monotonic()
 
+        LOG.info("[%s] wait_for_idle start indicator: [%s]", session, last_indicator)
+
         while not stop_event.is_set() and time.monotonic() < deadline:
             time.sleep(_POLL_INTERVAL)
             if stop_event.is_set():
@@ -56,9 +58,12 @@ class AgentCapturer:
                 last_indicator = indicator
                 last_content = current
                 last_change = time.monotonic()
+                LOG.info("[%s] indicator change: [%s]", session, last_indicator)
             elif time.monotonic() - last_change >= self.idle_seconds:
+                LOG.info("[%s] idle detected, last indicator: [%s]", session, last_indicator)
                 return current
 
+        LOG.info("[%s] wait_for_idle timeout/stopped, last indicator: [%s]", session, last_indicator)
         return None
 
     def extract_response(self, snapshot: str, current: str) -> str:
