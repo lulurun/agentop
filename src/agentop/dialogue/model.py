@@ -43,6 +43,9 @@ class Dialogue:
     def log_path(self) -> Path:
         return self._dir() / "dialogue.log"
 
+    def progress_path(self) -> Path:
+        return self._dir() / "progress.md"
+
     def save(self) -> None:
         self._dir().mkdir(parents=True, exist_ok=True)
         self._meta_path().write_text(

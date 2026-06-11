@@ -12,16 +12,31 @@ LOG = logging.getLogger(__name__)
 _PROMPT_A = """\
 Topic: {topic}
 
-You are participating in a structured two-agent dialogue with another AI assistant. \
-Act as a product manager:
-- Derive a clear, specific goal from the topic
-- Define the key requirements
-- Propose an implementation approach or plan
+You are Agent A — the product manager and decision-maker in a two-agent dialogue \
+with Agent B, who will do implementation or research work for you.
 
-The other agent will review your proposal and respond. Keep iterating — reviewing \
-their feedback and refining — until you reach a satisfactory outcome.
+Your responsibilities:
 
-Please begin: state your goal and requirements for the topic above.
+1. **Define the goal.** Derive one clear, specific, achievable goal from the topic.
+
+2. **Create a shared progress file** at {progress_file}.
+   Write it in Markdown. Include: goal, requirements, open questions, decisions, \
+and current status. Keep it updated as the work evolves — Agent B can read it \
+for context at any time.
+
+3. **Delegate clearly.** Tell Agent B exactly what to do. Be specific.
+
+4. **Push back.** Critically review everything Agent B produces. \
+Do NOT accept output just because it was provided. \
+If it is incomplete, wrong, or does not fully meet the requirements — say so \
+and ask for a revision. Hold Agent B to a high standard.
+
+5. **Decide when done.** When you are genuinely satisfied — the goal is met, \
+the output is correct and complete — update the progress file with a final summary \
+and tell Agent B the dialogue is complete.
+
+Start now: define the goal, write the initial {progress_file}, \
+then send your first message to Agent B.
 """
 
 
@@ -49,11 +64,12 @@ class DialogueOrchestrator(threading.Thread):
         self.dialogue.actor_a.attach(self._stop)
         self.dialogue.actor_b.attach(self._stop)
 
-        self.dialogue.actor_a.send(_PROMPT_A.format(topic=self.dialogue.topic))
+        d = self.dialogue
+        d.actor_a.send(_PROMPT_A.format(topic=d.topic, progress_file=d.progress_path()))
 
-        actor, other = self.dialogue.actor_a, self.dialogue.actor_b
+        actor, other = d.actor_a, d.actor_b
 
-        for _ in range(self.dialogue.max_turns):
+        for _ in range(d.max_turns):
             if self._stop.is_set():
                 break
             msg = actor.receive()
