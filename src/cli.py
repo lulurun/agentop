@@ -274,9 +274,9 @@ def cmd_dialogue_start(args):
     sa, sb = result["session_a"], result["session_b"]
     watch_cmd = (
         f"tmux new-window -n 'dia-{did}' "
-        f"'tmux attach -t {sa}' \\; "
+        f"\"watch -n1 -t 'tmux capture-pane -t {sa} -p -S -40'\" \\; "
         f"split-window -h "
-        f"'tmux attach -t {sb}'"
+        f"\"watch -n1 -t 'tmux capture-pane -t {sb} -p -S -40'\""
     )
     print(f"\nDialogue started: {did}")
     print(f"  Session A: {sa}")
