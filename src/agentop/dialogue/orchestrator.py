@@ -25,17 +25,40 @@ their feedback and refining — until you reach a satisfactory outcome.
 Please begin: state your goal and requirements for the topic above.
 """
 
-_RELAY_TO_B = "Please read and respond to the message in: {path}"
-
-_RELAY_TO_A = "The other agent responded. Please read their reply in: {path}"
+_RELAY = "Please read and respond to the message in: {path}"
 
 
-def _write_relay_file(content: str) -> str:
-    """Write content to a temp file and return its path."""
+def _write_file(content: str) -> str:
     fd, path = tempfile.mkstemp(prefix="agentop_relay_", suffix=".txt")
     with os.fdopen(fd, "w") as f:
         f.write(content)
     return path
+
+
+class Actor:
+    """Represents one participant in a dialogue: owns its tmux session and baseline."""
+
+    def __init__(self, id: str, session: str, agent: str, stop_event: threading.Event):
+        self.id = id            # "a" or "b"
+        self.session = session  # tmux session name
+        self.agent = agent      # "claude", "gemini", etc.
+        self._stop = stop_event
+        self._baseline = ""
+
+    def send(self, text: str) -> None:
+        """Write text to a temp file, instruct the agent to read it, then snapshot baseline."""
+        path = _write_file(text)
+        send_to_session(self.session, _RELAY.format(path=path))
+        time.sleep(1.0)
+        self._baseline = capture.capture_pane(self.session)
+
+    def receive(self) -> str | None:
+        """Wait until the agent is idle, return new content since last send (or None if stopped)."""
+        content = capture.wait_for_idle(self.session, self._stop)
+        if content is None:
+            return None
+        response = capture.extract_new_content(self._baseline, content)
+        return response.strip() or None
 
 
 class DialogueOrchestrator(threading.Thread):
@@ -62,48 +85,28 @@ class DialogueOrchestrator(threading.Thread):
             model.save(d)
 
     def _loop(self, d: model.Dialogue) -> None:
-        # Kick off session A with the PM prompt
-        send_to_session(d.session_a, _PROMPT_A.format(topic=d.topic))
-        time.sleep(1.0)
-        baseline: dict[str, str] = {"a": capture.capture_pane(d.session_a)}
+        actor_a = Actor("a", d.session_a, d.agent_a, self._stop)
+        actor_b = Actor("b", d.session_b, d.agent_b, self._stop)
 
-        # Session B receives no initial prompt — it's driven entirely by A's messages
-        current = "a"
+        # Session A drives the conversation; B is a blank slate
+        actor_a.send(_PROMPT_A.format(topic=d.topic))
+
+        actor, other = actor_a, actor_b
 
         for _ in range(d.max_turns):
             if self._stop.is_set():
                 break
 
-            session = d.session_a if current == "a" else d.session_b
-            agent = d.agent_a if current == "a" else d.agent_b
+            msg = actor.receive()
+            if msg is None:
+                break
 
-            content = capture.wait_for_idle(session, self._stop)
-            if content is None:
-                break  # stopped or timed out
-
-            response = capture.extract_new_content(baseline[current], content)
-            if not response.strip():
-                break  # nothing new — both agents are done
-
-            # Persist the turn
             d = model.load(self.dialogue_id) or d
-            d.turns.append(model.Turn(speaker=current, session=session, agent=agent, content=response))
+            d.turns.append(model.Turn(speaker=actor.id, session=actor.session, agent=actor.agent, content=msg))
             model.save(d)
 
-            # Relay to the other agent
-            other = "b" if current == "a" else "a"
-            other_session = d.session_b if other == "b" else d.session_a
-
-            path = _write_relay_file(response)
-            if other == "b":
-                msg = _RELAY_TO_B.format(path=path)
-            else:
-                msg = _RELAY_TO_A.format(path=path)
-            send_to_session(other_session, msg)
-            time.sleep(1.0)
-            baseline[other] = capture.capture_pane(other_session)
-
-            current = other
+            other.send(msg)
+            actor, other = other, actor
 
         d = model.load(self.dialogue_id) or d
         d.status = "stopped" if self._stop.is_set() else "completed"
