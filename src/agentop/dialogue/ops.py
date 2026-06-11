@@ -36,8 +36,9 @@ def start_dialogue(
 
     time.sleep(3)  # Give tmux sessions a moment to start up
 
-    actor_a = Actor(id="a", session=result_a["name"], capturer=get_capturer(agent_a))
-    actor_b = Actor(id="b", session=result_b["name"], capturer=get_capturer(agent_b))
+    from agentop.dialogue.orchestrator import DialogueOrchestrator
+    actor_a = Actor(id="a", session=result_a["name"], name=DialogueOrchestrator.NAME_A, capturer=get_capturer(agent_a))
+    actor_b = Actor(id="b", session=result_b["name"], name=DialogueOrchestrator.NAME_B, capturer=get_capturer(agent_b))
 
     d = Dialogue.create(
         topic=topic,
