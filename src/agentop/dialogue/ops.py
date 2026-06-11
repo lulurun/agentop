@@ -1,4 +1,5 @@
 """Dialogue operations: start and stop."""
+
 from __future__ import annotations
 
 import os
@@ -7,6 +8,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
+import time
 
 from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
@@ -30,6 +32,8 @@ def start_dialogue(
     result_b = agent_ops.start(agent_b, cwd_b, short_name=f"dia{dialogue_id[:4]}b")
     if not result_b.get("ok"):
         return {"ok": False, "error": f"Failed to start agent B ({agent_b}): {result_b.get('error')}"}
+
+    time.sleep(3)  # Give tmux sessions a moment to start up
 
     actor_a = Actor(id="a", session=result_a["name"], agent=agent_a, cwd=cwd_a)
     actor_b = Actor(id="b", session=result_b["name"], agent=agent_b, cwd=cwd_b)

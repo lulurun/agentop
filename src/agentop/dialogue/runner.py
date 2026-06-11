@@ -1,4 +1,5 @@
 """Entry point for the background dialogue orchestrator subprocess."""
+
 import sys
 
 

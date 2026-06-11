@@ -1,4 +1,5 @@
 """Tmux pane capture and idle detection."""
+
 from __future__ import annotations
 
 import subprocess
@@ -50,5 +51,3 @@ def wait_for_idle(
             return last_content
 
     return None
-
-

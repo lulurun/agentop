@@ -1,9 +1,9 @@
 """Actor: one participant in a dialogue, owning its data and tmux operations."""
+
 from __future__ import annotations
 
 import subprocess
 import threading
-import time
 from datetime import datetime
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from agentop.dialogue.capture import capture_pane, wait_for_idle
 
 class Actor:
     def __init__(self, id: str, session: str, agent: str, cwd: str):
-        self.id = id            # "a" or "b"
+        self.id = id  # "a" or "b"
         self.session = session  # tmux session name
         self.agent = agent
         self.cwd = cwd
@@ -34,7 +34,8 @@ class Actor:
         content = wait_for_idle(self.session, self._stop)
         if content is None:
             return None
-        new_lines = content.splitlines()[len(snapshot.splitlines()):]
+        start = len(snapshot.splitlines())
+        new_lines = content.splitlines()[start:]
         msg = "\n".join(new_lines).strip() or None
         if msg:
             self._append_log(msg)

@@ -1,4 +1,5 @@
 """Dialogue: metadata, two actors, folder-based persistence."""
+
 from __future__ import annotations
 
 import json
@@ -51,17 +52,22 @@ class Dialogue:
 
     def save(self) -> None:
         self._dir().mkdir(parents=True, exist_ok=True)
-        self._meta_path().write_text(json.dumps({
-            "id": self.id,
-            "topic": self.topic,
-            "actor_a": self.actor_a.to_dict(),
-            "actor_b": self.actor_b.to_dict(),
-            "status": self.status,
-            "created_at": self.created_at,
-            "max_turns": self.max_turns,
-            "error": self.error,
-            "pid": self.pid,
-        }, indent=2))
+        self._meta_path().write_text(
+            json.dumps(
+                {
+                    "id": self.id,
+                    "topic": self.topic,
+                    "actor_a": self.actor_a.to_dict(),
+                    "actor_b": self.actor_b.to_dict(),
+                    "status": self.status,
+                    "created_at": self.created_at,
+                    "max_turns": self.max_turns,
+                    "error": self.error,
+                    "pid": self.pid,
+                },
+                indent=2,
+            )
+        )
 
     def update(self, fields: dict) -> None:
         for k, v in fields.items():

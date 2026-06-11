@@ -1,4 +1,5 @@
 """Dialogue orchestrator: relays messages between two actors until done."""
+
 from __future__ import annotations
 
 import threading
