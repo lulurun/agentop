@@ -12,6 +12,7 @@ from pathlib import Path
 
 from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
+from agentop.dialogue.capturer import get_capturer
 from agentop.dialogue.model import Dialogue
 
 
@@ -35,8 +36,8 @@ def start_dialogue(
 
     time.sleep(3)  # Give tmux sessions a moment to start up
 
-    actor_a = Actor(id="a", session=result_a["name"])
-    actor_b = Actor(id="b", session=result_b["name"])
+    actor_a = Actor(id="a", session=result_a["name"], capturer=get_capturer(agent_a))
+    actor_b = Actor(id="b", session=result_b["name"], capturer=get_capturer(agent_b))
 
     d = Dialogue.create(
         topic=topic,
