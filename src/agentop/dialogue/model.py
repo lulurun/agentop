@@ -1,4 +1,4 @@
-"""Dialogue data model and JSON persistence."""
+"""Dialogue metadata model and folder-based persistence."""
 from __future__ import annotations
 
 import json
@@ -8,15 +8,6 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
-
-
-@dataclass
-class Turn:
-    speaker: str    # "a" or "b"
-    session: str    # tmux session name
-    agent: str      # "claude", "gemini", etc.
-    content: str
-    timestamp: float = field(default_factory=time.time)
 
 
 @dataclass
@@ -30,46 +21,47 @@ class Dialogue:
     cwd_a: str
     cwd_b: str
     status: str     # "starting" | "running" | "stopped" | "completed" | "error"
-    turns: list[Turn] = field(default_factory=list)
     created_at: float = field(default_factory=time.time)
     max_turns: int = 20
     error: str | None = None
-    pid: int | None = None  # orchestrator process PID
+    pid: int | None = None
 
 
-def _ensure_dir() -> Path:
-    DIALOGUES_DIR.mkdir(parents=True, exist_ok=True)
-    return DIALOGUES_DIR
+def dialogue_dir(dialogue_id: str) -> Path:
+    return DIALOGUES_DIR / dialogue_id
 
 
-def path_for(dialogue_id: str) -> Path:
-    _ensure_dir()
-    return DIALOGUES_DIR / f"{dialogue_id}.json"
+def meta_path(dialogue_id: str) -> Path:
+    return dialogue_dir(dialogue_id) / "meta.json"
+
+
+def log_path(dialogue_id: str) -> Path:
+    return dialogue_dir(dialogue_id) / "dialogue.log"
 
 
 def save(d: Dialogue) -> None:
-    path_for(d.id).write_text(json.dumps(asdict(d), indent=2))
+    dialogue_dir(d.id).mkdir(parents=True, exist_ok=True)
+    meta_path(d.id).write_text(json.dumps(asdict(d), indent=2))
 
 
 def load(dialogue_id: str) -> Dialogue | None:
-    p = path_for(dialogue_id)
+    p = meta_path(dialogue_id)
     if not p.exists():
         return None
     try:
-        data = json.loads(p.read_text())
-        turns = [Turn(**t) for t in data.pop("turns", [])]
-        return Dialogue(turns=turns, **data)
+        return Dialogue(**json.loads(p.read_text()))
     except (json.JSONDecodeError, TypeError, KeyError):
         return None
 
 
 def list_all() -> list[Dialogue]:
-    _ensure_dir()
+    DIALOGUES_DIR.mkdir(parents=True, exist_ok=True)
     results = []
-    for p in sorted(DIALOGUES_DIR.glob("*.json"), key=lambda x: x.stat().st_mtime, reverse=True):
-        d = load(p.stem)
-        if d:
-            results.append(d)
+    for entry in sorted(DIALOGUES_DIR.iterdir(), key=lambda x: x.stat().st_mtime, reverse=True):
+        if entry.is_dir():
+            d = load(entry.name)
+            if d:
+                results.append(d)
     return results
 
 
@@ -84,7 +76,6 @@ def create(
     max_turns: int = 20,
     dialogue_id: str | None = None,
 ) -> Dialogue:
-    _ensure_dir()
     d = Dialogue(
         id=dialogue_id or uuid.uuid4().hex[:8],
         topic=topic,

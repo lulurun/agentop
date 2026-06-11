@@ -291,18 +291,17 @@ def cmd_dialogue_list(args):
     if not dialogues:
         print("No dialogues found.")
         return
-    col = "{:<10} {:<11} {:<9} {:<9} {:<7} {}"
-    print(col.format("ID", "STATUS", "AGENT-A", "AGENT-B", "TURNS", "TOPIC"))
+    col = "{:<10} {:<11} {:<9} {:<9} {}"
+    print(col.format("ID", "STATUS", "AGENT-A", "AGENT-B", "TOPIC"))
     print("─" * 90)
     for d in dialogues:
-        topic = d.topic[:44] + ("…" if len(d.topic) > 44 else "")
-        turns = f"{len(d.turns)}/{d.max_turns}"
-        print(col.format(d.id, d.status, d.agent_a, d.agent_b, turns, topic))
+        topic = d.topic[:54] + ("…" if len(d.topic) > 54 else "")
+        print(col.format(d.id, d.status, d.agent_a, d.agent_b, topic))
 
 
 def cmd_dialogue_log(args):
     from datetime import datetime
-    from agentop.dialogue.model import load
+    from agentop.dialogue.model import load, log_path
     d = load(args.id)
     if not d:
         print(f"Dialogue {args.id!r} not found.", file=sys.stderr)
@@ -312,22 +311,14 @@ def cmd_dialogue_log(args):
     print(f"Topic:    {d.topic}")
     print(f"Agent A:  {d.agent_a}  ({d.session_a})")
     print(f"Agent B:  {d.agent_b}  ({d.session_b})")
-    print(f"Turns:    {len(d.turns)}/{d.max_turns}")
     if d.error:
         print(f"Error:    {d.error}")
-    if not d.turns:
-        print("\n(No turns yet.)")
-        return
     print()
-    for i, t in enumerate(d.turns, 1):
-        label = f"Agent {'A' if t.speaker == 'a' else 'B'} ({t.agent})"
-        ts = datetime.fromtimestamp(t.timestamp).strftime("%H:%M:%S")
-        print(f"── Turn {i}  [{ts}]  {label} ──────────────────────────────────────────")
-        body = t.content
-        if len(body) > 3000:
-            body = body[:3000] + "\n… (truncated)"
-        print(body)
-        print()
+    lp = log_path(d.id)
+    if not lp.exists():
+        print("(No messages yet.)")
+        return
+    print(lp.read_text())
 
 
 def cmd_dialogue_stop(args):

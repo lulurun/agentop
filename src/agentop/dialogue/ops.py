@@ -44,10 +44,9 @@ def start_dialogue(
     )
 
     runner = Path(__file__).parent / "runner.py"
-    log_path = model.DIALOGUES_DIR / f"{d.id}.log"
-    model._ensure_dir()
+    runner_log = model.dialogue_dir(d.id) / "runner.log"
 
-    with open(log_path, "w") as log_f:
+    with open(runner_log, "w") as log_f:
         proc = subprocess.Popen(
             [sys.executable, str(runner), d.id],
             stdout=log_f,
