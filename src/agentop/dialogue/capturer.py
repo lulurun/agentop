@@ -31,22 +31,21 @@ class AgentCapturer:
 
     idle_seconds: float = 10.0
 
-    def indicator_line(self, pane_lines: list[str]) -> str:
-        """Return the line used to detect idle state (watched for stability)."""
-        return pane_lines[-1] if pane_lines else ""
+    def indicator_line(self, pane_lines: list[str]) -> str | None:
+        """Return the indicator value, or None if the pane is not ready yet."""
+        return pane_lines[-1] if pane_lines else None
 
     def content_end(self, lines: list[str]) -> int:
         """Return the index where UI chrome begins (content lives before this index)."""
         return len(lines)
 
     def wait_for_idle(self, session: str, stop_event: threading.Event) -> str | None:
-        """Poll until the indicator line is stable; return full pane content or None."""
+        """Poll until the indicator is stable and non-None; return pane content or None."""
         deadline = time.monotonic() + _TIMEOUT
-        last_content = _capture_pane(session)
-        last_indicator = self.indicator_line(last_content.splitlines())
+        last_indicator: str | None = None
         last_change = time.monotonic()
 
-        LOG.info("[%s] wait_for_idle start indicator: [%s]", session, last_indicator)
+        LOG.info("[%s] wait_for_idle started", session)
 
         while not stop_event.is_set() and time.monotonic() < deadline:
             time.sleep(_POLL_INTERVAL)
@@ -54,16 +53,14 @@ class AgentCapturer:
                 return None
             current = _capture_pane(session)
             indicator = self.indicator_line(current.splitlines())
+            if indicator is None:
+                # Pane not ready yet (e.g. fewer than required lines) — skip entirely
+                continue
             if indicator != last_indicator:
                 last_indicator = indicator
-                last_content = current
                 last_change = time.monotonic()
-                # LOG.info("[%s] indicator change: [%s]", session, last_indicator)
-            elif time.monotonic() - last_change >= self.idle_seconds:
-                if not last_indicator.strip():
-                    # Blank indicator means the pane is still initialising or
-                    # redrawing — not genuinely idle.  Keep waiting.
-                    continue
+                LOG.info("[%s] indicator: [%s]", session, last_indicator)
+            elif last_indicator.strip() and time.monotonic() - last_change >= self.idle_seconds:
                 LOG.info("[%s] idle detected, last indicator: [%s]", session, last_indicator)
                 return current
 
@@ -106,8 +103,10 @@ class ClaudeCodeCapturer(AgentCapturer):
 
     idle_seconds: float = 5.0
 
-    def indicator_line(self, pane_lines: list[str]) -> str:
-        """Last 20 lines joined — changes while agent is active, stable when done."""
+    def indicator_line(self, pane_lines: list[str]) -> str | None:
+        """Last 20 lines joined, or None if pane has fewer than 20 lines."""
+        if len(pane_lines) < 20:
+            return None
         return "\n".join(pane_lines[-20:])
 
     def _anchor(self, lines: list[str]) -> int:
