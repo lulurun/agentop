@@ -11,8 +11,9 @@ A local dashboard for monitoring running AI agent sessions — Claude Code, Code
 - Reads AI-generated conversation titles from Claude Code and Codex sessions
 - Shows token usage (input, output, cache) per session
 - Shows git branch and dirty status for each session's project
+- **In-browser terminal** — click `▶` on any live session to open an xterm.js terminal attached to its tmux pane
 - History tab: browse past sessions with resume support (active sessions excluded)
-- Auto-refreshing web UI at `http://127.0.0.1:8765`
+- Auto-refreshing web UI at `http://127.0.0.1:9775`
 - `agentop` CLI for starting, stopping, and browsing session history
 
 ## Requirements
@@ -34,7 +35,7 @@ pip install -e .
 ./run_app.sh
 ```
 
-Open [http://127.0.0.1:8765](http://127.0.0.1:8765) in your browser.
+Open [http://127.0.0.1:9775](http://127.0.0.1:9775) in your browser.
 
 To restart:
 
