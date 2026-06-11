@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import threading
 import time
+
+LOG = logging.getLogger(__name__)
 
 POLL_INTERVAL = 2.0
 DEFAULT_IDLE_SECONDS = 12.0

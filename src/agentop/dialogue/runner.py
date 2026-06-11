@@ -1,6 +1,20 @@
 """Entry point for the background dialogue orchestrator subprocess."""
 
+import logging
 import sys
+
+
+def _setup_logging(log_path) -> None:
+    handler = logging.FileHandler(log_path)
+    handler.setFormatter(
+        logging.Formatter(
+            fmt="[%(asctime)s] %(name)s %(message)s",
+            datefmt="%Y-%m-%dT%H:%M:%S",
+        )
+    )
+    root = logging.getLogger()
+    root.setLevel(logging.INFO)
+    root.addHandler(handler)
 
 
 def main() -> None:
@@ -15,6 +29,8 @@ def main() -> None:
     if not d:
         print(f"Dialogue {sys.argv[1]!r} not found", file=sys.stderr)
         sys.exit(1)
+
+    _setup_logging(d.log_path())
 
     orch = DialogueOrchestrator(d)
     orch.start()

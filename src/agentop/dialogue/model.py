@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from pathlib import Path
 
 from agentop.dialogue.actor import Actor
+
+LOG = logging.getLogger(__name__)
 
 DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
 

@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import signal
 import subprocess
 import sys
+import time
 import uuid
 from pathlib import Path
-import time
 
 from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
 from agentop.dialogue.model import Dialogue
+
+LOG = logging.getLogger(__name__)
 
 
 def start_dialogue(

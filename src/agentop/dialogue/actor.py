@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 import threading
-from datetime import datetime
-from pathlib import Path
 
 from agentop.dialogue.capture import capture_pane, wait_for_idle
+
+LOG = logging.getLogger(__name__)
 
 
 class Actor:
@@ -17,11 +18,9 @@ class Actor:
         self.agent = agent
         self.cwd = cwd
         self._stop: threading.Event | None = None
-        self._log: Path | None = None
 
-    def attach(self, stop_event: threading.Event, log: Path) -> Actor:
+    def attach(self, stop_event: threading.Event) -> Actor:
         self._stop = stop_event
-        self._log = log
         return self
 
     def send(self, text: str) -> None:
@@ -38,13 +37,8 @@ class Actor:
         new_lines = content.splitlines()[start:]
         msg = "\n".join(new_lines).strip() or None
         if msg:
-            self._append_log(msg)
+            LOG.info("[%s:%s]\n%s", self.id.upper(), self.agent, msg)
         return msg
-
-    def _append_log(self, msg: str) -> None:
-        ts = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        with open(self._log, "a") as f:
-            f.write(f"[{ts}] [{self.id.upper()}:{self.agent}]\n{msg}\n\n")
 
     def to_dict(self) -> dict:
         return {"id": self.id, "session": self.session, "agent": self.agent, "cwd": self.cwd}

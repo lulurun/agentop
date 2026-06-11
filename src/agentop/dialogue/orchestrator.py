@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 import threading
 
 from agentop.dialogue.model import Dialogue
+
+LOG = logging.getLogger(__name__)
 
 _PROMPT_A = """\
 Topic: {topic}
@@ -34,15 +37,16 @@ class DialogueOrchestrator(threading.Thread):
     def run(self) -> None:
         d = self.dialogue
         d.update({"status": "running"})
+        LOG.info("dialogue %s started: %s", d.id, d.topic)
         try:
             self._loop(d)
         except Exception as exc:
+            LOG.error("dialogue %s error: %s", d.id, exc)
             d.update({"status": "error", "error": str(exc)})
 
     def _loop(self, d: Dialogue) -> None:
-        log = d.log_path()
-        d.actor_a.attach(self._stop, log)
-        d.actor_b.attach(self._stop, log)
+        d.actor_a.attach(self._stop)
+        d.actor_b.attach(self._stop)
 
         d.actor_a.send(_PROMPT_A.format(topic=d.topic))
 
@@ -57,4 +61,6 @@ class DialogueOrchestrator(threading.Thread):
             other.send(msg)
             actor, other = other, actor
 
-        d.update({"status": "stopped" if self._stop.is_set() else "completed", "pid": None})
+        status = "stopped" if self._stop.is_set() else "completed"
+        LOG.info("dialogue %s %s", d.id, status)
+        d.update({"status": status, "pid": None})
