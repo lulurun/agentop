@@ -104,10 +104,16 @@ class ClaudeCodeCapturer(AgentCapturer):
     idle_seconds: float = 5.0
 
     def indicator_line(self, pane_lines: list[str]) -> str | None:
-        """Last 20 lines joined, or None if pane has fewer than 20 lines."""
-        if len(pane_lines) < 20:
+        """Last 20 non-blank lines joined, or None if fewer than 20 exist.
+
+        Using non-blank lines sees through the terminal-fill blank padding that
+        appears below the chrome when the pane is idle, while still being
+        sensitive to spinner/content changes during processing.
+        """
+        nonblank = [l for l in pane_lines if l.strip()]
+        if len(nonblank) < 20:
             return None
-        return "\n".join(pane_lines[-20:])
+        return "\n".join(nonblank[-20:])
 
     def _anchor(self, lines: list[str]) -> int:
         """Index of the empty line above sep2 (stable structural anchor), or -1."""
@@ -130,9 +136,53 @@ class ClaudeCodeCapturer(AgentCapturer):
         return max(0, len(lines) - 8)
 
 
+class AntigravityCapturer(AgentCapturer):
+    """Capturer for Antigravity-cli (agy) sessions running in tmux.
+
+    idle detection : last 20 non-blank lines as a block; returns None while the
+                     status bar shows 'esc to interrupt' (still processing)
+    content_end    : structural search for the upper separator above the input
+                     prompt, excluding the 4-line chrome region at the bottom
+    """
+
+    idle_seconds: float = 5.0
+
+    def indicator_line(self, pane_lines: list[str]) -> str | None:
+        """Last 20 non-blank lines joined, or None if fewer than 20 or still processing.
+
+        The status bar (last pane line) shows 'esc to interrupt' while agy is
+        working and '← for agents' when idle — use this to gate idle detection.
+        """
+        nonblank = [l for l in pane_lines if l.strip()]
+        if len(nonblank) < 20:
+            return None
+        if pane_lines and "esc to interrupt" in pane_lines[-1]:
+            return None
+        return "\n".join(nonblank[-20:])
+
+    def content_end(self, lines: list[str]) -> int:
+        """Return index of the upper separator above the input prompt.
+
+        agy bottom chrome (4 lines):
+          ─── upper separator  ← content_end points here
+          ❯   input prompt
+          ─── lower separator
+              status bar
+        """
+        for i in range(len(lines) - 1, max(len(lines) - 8, -1), -1):
+            if lines[i].startswith("─"):
+                upper = i - 2
+                if upper >= 0 and lines[upper].startswith("─"):
+                    return upper
+                break
+        return max(0, len(lines) - 4)
+
+
 def get_capturer(agent: str) -> AgentCapturer:
     """Return the appropriate capturer for the given agent name."""
     if "claude" in agent.lower():
         return ClaudeCodeCapturer()
+    if "antigravity" in agent.lower() or "agy" in agent.lower():
+        return AntigravityCapturer()
     # Fallback: whole-pane stability, no chrome stripping
     return AgentCapturer()
