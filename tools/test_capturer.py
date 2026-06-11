@@ -83,23 +83,23 @@ def main() -> None:
     actor.send(args.prompt)
 
     # --- wait for idle with live indicator display ---
-    print("\n=== WAITING FOR IDLE ===")
-    last_indicator = ""
+    print(f"\n=== WAITING FOR IDLE (stable for {capturer.idle_seconds}s) ===")
     result_content = None
     last_content = _capture_pane(session)
     last_indicator_val = capturer.indicator_line(last_content.splitlines())
     last_change = time.monotonic()
     deadline = time.monotonic() + 120
 
+    print(f"  [start] indicator: {last_indicator_val!r}")
     while not stop.is_set() and time.monotonic() < deadline:
-        time.sleep(_POLL_INTERVAL := 2.0)
+        time.sleep(2.0)
         current = _capture_pane(session)
         indicator = capturer.indicator_line(current.splitlines())
         if indicator != last_indicator_val:
-            print(f"  indicator: {indicator!r}")
             last_indicator_val = indicator
             last_content = current
             last_change = time.monotonic()
+            print(f"  [change] indicator: {last_indicator_val!r}")
         elif time.monotonic() - last_change >= capturer.idle_seconds:
             result_content = current
             break
@@ -107,6 +107,9 @@ def main() -> None:
     if result_content is None:
         print("TIMEOUT — no response captured.")
         sys.exit(1)
+
+    final_indicator = capturer.indicator_line(result_content.splitlines())
+    print(f"  [idle]   indicator: {final_indicator!r}  (unchanged for {capturer.idle_seconds}s)")
 
     cur_lines = result_content.splitlines()
     cur_end = capturer.content_end(cur_lines)
