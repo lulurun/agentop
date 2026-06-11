@@ -289,12 +289,28 @@ def cmd_dialogue_start(args):
     print(f"\n  Stop:  agentop dialogue stop {did}")
 
 
+def cmd_dialogue_list(args):
+    dialogues = _dialogue_ops().list_dialogues()
+    if not dialogues:
+        print("No dialogues found.")
+        return
+    id_w, status_w = 10, 10
+    print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'SESSION A':<22}  {'SESSION B':<22}  TOPIC")
+    print("-" * 100)
+    for d in dialogues:
+        topic = d["topic"][:50] + ("…" if len(d["topic"]) > 50 else "")
+        print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {d['session_a']:<22}  {d['session_b']:<22}  {topic}")
+
+
 def cmd_dialogue_stop(args):
-    result = _dialogue_ops().stop_dialogue(args.id)
+    result = _dialogue_ops().stop_dialogue(args.id, close=getattr(args, "close", False))
     if not result.get("ok"):
         print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)
-    print(f"Dialogue {args.id} stopped.")
+    msg = f"Dialogue {args.id} stopped."
+    if getattr(args, "close", False):
+        msg += " Sessions closed."
+    print(msg)
 
 
 # ---------------------------------------------------------------------------
@@ -391,8 +407,11 @@ def main():
     p_dstart.add_argument("--max-turns", dest="max_turns", type=int, default=20,
                           help="Maximum relay turns before stopping (default: 20)")
 
+    dsub.add_parser("list", help="List all dialogues and their status")
+
     p_dstop = dsub.add_parser("stop", help="Stop a running dialogue orchestrator")
     p_dstop.add_argument("id", help="Dialogue ID")
+    p_dstop.add_argument("--close", action="store_true", help="Also kill both agent tmux sessions")
 
     args = parser.parse_args()
     if not args.command:
@@ -404,6 +423,7 @@ def main():
             p_dialogue.print_help()
             sys.exit(0)
         {
+            "list": cmd_dialogue_list,
             "start": cmd_dialogue_start,
             "stop": cmd_dialogue_stop,
         }[args.dialogue_command](args)

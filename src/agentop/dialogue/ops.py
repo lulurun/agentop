@@ -13,7 +13,7 @@ from pathlib import Path
 from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
 from agentop.dialogue.capturer import get_capturer
-from agentop.dialogue.model import Dialogue
+from agentop.dialogue.model import Dialogue, DIALOGUES_DIR
 
 
 def start_dialogue(
@@ -68,7 +68,24 @@ def start_dialogue(
     }
 
 
-def stop_dialogue(dialogue_id: str) -> dict:
+def list_dialogues() -> list[dict]:
+    if not DIALOGUES_DIR.exists():
+        return []
+    result = []
+    for meta in sorted(DIALOGUES_DIR.glob("*/meta.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        d = Dialogue.load(meta.parent.name)
+        if d:
+            result.append({
+                "id": d.id,
+                "status": d.status,
+                "topic": d.topic,
+                "session_a": d.actor_a.session,
+                "session_b": d.actor_b.session,
+            })
+    return result
+
+
+def stop_dialogue(dialogue_id: str, close: bool = False) -> dict:
     d = Dialogue.load(dialogue_id)
     if not d:
         return {"ok": False, "error": f"Dialogue {dialogue_id!r} not found"}
@@ -78,4 +95,14 @@ def stop_dialogue(dialogue_id: str) -> dict:
         except ProcessLookupError:
             pass
     d.update({"status": "stopped", "pid": None})
+    if close:
+        for session in (d.actor_a.session, d.actor_b.session):
+            try:
+                r = subprocess.run(["tmux", "has-session", "-t", session], capture_output=True, timeout=3)
+                if r.returncode == 0:
+                    subprocess.run(["tmux", "send-keys", "-t", session, "/exit", "Enter"], capture_output=True, timeout=5)
+                    time.sleep(3)
+                    subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True, timeout=5)
+            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
+                pass
     return {"ok": True}
