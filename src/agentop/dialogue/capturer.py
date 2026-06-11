@@ -58,8 +58,12 @@ class AgentCapturer:
                 last_indicator = indicator
                 last_content = current
                 last_change = time.monotonic()
-                LOG.info("[%s] indicator change: [%s]", session, last_indicator)
+                # LOG.info("[%s] indicator change: [%s]", session, last_indicator)
             elif time.monotonic() - last_change >= self.idle_seconds:
+                if not last_indicator.strip():
+                    # Blank indicator means the pane is still initialising or
+                    # redrawing — not genuinely idle.  Keep waiting.
+                    continue
                 LOG.info("[%s] idle detected, last indicator: [%s]", session, last_indicator)
                 return current
 
