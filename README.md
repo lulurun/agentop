@@ -4,6 +4,8 @@ A local dashboard for monitoring running AI agent sessions — Claude Code, Code
 
 ![agentop dashboard](https://raw.githubusercontent.com/lulurun/agentop/main/docs/screenshot.png)
 
+![in-browser terminal](https://raw.githubusercontent.com/lulurun/agentop/main/docs/screenshot-terminal.png)
+
 ## What it does
 
 - Detects running Claude Code, Codex, Gemini CLI, and Antigravity processes
