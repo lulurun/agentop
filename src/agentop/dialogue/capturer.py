@@ -17,7 +17,9 @@ def _capture_pane(session: str) -> str:
     try:
         r = subprocess.run(
             ["tmux", "capture-pane", "-t", session, "-p", "-S", "-"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         return r.stdout if r.returncode == 0 else ""
     except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
@@ -79,54 +81,48 @@ class AgentCapturer:
             else:
                 break
 
-        new_lines = cur_lines[snap_end + skip : cur_end]
+        start = snap_end + skip
+        new_lines = cur_lines[start:cur_end]
         return "\n".join(new_lines).strip()
 
 
 class ClaudeCodeCapturer(AgentCapturer):
     """Capturer for Claude Code (claude CLI) sessions running in tmux.
 
-    Observed pane layout when idle (from bottom, trailing blanks omitted):
-      ✻ Worked for Xs          ← activity indicator; searched dynamically
-      (blank)
-      ──── separator ────
-      ❯ (empty or echoed input)
-      ──── separator ────
-      ⏵⏵ hint line
+    Claude Code pane structure (from bottom, searching upward):
       (blank lines)
-
-    Layout in initial/fresh state (no ✻ line):
-      ──── separator ────
-      ❯ suggestion text
-      ──── separator ────
       ⏵⏵ hint line
-      ...
-
-    content_end() finds the ✻ line (or falls back to the separator before ❯),
-    so extract_response compares content areas rather than raw line counts.
+      ──── first separator ────
+      ❯ prompt / echoed input   (ignored)
+      ──── second separator ────
+      (empty line)
+      indicator line            ← watched for idle detection; content ends here
+      (response content above)
     """
 
-    idle_seconds: float = 10.0
+    idle_seconds: float = 5.0
+
+    def _indicator_idx(self, lines: list[str]) -> int:
+        """Return index of the indicator line via structural search, or -1."""
+        sep_count = 0
+        for i in range(len(lines) - 1, max(len(lines) - 25, -1), -1):
+            if lines[i].startswith("─"):
+                sep_count += 1
+                if sep_count == 2:
+                    # i is the second (upper) separator.
+                    # Layout: [i-1] empty, [i-2] indicator.
+                    if i >= 2 and lines[i - 1].strip() == "":
+                        return i - 2
+                    break
+        return -1
 
     def indicator_line(self, pane_lines: list[str]) -> str:
-        """Search last 25 lines for the ✻ activity indicator."""
-        for line in reversed(pane_lines[-25:]):
-            if line.strip().startswith("✻"):  # ✻
-                return line
-        return ""
+        idx = self._indicator_idx(pane_lines)
+        return pane_lines[idx] if idx >= 0 else ""
 
     def content_end(self, lines: list[str]) -> int:
-        """Index where chrome begins: the ✻ line, or the separator before ❯."""
-        # Primary: find ✻ indicator
-        for i in range(len(lines) - 1, max(len(lines) - 25, -1), -1):
-            if lines[i].strip().startswith("✻"):
-                return i
-        # Fallback: find the separator (───) that immediately precedes the ❯ prompt
-        for i in range(len(lines) - 1, max(len(lines) - 25, -1), -1):
-            s = lines[i].strip()
-            if s.startswith("❯") and i > 0 and "─" in lines[i - 1]:  # ❯ and ─
-                return i - 1
-        return max(0, len(lines) - 8)
+        idx = self._indicator_idx(lines)
+        return idx if idx >= 0 else max(0, len(lines) - 8)
 
 
 def get_capturer(agent: str) -> AgentCapturer:
