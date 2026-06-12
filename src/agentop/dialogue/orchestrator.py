@@ -41,12 +41,12 @@ Never write anything outside them.\
 """
 
 
-def _prompt_a(self, d: Dialogue) -> str:
+def _prompt_a(d: Dialogue) -> str:
     fmt = dict(name_a=d.actor_a.name, name_b=d.actor_b.name, topic=d.topic, progress_file=d.progress_path())
     return d.role_a.format(**fmt) + "\n\n" + _DELIMITER_RULE_A.format(**fmt)
 
 
-def _prompt_b(self, d: Dialogue) -> str:
+def _prompt_b(d: Dialogue) -> str:
     fmt = dict(name_a=d.actor_a.name, name_b=d.actor_b.name, topic=d.topic, progress_file=d.progress_path())
     return d.role_b.format(**fmt) + "\n\n" + _DELIMITER_RULE_B.format(**fmt)
 
