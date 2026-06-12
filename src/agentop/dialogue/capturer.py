@@ -53,27 +53,13 @@ class AgentCapturer:
         return None
 
     def extract_response(self, snapshot: str, current: str) -> str:
-        """Extract content added since snapshot by comparing content areas.
+        """Return scrollback lines added after the snapshot.
 
-        The snapshot's chrome lines (from content_end onwards) get preserved
-        verbatim at the same indices in the current scrollback.  Skip them so
-        only truly new content is returned.
+        BEGIN/END delimiters in the output mean content_end() is no longer
+        needed for extraction — _parse_output() locates the content exactly.
         """
-        snap_lines = snapshot.splitlines()
-        cur_lines = current.splitlines()
-        snap_end = self.content_end(snap_lines)
-        cur_end = self.content_end(cur_lines)
-
-        # Skip snapshot chrome lines that were carried over into current scrollback
-        skip = 0
-        for s, c in zip(snap_lines[snap_end:], cur_lines[snap_end:]):
-            if s == c:
-                skip += 1
-            else:
-                break
-
-        start = snap_end + skip
-        return "\n".join(cur_lines[start:cur_end]).strip()
+        snap_len = len(snapshot.splitlines())
+        return "\n".join(current.splitlines()[snap_len:]).strip()
 
 
 class ClaudeCodeCapturer(AgentCapturer):
@@ -131,14 +117,6 @@ class CodexCapturer(AgentCapturer):
             if lines[i].strip().startswith("›"):
                 return i
         return len(lines)
-
-    def extract_response(self, snapshot: str, current: str) -> str:
-        raw = super().extract_response(snapshot, current)
-        # Codex echoes the submitted prompt at the start of its output area — strip it
-        lines = raw.splitlines()
-        if lines and lines[0].strip().startswith("›"):
-            lines = lines[1:]
-        return "\n".join(lines).strip()
 
 
 def get_capturer(agent: str) -> AgentCapturer:

@@ -16,8 +16,8 @@ LOG = logging.getLogger(__name__)
 # Sentinel returned by receive() when the agent signals dialogue completion
 DIALOGUE_COMPLETE = "<<DIALOGUE_COMPLETE>>"
 
-_DELIMITER_RE = re.compile(r"---\s*output from \w+\s+turn:\d+\s*---", re.IGNORECASE)
-_COMPLETE_RE = re.compile(r"---\s*complete from \w+\s+turn:\d+\s*---", re.IGNORECASE)
+_BEGIN_RE = re.compile(r"---\s*BEGIN\s+(output|complete)\s+from\s+\w+\s+turn:\d+\s*---", re.IGNORECASE)
+_END_RE = re.compile(r"---\s*END\s+(output|complete)\s+from\s+\w+\s+turn:\d+\s*---", re.IGNORECASE)
 
 
 class Actor:
@@ -109,17 +109,24 @@ class Actor:
         return msg or None
 
     def _parse_output(self, raw: str) -> str:
-        """Return content after the delimiter, DIALOGUE_COMPLETE, or raw if absent."""
+        """Extract content between BEGIN/END delimiters; return DIALOGUE_COMPLETE or content."""
         lines = raw.splitlines()
         for i, line in enumerate(lines):
-            if _COMPLETE_RE.search(line):
-                LOG.info("[%s] complete delimiter found on line %d", self.name, i)
-                return DIALOGUE_COMPLETE
-            if _DELIMITER_RE.search(line):
-                extracted = "\n".join(lines[i + 1 :]).strip()
-                LOG.info("[%s] output delimiter found on line %d", self.name, i)
-                return extracted
-        LOG.warning("[%s] no delimiter found — using full raw response", self.name)
+            m = _BEGIN_RE.search(line)
+            if m:
+                kind = m.group(1).lower()
+                for j in range(i + 1, len(lines)):
+                    if _END_RE.search(lines[j]):
+                        content = "\n".join(lines[i + 1:j]).strip()
+                        if kind == "complete":
+                            LOG.info("[%s] complete delimiters found (lines %d-%d)", self.name, i, j)
+                            return DIALOGUE_COMPLETE
+                        LOG.info("[%s] output delimiters found (lines %d-%d)", self.name, i, j)
+                        return content
+                # BEGIN found but no END yet — return everything after BEGIN
+                LOG.warning("[%s] BEGIN found on line %d but no END — using partial content", self.name, i)
+                return "\n".join(lines[i + 1:]).strip()
+        LOG.warning("[%s] no BEGIN/END delimiters found — using full raw response", self.name)
         return raw
 
     def to_dict(self) -> dict:

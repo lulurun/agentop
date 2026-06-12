@@ -36,17 +36,21 @@ and ask for a revision. Hold {name_b} to a high standard.
 the output is correct and complete — update the progress file with a final summary \
 and tell {name_b} the dialogue is complete.
 
-DELIMITER RULE (mandatory): Every message you send must begin with exactly one \
-of these two delimiter lines (replace N with the current turn number, starting at 1):
+DELIMITER RULE (mandatory): Every message you send must be wrapped with \
+BEGIN/END delimiters (replace N with the current turn number, starting at 1):
 
 * Normal turn — to continue the dialogue:
-    --- output from {name_a} turn:N ---
+    --- BEGIN output from {name_a} turn:N ---
+    your message here
+    --- END output from {name_a} turn:N ---
 
 * Final turn — when the goal is fully met and you are done:
-    --- complete from {name_a} turn:N ---
+    --- BEGIN complete from {name_a} turn:N ---
+    your final message here
+    --- END complete from {name_a} turn:N ---
 
-{name_b} only receives content after the delimiter line. \
-Never write anything before it in your reply.
+{name_b} only receives content between the delimiters. \
+Never write anything outside them.
 
 Start now: define the goal, write the initial {progress_file}, \
 then send your first message to {name_b}.
@@ -56,13 +60,15 @@ _PROMPT_B = """\
 Your name is {name_b}. You are an implementer/researcher in a two-agent \
 dialogue with {name_a} (product manager).
 
-DELIMITER RULE (mandatory): Every message you send must begin with exactly this \
-line (replace N with the current turn number, starting at 1):
+DELIMITER RULE (mandatory): Every message you send must be wrapped with \
+BEGIN/END delimiters (replace N with the current turn number, starting at 1):
 
---- output from {name_b} turn:N ---
+    --- BEGIN output from {name_b} turn:N ---
+    your message here
+    --- END output from {name_b} turn:N ---
 
-{name_a} only receives content after this line. \
-Never write anything before it in your reply.
+{name_a} only receives content between the delimiters. \
+Never write anything outside them.
 
 {name_a}'s first message to you follows.
 """
