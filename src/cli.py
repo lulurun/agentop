@@ -246,6 +246,7 @@ _DIALOGUE_TOOLS = ["claude", "codex", "gemini", "antigravity"]
 def _dialogue_ops():
     try:
         from agentop.dialogue import ops
+
         return ops
     except ImportError as exc:
         print(f"Error: cannot import agentop.dialogue: {exc}", file=sys.stderr)
@@ -259,17 +260,6 @@ def cmd_dialogue_start(args):
     if not os.path.isfile(brief_path):
         print(f"Error: brief file not found: {brief_path!r}", file=sys.stderr)
         sys.exit(1)
-    with open(brief_path) as f:
-        brief_content = f.read().strip()
-    if not brief_content:
-        print(f"Error: brief file is empty: {brief_path!r}", file=sys.stderr)
-        sys.exit(1)
-    first_line = next((l.strip().lstrip("#").strip() for l in brief_content.splitlines() if l.strip()), brief_path)
-    print(f"Starting dialogue: {first_line!r}")
-    print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
-    print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
-    print(f"  Max turns: {args.max_turns}")
-
     scenario_file = ""
     if args.scenario:
         scenario_path = os.path.abspath(os.path.expanduser(args.scenario))
@@ -277,6 +267,11 @@ def cmd_dialogue_start(args):
             print(f"Error: scenario file not found: {scenario_path!r}", file=sys.stderr)
             sys.exit(1)
         scenario_file = scenario_path
+
+    print("Starting dialogue:")
+    print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
+    print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
+    print(f"  Max turns: {args.max_turns}")
 
     result = _dialogue_ops().start_dialogue(
         agent_a=args.agent_a,
@@ -299,6 +294,7 @@ def cmd_dialogue_start(args):
         f"\"watch -n1 -t 'tmux capture-pane -t {sb} -p -S -40'\""
     )
     from agentop.dialogue.model import DIALOGUES_DIR
+
     log_path = DIALOGUES_DIR / did / "dialogue.log"
     print(f"\nDialogue started: {did}")
     print(f"  Session A: {sa}")
@@ -315,12 +311,16 @@ def cmd_dialogue_list(args):
         print("No dialogues found.")
         return
     id_w, status_w, agent_w, sess_w = 10, 10, 10, 24
-    print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}")
+    print(
+        f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}"
+    )
     print("-" * 100)
     for d in dialogues:
         sa = d["session_a"] + (" [open]" if d["session_a_alive"] else "")
         sb = d["session_b"] + (" [open]" if d["session_b_alive"] else "")
-        print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {d['agent_a']:<{agent_w}}  {d['agent_b']:<{agent_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}")
+        print(
+            f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {d['agent_a']:<{agent_w}}  {d['agent_b']:<{agent_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}"
+        )
 
 
 def cmd_dialogue_stop(args):
@@ -416,20 +416,38 @@ def main():
     dsub = p_dialogue.add_subparsers(dest="dialogue_command", metavar="<subcommand>")
 
     p_dstart = dsub.add_parser("start", help="Start a new dialogue between two agents")
-    p_dstart.add_argument("--brief", required=True, metavar="FILE",
-                          help="Path to a Markdown file describing the topic/goal for the dialogue")
-    p_dstart.add_argument("--agent-a", dest="agent_a", default="claude", choices=_DIALOGUE_TOOLS,
-                          help="Agent for session A (default: claude)")
-    p_dstart.add_argument("--agent-b", dest="agent_b", default="claude", choices=_DIALOGUE_TOOLS,
-                          help="Agent for session B (default: claude)")
-    p_dstart.add_argument("--cwd-a", dest="cwd_a", default=os.path.expanduser("~"),
-                          help="Working directory for agent A (default: home)")
-    p_dstart.add_argument("--cwd-b", dest="cwd_b", default=os.path.expanduser("~"),
-                          help="Working directory for agent B (default: home)")
-    p_dstart.add_argument("--max-turns", dest="max_turns", type=int, default=20,
-                          help="Maximum relay turns before stopping (default: 20)")
-    p_dstart.add_argument("--scenario", default="", metavar="FILE",
-                          help="Path to a scenario TOML file (default: built-in pm-sde)")
+    p_dstart.add_argument(
+        "--brief",
+        required=True,
+        metavar="FILE",
+        help="Path to a Markdown file describing the topic/goal for the dialogue",
+    )
+    p_dstart.add_argument(
+        "--agent-a",
+        dest="agent_a",
+        default="claude",
+        choices=_DIALOGUE_TOOLS,
+        help="Agent for session A (default: claude)",
+    )
+    p_dstart.add_argument(
+        "--agent-b",
+        dest="agent_b",
+        default="claude",
+        choices=_DIALOGUE_TOOLS,
+        help="Agent for session B (default: claude)",
+    )
+    p_dstart.add_argument(
+        "--cwd-a", dest="cwd_a", default=os.path.expanduser("~"), help="Working directory for agent A (default: home)"
+    )
+    p_dstart.add_argument(
+        "--cwd-b", dest="cwd_b", default=os.path.expanduser("~"), help="Working directory for agent B (default: home)"
+    )
+    p_dstart.add_argument(
+        "--max-turns", dest="max_turns", type=int, default=20, help="Maximum relay turns before stopping (default: 20)"
+    )
+    p_dstart.add_argument(
+        "--scenario", default="", metavar="FILE", help="Path to a scenario TOML file (default: built-in pm-sde)"
+    )
 
     dsub.add_parser("list", help="List all dialogues and their status")
 
@@ -450,7 +468,9 @@ def main():
             "list": cmd_dialogue_list,
             "start": cmd_dialogue_start,
             "stop": cmd_dialogue_stop,
-        }[args.dialogue_command](args)
+        }[
+            args.dialogue_command
+        ](args)
         return
 
     {

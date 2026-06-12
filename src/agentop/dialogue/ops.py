@@ -22,8 +22,8 @@ def start_dialogue(
     agent_b: str,
     cwd_a: str,
     cwd_b: str,
+    max_turns: int,
     brief_file: str,
-    max_turns: int = 20,
     scenario_file: str = "",
 ) -> dict:
     dialogue_id = uuid.uuid4().hex[:8]
