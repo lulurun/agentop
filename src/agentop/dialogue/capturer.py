@@ -15,12 +15,9 @@ _TIMEOUT = 600.0
 
 
 class Capturer:
-    """Poll the visible screen until stable, then return the full scrollback."""
-
     idle_seconds: float = 5.0
 
     def wait_for_idle(self, session: str, stop_event: threading.Event) -> str | None:
-        """Poll screen until stable for idle_seconds; return full scrollback or None."""
         deadline = time.monotonic() + _TIMEOUT
         last_screen: str | None = None
         last_change = time.monotonic()
@@ -42,8 +39,3 @@ class Capturer:
 
         LOG.info("[%s] wait_for_idle timeout/stopped", session)
         return None
-
-    def extract_response(self, snapshot: str, current: str) -> str:
-        """Return scrollback lines added after the snapshot."""
-        snap_len = len(snapshot.splitlines())
-        return "\n".join(current.splitlines()[snap_len:]).strip()

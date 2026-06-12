@@ -16,19 +16,11 @@ DIALOGUE_COMPLETE = "<<DIALOGUE_COMPLETE>>"
 
 
 class Actor:
-    def __init__(
-        self,
-        id: str,
-        session: str,
-        name: str = "",
-        capturer: Capturer | None = None,
-        tool: str = "claude",
-    ):
+    def __init__(self, id: str, session: str, name: str):
         self.id = id  # "a" or "b"
         self.session = session
         self.name = name or id.upper()
-        self.tool = tool
-        self._capturer = capturer or Capturer()
+        self._capturer = Capturer()
         self._stop: threading.Event | None = None
         self._turn = 0  # incremented each receive(); matches turn:N in delimiters
 
@@ -72,4 +64,3 @@ class Actor:
         else:
             LOG.warning("[%s] turn:%d BEGIN found but no END", self.name, turn)
         return raw
-

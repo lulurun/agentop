@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentop.dialogue.scenarios.reader import Scenario, load
-
 _BUILTIN_DIR = Path(__file__).parent
 
 

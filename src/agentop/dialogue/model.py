@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+from agentop.dialogue.scenarios.reader import load as load_scenario
+from agentop.dialogue.actor import Actor
 
 LOG = logging.getLogger(__name__)
 
@@ -15,8 +18,6 @@ DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
 
 @dataclass
 class DialogueMeta:
-    """Persisted metadata for a dialogue — written to meta.json in the dialogue folder."""
-
     id: str
     session_a: str
     session_b: str
@@ -42,18 +43,23 @@ class DialogueMeta:
 
     def save(self) -> None:
         self._dir().mkdir(parents=True, exist_ok=True)
-        self._meta_path().write_text(json.dumps({
-            "id": self.id,
-            "session_a": self.session_a,
-            "session_b": self.session_b,
-            "agent_a": self.agent_a,
-            "agent_b": self.agent_b,
-            "max_turns": self.max_turns,
-            "start_time": self.start_time,
-            "status": self.status,
-            "pid": self.pid,
-            "error": self.error,
-        }, indent=2))
+        self._meta_path().write_text(
+            json.dumps(
+                {
+                    "id": self.id,
+                    "session_a": self.session_a,
+                    "session_b": self.session_b,
+                    "agent_a": self.agent_a,
+                    "agent_b": self.agent_b,
+                    "max_turns": self.max_turns,
+                    "start_time": self.start_time,
+                    "status": self.status,
+                    "pid": self.pid,
+                    "error": self.error,
+                },
+                indent=2,
+            )
+        )
 
     def update(self, fields: dict) -> None:
         for k, v in fields.items():
@@ -108,9 +114,7 @@ class DialogueMeta:
 
 
 class Dialogue:
-    """Runtime dialogue object — wraps DialogueMeta with loaded topic, actors, and role prompts."""
-
-    def __init__(self, meta: DialogueMeta, topic: str, actor_a, actor_b, role_a: str, role_b: str):
+    def __init__(self, meta: DialogueMeta, topic: str, actor_a: Actor, actor_b: Actor, role_a: str, role_b: str):
         self.meta = meta
         self.topic = topic
         self.actor_a = actor_a
@@ -145,16 +149,12 @@ class Dialogue:
 
     @classmethod
     def from_meta(cls, meta: DialogueMeta) -> Dialogue:
-        from agentop.dialogue import scenarios
-        from agentop.dialogue.actor import Actor
-        from agentop.dialogue.capturer import Capturer
-
         folder = meta._dir()
         topic = (folder / "brief.md").read_text().strip()
-        scenario = scenarios.load(folder / "scenario.toml")
+        scenario = load_scenario(folder / "scenario.toml")
 
-        actor_a = Actor(id="a", session=meta.session_a, name=scenario.name_a, capturer=Capturer(), tool=meta.agent_a)
-        actor_b = Actor(id="b", session=meta.session_b, name=scenario.name_b, capturer=Capturer(), tool=meta.agent_b)
+        actor_a = Actor(id="a", session=meta.session_a, name=scenario.name_a)
+        actor_b = Actor(id="b", session=meta.session_b, name=scenario.name_b)
 
         return cls(
             meta=meta,

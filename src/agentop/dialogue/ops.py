@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agentop import ops as agent_ops
 from agentop.dialogue import scenarios
-from agentop.dialogue.model import DialogueMeta, DIALOGUES_DIR
+from agentop.dialogue.model import DIALOGUES_DIR, DialogueMeta
 from agentop.tmux import Session
 
 
@@ -79,16 +79,18 @@ def list_dialogues() -> list[dict]:
     for meta_file in sorted(DIALOGUES_DIR.glob("*/meta.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         meta = DialogueMeta.load(meta_file.parent.name)
         if meta:
-            result.append({
-                "id": meta.id,
-                "status": meta.status,
-                "agent_a": meta.agent_a,
-                "agent_b": meta.agent_b,
-                "session_a": meta.session_a,
-                "session_b": meta.session_b,
-                "session_a_alive": Session.has(meta.session_a),
-                "session_b_alive": Session.has(meta.session_b),
-            })
+            result.append(
+                {
+                    "id": meta.id,
+                    "status": meta.status,
+                    "agent_a": meta.agent_a,
+                    "agent_b": meta.agent_b,
+                    "session_a": meta.session_a,
+                    "session_b": meta.session_b,
+                    "session_a_alive": Session.has(meta.session_a),
+                    "session_b_alive": Session.has(meta.session_b),
+                }
+            )
     return result
 
 
