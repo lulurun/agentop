@@ -5,10 +5,9 @@ from __future__ import annotations
 import logging
 import re
 import threading
-import time
 
 from agentop.dialogue.capturer import Capturer
-from agentop.tmux import CapturePane, Session
+from agentop.tmux import Session
 
 LOG = logging.getLogger(__name__)
 
@@ -38,31 +37,7 @@ class Actor:
         return self
 
     def send(self, text: str) -> None:
-        LOG.info("[%s] send start", self.name)
-        start_time = time.monotonic()
         Session.paste_text(self.session, text)
-
-        # Wait until the terminal screen starts changing (pasting begins)
-        original_content = CapturePane.screen(self.session)
-        paste_start_time = time.monotonic()
-        while time.monotonic() - paste_start_time < 2.0:
-            time.sleep(0.05)
-            if CapturePane.screen(self.session) != original_content:
-                LOG.info("[%s] paste detected after %.3f s", self.name, time.monotonic() - paste_start_time)
-                break
-        else:
-            LOG.info("[%s] paste start timeout reached", self.name)
-
-        # Wait until the terminal screen stops changing (pasting finished)
-        last_content = CapturePane.screen(self.session)
-        stable_since = time.monotonic()
-        while time.monotonic() - stable_since < 0.5:
-            time.sleep(0.1)
-            cur = CapturePane.screen(self.session)
-            if cur != last_content:
-                last_content = cur
-                stable_since = time.monotonic()
-        LOG.info("[%s] screen stable, sending Enter. total paste wait: %.3f s", self.name, time.monotonic() - start_time)
         Session.send_keys(self.session, "Enter")
 
     def receive(self) -> str | None:
