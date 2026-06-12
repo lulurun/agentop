@@ -11,21 +11,23 @@ from agentop.dialogue.model import Dialogue
 LOG = logging.getLogger(__name__)
 
 _DELIMITER_RULE_A = """\
-DELIMITER RULE (mandatory): Every message you send must be wrapped with \
-BEGIN/END delimiters (replace N with the current turn number, starting at 1):
+REPORTING RULE (mandatory): Do all your thinking and planning freely. \
+When ready to send to {name_b}, write a concise message wrapped in \
+BEGIN/END delimiters at the very end (replace N with the current turn \
+number, starting at 1):
 
 * Normal turn — to continue the dialogue:
     --- BEGIN output from {name_a} turn:N ---
-    your message here
+    your concise message to {name_b} here
     --- END output from {name_a} turn:N ---
 
 * Final turn — when the goal is fully met and you are done:
     --- BEGIN complete from {name_a} turn:N ---
-    your final message here
+    your final summary here
     --- END complete from {name_a} turn:N ---
 
-{name_b} only receives content between the delimiters. \
-Never write anything outside them.\
+{name_b} only receives content between the delimiters — \
+everything outside them is your working space.\
 """
 
 _DELIMITER_RULE_B = """\
