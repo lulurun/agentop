@@ -15,22 +15,23 @@ _TIMEOUT = 600.0
 
 
 class AgentCapturer:
-    """Base class: subclasses implement idle detection and response extraction."""
+    """Base class: subclasses implement content_end and extract_response.
 
-    idle_seconds: float = 10.0
+    Idle detection is shared: poll the visible screen every 2 s and declare
+    idle once the content has been unchanged for idle_seconds.  No agent-
+    specific indicator parsing — whole-screen stability is the signal.
+    """
 
-    def indicator_line(self, pane_lines: list[str]) -> str | None:
-        """Return the indicator value, or None if the pane is not ready yet."""
-        return pane_lines[-1] if pane_lines else None
+    idle_seconds: float = 5.0
 
     def content_end(self, lines: list[str]) -> int:
         """Return the index where UI chrome begins (content lives before this index)."""
         return len(lines)
 
     def wait_for_idle(self, session: str, stop_event: threading.Event) -> str | None:
-        """Poll screen until the indicator is stable; return full scrollback or None."""
+        """Poll screen until stable for idle_seconds; return full scrollback or None."""
         deadline = time.monotonic() + _TIMEOUT
-        last_indicator: str | None = None
+        last_screen: str | None = None
         last_change = time.monotonic()
 
         LOG.info("[%s] wait_for_idle started", session)
@@ -40,19 +41,15 @@ class AgentCapturer:
             if stop_event.is_set():
                 return None
             screen = CapturePane.screen(session)
-            indicator = self.indicator_line(screen.splitlines())
-            if indicator is None:
-                # Pane not ready yet (e.g. fewer than required lines) — skip entirely
-                continue
-            if indicator != last_indicator:
-                last_indicator = indicator
+            if screen != last_screen:
+                last_screen = screen
                 last_change = time.monotonic()
-                LOG.info("[%s] indicator: [%s]", session, last_indicator)
-            elif last_indicator.strip() and time.monotonic() - last_change >= self.idle_seconds:
-                LOG.info("[%s] idle detected, last indicator: [%s]", session, last_indicator)
+                LOG.info("[%s] screen changed", session)
+            elif last_screen is not None and time.monotonic() - last_change >= self.idle_seconds:
+                LOG.info("[%s] idle detected", session)
                 return CapturePane.scrollback(session)
 
-        LOG.info("[%s] wait_for_idle timeout/stopped, last indicator: [%s]", session, last_indicator)
+        LOG.info("[%s] wait_for_idle timeout/stopped", session)
         return None
 
     def extract_response(self, snapshot: str, current: str) -> str:
@@ -76,32 +73,15 @@ class AgentCapturer:
                 break
 
         start = snap_end + skip
-        new_lines = cur_lines[start:cur_end]
-        return "\n".join(new_lines).strip()
+        return "\n".join(cur_lines[start:cur_end]).strip()
 
 
 class ClaudeCodeCapturer(AgentCapturer):
-    """Capturer for Claude Code (claude CLI) sessions running in tmux.
+    """Capturer for Claude Code (claude CLI) sessions.
 
-    idle detection : last 20 non-blank lines as a block — terminal-width agnostic
-    content_end    : structural search for the empty anchor above sep2,
-                     so the chrome-only region is excluded without cutting
-                     into the response content
+    content_end: structural search for the empty anchor above sep2 to exclude
+                 the chrome region without cutting into response content.
     """
-
-    idle_seconds: float = 5.0
-
-    def indicator_line(self, pane_lines: list[str]) -> str | None:
-        """Last 20 non-blank lines joined, or None if fewer than 20 exist.
-
-        Using non-blank lines sees through the terminal-fill blank padding that
-        appears below the chrome when the pane is idle, while still being
-        sensitive to spinner/content changes during processing.
-        """
-        nonblank = [l for l in pane_lines if l.strip()]
-        if len(nonblank) < 20:
-            return None
-        return "\n".join(nonblank[-20:])
 
     def _anchor(self, lines: list[str]) -> int:
         """Index of the empty line above sep2 (stable structural anchor), or -1."""
@@ -117,7 +97,6 @@ class ClaudeCodeCapturer(AgentCapturer):
         return -1
 
     def content_end(self, lines: list[str]) -> int:
-        """Cut just above the last indicator line (anchor - 1)."""
         anchor = self._anchor(lines)
         if anchor >= 0:
             return max(0, anchor - 1)
@@ -125,38 +104,12 @@ class ClaudeCodeCapturer(AgentCapturer):
 
 
 class AntigravityCapturer(AgentCapturer):
-    """Capturer for Antigravity-cli (agy) sessions running in tmux.
+    """Capturer for Antigravity-cli (agy) sessions.
 
-    idle detection : last 20 non-blank lines as a block; returns None while the
-                     status bar shows 'esc to interrupt' (still processing)
-    content_end    : structural search for the upper separator above the input
-                     prompt, excluding the 4-line chrome region at the bottom
+    content_end: the upper separator line above the input prompt.
     """
 
-    idle_seconds: float = 5.0
-
-    def indicator_line(self, pane_lines: list[str]) -> str | None:
-        """Last 20 non-blank lines joined, or None if fewer than 20 or still processing.
-
-        The status bar (last pane line) shows 'esc to interrupt' while agy is
-        working and '← for agents' when idle — use this to gate idle detection.
-        """
-        nonblank = [l for l in pane_lines if l.strip()]
-        if len(nonblank) < 20:
-            return None
-        if pane_lines and "esc to interrupt" in pane_lines[-1]:
-            return None
-        return "\n".join(nonblank[-20:])
-
     def content_end(self, lines: list[str]) -> int:
-        """Return index of the upper separator above the input prompt.
-
-        agy bottom chrome (4 lines):
-          ─── upper separator  ← content_end points here
-          ❯   input prompt
-          ─── lower separator
-              status bar
-        """
         for i in range(len(lines) - 1, max(len(lines) - 8, -1), -1):
             if lines[i].startswith("─"):
                 upper = i - 2
@@ -167,27 +120,12 @@ class AntigravityCapturer(AgentCapturer):
 
 
 class CodexCapturer(AgentCapturer):
-    """Capturer for Codex (codex-cli) sessions running in tmux.
+    """Capturer for Codex (codex-cli) sessions.
 
-    idle detection : last 20 non-blank lines as a block; returns None while
-                     'esc to interrupt' appears in the last 12 lines
-    content_end    : the last input prompt line starting with '›'
+    content_end: the last input prompt line starting with '›'.
     """
 
-    idle_seconds: float = 5.0
-
-    def indicator_line(self, pane_lines: list[str]) -> str | None:
-        """Last 20 non-blank lines joined, or None if fewer than 20 or still processing."""
-        nonblank = [l for l in pane_lines if l.strip()]
-        if len(nonblank) < 20:
-            return None
-        for line in pane_lines[-12:]:
-            if "esc to interrupt" in line:
-                return None
-        return "\n".join(nonblank[-20:])
-
     def content_end(self, lines: list[str]) -> int:
-        """Return index of the last input prompt line starting with '›'."""
         start_idx = max(0, len(lines) - 15)
         for i in range(len(lines) - 1, start_idx - 1, -1):
             if lines[i].strip().startswith("›"):
@@ -211,5 +149,4 @@ def get_capturer(agent: str) -> AgentCapturer:
         return CodexCapturer()
     if "antigravity" in agent.lower() or "agy" in agent.lower():
         return AntigravityCapturer()
-    # Fallback: whole-pane stability, no chrome stripping
     return AgentCapturer()
