@@ -29,15 +29,17 @@ Never write anything outside them.\
 """
 
 _DELIMITER_RULE_B = """\
-DELIMITER RULE (mandatory): Every message you send must be wrapped with \
-BEGIN/END delimiters (replace N with the current turn number, starting at 1):
+REPORTING RULE (mandatory): Do all your thinking, research, and implementation \
+work freely. When your work is complete, write a concise report or summary \
+wrapped in BEGIN/END delimiters at the very end (replace N with the current \
+turn number, starting at 1):
 
     --- BEGIN output from {name_b} turn:N ---
-    your message here
+    your concise report or summary here
     --- END output from {name_b} turn:N ---
 
-{name_a} only receives content between the delimiters. \
-Never write anything outside them.\
+{name_a} only receives the content between the delimiters — \
+everything outside them is your working space.\
 """
 
 
