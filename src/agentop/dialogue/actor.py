@@ -15,9 +15,6 @@ LOG = logging.getLogger(__name__)
 # Sentinel returned by receive() when the agent signals dialogue completion
 DIALOGUE_COMPLETE = "<<DIALOGUE_COMPLETE>>"
 
-_BEGIN_RE = re.compile(r"---\s*BEGIN\s+(output|complete)\s+from\s+\w+\s+turn:\d+\s*---", re.IGNORECASE)
-_END_RE = re.compile(r"---\s*END\s+(output|complete)\s+from\s+\w+\s+turn:\d+\s*---", re.IGNORECASE)
-
 
 class Actor:
     def __init__(
@@ -34,6 +31,7 @@ class Actor:
         self.tool = tool
         self._capturer = capturer or Capturer()
         self._stop: threading.Event | None = None
+        self._turn = 0  # incremented each receive(); matches turn:N in delimiters
 
     def attach(self, stop_event: threading.Event) -> Actor:
         self._stop = stop_event
@@ -71,37 +69,36 @@ class Actor:
         content = self._capturer.wait_for_idle(self.session, self._stop)
         if content is None:
             return None
-        msg = self._parse_output(content)
+        self._turn += 1
+        msg = self._parse_output(content, self._turn)
         if msg:
             LOG.info("[%s]: %s", self.name, msg)
         return msg or None
 
-    def _parse_output(self, raw: str) -> str:
-        """Find the last BEGIN/END delimiter block in raw scrollback and return its content."""
+    def _parse_output(self, raw: str, turn: int) -> str:
+        """Find the exact BEGIN/END delimiter block for this turn and return its content."""
+        name = re.escape(self.name)
+        begin_re = re.compile(rf"---\s*BEGIN\s+(output|complete)\s+from\s+{name}\s+turn:{turn}\s*---", re.IGNORECASE)
+        end_re = re.compile(rf"---\s*END\s+(output|complete)\s+from\s+{name}\s+turn:{turn}\s*---", re.IGNORECASE)
+
         lines = raw.splitlines()
-
-        last_begin: tuple[int, str] | None = None
         for i, line in enumerate(lines):
-            m = _BEGIN_RE.search(line)
+            m = begin_re.search(line)
             if m:
-                last_begin = (i, m.group(1).lower())
+                kind = m.group(1).lower()
+                for j in range(i + 1, len(lines)):
+                    if end_re.search(lines[j]):
+                        content = "\n".join(lines[i + 1:j]).strip()
+                        if kind == "complete":
+                            LOG.info("[%s] turn:%d complete delimiters found", self.name, turn)
+                            return DIALOGUE_COMPLETE
+                        LOG.info("[%s] turn:%d output delimiters found", self.name, turn)
+                        return content
+                LOG.warning("[%s] turn:%d BEGIN found but no END — using partial content", self.name, turn)
+                return "\n".join(lines[i + 1:]).strip()
 
-        if last_begin is None:
-            LOG.warning("[%s] no BEGIN/END delimiters found — using full raw response", self.name)
-            return raw
-
-        i, kind = last_begin
-        for j in range(i + 1, len(lines)):
-            if _END_RE.search(lines[j]):
-                content = "\n".join(lines[i + 1:j]).strip()
-                if kind == "complete":
-                    LOG.info("[%s] complete delimiters found (lines %d-%d)", self.name, i, j)
-                    return DIALOGUE_COMPLETE
-                LOG.info("[%s] output delimiters found (lines %d-%d)", self.name, i, j)
-                return content
-
-        LOG.warning("[%s] BEGIN found on line %d but no END — using partial content", self.name, i)
-        return "\n".join(lines[i + 1:]).strip()
+        LOG.warning("[%s] turn:%d delimiters not found — using full raw response", self.name, turn)
+        return raw
 
     def to_dict(self) -> dict:
         return {"id": self.id, "session": self.session, "name": self.name, "tool": self.tool}
