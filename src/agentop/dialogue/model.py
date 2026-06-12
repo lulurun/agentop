@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -12,32 +13,20 @@ LOG = logging.getLogger(__name__)
 DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
 
 
+@dataclass
 class DialogueMeta:
     """Persisted metadata for a dialogue — written to meta.json in the dialogue folder."""
 
-    def __init__(
-        self,
-        id: str,
-        session_a: str,
-        session_b: str,
-        agent_a: str,
-        agent_b: str,
-        max_turns: int,
-        start_time: str,
-        status: str,
-        pid: int | None = None,
-        error: str | None = None,
-    ):
-        self.id = id
-        self.session_a = session_a
-        self.session_b = session_b
-        self.agent_a = agent_a
-        self.agent_b = agent_b
-        self.max_turns = max_turns
-        self.start_time = start_time
-        self.status = status
-        self.pid = pid
-        self.error = error
+    id: str
+    session_a: str
+    session_b: str
+    agent_a: str
+    agent_b: str
+    max_turns: int
+    start_time: str
+    status: str
+    pid: int | None = None
+    error: str | None = None
 
     def _dir(self) -> Path:
         return DIALOGUES_DIR / self.id
@@ -53,23 +42,18 @@ class DialogueMeta:
 
     def save(self) -> None:
         self._dir().mkdir(parents=True, exist_ok=True)
-        self._meta_path().write_text(
-            json.dumps(
-                {
-                    "id": self.id,
-                    "session_a": self.session_a,
-                    "session_b": self.session_b,
-                    "agent_a": self.agent_a,
-                    "agent_b": self.agent_b,
-                    "max_turns": self.max_turns,
-                    "start_time": self.start_time,
-                    "status": self.status,
-                    "pid": self.pid,
-                    "error": self.error,
-                },
-                indent=2,
-            )
-        )
+        self._meta_path().write_text(json.dumps({
+            "id": self.id,
+            "session_a": self.session_a,
+            "session_b": self.session_b,
+            "agent_a": self.agent_a,
+            "agent_b": self.agent_b,
+            "max_turns": self.max_turns,
+            "start_time": self.start_time,
+            "status": self.status,
+            "pid": self.pid,
+            "error": self.error,
+        }, indent=2))
 
     def update(self, fields: dict) -> None:
         for k, v in fields.items():
