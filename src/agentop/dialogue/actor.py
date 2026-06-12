@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 
-from agentop.dialogue.capturer import AgentCapturer, get_capturer, CodexCapturer
+from agentop.dialogue.capturer import Capturer
 from agentop.tmux import CapturePane, Session
 
 LOG = logging.getLogger(__name__)
@@ -26,14 +26,14 @@ class Actor:
         id: str,
         session: str,
         name: str = "",
-        capturer: AgentCapturer | None = None,
+        capturer: Capturer | None = None,
         tool: str = "claude",
     ):
         self.id = id  # "a" or "b"
         self.session = session
         self.name = name or id.upper()
         self.tool = tool
-        self._capturer = capturer or get_capturer(tool)
+        self._capturer = capturer or Capturer()
         self._stop: threading.Event | None = None
 
     def attach(self, stop_event: threading.Event) -> Actor:

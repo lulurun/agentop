@@ -23,7 +23,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agentop.dialogue.capturer import get_capturer
+from agentop.dialogue.capturer import Capturer
 from agentop.tmux import CapturePane
 
 
@@ -64,7 +64,7 @@ def main() -> None:
     args = parser.parse_args()
 
     session = args.session or _start_session(args.capturer, args.cwd)
-    capturer = get_capturer(args.capturer)
+    capturer = Capturer()
     stop = threading.Event()
 
     # --- snapshot before send ---

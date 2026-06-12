@@ -12,7 +12,7 @@ from pathlib import Path
 
 from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
-from agentop.dialogue.capturer import get_capturer
+from agentop.dialogue.capturer import Capturer
 from agentop.dialogue.model import Dialogue, DIALOGUES_DIR
 from agentop.tmux import Session
 
@@ -46,8 +46,8 @@ def start_dialogue(
     time.sleep(8)  # Give tmux sessions a moment to start up (codex needs time to boot MCP servers)
 
     from agentop.dialogue.orchestrator import DialogueOrchestrator
-    actor_a = Actor(id="a", session=result_a["name"], name=DialogueOrchestrator.NAME_A, capturer=get_capturer(agent_a), tool=agent_a)
-    actor_b = Actor(id="b", session=result_b["name"], name=DialogueOrchestrator.NAME_B, capturer=get_capturer(agent_b), tool=agent_b)
+    actor_a = Actor(id="a", session=result_a["name"], name=DialogueOrchestrator.NAME_A, capturer=Capturer(), tool=agent_a)
+    actor_b = Actor(id="b", session=result_b["name"], name=DialogueOrchestrator.NAME_B, capturer=Capturer(), tool=agent_b)
 
     d = Dialogue.create(
         topic=topic,
