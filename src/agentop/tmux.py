@@ -10,6 +10,34 @@ from agentop.agents import get_agent
 from agentop.process import get_ancestor_and_child_pids
 
 
+class CapturePane:
+    """Static helpers for capturing tmux pane content."""
+
+    @staticmethod
+    def screen(session: str) -> str:
+        """Return the text currently visible on screen (no scrollback)."""
+        try:
+            r = subprocess.run(
+                ["tmux", "capture-pane", "-t", session, "-p"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return r.stdout if r.returncode == 0 else ""
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            return ""
+
+    @staticmethod
+    def scrollback(session: str) -> str:
+        """Return the full scrollback history plus the current screen."""
+        try:
+            r = subprocess.run(
+                ["tmux", "capture-pane", "-t", session, "-p", "-S", "-"],
+                capture_output=True, text=True, timeout=5,
+            )
+            return r.stdout if r.returncode == 0 else ""
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            return ""
+
+
 def scan_tmux() -> list[dict]:
     """Return list of tmux pane dicts."""
     try:

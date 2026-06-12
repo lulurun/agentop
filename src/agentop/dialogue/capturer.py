@@ -3,27 +3,15 @@
 from __future__ import annotations
 
 import logging
-import subprocess
 import threading
 import time
+
+from agentop.tmux import CapturePane
 
 LOG = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 2.0
 _TIMEOUT = 600.0
-
-
-def _capture_pane(session: str) -> str:
-    try:
-        r = subprocess.run(
-            ["tmux", "capture-pane", "-t", session, "-p", "-S", "-"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        return r.stdout if r.returncode == 0 else ""
-    except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-        return ""
 
 
 class AgentCapturer:
@@ -40,7 +28,7 @@ class AgentCapturer:
         return len(lines)
 
     def wait_for_idle(self, session: str, stop_event: threading.Event) -> str | None:
-        """Poll until the indicator is stable and non-None; return pane content or None."""
+        """Poll screen until the indicator is stable; return full scrollback or None."""
         deadline = time.monotonic() + _TIMEOUT
         last_indicator: str | None = None
         last_change = time.monotonic()
@@ -51,8 +39,8 @@ class AgentCapturer:
             time.sleep(_POLL_INTERVAL)
             if stop_event.is_set():
                 return None
-            current = _capture_pane(session)
-            indicator = self.indicator_line(current.splitlines())
+            screen = CapturePane.screen(session)
+            indicator = self.indicator_line(screen.splitlines())
             if indicator is None:
                 # Pane not ready yet (e.g. fewer than required lines) — skip entirely
                 continue
@@ -62,7 +50,7 @@ class AgentCapturer:
                 LOG.info("[%s] indicator: [%s]", session, last_indicator)
             elif last_indicator.strip() and time.monotonic() - last_change >= self.idle_seconds:
                 LOG.info("[%s] idle detected, last indicator: [%s]", session, last_indicator)
-                return current
+                return CapturePane.scrollback(session)
 
         LOG.info("[%s] wait_for_idle timeout/stopped, last indicator: [%s]", session, last_indicator)
         return None
@@ -95,7 +83,7 @@ class AgentCapturer:
 class ClaudeCodeCapturer(AgentCapturer):
     """Capturer for Claude Code (claude CLI) sessions running in tmux.
 
-    idle detection : last 20 lines as a block — simple and robust
+    idle detection : last 20 non-blank lines as a block — terminal-width agnostic
     content_end    : structural search for the empty anchor above sep2,
                      so the chrome-only region is excluded without cutting
                      into the response content
@@ -178,10 +166,49 @@ class AntigravityCapturer(AgentCapturer):
         return max(0, len(lines) - 4)
 
 
+class CodexCapturer(AgentCapturer):
+    """Capturer for Codex (codex-cli) sessions running in tmux.
+
+    idle detection : last 20 non-blank lines as a block; returns None while
+                     'esc to interrupt' appears in the last 12 lines
+    content_end    : the last input prompt line starting with '›'
+    """
+
+    idle_seconds: float = 5.0
+
+    def indicator_line(self, pane_lines: list[str]) -> str | None:
+        """Last 20 non-blank lines joined, or None if fewer than 20 or still processing."""
+        nonblank = [l for l in pane_lines if l.strip()]
+        if len(nonblank) < 20:
+            return None
+        for line in pane_lines[-12:]:
+            if "esc to interrupt" in line:
+                return None
+        return "\n".join(nonblank[-20:])
+
+    def content_end(self, lines: list[str]) -> int:
+        """Return index of the last input prompt line starting with '›'."""
+        start_idx = max(0, len(lines) - 15)
+        for i in range(len(lines) - 1, start_idx - 1, -1):
+            if lines[i].strip().startswith("›"):
+                return i
+        return len(lines)
+
+    def extract_response(self, snapshot: str, current: str) -> str:
+        raw = super().extract_response(snapshot, current)
+        # Codex echoes the submitted prompt at the start of its output area — strip it
+        lines = raw.splitlines()
+        if lines and lines[0].strip().startswith("›"):
+            lines = lines[1:]
+        return "\n".join(lines).strip()
+
+
 def get_capturer(agent: str) -> AgentCapturer:
     """Return the appropriate capturer for the given agent name."""
     if "claude" in agent.lower():
         return ClaudeCodeCapturer()
+    if "codex" in agent.lower():
+        return CodexCapturer()
     if "antigravity" in agent.lower() or "agy" in agent.lower():
         return AntigravityCapturer()
     # Fallback: whole-pane stability, no chrome stripping
