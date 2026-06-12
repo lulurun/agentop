@@ -54,20 +54,23 @@ class Actor:
         begin_re = re.compile(rf"BEGIN.+turn:{turn}", re.IGNORECASE)
         end_re = re.compile(rf"END.+turn:{turn}", re.IGNORECASE)
 
-        lines = raw.splitlines()
-        for i, line in enumerate(lines):
-            if begin_re.search(line):
-                for j in range(i + 1, len(lines)):
-                    if end_re.search(lines[j]):
-                        content = "\n".join(lines[i + 1:j]).strip()
-                        if "complete" in line.lower():
-                            LOG.info("[%s] turn:%d complete", self.name, turn)
-                            return DIALOGUE_COMPLETE
-                        return content
-                LOG.warning("[%s] turn:%d BEGIN found but no END", self.name, turn)
-                return "\n".join(lines[i + 1:]).strip()
+        content = ""
+        begin_line = None
+        for line in raw.splitlines():
+            if begin_line is None:
+                if begin_re.search(line):
+                    begin_line = line
+            elif end_re.search(line):
+                if "complete" in begin_line.lower():
+                    return DIALOGUE_COMPLETE
+                return content.strip()
+            else:
+                content += line + "\n"
 
-        LOG.warning("[%s] turn:%d delimiters not found", self.name, turn)
+        if begin_line is None:
+            LOG.warning("[%s] turn:%d delimiters not found", self.name, turn)
+        else:
+            LOG.warning("[%s] turn:%d BEGIN found but no END", self.name, turn)
         return raw
 
     def to_dict(self) -> dict:
