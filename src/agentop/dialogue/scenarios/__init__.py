@@ -1,10 +1,10 @@
-"""Dialogue scenarios: load role prompts from TOML description files."""
+"""Dialogue scenarios: load role prompts and agent names from TOML files."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from agentop.dialogue.scenarios.reader import load
+from agentop.dialogue.scenarios.reader import Scenario, load
 
 _BUILTIN_DIR = Path(__file__).parent
 

@@ -73,9 +73,3 @@ class Actor:
             LOG.warning("[%s] turn:%d BEGIN found but no END", self.name, turn)
         return raw
 
-    def to_dict(self) -> dict:
-        return {"id": self.id, "session": self.session, "name": self.name, "tool": self.tool}
-
-    @classmethod
-    def from_dict(cls, d: dict) -> Actor:
-        return cls(id=d["id"], session=d["session"], name=d.get("name", ""), tool=d.get("tool", "claude"))

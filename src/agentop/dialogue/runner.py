@@ -22,16 +22,17 @@ def main() -> None:
         print("Usage: runner.py <dialogue_id>", file=sys.stderr)
         sys.exit(1)
 
-    from agentop.dialogue.model import Dialogue
+    from agentop.dialogue.model import DialogueMeta, Dialogue
     from agentop.dialogue.orchestrator import DialogueOrchestrator
 
-    d = Dialogue.load(sys.argv[1])
-    if not d:
+    meta = DialogueMeta.load(sys.argv[1])
+    if not meta:
         print(f"Dialogue {sys.argv[1]!r} not found", file=sys.stderr)
         sys.exit(1)
 
-    _setup_logging(d.log_path())
+    _setup_logging(meta.log_path())
 
+    d = Dialogue.from_meta(meta)
     orch = DialogueOrchestrator(d)
     orch.start()
     orch.join()

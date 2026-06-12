@@ -1,6 +1,9 @@
 # Scenario: Product Manager + Software Development Engineer
 # Placeholders available: {name_a}, {name_b}, {topic}, {progress_file}
 
+name_a = "Alex"
+name_b = "Bob"
+
 [role_a]
 prompt = """
 Topic: {topic}

@@ -255,30 +255,30 @@ def _dialogue_ops():
 def cmd_dialogue_start(args):
     cwd_a = os.path.expanduser(args.cwd_a)
     cwd_b = os.path.expanduser(args.cwd_b)
-    brief_path = os.path.expanduser(args.brief)
+    brief_path = os.path.abspath(os.path.expanduser(args.brief))
     if not os.path.isfile(brief_path):
         print(f"Error: brief file not found: {brief_path!r}", file=sys.stderr)
         sys.exit(1)
     with open(brief_path) as f:
-        topic = f.read().strip()
-    if not topic:
+        brief_content = f.read().strip()
+    if not brief_content:
         print(f"Error: brief file is empty: {brief_path!r}", file=sys.stderr)
         sys.exit(1)
-    first_line = next((l.strip().lstrip("#").strip() for l in topic.splitlines() if l.strip()), brief_path)
+    first_line = next((l.strip().lstrip("#").strip() for l in brief_content.splitlines() if l.strip()), brief_path)
     print(f"Starting dialogue: {first_line!r}")
     print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
     print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
     print(f"  Max turns: {args.max_turns}")
+
     scenario_file = ""
     if args.scenario:
-        scenario_path = os.path.expanduser(args.scenario)
+        scenario_path = os.path.abspath(os.path.expanduser(args.scenario))
         if not os.path.isfile(scenario_path):
             print(f"Error: scenario file not found: {scenario_path!r}", file=sys.stderr)
             sys.exit(1)
-        scenario_file = os.path.abspath(scenario_path)
+        scenario_file = scenario_path
 
     result = _dialogue_ops().start_dialogue(
-        topic=topic,
         agent_a=args.agent_a,
         agent_b=args.agent_b,
         cwd_a=cwd_a,
@@ -314,15 +314,13 @@ def cmd_dialogue_list(args):
     if not dialogues:
         print("No dialogues found.")
         return
-    id_w, status_w, sess_w = 10, 10, 24
-    print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}  TOPIC")
-    print("-" * 110)
+    id_w, status_w, agent_w, sess_w = 10, 10, 10, 24
+    print(f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}")
+    print("-" * 100)
     for d in dialogues:
-        first_line = next((l.strip().lstrip("#").strip() for l in d["topic"].splitlines() if l.strip()), "")
-        topic = first_line[:48] + ("…" if len(first_line) > 48 else "")
         sa = d["session_a"] + (" [open]" if d["session_a_alive"] else "")
         sb = d["session_b"] + (" [open]" if d["session_b_alive"] else "")
-        print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}  {topic}")
+        print(f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {d['agent_a']:<{agent_w}}  {d['agent_b']:<{agent_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}")
 
 
 def cmd_dialogue_stop(args):
