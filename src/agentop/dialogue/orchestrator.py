@@ -71,7 +71,7 @@ class DialogueOrchestrator(threading.Thread):
         d.actor_a.attach(self._stop)
         d.actor_b.attach(self._stop)
 
-        role_a, role_b = scenarios.load(d.scenario)
+        role_a, role_b = scenarios.load(d.scenario_file or scenarios.default_path())
         fmt = dict(name_a=na, name_b=nb, topic=d.topic, progress_file=d.progress_path())
 
         d.actor_a.send(

@@ -17,5 +17,8 @@ agentop = "cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["agentop", "agentop.agents", "agentop.dialogue"]
+packages = ["agentop", "agentop.agents", "agentop.dialogue", "agentop.dialogue.scenarios"]
 py-modules = ["cli"]
+
+[tool.setuptools.package-data]
+"agentop.dialogue.scenarios" = ["*.toml"]

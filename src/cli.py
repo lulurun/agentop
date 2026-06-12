@@ -269,6 +269,14 @@ def cmd_dialogue_start(args):
     print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
     print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
     print(f"  Max turns: {args.max_turns}")
+    scenario_file = ""
+    if args.scenario:
+        scenario_path = os.path.expanduser(args.scenario)
+        if not os.path.isfile(scenario_path):
+            print(f"Error: scenario file not found: {scenario_path!r}", file=sys.stderr)
+            sys.exit(1)
+        scenario_file = os.path.abspath(scenario_path)
+
     result = _dialogue_ops().start_dialogue(
         topic=topic,
         agent_a=args.agent_a,
@@ -277,7 +285,7 @@ def cmd_dialogue_start(args):
         cwd_b=cwd_b,
         max_turns=args.max_turns,
         brief_file=brief_path,
-        scenario=args.scenario,
+        scenario_file=scenario_file,
     )
     if not result.get("ok"):
         print(f"Error: {result['error']}", file=sys.stderr)
@@ -422,8 +430,8 @@ def main():
                           help="Working directory for agent B (default: home)")
     p_dstart.add_argument("--max-turns", dest="max_turns", type=int, default=20,
                           help="Maximum relay turns before stopping (default: 20)")
-    p_dstart.add_argument("--scenario", default="default",
-                          help="Scenario name (default: default)")
+    p_dstart.add_argument("--scenario", default="", metavar="FILE",
+                          help="Path to a scenario TOML file (default: built-in pm-sde)")
 
     dsub.add_parser("list", help="List all dialogues and their status")
 
