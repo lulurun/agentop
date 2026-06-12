@@ -51,28 +51,23 @@ class Actor:
         return msg or None
 
     def _parse_output(self, raw: str, turn: int) -> str:
-        """Find the exact BEGIN/END delimiter block for this turn and return its content."""
-        name = re.escape(self.name)
-        begin_re = re.compile(rf"---\s*BEGIN\s+(output|complete)\s+from\s+{name}\s+turn:{turn}\s*---", re.IGNORECASE)
-        end_re = re.compile(rf"---\s*END\s+(output|complete)\s+from\s+{name}\s+turn:{turn}\s*---", re.IGNORECASE)
+        begin_re = re.compile(rf"BEGIN.+turn:{turn}", re.IGNORECASE)
+        end_re = re.compile(rf"END.+turn:{turn}", re.IGNORECASE)
 
         lines = raw.splitlines()
         for i, line in enumerate(lines):
-            m = begin_re.search(line)
-            if m:
-                kind = m.group(1).lower()
+            if begin_re.search(line):
                 for j in range(i + 1, len(lines)):
                     if end_re.search(lines[j]):
                         content = "\n".join(lines[i + 1:j]).strip()
-                        if kind == "complete":
-                            LOG.info("[%s] turn:%d complete delimiters found", self.name, turn)
+                        if "complete" in line.lower():
+                            LOG.info("[%s] turn:%d complete", self.name, turn)
                             return DIALOGUE_COMPLETE
-                        LOG.info("[%s] turn:%d output delimiters found", self.name, turn)
                         return content
-                LOG.warning("[%s] turn:%d BEGIN found but no END — using partial content", self.name, turn)
+                LOG.warning("[%s] turn:%d BEGIN found but no END", self.name, turn)
                 return "\n".join(lines[i + 1:]).strip()
 
-        LOG.warning("[%s] turn:%d delimiters not found — using full raw response", self.name, turn)
+        LOG.warning("[%s] turn:%d delimiters not found", self.name, turn)
         return raw
 
     def to_dict(self) -> dict:
