@@ -4,10 +4,6 @@ from __future__ import annotations
 
 import subprocess
 import time
-from typing import Optional
-
-from agentop.process import get_ancestor_and_child_pids
-
 
 class CapturePane:
     """Static helpers for capturing tmux pane content."""
@@ -145,21 +141,6 @@ def scan_tmux() -> list[dict]:
         return []
 
 
-def map_process_to_tmux(pid: int, tmux_panes: list[dict]) -> Optional[dict]:
-    """Find the tmux pane that contains a process by ancestry matching."""
-    if not tmux_panes:
-        return None
-    related_pids = get_ancestor_and_child_pids(pid)
-    for pane in tmux_panes:
-        if pane["pane_pid"] and pane["pane_pid"] in related_pids:
-            return {
-                "session": pane["session_name"],
-                "window": pane["window_name"],
-                "pane": pane["pane_index"],
-            }
-    return None
-
-
 def send_to_session(tmux_session: str, text: str) -> dict:
     """Send text followed by Enter to the given tmux session."""
     Session.send_keys(tmux_session, text, "Enter")
@@ -180,12 +161,3 @@ def stop_session(cwd: str, tmux_name: str) -> dict:
         tmux_killed = True
 
     return {"sent_exit": sent_exit, "tmux_killed": tmux_killed}
-
-
-def start_session_with_tool(tool: str, cwd: str, short_name: str = "") -> dict:
-    """Delegate to the agent's start_session() method."""
-    from agentop.agents import get_agent
-    agent = get_agent(tool)
-    if not agent:
-        return {"ok": False, "error": f"Unknown tool: {tool}"}
-    return agent.start_session(cwd, short_name)

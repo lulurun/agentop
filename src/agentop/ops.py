@@ -24,7 +24,11 @@ def start(tool: str, cwd: str, short_name: str = "") -> dict:
     Returns {"ok": True, "name": …, "pid": …}
          or {"ok": False, "error": …}.
     """
-    result = scanner.start_session_with_tool(tool, cwd, short_name)
+    from agentop.agents import get_agent
+    agent = get_agent(tool)
+    if not agent:
+        return {"ok": False, "error": f"Unknown tool: {tool}"}
+    result = agent.start_session(cwd, short_name)
     if result.get("ok"):
         registry.upsert_session(result["name"], {"managed": True})
     return result

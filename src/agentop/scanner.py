@@ -8,18 +8,33 @@ from __future__ import annotations
 from agentop.agents import AGENTS, get_agent
 from agentop.files import get_recent_project_files, scan_agent_dirs
 from agentop.git import get_git_info
-from agentop.process import get_process_tree, scan_processes
-from agentop.tmux import map_process_to_tmux, scan_tmux, send_to_session, start_session_with_tool, stop_session
+from agentop.process import get_ancestor_and_child_pids, get_process_tree, scan_processes
+from agentop.tmux import scan_tmux, send_to_session, stop_session
 
 __all__ = [
     "build_sessions",
     "get_process_tree",
     "get_recent_project_files",
+    "map_process_to_tmux",
     "scan_agent_dirs",
     "send_to_session",
-    "start_session_with_tool",
     "stop_session",
 ]
+
+
+def map_process_to_tmux(pid: int, tmux_panes: list[dict]) -> dict | None:
+    """Find the tmux pane that contains a process by ancestry matching."""
+    if not tmux_panes:
+        return None
+    related_pids = get_ancestor_and_child_pids(pid)
+    for pane in tmux_panes:
+        if pane["pane_pid"] and pane["pane_pid"] in related_pids:
+            return {
+                "session": pane["session_name"],
+                "window": pane["window_name"],
+                "pane": pane["pane_index"],
+            }
+    return None
 
 
 def build_sessions(managed_names: set | None = None) -> list[dict]:
