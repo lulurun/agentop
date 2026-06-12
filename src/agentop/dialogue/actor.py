@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import re
-import subprocess
 import threading
 import time
 
@@ -45,55 +44,28 @@ class Actor:
         start_time = time.monotonic()
         Session.paste_text(self.session, text)
 
-        if self.tool == "codex":
-            # Wait a bit for the first chunk to paste
-            time.sleep(2.0)
-
-            # Send a "kick" Escape key to ensure the pty doesn't get stuck
-            LOG.info("[%s] sending kick Escape for Codex", self.name)
-            Session.send_keys(self.session, "Escape")
-
-            # Now wait for screen stability (meaning paste has finished)
-            last_content = CapturePane.screen(self.session)
-            stable_since = time.monotonic()
-            while time.monotonic() - stable_since < 1.0:
-                time.sleep(0.1)
-                cur = CapturePane.screen(self.session)
-                if cur != last_content:
-                    last_content = cur
-                    stable_since = time.monotonic()
-            LOG.info("[%s] screen stable. total paste wait: %.3f s", self.name, time.monotonic() - start_time)
-
-            # Send Escape and Enter to submit the prompt
-            LOG.info("[%s] sending Escape then Enter for Codex submission", self.name)
-            Session.send_keys(self.session, "Escape")
-            time.sleep(0.5)
-            Session.send_keys(self.session, "Enter")
+        # Wait until the terminal screen starts changing (pasting begins)
+        original_content = CapturePane.screen(self.session)
+        paste_start_time = time.monotonic()
+        while time.monotonic() - paste_start_time < 2.0:
+            time.sleep(0.05)
+            if CapturePane.screen(self.session) != original_content:
+                LOG.info("[%s] paste detected after %.3f s", self.name, time.monotonic() - paste_start_time)
+                break
         else:
-            # Wait until the terminal screen starts changing (pasting begins)
-            original_content = CapturePane.screen(self.session)
-            paste_start_time = time.monotonic()
-            while time.monotonic() - paste_start_time < 2.0:
-                time.sleep(0.05)
-                if CapturePane.screen(self.session) != original_content:
-                    LOG.info("[%s] paste detected after %.3f s", self.name, time.monotonic() - paste_start_time)
-                    break
-            else:
-                LOG.info("[%s] paste start timeout reached", self.name)
+            LOG.info("[%s] paste start timeout reached", self.name)
 
-            # Wait until the terminal screen stops changing (pasting finished)
-            last_content = CapturePane.screen(self.session)
-            stable_since = time.monotonic()
-            while time.monotonic() - stable_since < 0.5:
-                time.sleep(0.1)
-                cur = CapturePane.screen(self.session)
-                if cur != last_content:
-                    last_content = cur
-                    stable_since = time.monotonic()
-            LOG.info("[%s] screen stable. total paste wait: %.3f s", self.name, time.monotonic() - start_time)
-
-            LOG.info("[%s] sending Enter", self.name)
-            Session.send_keys(self.session, "Enter")
+        # Wait until the terminal screen stops changing (pasting finished)
+        last_content = CapturePane.screen(self.session)
+        stable_since = time.monotonic()
+        while time.monotonic() - stable_since < 0.5:
+            time.sleep(0.1)
+            cur = CapturePane.screen(self.session)
+            if cur != last_content:
+                last_content = cur
+                stable_since = time.monotonic()
+        LOG.info("[%s] screen stable, sending Enter. total paste wait: %.3f s", self.name, time.monotonic() - start_time)
+        Session.send_keys(self.session, "Enter")
 
     def receive(self) -> str | None:
         snapshot = CapturePane.scrollback(self.session)
