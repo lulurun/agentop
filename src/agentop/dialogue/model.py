@@ -22,6 +22,7 @@ class Dialogue:
         actor_b: Actor,
         status: str,
         max_turns: int,
+        scenario: str = "default",
         error: str | None = None,
         pid: int | None = None,
     ):
@@ -31,6 +32,7 @@ class Dialogue:
         self.actor_b = actor_b
         self.status = status
         self.max_turns = max_turns
+        self.scenario = scenario
         self.error = error
         self.pid = pid
 
@@ -57,6 +59,7 @@ class Dialogue:
                     "actor_b": self.actor_b.to_dict(),
                     "status": self.status,
                     "max_turns": self.max_turns,
+                    "scenario": self.scenario,
                     "error": self.error,
                     "pid": self.pid,
                 },
@@ -78,6 +81,7 @@ class Dialogue:
         actor_a: Actor,
         actor_b: Actor,
         max_turns: int,
+        scenario: str = "default",
     ) -> Dialogue:
         d = cls(
             id=dialogue_id,
@@ -85,6 +89,7 @@ class Dialogue:
             actor_a=actor_a,
             actor_b=actor_b,
             max_turns=max_turns,
+            scenario=scenario,
             status="starting",
         )
         d.save()
@@ -103,6 +108,7 @@ class Dialogue:
                 actor_a=Actor.from_dict(data["actor_a"]),
                 actor_b=Actor.from_dict(data["actor_b"]),
                 max_turns=data["max_turns"],
+                scenario=data.get("scenario", "default"),
                 status=data["status"],
                 error=data.get("error"),
                 pid=data.get("pid"),

@@ -277,6 +277,7 @@ def cmd_dialogue_start(args):
         cwd_b=cwd_b,
         max_turns=args.max_turns,
         brief_file=brief_path,
+        scenario=args.scenario,
     )
     if not result.get("ok"):
         print(f"Error: {result['error']}", file=sys.stderr)
@@ -421,6 +422,8 @@ def main():
                           help="Working directory for agent B (default: home)")
     p_dstart.add_argument("--max-turns", dest="max_turns", type=int, default=20,
                           help="Maximum relay turns before stopping (default: 20)")
+    p_dstart.add_argument("--scenario", default="default",
+                          help="Scenario name (default: default)")
 
     dsub.add_parser("list", help="List all dialogues and their status")
 

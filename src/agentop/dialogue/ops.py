@@ -25,6 +25,7 @@ def start_dialogue(
     cwd_b: str,
     max_turns: int = 20,
     brief_file: str | None = None,
+    scenario: str = "default",
 ) -> dict:
     dialogue_id = uuid.uuid4().hex[:8]
 
@@ -54,6 +55,7 @@ def start_dialogue(
         actor_a=actor_a,
         actor_b=actor_b,
         max_turns=max_turns,
+        scenario=scenario,
         dialogue_id=dialogue_id,
     )
 

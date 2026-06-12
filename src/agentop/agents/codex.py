@@ -19,7 +19,7 @@ class CodexAgent(BaseAgent):
 
     @property
     def launch_cmd(self) -> str:
-        return "codex"
+        return "codex --dangerously-bypass-hook-trust"
 
     def _find_thread(self, pid: int, cwd: str) -> Optional[dict]:
         """Query state_5.sqlite for the thread matching this process by cwd + start time.
