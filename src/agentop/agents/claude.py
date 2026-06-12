@@ -68,26 +68,14 @@ class ClaudeAgent(BaseAgent):
 
     def post_start_hook(self, tmux_session: str) -> None:
         """Accept Claude's trust / safety-check prompt automatically."""
+        from agentop.tmux import CapturePane, Session
         for _ in range(40):
             time.sleep(0.25)
-            try:
-                r = subprocess.run(
-                    ["tmux", "capture-pane", "-t", tmux_session, "-p"],
-                    capture_output=True,
-                    text=True,
-                    timeout=3,
-                )
-                content = r.stdout.lower()
-                if "trust" in content or "safety check" in content:
-                    time.sleep(0.1)
-                    subprocess.run(
-                        ["tmux", "send-keys", "-t", tmux_session, "Enter"],
-                        capture_output=True,
-                        timeout=3,
-                    )
-                    return
-            except (subprocess.TimeoutExpired, subprocess.SubprocessError):
-                continue
+            content = CapturePane.screen(tmux_session).lower()
+            if "trust" in content or "safety check" in content:
+                time.sleep(0.1)
+                Session.send_keys(tmux_session, "Enter")
+                return
 
     def _get_jsonl_path(self, pid: int, cwd: str) -> Optional[Path]:
         """Resolve the JSONL conversation file for a Claude session, or None."""

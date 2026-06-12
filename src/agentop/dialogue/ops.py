@@ -14,6 +14,7 @@ from agentop import ops as agent_ops
 from agentop.dialogue.actor import Actor
 from agentop.dialogue.capturer import get_capturer
 from agentop.dialogue.model import Dialogue, DIALOGUES_DIR
+from agentop.tmux import Session
 
 
 def start_dialogue(
@@ -42,11 +43,11 @@ def start_dialogue(
     if not result_b.get("ok"):
         return {"ok": False, "error": f"Failed to start agent B ({agent_b}): {result_b.get('error')}"}
 
-    time.sleep(3)  # Give tmux sessions a moment to start up
+    time.sleep(8)  # Give tmux sessions a moment to start up (codex needs time to boot MCP servers)
 
     from agentop.dialogue.orchestrator import DialogueOrchestrator
-    actor_a = Actor(id="a", session=result_a["name"], name=DialogueOrchestrator.NAME_A, capturer=get_capturer(agent_a))
-    actor_b = Actor(id="b", session=result_b["name"], name=DialogueOrchestrator.NAME_B, capturer=get_capturer(agent_b))
+    actor_a = Actor(id="a", session=result_a["name"], name=DialogueOrchestrator.NAME_A, capturer=get_capturer(agent_a), tool=agent_a)
+    actor_b = Actor(id="b", session=result_b["name"], name=DialogueOrchestrator.NAME_B, capturer=get_capturer(agent_b), tool=agent_b)
 
     d = Dialogue.create(
         topic=topic,
@@ -77,11 +78,7 @@ def start_dialogue(
 
 
 def _session_alive(name: str) -> bool:
-    try:
-        r = subprocess.run(["tmux", "has-session", "-t", name], capture_output=True, timeout=3)
-        return r.returncode == 0
-    except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-        return False
+    return Session.has(name)
 
 
 def list_dialogues() -> list[dict]:
@@ -115,12 +112,8 @@ def stop_dialogue(dialogue_id: str, close: bool = False) -> dict:
     d.update({"status": "stopped", "pid": None})
     if close:
         for session in (d.actor_a.session, d.actor_b.session):
-            try:
-                r = subprocess.run(["tmux", "has-session", "-t", session], capture_output=True, timeout=3)
-                if r.returncode == 0:
-                    subprocess.run(["tmux", "send-keys", "-t", session, "/exit", "Enter"], capture_output=True, timeout=5)
-                    time.sleep(3)
-                    subprocess.run(["tmux", "kill-session", "-t", session], capture_output=True, timeout=5)
-            except (subprocess.SubprocessError, subprocess.TimeoutExpired):
-                pass
+            if Session.has(session):
+                Session.send_keys(session, "/exit", "Enter")
+                time.sleep(3)
+                Session.kill(session)
     return {"ok": True}

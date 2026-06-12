@@ -47,41 +47,20 @@ class BaseAgent:
 
     def _run_in_tmux(self, cmd: str, cwd: str, short_name: str = "") -> dict:
         """Create a tmux session, run cmd, wait for the agent PID, rename the session."""
+        from agentop.tmux import Session
+
         rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         temp_name = f"agentop_tmp_{rand_id}"
 
-        try:
-            r = subprocess.run(
-                ["tmux", "new-session", "-d", "-s", temp_name, "-c", cwd],
-                capture_output=True,
-                timeout=5,
-            )
-            if r.returncode != 0:
-                return {"ok": False, "error": r.stderr.decode().strip() or "tmux failed"}
-        except FileNotFoundError:
-            return {"ok": False, "error": "tmux is not installed"}
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "error": "tmux timed out"}
+        if not Session.new(temp_name, cwd):
+            return {"ok": False, "error": "tmux new-session failed"}
 
-        subprocess.run(
-            ["tmux", "send-keys", "-t", temp_name, cmd, "Enter"],
-            capture_output=True,
-            timeout=5,
-        )
+        Session.send_keys(temp_name, cmd, "Enter")
 
         pane_pid: Optional[int] = None
-        try:
-            r = subprocess.run(
-                ["tmux", "list-panes", "-t", temp_name, "-F", "#{pane_pid}"],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
-            pid_str = r.stdout.strip()
-            if pid_str.isdigit():
-                pane_pid = int(pid_str)
-        except subprocess.TimeoutExpired:
-            pass
+        lines = Session.list_panes(temp_name, "#{pane_pid}")
+        if lines and lines[0].isdigit():
+            pane_pid = int(lines[0])
 
         tool_pid: Optional[int] = None
         if pane_pid:
@@ -106,8 +85,7 @@ class BaseAgent:
             try:
                 subprocess.run(
                     ["tmux", "rename-session", "-t", temp_name, final_name],
-                    capture_output=True,
-                    timeout=3,
+                    capture_output=True, timeout=3,
                 )
             except subprocess.TimeoutExpired:
                 final_name = temp_name

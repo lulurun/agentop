@@ -9,7 +9,7 @@ import threading
 import time
 
 from agentop.dialogue.capturer import AgentCapturer, get_capturer, CodexCapturer
-from agentop.tmux import CapturePane
+from agentop.tmux import CapturePane, Session
 
 LOG = logging.getLogger(__name__)
 
@@ -43,17 +43,16 @@ class Actor:
     def send(self, text: str) -> None:
         LOG.info("[%s] send start", self.name)
         start_time = time.monotonic()
-        subprocess.run(["tmux", "load-buffer", "-"], input=text.encode(), capture_output=True, timeout=5)
-        subprocess.run(["tmux", "paste-buffer", "-t", self.session], capture_output=True, timeout=5)
-        
+        Session.paste_text(self.session, text)
+
         if self.tool == "codex":
             # Wait a bit for the first chunk to paste
             time.sleep(2.0)
-            
+
             # Send a "kick" Escape key to ensure the pty doesn't get stuck
             LOG.info("[%s] sending kick Escape for Codex", self.name)
-            subprocess.run(["tmux", "send-keys", "-t", self.session, "Escape"], capture_output=True, timeout=5)
-            
+            Session.send_keys(self.session, "Escape")
+
             # Now wait for screen stability (meaning paste has finished)
             last_content = CapturePane.screen(self.session)
             stable_since = time.monotonic()
@@ -64,13 +63,12 @@ class Actor:
                     last_content = cur
                     stable_since = time.monotonic()
             LOG.info("[%s] screen stable. total paste wait: %.3f s", self.name, time.monotonic() - start_time)
-            
+
             # Send Escape and Enter to submit the prompt
-            LOG.info("[%s] sending Escape for Codex submission", self.name)
-            subprocess.run(["tmux", "send-keys", "-t", self.session, "Escape"], capture_output=True, timeout=5)
+            LOG.info("[%s] sending Escape then Enter for Codex submission", self.name)
+            Session.send_keys(self.session, "Escape")
             time.sleep(0.5)
-            LOG.info("[%s] sending Enter for Codex submission", self.name)
-            subprocess.run(["tmux", "send-keys", "-t", self.session, "Enter"], capture_output=True, timeout=5)
+            Session.send_keys(self.session, "Enter")
         else:
             # Wait until the terminal screen starts changing (pasting begins)
             original_content = CapturePane.screen(self.session)
@@ -93,9 +91,9 @@ class Actor:
                     last_content = cur
                     stable_since = time.monotonic()
             LOG.info("[%s] screen stable. total paste wait: %.3f s", self.name, time.monotonic() - start_time)
-            
+
             LOG.info("[%s] sending Enter", self.name)
-            subprocess.run(["tmux", "send-keys", "-t", self.session, "Enter"], capture_output=True, timeout=5)
+            Session.send_keys(self.session, "Enter")
 
     def receive(self) -> str | None:
         snapshot = CapturePane.scrollback(self.session)
