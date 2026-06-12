@@ -68,38 +68,40 @@ class Actor:
         Session.send_keys(self.session, "Enter")
 
     def receive(self) -> str | None:
-        snapshot = CapturePane.scrollback(self.session)
         content = self._capturer.wait_for_idle(self.session, self._stop)
         if content is None:
             return None
-        raw = self._capturer.extract_response(snapshot, content)
-        if not raw:
-            return None
-        msg = self._parse_output(raw)
+        msg = self._parse_output(content)
         if msg:
             LOG.info("[%s]: %s", self.name, msg)
         return msg or None
 
     def _parse_output(self, raw: str) -> str:
-        """Extract content between BEGIN/END delimiters; return DIALOGUE_COMPLETE or content."""
+        """Find the last BEGIN/END delimiter block in raw scrollback and return its content."""
         lines = raw.splitlines()
+
+        last_begin: tuple[int, str] | None = None
         for i, line in enumerate(lines):
             m = _BEGIN_RE.search(line)
             if m:
-                kind = m.group(1).lower()
-                for j in range(i + 1, len(lines)):
-                    if _END_RE.search(lines[j]):
-                        content = "\n".join(lines[i + 1:j]).strip()
-                        if kind == "complete":
-                            LOG.info("[%s] complete delimiters found (lines %d-%d)", self.name, i, j)
-                            return DIALOGUE_COMPLETE
-                        LOG.info("[%s] output delimiters found (lines %d-%d)", self.name, i, j)
-                        return content
-                # BEGIN found but no END yet — return everything after BEGIN
-                LOG.warning("[%s] BEGIN found on line %d but no END — using partial content", self.name, i)
-                return "\n".join(lines[i + 1:]).strip()
-        LOG.warning("[%s] no BEGIN/END delimiters found — using full raw response", self.name)
-        return raw
+                last_begin = (i, m.group(1).lower())
+
+        if last_begin is None:
+            LOG.warning("[%s] no BEGIN/END delimiters found — using full raw response", self.name)
+            return raw
+
+        i, kind = last_begin
+        for j in range(i + 1, len(lines)):
+            if _END_RE.search(lines[j]):
+                content = "\n".join(lines[i + 1:j]).strip()
+                if kind == "complete":
+                    LOG.info("[%s] complete delimiters found (lines %d-%d)", self.name, i, j)
+                    return DIALOGUE_COMPLETE
+                LOG.info("[%s] output delimiters found (lines %d-%d)", self.name, i, j)
+                return content
+
+        LOG.warning("[%s] BEGIN found on line %d but no END — using partial content", self.name, i)
+        return "\n".join(lines[i + 1:]).strip()
 
     def to_dict(self) -> dict:
         return {"id": self.id, "session": self.session, "name": self.name, "tool": self.tool}
