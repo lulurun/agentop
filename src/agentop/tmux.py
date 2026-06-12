@@ -122,3 +122,27 @@ class Session:
             )
         except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
             pass
+
+    @staticmethod
+    def paste_text_bracketed(name: str, text: str) -> None:
+        """Paste text wrapped in bracketed-paste escape sequences.
+
+        Bracketed paste (ESC[200~ ... ESC[201~) prevents the terminal from
+        interpreting embedded newlines as Enter key presses, so the entire
+        multi-line block is delivered as one atomic input.
+        """
+        bracketed = "\x1b[200~" + text + "\x1b[201~"
+        try:
+            subprocess.run(
+                ["tmux", "load-buffer", "-"],
+                input=bracketed.encode(),
+                capture_output=True,
+                timeout=5,
+            )
+            subprocess.run(
+                ["tmux", "paste-buffer", "-t", name],
+                capture_output=True,
+                timeout=5,
+            )
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            pass

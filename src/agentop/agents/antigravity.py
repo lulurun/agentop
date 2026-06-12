@@ -11,6 +11,10 @@ import psutil
 from agentop.agents.base import BaseAgent
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
+
+# agy streams with post-completion screen updates (token banner, input prompt);
+# 5 s base idle threshold fires too early — use 15 s.
+_AGY_IDLE_SECONDS = 15.0
 _LOG_NAME_RE = re.compile(r"cli-(\d{8})_(\d{6})\.log")
 _USER_INPUT_RE = re.compile(r'HandleUserInput called with text: "(.+)"')
 _START_TOLERANCE_SEC = 15
@@ -18,6 +22,28 @@ _START_TOLERANCE_SEC = 15
 
 class AntigravityAgent(BaseAgent):
     name = "antigravity"
+
+    def make_actor(self, id: str, session: str, name: str):
+        # Lazy imports to avoid circular dependency through agentop.dialogue.__init__
+        from agentop.dialogue.actor import Actor
+        from agentop.dialogue.capturer import Capturer
+        from agentop.tmux import Session
+
+        class AntigravityCapturer(Capturer):
+            idle_seconds: float = _AGY_IDLE_SECONDS
+
+        class AntigravityActor(Actor):
+            """agy treats bare newlines as Enter, so multi-line prompts need bracketed paste."""
+
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self._capturer = AntigravityCapturer()
+
+            def send(self, text: str) -> None:
+                Session.paste_text_bracketed(self.session, text)
+                Session.send_keys(self.session, "Enter")
+
+        return AntigravityActor(id=id, session=session, name=name)
 
     def matches(self, proc_name: str, cmdline: str) -> bool:
         name_lower = proc_name.lower()

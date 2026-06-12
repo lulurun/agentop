@@ -11,7 +11,7 @@ from agentop.tmux import CapturePane
 LOG = logging.getLogger(__name__)
 
 _POLL_INTERVAL = 2.0
-_TIMEOUT = 600.0
+_TIMEOUT = 1800.0
 
 
 class Capturer:

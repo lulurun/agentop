@@ -64,8 +64,16 @@ def main() -> None:
     args = parser.parse_args()
 
     session = args.session or _start_session(args.capturer, args.cwd)
-    capturer = Capturer()
     stop = threading.Event()
+
+    from agentop.agents import get_agent
+    from agentop.dialogue.actor import Actor
+    agent = get_agent(args.capturer)
+    if agent:
+        actor = agent.make_actor(id="test", session=session, name="Tester")
+    else:
+        actor = Actor(id="test", session=session, name="Tester")
+    capturer = actor._capturer
 
     # --- snapshot before send ---
     snapshot_raw = CapturePane.scrollback(session)
@@ -74,8 +82,6 @@ def main() -> None:
 
     # --- send prompt ---
     print(f"\n=== SENDING PROMPT ===\n  {args.prompt!r}")
-    from agentop.dialogue.actor import Actor
-    actor = Actor(id="test", session=session, capturer=capturer)
     actor.attach(stop)
     actor.send(args.prompt)
 

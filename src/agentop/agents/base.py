@@ -124,6 +124,11 @@ class BaseAgent:
     def get_extra_meta(self, pid: int, cwd: str) -> dict:
         return {}
 
+    def make_actor(self, id: str, session: str, name: str) -> "Actor":
+        """Return the Actor subclass appropriate for this agent type."""
+        from agentop.dialogue.actor import Actor
+        return Actor(id=id, session=session, name=name)
+
     def get_session_meta(self, pid: int, cwd: str) -> dict:
         meta = self.get_extra_meta(pid, cwd)
         title = self.get_ai_title(pid, cwd)
