@@ -43,24 +43,30 @@ class Actor:
         return msg or None
 
     def _parse_output(self, raw: str, turn: int) -> str:
-        begin_re = re.compile(rf"BEGIN.+turn:{turn}", re.IGNORECASE)
-        end_re = re.compile(rf"END.+turn:{turn}", re.IGNORECASE)
+        name = re.escape(self.name)
+        begin_re = re.compile(rf"^--- BEGIN .+ from {name} turn:{turn} ---$", re.IGNORECASE)
+        end_re = re.compile(rf"^--- END .+ from {name} turn:{turn} ---$", re.IGNORECASE)
 
-        content = ""
+        in_block = False
+        buffer = []
         begin_line = None
-        for line in raw.splitlines():
-            if begin_line is None:
-                if begin_re.search(line):
-                    begin_line = line
-            elif end_re.search(line):
-                if "complete" in begin_line.lower():
-                    return DIALOGUE_COMPLETE
-                return content.strip()
+        for line in reversed(raw.splitlines()):
+            stripped = line.strip()
+            if not in_block:
+                if end_re.match(stripped):
+                    in_block = True
+            elif begin_re.match(stripped):
+                begin_line = stripped
+                break
             else:
-                content += line + "\n"
+                buffer.append(line)
 
         if begin_line is None:
             LOG.warning("[%s] turn:%d delimiters not found", self.name, turn)
-        else:
-            LOG.warning("[%s] turn:%d BEGIN found but no END", self.name, turn)
-        return raw
+            return raw
+
+        content = "\n".join(reversed(buffer)).strip()
+        if "complete" in begin_line.lower():
+            LOG.info("[%s] turn:%d complete", self.name, turn)
+            return DIALOGUE_COMPLETE
+        return content
