@@ -5,11 +5,14 @@ Public API is re-exported here so existing callers (api.py, ops.py) need no chan
 
 from __future__ import annotations
 
+import subprocess
+import time
+
 from agentop.agents import AGENTS, get_agent
 from agentop.files import get_recent_project_files, scan_agent_dirs
 from agentop.git import get_git_info
 from agentop.process import get_ancestor_and_child_pids, get_process_tree, scan_processes
-from agentop.tmux import scan_tmux, send_to_session, stop_session
+from agentop.tmux import Session
 
 __all__ = [
     "build_sessions",
@@ -20,6 +23,58 @@ __all__ = [
     "send_to_session",
     "stop_session",
 ]
+
+
+def scan_tmux() -> list[dict]:
+    """Return list of tmux pane dicts."""
+    try:
+        result = subprocess.run(
+            [
+                "tmux", "list-panes", "-a", "-F",
+                "#{session_name}|#{window_name}|#{pane_index}|#{pane_pid}|#{pane_current_path}|#{pane_current_command}",
+            ],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode != 0:
+            return []
+        panes = []
+        for line in result.stdout.strip().splitlines():
+            parts = line.split("|")
+            if len(parts) == 6:
+                pane_pid = int(parts[3]) if parts[3].isdigit() else None
+                panes.append({
+                    "session_name": parts[0],
+                    "window_name": parts[1],
+                    "pane_index": parts[2],
+                    "pane_pid": pane_pid,
+                    "pane_current_path": parts[4],
+                    "pane_current_command": parts[5],
+                })
+        return panes
+    except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
+        return []
+
+
+def send_to_session(tmux_session: str, text: str) -> dict:
+    """Send text followed by Enter to the given tmux session."""
+    Session.send_keys(tmux_session, text, "Enter")
+    return {"ok": True}
+
+
+def stop_session(cwd: str, tmux_name: str) -> dict:
+    """Send /exit to the agent session via tmux, then kill the tmux session."""
+    sent_exit = False
+    if tmux_name and Session.has(tmux_name):
+        Session.send_keys(tmux_name, "/exit", "Enter")
+        sent_exit = True
+        time.sleep(3)
+
+    tmux_killed = False
+    if tmux_name and Session.has(tmux_name):
+        Session.kill(tmux_name)
+        tmux_killed = True
+
+    return {"sent_exit": sent_exit, "tmux_killed": tmux_killed}
 
 
 def map_process_to_tmux(pid: int, tmux_panes: list[dict]) -> dict | None:
