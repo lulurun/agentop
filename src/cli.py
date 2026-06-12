@@ -299,7 +299,7 @@ def cmd_dialogue_start(args):
     print(f"\nDialogue started: {did}")
     print(f"  Session A: {sa}")
     print(f"  Session B: {sb}")
-    print(f"\n  Watch side-by-side:")
+    print("\n  Watch side-by-side:")
     print(f"    {watch_cmd}")
     print(f"\n  Tail log:  tail -f {log_path}")
     print(f"\n  Stop:  agentop dialogue stop {did}")
@@ -312,14 +312,16 @@ def cmd_dialogue_list(args):
         return
     id_w, status_w, agent_w, sess_w = 10, 10, 10, 24
     print(
-        f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  {'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}"
+        f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  "
+        f"{'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}"
     )
     print("-" * 100)
     for d in dialogues:
         sa = d["session_a"] + (" [open]" if d["session_a_alive"] else "")
         sb = d["session_b"] + (" [open]" if d["session_b_alive"] else "")
         print(
-            f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  {d['agent_a']:<{agent_w}}  {d['agent_b']:<{agent_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}"
+            f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  "
+            f"{d['agent_a']:<{agent_w}}  {d['agent_b']:<{agent_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}"
         )
 
 
