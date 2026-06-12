@@ -44,8 +44,8 @@ class Actor:
 
     def _parse_output(self, raw: str, turn: int) -> str:
         name = re.escape(self.name)
-        begin_re = re.compile(rf"^--- BEGIN .+ from {name} turn:{turn} ---$", re.IGNORECASE)
-        end_re = re.compile(rf"^--- END .+ from {name} turn:{turn} ---$", re.IGNORECASE)
+        begin_re = re.compile(rf"--- BEGIN .+ from {name} turn:{turn} ---$", re.IGNORECASE)
+        end_re = re.compile(rf"--- END .+ from {name} turn:{turn} ---$", re.IGNORECASE)
 
         in_block = False
         buffer = []
@@ -53,9 +53,9 @@ class Actor:
         for line in reversed(raw.splitlines()):
             stripped = line.strip()
             if not in_block:
-                if end_re.match(stripped):
+                if end_re.search(stripped):
                     in_block = True
-            elif begin_re.match(stripped):
+            elif begin_re.search(stripped):
                 begin_line = stripped
                 break
             else:
