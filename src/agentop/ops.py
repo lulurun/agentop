@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agentop import registry, scanner
+from agentop.agents import AGENTS, get_agent
 
 
 def get_sessions() -> list[dict]:
@@ -18,17 +19,16 @@ def get_sessions() -> list[dict]:
     return sessions
 
 
-def start(tool: str, cwd: str, short_name: str = "") -> dict:
+def start(tool: str, cwd: str, short_name: str = "", params: dict | None = None) -> dict:
     """Launch a new managed agent session.
 
     Returns {"ok": True, "name": …, "pid": …}
          or {"ok": False, "error": …}.
     """
-    from agentop.agents import get_agent
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}
-    result = agent.start_session(cwd, short_name)
+    result = agent.start_session(cwd, short_name, params)
     if result.get("ok"):
         registry.upsert_session(result["name"], {"managed": True})
     return result
@@ -72,7 +72,6 @@ def get_saved_sessions(
         if s.get("tool") and s.get("cwd") and s["tool"] not in agents_with_id
     }
 
-    from agentop.agents import AGENTS, get_agent
     agents = [get_agent(tool)] if tool else AGENTS
     results = []
     for agent in agents:
@@ -97,7 +96,6 @@ def get_saved_sessions(
 
 def resume_session(tool: str, session_id: str, cwd: str, short_name: str = "") -> dict:
     """Resume a saved agent session in a new tmux window."""
-    from agentop.agents import get_agent
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}
@@ -109,7 +107,6 @@ def resume_session(tool: str, session_id: str, cwd: str, short_name: str = "") -
 
 def delete_saved_session(tool: str, session_id: str) -> dict:
     """Permanently delete a saved session from its source storage."""
-    from agentop.agents import get_agent
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}

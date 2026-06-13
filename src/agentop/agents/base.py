@@ -45,8 +45,17 @@ class BaseAgent:
         """Called once after the agent process appears in tmux."""
         pass
 
-    def _run_in_tmux(self, cmd: str, cwd: str, short_name: str = "") -> dict:
+    def _build_cmd(self, base_cmd: str, params: dict) -> str:
+        """Append agent-specific CLI flags derived from params."""
+        cmd = base_cmd
+        if "model" in params:
+            cmd += f" --model {params['model']}"
+        return cmd
+
+    def _run_in_tmux(self, cmd: str, cwd: str, short_name: str = "", params: dict | None = None) -> dict:
         """Create a tmux session, run cmd, wait for the agent PID, rename the session."""
+        if params:
+            cmd = self._build_cmd(cmd, params)
         from agentop.tmux import Session
 
         rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -85,7 +94,8 @@ class BaseAgent:
             try:
                 subprocess.run(
                     ["tmux", "rename-session", "-t", temp_name, final_name],
-                    capture_output=True, timeout=3,
+                    capture_output=True,
+                    timeout=3,
                 )
             except subprocess.TimeoutExpired:
                 final_name = temp_name
@@ -95,9 +105,9 @@ class BaseAgent:
         self.post_start_hook(temp_name)
         return {"ok": True, "name": temp_name, "pid": None, "tmux_session": temp_name}
 
-    def start_session(self, cwd: str, short_name: str = "") -> dict:
+    def start_session(self, cwd: str, short_name: str = "", params: dict | None = None) -> dict:
         """Create a tmux session and launch the agent."""
-        return self._run_in_tmux(self.launch_cmd, cwd, short_name)
+        return self._run_in_tmux(self.launch_cmd, cwd, short_name, params)
 
     def resume_session(self, session_id: str, cwd: str, short_name: str = "") -> dict:
         """Resume a saved session in a new tmux window."""
@@ -127,6 +137,7 @@ class BaseAgent:
     def make_actor(self, id: str, session: str, name: str) -> "Actor":
         """Return the Actor subclass appropriate for this agent type."""
         from agentop.dialogue.actor import Actor
+
         return Actor(id=id, session=session, name=name)
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:

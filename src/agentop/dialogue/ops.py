@@ -39,11 +39,13 @@ def start_dialogue(
         scenario = load_scenario(resolved_scenario)
         max_turns = scenario.max_turns or 20
 
-    result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a")
+    dialogue_params = {"model": "claude-opus-4-8"}
+
+    result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a", params=dialogue_params)
     if not result_a.get("ok"):
         return {"ok": False, "error": f"Failed to start agent A ({agent_a}): {result_a.get('error')}"}
 
-    result_b = agent_ops.start(agent_b, cwd_b, short_name=f"dia{dialogue_id[:4]}b")
+    result_b = agent_ops.start(agent_b, cwd_b, short_name=f"dia{dialogue_id[:4]}b", params=dialogue_params)
     if not result_b.get("ok"):
         return {"ok": False, "error": f"Failed to start agent B ({agent_b}): {result_b.get('error')}"}
 
