@@ -13,18 +13,18 @@ LOG = logging.getLogger(__name__)
 
 _MAX_RETRIES = 2  # retries after first attempt = up to 3 total receives per turn
 
-_PROTOCOL_RULE = """\
+_PROTOCOL_RULE = f"""\
 OUTPUT FORMAT (mandatory): Do all your thinking freely. When ready to send \
 your message, output it using this exact XML structure at the very end:
 
-<agentop_message turn="{turn}" from="{name}" nonce="{nonce}">
+<agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
 your message here
 <agentop_status>ok</agentop_status>
 </agentop_message>
 
 Rules:
 - Replace nothing — use the exact turn number, name, and nonce shown above.
-- To signal you are completely done, use <agentop_status>{status_complete}</agentop_status>.
+- To signal you are completely done, use <agentop_status>{STATUS_COMPLETE}</agentop_status>.
 - Everything outside the XML block is your private workspace and is not forwarded.\
 """
 
@@ -44,7 +44,7 @@ def _new_nonce() -> str:
 
 
 def _format_rule(name: str, turn: int, nonce: str) -> str:
-    return _PROTOCOL_RULE.format(turn=turn, name=name, nonce=nonce, status_complete=STATUS_COMPLETE)
+    return _PROTOCOL_RULE.format(turn=turn, name=name, nonce=nonce)
 
 
 def _recovery_prompt(name: str, turn: int, nonce: str) -> str:
