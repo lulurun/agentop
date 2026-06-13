@@ -28,11 +28,11 @@ Rules:
 - Everything outside the XML block is your private workspace and is not forwarded.\
 """
 
-_RECOVERY_PROMPT = """\
+_RECOVERY_PROMPT = f"""\
 Your previous response did not contain the required XML block. Please re-send \
 your message now using exactly this format:
 
-<agentop_message turn="{turn}" from="{name}" nonce="{nonce}">
+<agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
 your message here
 <agentop_status>{STATUS_OK}</agentop_status>
 </agentop_message>\
