@@ -24,7 +24,7 @@ your message here
 
 Rules:
 - Replace nothing — use the exact turn number, name, and nonce shown above.
-- To signal you are completely done, use <agentop_status>complete</agentop_status>.
+- To signal you are completely done, use <agentop_status>{status_complete}</agentop_status>.
 - Everything outside the XML block is your private workspace and is not forwarded.\
 """
 
@@ -44,7 +44,7 @@ def _new_nonce() -> str:
 
 
 def _format_rule(name: str, turn: int, nonce: str) -> str:
-    return _PROTOCOL_RULE.format(turn=turn, name=name, nonce=nonce)
+    return _PROTOCOL_RULE.format(turn=turn, name=name, nonce=nonce, status_complete=STATUS_COMPLETE)
 
 
 def _recovery_prompt(name: str, turn: int, nonce: str) -> str:
