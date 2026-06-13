@@ -11,8 +11,22 @@ from agentop.tmux import Session
 
 LOG = logging.getLogger(__name__)
 
-# Sentinel returned by receive() when the agent signals dialogue completion
-DIALOGUE_COMPLETE = "<<DIALOGUE_COMPLETE>>"
+# <agentop_message turn="N" from="NAME" nonce="HEX">...</agentop_message>
+_MSG_RE = re.compile(
+    r'<agentop_message\s+turn="(\d+)"\s+from="([^"]+)"\s+nonce="([0-9a-f]+)"\s*>'
+    r"(.*?)"
+    r"</agentop_message>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+# <agentop_status>VALUE</agentop_status>
+_STATUS_RE = re.compile(
+    r"<agentop_status>(.*?)</agentop_status>",
+    re.DOTALL | re.IGNORECASE,
+)
+
+# Status value that signals the dialogue is complete
+STATUS_COMPLETE = "complete"
 
 
 class Actor:
@@ -22,7 +36,7 @@ class Actor:
         self.name = name or id.upper()
         self._capturer = Capturer()
         self._stop: threading.Event | None = None
-        self._turn = 0  # incremented each receive(); matches turn:N in delimiters
+        self._turn = 0  # incremented each receive()
 
     def attach(self, stop_event: threading.Event) -> Actor:
         self._stop = stop_event
@@ -32,41 +46,50 @@ class Actor:
         Session.paste_text(self.session, text)
         Session.send_keys(self.session, "Enter")
 
-    def receive(self) -> str | None:
+    def receive(self, nonce: str) -> tuple[str, str] | None:
+        """Wait for the agent to become idle, then extract and validate the message.
+
+        Returns:
+            (body, status) on success — status is STATUS_COMPLETE or "ok"
+            ("", "parse_failure") when no valid message found after waiting
+            None on timeout or stop signal
+        """
         content = self._capturer.wait_for_idle(self.session, self._stop)
         if content is None:
             return None
         self._turn += 1
-        msg = self._parse_output(content, self._turn)
-        if msg:
-            LOG.info("[%s]: %s", self.name, msg)
-        return msg or None
+        return self._parse_output(content, self._turn, nonce)
 
-    def _parse_output(self, raw: str, turn: int) -> str:
-        name = re.escape(self.name)
-        begin_re = re.compile(rf"--- BEGIN .+ from {name} turn:{turn} ---$", re.IGNORECASE)
-        end_re = re.compile(rf"--- END .+ from {name} turn:{turn} ---$", re.IGNORECASE)
+    def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, str]:
+        """Extract the last valid <agentop_message> block matching turn, name, and nonce."""
+        body = None
+        status = "ok"
 
-        in_block = False
-        buffer = []
-        begin_line = None
-        for line in reversed(raw.splitlines()):
-            stripped = line.strip()
-            if not in_block:
-                if end_re.search(stripped):
-                    in_block = True
-            elif begin_re.search(stripped):
-                begin_line = stripped
-                break
-            else:
-                buffer.append(line)
+        for m in _MSG_RE.finditer(raw):
+            msg_turn = int(m.group(1))
+            msg_from = m.group(2)
+            msg_nonce = m.group(3)
+            msg_body = m.group(4).strip()
 
-        if begin_line is None:
-            LOG.warning("[%s] turn:%d delimiters not found", self.name, turn)
-            return raw
+            if msg_turn != turn:
+                continue
+            if msg_from.lower() != self.name.lower():
+                continue
+            if msg_nonce != nonce:
+                continue
 
-        content = "\n".join(reversed(buffer)).strip()
-        if "complete" in begin_line.lower():
-            LOG.info("[%s] turn:%d complete", self.name, turn)
-            return DIALOGUE_COMPLETE
-        return content
+            body = msg_body
+
+            # Look for a status tag inside this message block
+            sm = _STATUS_RE.search(msg_body)
+            if sm:
+                status = sm.group(1).strip().lower()
+                # Remove the status tag from the body
+                body = _STATUS_RE.sub("", msg_body).strip()
+
+        if body is None:
+            LOG.warning("[%s] turn:%d nonce:%s — no valid message found", self.name, turn, nonce)
+            return ("", "parse_failure")
+
+        LOG.info("[%s] turn:%d status:%s body_len:%d", self.name, turn, status, len(body))
+        return (body, status)

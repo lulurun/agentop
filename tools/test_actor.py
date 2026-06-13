@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Developer tool: test Actor send/receive over multiple turns against a live session.
 
-Sends prompts that include the delimiter rule (as the orchestrator would),
+Sends prompts that include the protocol rule (as the orchestrator would),
 then calls actor.receive() to verify the response is extracted correctly.
 
 Usage:
@@ -22,21 +22,10 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agentop.dialogue.actor import Actor, DIALOGUE_COMPLETE
+from agentop.dialogue.actor import Actor, STATUS_COMPLETE
+from agentop.dialogue.orchestrator import _format_rule, _new_nonce
 
 _NAME = "Tester"
-
-_DELIMITER_RULE = """\
-REPORTING RULE (mandatory): Do all your thinking freely. When ready, write \
-your response wrapped in BEGIN/END delimiters at the very end \
-(replace N with the current turn number, starting at 1):
-
-    --- BEGIN output from {name} turn:N ---
-    your response here
-    --- END output from {name} turn:N ---
-
-Everything outside the delimiters is your working space.\
-"""
 
 QUESTIONS = [
     "Write a short poem about the ocean.",
@@ -77,23 +66,18 @@ def main() -> None:
         actor = Actor(id="test", session=session, name=_NAME)
     actor.attach(stop)
 
-    # Send delimiter rule once as the first message
-    print(f"\nSending delimiter rule to session {session}...")
-    actor.send(_DELIMITER_RULE.format(name=_NAME))
-
     for i in range(1, args.turns + 1):
         question = QUESTIONS[(i - 1) % len(QUESTIONS)]
+        nonce = _new_nonce()
         print(f"\n{'='*60}")
-        print(f"TURN {i} — sending: {question!r}")
+        print(f"TURN {i} — sending: {question!r}  nonce={nonce}")
 
-        # First turn: receive the response to the delimiter rule setup,
-        # then subsequent turns we send the next question after receiving
-        if i > 1:
-            actor.send(question)
+        msg = question + "\n\n" + _format_rule(_NAME, i, nonce)
+        actor.send(msg)
 
-        print(f"Waiting for response (expecting turn:{i})...")
+        print(f"Waiting for response (expecting turn:{i} nonce:{nonce})...")
         t0 = time.monotonic()
-        result = actor.receive()
+        result = actor.receive(nonce)
         elapsed = time.monotonic() - t0
 
         print(f"elapsed: {elapsed:.1f}s  |  internal turn counter: {actor._turn}")
@@ -101,19 +85,17 @@ def main() -> None:
         if result is None:
             print("ERROR: receive() returned None (timeout or stop)")
             break
-        if result is DIALOGUE_COMPLETE:
+
+        body, status = result
+        print(f"status: {status!r}")
+
+        if status == "parse_failure":
+            print("WARNING: parse_failure — no valid message block found")
+        elif status == STATUS_COMPLETE:
             print("COMPLETE signal")
             break
-
-        from agentop.tmux import CapturePane
-        scrollback = CapturePane.scrollback(session)
-        if result == scrollback.strip():
-            print("WARNING: returned full raw buffer — delimiter not found")
         else:
-            print(f"OK — extracted ({len(result)} chars):\n{result[:400]}")
-
-        if i == 1:
-            actor.send(question)
+            print(f"OK — extracted ({len(body)} chars):\n{body[:400]}")
 
     print(f"\nDone. Session: {session}")
     print(f"  Attach: tmux attach-session -t {session}")

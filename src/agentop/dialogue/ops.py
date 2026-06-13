@@ -14,6 +14,7 @@ from pathlib import Path
 from agentop import ops as agent_ops
 from agentop.dialogue import scenarios
 from agentop.dialogue.model import DIALOGUES_DIR, DialogueMeta
+from agentop.dialogue.scenarios.reader import load as load_scenario
 from agentop.tmux import Session
 
 
@@ -30,8 +31,13 @@ def start_dialogue(
     dialogue_dir = DIALOGUES_DIR / dialogue_id
     dialogue_dir.mkdir(parents=True, exist_ok=True)
 
+    resolved_scenario = scenario_file or scenarios.default_path()
     shutil.copy2(brief_file, dialogue_dir / "brief.md")
-    shutil.copy2(scenario_file or scenarios.default_path(), dialogue_dir / "scenario.toml")
+    shutil.copy2(resolved_scenario, dialogue_dir / "scenario.toml")
+
+    if not max_turns:
+        scenario = load_scenario(resolved_scenario)
+        max_turns = scenario.max_turns or 20
 
     result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a")
     if not result_a.get("ok"):

@@ -445,7 +445,7 @@ def main():
         "--cwd-b", dest="cwd_b", default=os.path.expanduser("~"), help="Working directory for agent B (default: home)"
     )
     p_dstart.add_argument(
-        "--max-turns", dest="max_turns", type=int, default=20, help="Maximum relay turns before stopping (default: 20)"
+        "--max-turns", dest="max_turns", type=int, default=0, help="Maximum relay turns (default: use scenario setting, fallback 20)"
     )
     p_dstart.add_argument(
         "--scenario", default="", metavar="FILE", help="Path to a scenario TOML file (default: built-in pm-sde)"

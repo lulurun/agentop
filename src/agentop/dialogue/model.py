@@ -115,13 +115,14 @@ class DialogueMeta:
 
 
 class Dialogue:
-    def __init__(self, meta: DialogueMeta, topic: str, actor_a: Actor, actor_b: Actor, role_a: str, role_b: str):
+    def __init__(self, meta: DialogueMeta, topic: str, actor_a: Actor, actor_b: Actor, role_a: str, role_b: str, opening: str | None = None):
         self.meta = meta
         self.topic = topic
         self.actor_a = actor_a
         self.actor_b = actor_b
         self.role_a = role_a
         self.role_b = role_b
+        self.opening = opening
 
     @property
     def id(self) -> str:
@@ -166,4 +167,5 @@ class Dialogue:
             actor_b=actor_b,
             role_a=scenario.role_a,
             role_b=scenario.role_b,
+            opening=scenario.opening,
         )
