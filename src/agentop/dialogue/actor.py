@@ -25,7 +25,8 @@ _STATUS_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-# Status value that signals the dialogue is complete
+# Status values used in <agentop_status> tags
+STATUS_OK = "ok"
 STATUS_COMPLETE = "complete"
 
 
@@ -63,7 +64,7 @@ class Actor:
     def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, str]:
         """Extract the last valid <agentop_message> block matching turn, name, and nonce."""
         body = None
-        status = "ok"
+        status = STATUS_OK
 
         for m in _MSG_RE.finditer(raw):
             msg_turn = int(m.group(1))

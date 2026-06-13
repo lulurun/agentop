@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 
-from agentop.dialogue.actor import STATUS_COMPLETE, Actor
+from agentop.dialogue.actor import STATUS_COMPLETE, STATUS_OK, Actor
 from agentop.dialogue.model import Dialogue
 
 LOG = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ your message, output it using this exact XML structure at the very end:
 
 <agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
 your message here
-<agentop_status>ok</agentop_status>
+<agentop_status>{STATUS_OK}</agentop_status>
 </agentop_message>
 
 Rules:
@@ -34,7 +34,7 @@ your message now using exactly this format:
 
 <agentop_message turn="{turn}" from="{name}" nonce="{nonce}">
 your message here
-<agentop_status>ok</agentop_status>
+<agentop_status>{STATUS_OK}</agentop_status>
 </agentop_message>\
 """
 
