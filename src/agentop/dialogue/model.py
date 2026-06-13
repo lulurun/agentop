@@ -16,6 +16,14 @@ LOG = logging.getLogger(__name__)
 
 DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
 
+# Dialogue lifecycle status values (persisted in meta.json)
+DIALOGUE_STARTING = "starting"
+DIALOGUE_RUNNING = "running"
+DIALOGUE_STOPPED = "stopped"
+DIALOGUE_COMPLETED = "completed"
+DIALOGUE_ERROR = "error"
+DIALOGUE_PARSE_ERROR = "parse_error"
+
 
 @dataclass
 class DialogueMeta:
@@ -86,7 +94,7 @@ class DialogueMeta:
             agent_b=agent_b,
             max_turns=max_turns,
             start_time=datetime.now(timezone.utc).isoformat(),
-            status="starting",
+            status=DIALOGUE_STARTING,
         )
         meta.save()
         return meta

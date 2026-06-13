@@ -25,9 +25,11 @@ _STATUS_RE = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-# Status values used in <agentop_status> tags
-STATUS_OK = "ok"
-STATUS_COMPLETE = "complete"
+# Receive status values — carried inside <agentop_status> tags
+RECEIVE_OK = "ok"
+RECEIVE_COMPLETE = "complete"
+RECEIVE_PARSE_FAILURE = "parse_failure"  # no valid block found; orchestrator may retry
+RECEIVE_PARSE_ERROR = "parse_error"      # retries exhausted; orchestrator halts
 
 
 class Actor:
@@ -51,8 +53,8 @@ class Actor:
         """Wait for the agent to become idle, then extract and validate the message.
 
         Returns:
-            (body, status) on success — status is STATUS_COMPLETE or "ok"
-            ("", "parse_failure") when no valid message found after waiting
+            (body, RECEIVE_OK | RECEIVE_COMPLETE) on success
+            ("", RECEIVE_PARSE_FAILURE) when no valid block found after waiting
             None on timeout or stop signal
         """
         content = self._capturer.wait_for_idle(self.session, self._stop)
@@ -64,7 +66,7 @@ class Actor:
     def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, str]:
         """Extract the last valid <agentop_message> block matching turn, name, and nonce."""
         body = None
-        status = STATUS_OK
+        receive_status = RECEIVE_OK
 
         for m in _MSG_RE.finditer(raw):
             msg_turn = int(m.group(1))
@@ -84,13 +86,13 @@ class Actor:
             # Look for a status tag inside this message block
             sm = _STATUS_RE.search(msg_body)
             if sm:
-                status = sm.group(1).strip().lower()
+                receive_status = sm.group(1).strip().lower()
                 # Remove the status tag from the body
                 body = _STATUS_RE.sub("", msg_body).strip()
 
         if body is None:
             LOG.warning("[%s] turn:%d nonce:%s — no valid message found", self.name, turn, nonce)
-            return ("", "parse_failure")
+            return ("", RECEIVE_PARSE_FAILURE)
 
-        LOG.info("[%s] turn:%d status:%s body_len:%d", self.name, turn, status, len(body))
-        return (body, status)
+        LOG.info("[%s] turn:%d receive_status:%s body_len:%d", self.name, turn, receive_status, len(body))
+        return (body, receive_status)

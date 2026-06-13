@@ -6,8 +6,8 @@ import logging
 import os
 import threading
 
-from agentop.dialogue.actor import STATUS_COMPLETE, STATUS_OK, Actor
-from agentop.dialogue.model import Dialogue
+from agentop.dialogue.actor import RECEIVE_COMPLETE, RECEIVE_OK, RECEIVE_PARSE_ERROR, RECEIVE_PARSE_FAILURE, Actor
+from agentop.dialogue.model import DIALOGUE_COMPLETED, DIALOGUE_ERROR, DIALOGUE_PARSE_ERROR, DIALOGUE_RUNNING, DIALOGUE_STOPPED, Dialogue
 
 LOG = logging.getLogger(__name__)
 
@@ -19,12 +19,12 @@ your message, output it using this exact XML structure at the very end:
 
 <agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
 your message here
-<agentop_status>{STATUS_OK}</agentop_status>
+<agentop_status>{RECEIVE_OK}</agentop_status>
 </agentop_message>
 
 Rules:
 - Replace nothing — use the exact turn number, name, and nonce shown above.
-- To signal you are completely done, use <agentop_status>{STATUS_COMPLETE}</agentop_status>.
+- To signal you are completely done, use <agentop_status>{RECEIVE_COMPLETE}</agentop_status>.
 - Everything outside the XML block is your private workspace and is not forwarded.\
 """
 
@@ -34,7 +34,7 @@ your message now using exactly this format:
 
 <agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
 your message here
-<agentop_status>{STATUS_OK}</agentop_status>
+<agentop_status>{RECEIVE_OK}</agentop_status>
 </agentop_message>\
 """
 
@@ -87,15 +87,15 @@ class DialogueOrchestrator(threading.Thread):
         self._stop.set()
 
     def run(self) -> None:
-        self.dialogue.update({"status": "running"})
+        self.dialogue.update({"status": DIALOGUE_RUNNING})
         try:
             self._loop()
         except Exception as exc:
             LOG.error("Loop for dialogue %s error: %s", self.dialogue.id, exc)
-            self.dialogue.update({"status": "error", "error": str(exc)})
+            self.dialogue.update({"status": DIALOGUE_ERROR, "error": str(exc)})
 
-        status = "stopped" if self._stop.is_set() else "completed"
-        self.dialogue.update({"status": status, "pid": None})
+        dialogue_status = DIALOGUE_STOPPED if self._stop.is_set() else DIALOGUE_COMPLETED
+        self.dialogue.update({"status": dialogue_status, "pid": None})
 
     def _receive_with_retry(self, actor: Actor, turn: int, nonce: str) -> tuple[str, str] | None:
         """Receive from actor, retrying up to _MAX_RETRIES times on parse_failure."""
@@ -105,16 +105,16 @@ class DialogueOrchestrator(threading.Thread):
             result = actor.receive(nonce)
             if result is None:
                 return None  # timeout / stop
-            body, status = result
-            if status != "parse_failure":
-                return (body, status)
+            body, receive_status = result
+            if receive_status != RECEIVE_PARSE_FAILURE:
+                return (body, receive_status)
             if attempt < _MAX_RETRIES:
                 LOG.warning(
                     "[%s] turn:%d attempt:%d parse_failure — sending recovery prompt", actor.name, turn, attempt + 1
                 )
                 actor.send(_recovery_prompt(actor.name, turn, nonce))
         LOG.error("[%s] turn:%d exhausted retries", actor.name, turn)
-        return ("", "parse_error")
+        return ("", RECEIVE_PARSE_ERROR)
 
     def _loop(self) -> None:
         d = self.dialogue
@@ -138,13 +138,13 @@ class DialogueOrchestrator(threading.Thread):
             if result is None:
                 break
 
-            body, status = result
+            body, receive_status = result
 
-            if status == "parse_error":
-                d.update({"status": "parse_error", "error": f"actor {actor.name} turn {turn} exhausted retries"})
+            if receive_status == RECEIVE_PARSE_ERROR:
+                d.update({"status": DIALOGUE_PARSE_ERROR, "error": f"actor {actor.name} turn {turn} exhausted retries"})
                 break
 
-            if status == STATUS_COMPLETE:
+            if receive_status == RECEIVE_COMPLETE:
                 LOG.info("dialogue %s complete signal from %s turn %d", d.id, actor.name, turn)
                 break
 
