@@ -102,6 +102,31 @@ def list_dialogues() -> list[dict]:
     return result
 
 
+_REMOVABLE_STATUSES = {"stopped", "completed", "error", "agent_missing_delimiter"}
+
+
+def remove_dialogue(dialogue_id: str) -> dict:
+    meta = DialogueMeta.load(dialogue_id)
+    if not meta:
+        return {"ok": False, "error": f"Dialogue {dialogue_id!r} not found"}
+    if meta.status not in _REMOVABLE_STATUSES:
+        return {"ok": False, "error": f"Dialogue {dialogue_id!r} is {meta.status} — only stopped/completed dialogues can be removed"}
+    shutil.rmtree(meta._dir())
+    return {"ok": True}
+
+
+def remove_all_stopped_dialogues() -> dict:
+    if not DIALOGUES_DIR.exists():
+        return {"ok": True, "removed": []}
+    removed = []
+    for meta_file in DIALOGUES_DIR.glob("*/meta.json"):
+        meta = DialogueMeta.load(meta_file.parent.name)
+        if meta and meta.status in _REMOVABLE_STATUSES:
+            shutil.rmtree(meta._dir())
+            removed.append(meta.id)
+    return {"ok": True, "removed": removed}
+
+
 def stop_dialogue(dialogue_id: str, close: bool = False) -> dict:
     meta = DialogueMeta.load(dialogue_id)
     if not meta:

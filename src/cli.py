@@ -336,6 +336,23 @@ def cmd_dialogue_stop(args):
     print(msg)
 
 
+def cmd_dialogue_remove(args):
+    ops = _dialogue_ops()
+    if getattr(args, "all", False):
+        result = ops.remove_all_stopped_dialogues()
+        if not result["removed"]:
+            print("No stopped/completed dialogues to remove.")
+        else:
+            for did in result["removed"]:
+                print(f"Removed {did}")
+    else:
+        result = ops.remove_dialogue(args.id)
+        if not result.get("ok"):
+            print(f"Error: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Removed dialogue {args.id}.")
+
+
 # ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
@@ -457,6 +474,11 @@ def main():
     p_dstop.add_argument("id", help="Dialogue ID")
     p_dstop.add_argument("--close", action="store_true", help="Also kill both agent tmux sessions")
 
+    p_dremove = dsub.add_parser("remove", help="Remove stopped/completed dialogue(s)")
+    p_dremove_group = p_dremove.add_mutually_exclusive_group(required=True)
+    p_dremove_group.add_argument("id", nargs="?", help="Dialogue ID to remove")
+    p_dremove_group.add_argument("--all", action="store_true", help="Remove all stopped/completed dialogues")
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
@@ -470,6 +492,7 @@ def main():
             "list": cmd_dialogue_list,
             "start": cmd_dialogue_start,
             "stop": cmd_dialogue_stop,
+            "remove": cmd_dialogue_remove,
         }[
             args.dialogue_command
         ](args)
