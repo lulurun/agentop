@@ -339,12 +339,25 @@ def cmd_dialogue_stop(args):
 def cmd_dialogue_remove(args):
     ops = _dialogue_ops()
     if getattr(args, "all", False):
-        result = ops.remove_all_stopped_dialogues()
-        if not result["removed"]:
+        candidates = ops.list_removable_dialogues()
+        if not candidates:
             print("No stopped/completed dialogues to remove.")
-        else:
-            for did in result["removed"]:
-                print(f"Removed {did}")
+            return
+        print("Will remove:")
+        for meta in candidates:
+            print(f"  {meta.id}  [{meta.status}]  {meta.agent_a} vs {meta.agent_b}")
+        if not getattr(args, "yes", False):
+            try:
+                answer = input(f"\nRemove {len(candidates)} dialogue(s)? [y/N] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print("\nAborted.")
+                return
+            if answer != "y":
+                print("Aborted.")
+                return
+        result = ops.remove_all_stopped_dialogues()
+        for did in result["removed"]:
+            print(f"Removed {did}")
     else:
         result = ops.remove_dialogue(args.id)
         if not result.get("ok"):
@@ -482,6 +495,7 @@ def main():
     p_dremove_group = p_dremove.add_mutually_exclusive_group(required=True)
     p_dremove_group.add_argument("id", nargs="?", help="Dialogue ID to remove")
     p_dremove_group.add_argument("--all", action="store_true", help="Remove all stopped/completed dialogues")
+    p_dremove.add_argument("--yes", action="store_true", help="Skip confirmation prompt (for scripting)")
 
     args = parser.parse_args()
     if not args.command:

@@ -1,6 +1,6 @@
 # AgentOp Dialogue Scenario TOML Files
 
-This package contains 10 proposed dialogue scenarios:
+This package contains proposed dialogue scenarios:
 
 1. builder-reviewer.toml
 2. researcher-skeptic.toml
@@ -12,6 +12,7 @@ This package contains 10 proposed dialogue scenarios:
 8. bull-bear-judge.toml
 9. red-team-blue-team.toml
 10. software-team.toml
+11. investment-product-strategy.toml
 
 Notes:
 - Some files use the existing two-role style: [role_a] and [role_b].

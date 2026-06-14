@@ -115,15 +115,23 @@ def remove_dialogue(dialogue_id: str) -> dict:
     return {"ok": True}
 
 
-def remove_all_stopped_dialogues() -> dict:
+def list_removable_dialogues() -> list[DialogueMeta]:
     if not DIALOGUES_DIR.exists():
-        return {"ok": True, "removed": []}
-    removed = []
+        return []
+    result = []
     for meta_file in DIALOGUES_DIR.glob("*/meta.json"):
         meta = DialogueMeta.load(meta_file.parent.name)
         if meta and meta.status in _REMOVABLE_STATUSES:
-            shutil.rmtree(meta._dir())
-            removed.append(meta.id)
+            result.append(meta)
+    return result
+
+
+def remove_all_stopped_dialogues() -> dict:
+    candidates = list_removable_dialogues()
+    removed = []
+    for meta in candidates:
+        shutil.rmtree(meta._dir())
+        removed.append(meta.id)
     return {"ok": True, "removed": removed}
 
 
