@@ -5,6 +5,7 @@ from __future__ import annotations
 import threading
 import time
 
+from agentop.actors import get_actor
 from agentop.agentcli import AgentCli
 from agentop.tmux import Session
 
@@ -15,7 +16,7 @@ class AgentInstance:
     def __init__(self, agent: AgentCli, session: str, name: str = ""):
         self.agent = agent
         self.session = session
-        self.actor = agent.actor_class(
+        self.actor = get_actor(agent.name)(
             session=session,
             name=name,
             idle_seconds=agent.idle_seconds,

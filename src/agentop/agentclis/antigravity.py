@@ -8,17 +8,7 @@ from typing import Optional
 
 import psutil
 
-from agentop.actor import Actor
 from agentop.agentcli import AgentCli
-from agentop.tmux import Session
-
-
-class AntigravityActor(Actor):
-    """Actor for agy: uses bracketed paste so bare newlines don't submit prematurely."""
-
-    def send(self, text: str) -> None:
-        Session.paste_text_bracketed(self.session, text)
-        Session.send_keys(self.session, "Enter")
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
 
@@ -30,7 +20,6 @@ _START_TOLERANCE_SEC = 15
 class AntigravityAgentCli(AgentCli):
     name = "antigravity"
     idle_seconds = 15.0
-    actor_class = AntigravityActor
 
     def matches(self, proc_name: str, cmdline: str) -> bool:
         name_lower = proc_name.lower()

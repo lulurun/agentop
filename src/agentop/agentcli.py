@@ -8,8 +8,6 @@ from typing import Optional
 
 import psutil
 
-from agentop.actor import Actor
-
 
 class AgentCli:
     """Interface and shared implementation for every supported agent CLI tool."""
@@ -18,7 +16,6 @@ class AgentCli:
 
     # ------------------------------------------------------------------ actor behaviour
     idle_seconds: float = 5.0
-    actor_class: type[Actor] = Actor
 
     # ------------------------------------------------------------------ detection
 
