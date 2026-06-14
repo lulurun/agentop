@@ -59,12 +59,8 @@ def main() -> None:
 
     session = args.session or _start_session(args.tool, args.cwd)
     stop = threading.Event()
-    from agentop.agents import get_agent
-    agent = get_agent(args.tool)
-    if agent:
-        actor = agent.make_actor(id="test", session=session, name=_NAME)
-    else:
-        actor = Actor(id="test", session=session, name=_NAME)
+    from agentop.dialogue.actor_factory import ActorFactory
+    actor = ActorFactory.create(args.tool, "test", session, _NAME)
     actor.attach(stop)
 
     for i in range(1, args.turns + 1):
