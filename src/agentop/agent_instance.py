@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import threading
 
+from agentop.actor import Actor
 from agentop.agents.base import BaseAgent
-from agentop.dialogue.actor import Actor
 from agentop.tmux import Session
 
 

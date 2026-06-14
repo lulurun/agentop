@@ -1,4 +1,4 @@
-"""Agent output capturer: idle detection and response extraction."""
+"""Capturer: polls a tmux session for screen stability, returns scrollback on idle."""
 
 from __future__ import annotations
 

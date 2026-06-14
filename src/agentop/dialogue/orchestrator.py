@@ -6,8 +6,9 @@ import logging
 import os
 import threading
 
-from agentop.dialogue.actor import Actor
+from agentop.actor import Actor
 from agentop.dialogue.model import Dialogue
+from agentop.dialogue.parser import ResponseParser
 from agentop.dialogue.status import DialogueStatus, ReceiveStatus
 
 LOG = logging.getLogger(__name__)
@@ -101,15 +102,17 @@ class DialogueOrchestrator(threading.Thread):
         dialogue_status = DialogueStatus.STOPPED if self._stop.is_set() else DialogueStatus.COMPLETED
         self.dialogue.update({"status": dialogue_status, "pid": None})
 
+    _parser = ResponseParser()
+
     def _receive_with_retry(self, actor: Actor, turn: int, nonce: str) -> tuple[str, ReceiveStatus] | None:
         """Receive from actor, retrying up to _MAX_RETRIES times on delimiter not found."""
         for attempt in range(_MAX_RETRIES + 1):
             if self._stop.is_set():
                 return None
-            result = actor.receive(nonce)
-            if result is None:
+            raw = actor.receive()
+            if raw is None:
                 return None  # timeout / stop
-            body, receive_status = result
+            body, receive_status = self._parser.parse(raw, actor.name, turn, nonce)
             if receive_status != ReceiveStatus.DELIMITER_NOT_FOUND_WILL_RETRY:
                 return (body, receive_status)
             if attempt < _MAX_RETRIES:

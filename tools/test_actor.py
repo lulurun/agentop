@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from agentop.dialogue.status import ReceiveStatus
 from agentop.dialogue.orchestrator import _format_rule, _new_nonce
+from agentop.dialogue.parser import ResponseParser
 
 _NAME = "Tester"
 
@@ -63,6 +64,7 @@ def main() -> None:
     instance = AgentInstance(get_agent(args.tool), session, _NAME)
     actor = instance.actor
     instance.attach(stop)
+    parser = ResponseParser()
 
     for i in range(1, args.turns + 1):
         question = QUESTIONS[(i - 1) % len(QUESTIONS)]
@@ -75,16 +77,16 @@ def main() -> None:
 
         print(f"Waiting for response (expecting turn:{i} nonce:{nonce})...")
         t0 = time.monotonic()
-        result = actor.receive(nonce)
+        raw = actor.receive()
         elapsed = time.monotonic() - t0
 
-        print(f"elapsed: {elapsed:.1f}s  |  internal turn counter: {actor._turn}")
+        print(f"elapsed: {elapsed:.1f}s")
 
-        if result is None:
+        if raw is None:
             print("ERROR: receive() returned None (timeout or stop)")
             break
 
-        body, status = result
+        body, status = parser.parse(raw, _NAME, i, nonce)
         print(f"status: {status!r}")
 
         if status == ReceiveStatus.DELIMITER_NOT_FOUND_WILL_RETRY:
