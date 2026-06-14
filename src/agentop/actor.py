@@ -15,11 +15,10 @@ _TIMEOUT = 1800.0
 
 
 class Actor:
-    def __init__(self, session: str, name: str, idle_seconds: float = 5.0, use_bracketed_paste: bool = False):
+    def __init__(self, session: str, name: str, idle_seconds: float = 5.0):
         self.session = session
         self.name = name
         self.idle_seconds = idle_seconds
-        self._use_bracketed_paste = use_bracketed_paste
         self._stop: threading.Event | None = None
 
     def attach(self, stop_event: threading.Event) -> Actor:
@@ -27,10 +26,7 @@ class Actor:
         return self
 
     def send(self, text: str) -> None:
-        if self._use_bracketed_paste:
-            Session.paste_text_bracketed(self.session, text)
-        else:
-            Session.paste_text(self.session, text)
+        Session.paste_text(self.session, text)
         Session.send_keys(self.session, "Enter")
 
     def receive(self) -> str | None:
