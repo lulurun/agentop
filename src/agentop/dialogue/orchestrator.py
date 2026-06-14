@@ -7,7 +7,8 @@ import os
 import threading
 
 from agentop.dialogue.actor import Actor
-from agentop.dialogue.model import Dialogue, DialogueStatus, ReceiveStatus
+from agentop.dialogue.model import Dialogue
+from agentop.dialogue.status import DialogueStatus, ReceiveStatus
 
 LOG = logging.getLogger(__name__)
 

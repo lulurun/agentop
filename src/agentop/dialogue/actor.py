@@ -7,7 +7,7 @@ import re
 import threading
 
 from agentop.dialogue.capturer import Capturer
-from agentop.dialogue.model import ReceiveStatus
+from agentop.dialogue.status import ReceiveStatus
 from agentop.tmux import Session
 
 LOG = logging.getLogger(__name__)

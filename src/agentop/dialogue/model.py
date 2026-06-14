@@ -6,35 +6,16 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from agentop.agents import get_agent
+from agentop.dialogue.actor import Actor
 from agentop.dialogue.scenarios.reader import load as load_scenario
-
-if TYPE_CHECKING:
-    from agentop.dialogue.actor import Actor
+from agentop.dialogue.status import DialogueStatus, ReceiveStatus
 
 LOG = logging.getLogger(__name__)
 
 DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
-
-
-class ReceiveStatus(StrEnum):
-    CONTINUE = "continue"
-    COMPLETE = "complete"
-    DELIMITER_NOT_FOUND_WILL_RETRY = "delimiter_not_found"
-    DELIMITER_NOT_FOUND_RETRIES_EXHAUSTED = "delimiter_exhausted"
-
-
-class DialogueStatus(StrEnum):
-    STARTING = "starting"
-    RUNNING = "running"
-    STOPPED = "stopped"
-    COMPLETED = "completed"
-    ERROR = "error"
-    AGENT_REPEATEDLY_MISSING_DELIMITER = "agent_missing_delimiter"
 
 
 @dataclass
@@ -180,8 +161,6 @@ class Dialogue:
 
     @classmethod
     def from_meta(cls, meta: DialogueMeta) -> Dialogue:
-        from agentop.dialogue.actor import Actor
-
         folder = meta._dir()
         topic = (folder / "brief.md").read_text().strip()
         scenario = load_scenario(folder / "scenario.toml")

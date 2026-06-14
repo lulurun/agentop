@@ -23,7 +23,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from agentop.dialogue.actor import Actor
-from agentop.dialogue.model import ReceiveStatus
+from agentop.dialogue.status import ReceiveStatus
 from agentop.dialogue.orchestrator import _format_rule, _new_nonce
 
 _NAME = "Tester"
