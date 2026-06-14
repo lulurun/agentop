@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from agentop.agents.base import BaseAgent
+from agentop.agentcli import AgentCli
 
 
-class GeminiAgent(BaseAgent):
+class GeminiAgent(AgentCli):
     name = "gemini"
 
     def matches(self, proc_name: str, cmdline: str) -> bool:

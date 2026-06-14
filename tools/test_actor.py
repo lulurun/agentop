@@ -60,7 +60,7 @@ def main() -> None:
     session = args.session or _start_session(args.tool, args.cwd)
     stop = threading.Event()
     from agentop.agent_instance import AgentInstance
-    from agentop.agents import get_agent
+    from agentop.agentclis import get_agent
     instance = AgentInstance(get_agent(args.tool), session, _NAME)
     actor = instance.actor
     instance.attach(stop)

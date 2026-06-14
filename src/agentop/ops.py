@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from agentop import registry, scanner
-from agentop.agents import AGENTS, get_agent
+from agentop.agentclis import AGENTS, get_agent
 
 
 def get_sessions() -> list[dict]:

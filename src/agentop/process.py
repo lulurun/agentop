@@ -7,7 +7,7 @@ from typing import Optional
 
 import psutil
 
-from agentop.agents import AGENTS
+from agentop.agentclis import AGENTS
 
 IGNORE_CMDLINE_PATTERNS = [
     "grep",

@@ -8,7 +8,7 @@ from __future__ import annotations
 import subprocess
 import time
 
-from agentop.agents import AGENTS, get_agent
+from agentop.agentclis import AGENTS, get_agent
 from agentop.files import get_recent_project_files, scan_agent_dirs
 from agentop.git import get_git_info
 from agentop.process import get_ancestor_and_child_pids, get_process_tree, scan_processes

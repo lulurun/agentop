@@ -6,12 +6,12 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from agentop.agents.base import BaseAgent
+from agentop.agentcli import AgentCli
 
 _PROJECTS_DIR = Path("~/.claude/projects")
 
 
-class ClaudeAgent(BaseAgent):
+class ClaudeAgent(AgentCli):
     name = "claude"
 
     @property

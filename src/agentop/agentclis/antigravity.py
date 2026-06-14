@@ -8,7 +8,7 @@ from typing import Optional
 
 import psutil
 
-from agentop.agents.base import BaseAgent
+from agentop.agentcli import AgentCli
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
 
@@ -17,7 +17,7 @@ _USER_INPUT_RE = re.compile(r'HandleUserInput called with text: "(.+)"')
 _START_TOLERANCE_SEC = 15
 
 
-class AntigravityAgent(BaseAgent):
+class AntigravityAgent(AgentCli):
     name = "antigravity"
     idle_seconds = 15.0       # agy updates the screen after completion (token banner, input prompt)
     use_bracketed_paste = True # bare newlines act as Enter in agy

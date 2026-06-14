@@ -7,10 +7,10 @@ from typing import Optional
 
 import psutil
 
-from agentop.agents.base import BaseAgent
+from agentop.agentcli import AgentCli
 
 
-class CodexAgent(BaseAgent):
+class CodexAgent(AgentCli):
     name = "codex"
 
     # Tolerance for matching process start time to thread created_at_ms (30 seconds)

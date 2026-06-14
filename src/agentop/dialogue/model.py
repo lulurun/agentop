@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agentop.agent_instance import AgentInstance
-from agentop.agents import get_agent
+from agentop.agentclis import get_agent
 from agentop.dialogue.scenarios.reader import load as load_scenario
 from agentop.dialogue.status import DialogueStatus, ReceiveStatus
 

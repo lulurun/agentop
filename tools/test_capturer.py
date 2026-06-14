@@ -51,7 +51,7 @@ def main() -> None:
     stop = threading.Event()
 
     from agentop.agent_instance import AgentInstance
-    from agentop.agents import get_agent
+    from agentop.agentclis import get_agent
     instance = AgentInstance(get_agent(args.tool), session, "Tester")
     actor = instance.actor
     instance.attach(stop)

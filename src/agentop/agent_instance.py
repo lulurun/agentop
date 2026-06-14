@@ -5,12 +5,12 @@ from __future__ import annotations
 import threading
 
 from agentop.actor import Actor
-from agentop.agents.base import BaseAgent
+from agentop.agentcli import AgentCli
 from agentop.tmux import Session
 
 
 class AgentInstance:
-    def __init__(self, agent: BaseAgent, session: str, name: str = ""):
+    def __init__(self, agent: AgentCli, session: str, name: str = ""):
         self.agent = agent
         self.session = session
         self.actor = Actor(
