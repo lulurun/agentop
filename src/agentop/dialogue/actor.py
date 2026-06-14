@@ -7,15 +7,10 @@ import re
 import threading
 
 from agentop.dialogue.capturer import Capturer
+from agentop.dialogue.model import ReceiveStatus
 from agentop.tmux import Session
 
 LOG = logging.getLogger(__name__)
-
-# Receive status values — embedded in BEGIN/END delimiter lines as status:VALUE
-RECEIVE_CONTINUE = "continue"
-RECEIVE_COMPLETE = "complete"
-RECEIVE_PARSE_FAILURE = "parse_failure"  # no valid block found; orchestrator may retry
-RECEIVE_PARSE_ERROR = "parse_error"  # retries exhausted; orchestrator halts
 
 
 class Actor:
@@ -35,12 +30,12 @@ class Actor:
         Session.paste_text(self.session, text)
         Session.send_keys(self.session, "Enter")
 
-    def receive(self, nonce: str) -> tuple[str, str] | None:
+    def receive(self, nonce: str) -> tuple[str, ReceiveStatus] | None:
         """Wait for the agent to become idle, then extract and validate the message.
 
         Returns:
-            (body, RECEIVE_CONTINUE | RECEIVE_COMPLETE) on success
-            ("", RECEIVE_PARSE_FAILURE) when no valid block found after waiting
+            (body, ReceiveStatus.CONTINUE | ReceiveStatus.COMPLETE) on success
+            ("", ReceiveStatus.DELIMITER_NOT_FOUND_WILL_RETRY) when no block found
             None on timeout or stop signal
         """
         content = self._capturer.wait_for_idle(self.session, self._stop)
@@ -49,7 +44,7 @@ class Actor:
         self._turn += 1
         return self._parse_output(content, self._turn, nonce)
 
-    def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, str]:
+    def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, ReceiveStatus]:
         """Extract the last BEGIN/END delimited block matching turn, name, and nonce.
 
         Scans lines from the bottom: collect lines once END is found, stop and
@@ -72,12 +67,16 @@ class Actor:
             else:
                 if begin_tag.lower() in stripped.lower():
                     sm = re.search(r"status:(\w+)", stripped, re.IGNORECASE)
-                    receive_status = RECEIVE_COMPLETE if (sm and sm.group(1).lower() == RECEIVE_COMPLETE) else RECEIVE_CONTINUE
+                    receive_status = (
+                        ReceiveStatus.COMPLETE
+                        if (sm and sm.group(1).lower() == ReceiveStatus.COMPLETE)
+                        else ReceiveStatus.CONTINUE
+                    )
                     body = "\n".join(reversed(buffer)).strip()
-                    LOG.info("[%s] turn:%d receive_status:%s body_len:%d", self.name, turn, receive_status, len(body))
+                    LOG.info("[%s] turn:%d status:%s body_len:%d", self.name, turn, receive_status, len(body))
                     return (body, receive_status)
                 else:
                     buffer.append(line)
 
         LOG.warning("[%s] turn:%d nonce:%s — delimiters not found", self.name, turn, nonce)
-        return ("", RECEIVE_PARSE_FAILURE)
+        return ("", ReceiveStatus.DELIMITER_NOT_FOUND_WILL_RETRY)

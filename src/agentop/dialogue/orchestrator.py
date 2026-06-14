@@ -6,21 +6,8 @@ import logging
 import os
 import threading
 
-from agentop.dialogue.actor import (
-    RECEIVE_COMPLETE,
-    RECEIVE_CONTINUE,
-    RECEIVE_PARSE_ERROR,
-    RECEIVE_PARSE_FAILURE,
-    Actor,
-)
-from agentop.dialogue.model import (
-    DIALOGUE_COMPLETED,
-    DIALOGUE_ERROR,
-    DIALOGUE_PARSE_ERROR,
-    DIALOGUE_RUNNING,
-    DIALOGUE_STOPPED,
-    Dialogue,
-)
+from agentop.dialogue.actor import Actor
+from agentop.dialogue.model import Dialogue, DialogueStatus, ReceiveStatus
 
 LOG = logging.getLogger(__name__)
 
@@ -30,15 +17,15 @@ _PROTOCOL_RULE = f"""\
 OUTPUT FORMAT (mandatory): Do all your thinking freely. When ready to send \
 your message, wrap it in BEGIN/END delimiters at the very end:
 
---- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---
+--- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---
 your message here
---- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---
+--- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---
 
 To signal you are completely done:
 
---- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_COMPLETE} ---
+--- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.COMPLETE} ---
 your final summary here
---- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_COMPLETE} ---
+--- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.COMPLETE} ---
 
 Rules:
 - Replace nothing — use the exact name, turn number, and nonce shown above.
@@ -49,9 +36,9 @@ _RECOVERY_PROMPT = f"""\
 Your previous response did not contain the required BEGIN/END delimiters. \
 Please re-send your message now using exactly this format:
 
---- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---
+--- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---
 your message here
---- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---\
+--- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---\
 """
 
 
@@ -103,18 +90,18 @@ class DialogueOrchestrator(threading.Thread):
         self._stop.set()
 
     def run(self) -> None:
-        self.dialogue.update({"status": DIALOGUE_RUNNING})
+        self.dialogue.update({"status": DialogueStatus.RUNNING})
         try:
             self._loop()
         except Exception as exc:
             LOG.error("Loop for dialogue %s error: %s", self.dialogue.id, exc)
-            self.dialogue.update({"status": DIALOGUE_ERROR, "error": str(exc)})
+            self.dialogue.update({"status": DialogueStatus.ERROR, "error": str(exc)})
 
-        dialogue_status = DIALOGUE_STOPPED if self._stop.is_set() else DIALOGUE_COMPLETED
+        dialogue_status = DialogueStatus.STOPPED if self._stop.is_set() else DialogueStatus.COMPLETED
         self.dialogue.update({"status": dialogue_status, "pid": None})
 
-    def _receive_with_retry(self, actor: Actor, turn: int, nonce: str) -> tuple[str, str] | None:
-        """Receive from actor, retrying up to _MAX_RETRIES times on parse_failure."""
+    def _receive_with_retry(self, actor: Actor, turn: int, nonce: str) -> tuple[str, ReceiveStatus] | None:
+        """Receive from actor, retrying up to _MAX_RETRIES times on delimiter not found."""
         for attempt in range(_MAX_RETRIES + 1):
             if self._stop.is_set():
                 return None
@@ -122,15 +109,15 @@ class DialogueOrchestrator(threading.Thread):
             if result is None:
                 return None  # timeout / stop
             body, receive_status = result
-            if receive_status != RECEIVE_PARSE_FAILURE:
+            if receive_status != ReceiveStatus.DELIMITER_NOT_FOUND_WILL_RETRY:
                 return (body, receive_status)
             if attempt < _MAX_RETRIES:
                 LOG.warning(
-                    "[%s] turn:%d attempt:%d parse_failure — sending recovery prompt", actor.name, turn, attempt + 1
+                    "[%s] turn:%d attempt:%d delimiter not found — sending recovery prompt", actor.name, turn, attempt + 1
                 )
                 actor.send(_recovery_prompt(actor.name, turn, nonce))
         LOG.error("[%s] turn:%d exhausted retries", actor.name, turn)
-        return ("", RECEIVE_PARSE_ERROR)
+        return ("", ReceiveStatus.DELIMITER_NOT_FOUND_RETRIES_EXHAUSTED)
 
     def _loop(self) -> None:
         d = self.dialogue
@@ -156,13 +143,13 @@ class DialogueOrchestrator(threading.Thread):
 
             body, receive_status = result
 
-            if receive_status == RECEIVE_PARSE_ERROR:
+            if receive_status == ReceiveStatus.DELIMITER_NOT_FOUND_RETRIES_EXHAUSTED:
                 d.update(
-                    {"status": DIALOGUE_PARSE_ERROR, "error": f"actor {actor.name} turn {turn} exhausted retries"}
+                    {"status": DialogueStatus.AGENT_REPEATEDLY_MISSING_DELIMITER, "error": f"actor {actor.name} turn {turn} exhausted retries"}
                 )
                 break
 
-            if receive_status == RECEIVE_COMPLETE:
+            if receive_status == ReceiveStatus.COMPLETE:
                 LOG.info("dialogue %s complete signal from %s turn %d", d.id, actor.name, turn)
                 break
 

@@ -22,7 +22,8 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agentop.dialogue.actor import Actor, RECEIVE_COMPLETE, RECEIVE_PARSE_FAILURE
+from agentop.dialogue.actor import Actor
+from agentop.dialogue.model import ReceiveStatus
 from agentop.dialogue.orchestrator import _format_rule, _new_nonce
 
 _NAME = "Tester"
@@ -89,9 +90,9 @@ def main() -> None:
         body, status = result
         print(f"status: {status!r}")
 
-        if status == RECEIVE_PARSE_FAILURE:
-            print("WARNING: parse_failure — no valid delimiter block found")
-        elif status == RECEIVE_COMPLETE:
+        if status == ReceiveStatus.DELIMITER_NOT_FOUND_WILL_RETRY:
+            print("WARNING: delimiter not found")
+        elif status == ReceiveStatus.COMPLETE:
             print("COMPLETE signal")
             break
         else:
