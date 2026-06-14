@@ -13,13 +13,11 @@ from agentop.process import (
     get_process_tree,
     scan_processes,
 )
-from agentop.tmux import Session
 
 __all__ = [
     "build_sessions",
     "get_process_tree",
     "map_process_to_tmux",
-    "send_to_session",
 ]
 
 
@@ -59,11 +57,6 @@ def scan_tmux() -> list[dict]:
     except (FileNotFoundError, subprocess.TimeoutExpired, subprocess.SubprocessError):
         return []
 
-
-def send_to_session(tmux_session: str, text: str) -> dict:
-    """Send text followed by Enter to the given tmux session."""
-    Session.send_keys(tmux_session, text, "Enter")
-    return {"ok": True}
 
 
 

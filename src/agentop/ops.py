@@ -143,7 +143,11 @@ def send(name: str, text: str, sessions: list[dict] | None = None) -> dict:
         return {"ok": False, "error": "Session not found"}
     if not s.get("managed"):
         return {"ok": False, "error": "Not a managed session"}
+    agent = get_agent(s["tool"])
+    if not agent:
+        return {"ok": False, "error": f"Unknown tool: {s['tool']}"}
     tmux_name = (s.get("tmux") or {}).get("session")
     if not tmux_name:
         return {"ok": False, "error": "No tmux session found"}
-    return scanner.send_to_session(tmux_name, text)
+    AgentInstance(agent, tmux_name).send_command(text)
+    return {"ok": True}
