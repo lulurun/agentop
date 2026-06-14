@@ -57,8 +57,8 @@ def _recovery_prompt(name: str, turn: int, nonce: str) -> str:
 
 def _fmt(d: Dialogue) -> dict:
     return dict(
-        name_a=d.actor_a.name,
-        name_b=d.actor_b.name,
+        name_a=d.instance_a.actor.name,
+        name_b=d.instance_b.actor.name,
         brief=d.topic,
         topic=d.topic,  # backward compat for legacy scenario prompts
         progress_file=d.progress_path(),
@@ -67,7 +67,7 @@ def _fmt(d: Dialogue) -> dict:
 
 def _prompt_a(d: Dialogue, turn: int, nonce: str) -> str:
     fmt = _fmt(d)
-    rule = _format_rule(d.actor_a.name, turn, nonce)
+    rule = _format_rule(d.instance_a.actor.name, turn, nonce)
     parts = [d.role_a.format(**fmt)]
     if d.opening:
         parts.append(d.opening.format(**fmt))
@@ -77,7 +77,7 @@ def _prompt_a(d: Dialogue, turn: int, nonce: str) -> str:
 
 def _prompt_b(d: Dialogue, turn: int, nonce: str) -> str:
     fmt = _fmt(d)
-    rule = _format_rule(d.actor_b.name, turn, nonce)
+    rule = _format_rule(d.instance_b.actor.name, turn, nonce)
     return d.role_b.format(**fmt) + "\n\n" + rule
 
 
@@ -122,14 +122,14 @@ class DialogueOrchestrator(threading.Thread):
 
     def _loop(self) -> None:
         d = self.dialogue
-        d.actor_a.attach(self._stop)
-        d.actor_b.attach(self._stop)
+        d.instance_a.attach(self._stop)
+        d.instance_b.attach(self._stop)
 
         # Turn 1: initialize actor_a with its role + protocol rule
         current_nonce = _new_nonce()
-        d.actor_a.send(_prompt_a(d, turn=1, nonce=current_nonce))
+        d.instance_a.actor.send(_prompt_a(d, turn=1, nonce=current_nonce))
 
-        actor, other = d.actor_a, d.actor_b
+        actor, other = d.instance_a.actor, d.instance_b.actor
         b_initialized = False
         turn = 1
 
@@ -157,7 +157,7 @@ class DialogueOrchestrator(threading.Thread):
             turn += 1
             current_nonce = _new_nonce()
 
-            if other is d.actor_b and not b_initialized:
+            if other is d.instance_b.actor and not b_initialized:
                 # Prepend actor_b's role + protocol rule on first contact
                 msg = _prompt_b(d, turn=turn, nonce=current_nonce) + "\n\n" + body
                 b_initialized = True

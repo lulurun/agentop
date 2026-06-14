@@ -8,8 +8,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agentop.dialogue.actor import Actor
-from agentop.dialogue.actor_factory import ActorFactory
+from agentop.agent_instance import AgentInstance
+from agentop.agents import get_agent
 from agentop.dialogue.scenarios.reader import load as load_scenario
 from agentop.dialogue.status import DialogueStatus, ReceiveStatus
 
@@ -120,16 +120,16 @@ class Dialogue:
         self,
         meta: DialogueMeta,
         topic: str,
-        actor_a: Actor,
-        actor_b: Actor,
+        instance_a: AgentInstance,
+        instance_b: AgentInstance,
         role_a: str,
         role_b: str,
         opening: str | None = None,
     ):
         self.meta = meta
         self.topic = topic
-        self.actor_a = actor_a
-        self.actor_b = actor_b
+        self.instance_a = instance_a
+        self.instance_b = instance_b
         self.role_a = role_a
         self.role_b = role_b
         self.opening = opening
@@ -165,14 +165,16 @@ class Dialogue:
         topic = (folder / "brief.md").read_text().strip()
         scenario = load_scenario(folder / "scenario.toml")
 
-        actor_a = ActorFactory.create(meta.agent_a, "a", meta.session_a, scenario.name_a)
-        actor_b = ActorFactory.create(meta.agent_b, "b", meta.session_b, scenario.name_b)
+        agent_a = get_agent(meta.agent_a)
+        agent_b = get_agent(meta.agent_b)
+        instance_a = AgentInstance(agent_a, meta.session_a, scenario.name_a)
+        instance_b = AgentInstance(agent_b, meta.session_b, scenario.name_b)
 
         return cls(
             meta=meta,
             topic=topic,
-            actor_a=actor_a,
-            actor_b=actor_b,
+            instance_a=instance_a,
+            instance_b=instance_b,
             role_a=scenario.role_a,
             role_b=scenario.role_b,
             opening=scenario.opening,

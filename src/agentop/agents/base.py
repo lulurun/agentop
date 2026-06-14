@@ -14,6 +14,10 @@ class BaseAgent:
 
     name: str = ""  # "claude", "codex", "gemini", …
 
+    # ------------------------------------------------------------------ actor behaviour
+    idle_seconds: float = 5.0
+    use_bracketed_paste: bool = False
+
     # ------------------------------------------------------------------ detection
 
     def matches(self, proc_name: str, cmdline: str) -> bool:

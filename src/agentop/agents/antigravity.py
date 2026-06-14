@@ -19,6 +19,8 @@ _START_TOLERANCE_SEC = 15
 
 class AntigravityAgent(BaseAgent):
     name = "antigravity"
+    idle_seconds = 15.0       # agy updates the screen after completion (token banner, input prompt)
+    use_bracketed_paste = True # bare newlines act as Enter in agy
 
     def matches(self, proc_name: str, cmdline: str) -> bool:
         name_lower = proc_name.lower()

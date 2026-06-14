@@ -1,4 +1,4 @@
-"""Actor: one participant in a dialogue, owning its data and tmux operations."""
+"""Actor: dialogue-level send/receive for one participant in a dialogue."""
 
 from __future__ import annotations
 
@@ -14,20 +14,23 @@ LOG = logging.getLogger(__name__)
 
 
 class Actor:
-    def __init__(self, id: str, session: str, name: str):
-        self.id = id  # "a" or "b"
+    def __init__(self, session: str, name: str, idle_seconds: float = 5.0, use_bracketed_paste: bool = False):
         self.session = session
-        self.name = name or id.upper()
-        self._capturer = Capturer()
+        self.name = name
+        self._capturer = Capturer(idle_seconds=idle_seconds)
+        self._use_bracketed_paste = use_bracketed_paste
         self._stop: threading.Event | None = None
-        self._turn = 0  # incremented each receive()
+        self._turn = 0
 
     def attach(self, stop_event: threading.Event) -> Actor:
         self._stop = stop_event
         return self
 
     def send(self, text: str) -> None:
-        Session.paste_text(self.session, text)
+        if self._use_bracketed_paste:
+            Session.paste_text_bracketed(self.session, text)
+        else:
+            Session.paste_text(self.session, text)
         Session.send_keys(self.session, "Enter")
 
     def receive(self, nonce: str) -> tuple[str, ReceiveStatus] | None:

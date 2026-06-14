@@ -22,7 +22,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agentop.dialogue.actor import Actor
 from agentop.dialogue.status import ReceiveStatus
 from agentop.dialogue.orchestrator import _format_rule, _new_nonce
 
@@ -59,9 +58,11 @@ def main() -> None:
 
     session = args.session or _start_session(args.tool, args.cwd)
     stop = threading.Event()
-    from agentop.dialogue.actor_factory import ActorFactory
-    actor = ActorFactory.create(args.tool, "test", session, _NAME)
-    actor.attach(stop)
+    from agentop.agent_instance import AgentInstance
+    from agentop.agents import get_agent
+    instance = AgentInstance(get_agent(args.tool), session, _NAME)
+    actor = instance.actor
+    instance.attach(stop)
 
     for i in range(1, args.turns + 1):
         question = QUESTIONS[(i - 1) % len(QUESTIONS)]

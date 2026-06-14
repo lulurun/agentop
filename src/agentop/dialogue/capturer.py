@@ -15,7 +15,8 @@ _TIMEOUT = 1800.0
 
 
 class Capturer:
-    idle_seconds: float = 5.0
+    def __init__(self, idle_seconds: float = 5.0):
+        self.idle_seconds = idle_seconds
 
     def wait_for_idle(self, session: str, stop_event: threading.Event) -> str | None:
         deadline = time.monotonic() + _TIMEOUT
