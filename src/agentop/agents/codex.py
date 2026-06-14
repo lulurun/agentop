@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -124,13 +123,15 @@ class CodexAgent(BaseAgent):
         for row in rows:
             title = row["title"] or row["first_user_message"] or None
             ts_ms = row["updated_at_ms"] or row["created_at_ms"] or 0
-            result.append({
-                "session_id": row["id"],
-                "title": title[:80] + ("…" if title and len(title) > 80 else "") if title else None,
-                "cwd": row["cwd"] or "",
-                "tool": self.name,
-                "last_active": ts_ms / 1000,
-            })
+            result.append(
+                {
+                    "session_id": row["id"],
+                    "title": title[:80] + ("…" if title and len(title) > 80 else "") if title else None,
+                    "cwd": row["cwd"] or "",
+                    "tool": self.name,
+                    "last_active": ts_ms / 1000,
+                }
+            )
         return result
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:

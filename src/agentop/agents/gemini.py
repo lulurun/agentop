@@ -127,21 +127,21 @@ class GeminiAgent(BaseAgent):
                             if msg.get("type") == "user":
                                 content = msg.get("content", "")
                                 if isinstance(content, list):
-                                    content = " ".join(
-                                        c.get("text", "") for c in content if isinstance(c, dict)
-                                    )
+                                    content = " ".join(c.get("text", "") for c in content if isinstance(c, dict))
                                 title = str(content).strip()[:80]
                                 if title:
                                     break
                 except (OSError, json.JSONDecodeError, KeyError):
                     pass
-                sessions.append({
-                    "session_id": session_id or f.stem,
-                    "title": title or None,
-                    "cwd": cwd,
-                    "tool": self.name,
-                    "last_active": f.stat().st_mtime,
-                })
+                sessions.append(
+                    {
+                        "session_id": session_id or f.stem,
+                        "title": title or None,
+                        "cwd": cwd,
+                        "tool": self.name,
+                        "last_active": f.stat().st_mtime,
+                    }
+                )
         except OSError:
             pass
         sessions.sort(key=lambda x: x["last_active"], reverse=True)

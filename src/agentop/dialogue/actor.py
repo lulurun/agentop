@@ -13,9 +13,7 @@ LOG = logging.getLogger(__name__)
 
 # <agentop_message turn="N" from="NAME" nonce="HEX">...</agentop_message>
 _MSG_RE = re.compile(
-    r'<agentop_message\s+turn="(\d+)"\s+from="([^"]+)"\s+nonce="([0-9a-f]+)"\s*>'
-    r"(.*?)"
-    r"</agentop_message>",
+    r'<agentop_message\s+turn="(\d+)"\s+from="([^"]+)"\s+nonce="([0-9a-f]+)"\s*>' r"(.*?)" r"</agentop_message>",
     re.DOTALL | re.IGNORECASE,
 )
 
@@ -29,7 +27,7 @@ _STATUS_RE = re.compile(
 RECEIVE_OK = "ok"
 RECEIVE_COMPLETE = "complete"
 RECEIVE_PARSE_FAILURE = "parse_failure"  # no valid block found; orchestrator may retry
-RECEIVE_PARSE_ERROR = "parse_error"      # retries exhausted; orchestrator halts
+RECEIVE_PARSE_ERROR = "parse_error"  # retries exhausted; orchestrator halts
 
 
 class Actor:

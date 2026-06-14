@@ -153,18 +153,21 @@ class AntigravityAgent(BaseAgent):
                             break
             except OSError:
                 continue
-            sessions.append({
-                "session_id": session_id,
-                "title": title,
-                "cwd": cwd_map.get(session_id, ""),
-                "tool": self.name,
-                "last_active": transcript.stat().st_mtime,
-            })
+            sessions.append(
+                {
+                    "session_id": session_id,
+                    "title": title,
+                    "cwd": cwd_map.get(session_id, ""),
+                    "tool": self.name,
+                    "last_active": transcript.stat().st_mtime,
+                }
+            )
         sessions.sort(key=lambda x: x["last_active"], reverse=True)
         return sessions[:limit]
 
     def delete_session(self, session_id: str) -> None:
         import shutil
+
         conv_dir = Path("~/.gemini/antigravity-cli/brain").expanduser() / session_id
         if not conv_dir.exists():
             raise FileNotFoundError(f"Session {session_id} not found in Antigravity brain")

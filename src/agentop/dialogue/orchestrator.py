@@ -6,8 +6,21 @@ import logging
 import os
 import threading
 
-from agentop.dialogue.actor import RECEIVE_COMPLETE, RECEIVE_OK, RECEIVE_PARSE_ERROR, RECEIVE_PARSE_FAILURE, Actor
-from agentop.dialogue.model import DIALOGUE_COMPLETED, DIALOGUE_ERROR, DIALOGUE_PARSE_ERROR, DIALOGUE_RUNNING, DIALOGUE_STOPPED, Dialogue
+from agentop.dialogue.actor import (
+    RECEIVE_COMPLETE,
+    RECEIVE_OK,
+    RECEIVE_PARSE_ERROR,
+    RECEIVE_PARSE_FAILURE,
+    Actor,
+)
+from agentop.dialogue.model import (
+    DIALOGUE_COMPLETED,
+    DIALOGUE_ERROR,
+    DIALOGUE_PARSE_ERROR,
+    DIALOGUE_RUNNING,
+    DIALOGUE_STOPPED,
+    Dialogue,
+)
 
 LOG = logging.getLogger(__name__)
 
@@ -141,7 +154,9 @@ class DialogueOrchestrator(threading.Thread):
             body, receive_status = result
 
             if receive_status == RECEIVE_PARSE_ERROR:
-                d.update({"status": DIALOGUE_PARSE_ERROR, "error": f"actor {actor.name} turn {turn} exhausted retries"})
+                d.update(
+                    {"status": DIALOGUE_PARSE_ERROR, "error": f"actor {actor.name} turn {turn} exhausted retries"}
+                )
                 break
 
             if receive_status == RECEIVE_COMPLETE:

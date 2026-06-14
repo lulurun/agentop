@@ -8,9 +8,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agentop.dialogue.scenarios.reader import load as load_scenario
-from agentop.dialogue.actor import Actor
 from agentop.agents import get_agent
+from agentop.dialogue.actor import Actor
+from agentop.dialogue.scenarios.reader import load as load_scenario
 
 LOG = logging.getLogger(__name__)
 
@@ -123,7 +123,16 @@ class DialogueMeta:
 
 
 class Dialogue:
-    def __init__(self, meta: DialogueMeta, topic: str, actor_a: Actor, actor_b: Actor, role_a: str, role_b: str, opening: str | None = None):
+    def __init__(
+        self,
+        meta: DialogueMeta,
+        topic: str,
+        actor_a: Actor,
+        actor_b: Actor,
+        role_a: str,
+        role_b: str,
+        opening: str | None = None,
+    ):
         self.meta = meta
         self.topic = topic
         self.actor_a = actor_a
@@ -165,8 +174,16 @@ class Dialogue:
 
         agent_a = get_agent(meta.agent_a)
         agent_b = get_agent(meta.agent_b)
-        actor_a = agent_a.make_actor("a", meta.session_a, scenario.name_a) if agent_a else Actor(id="a", session=meta.session_a, name=scenario.name_a)
-        actor_b = agent_b.make_actor("b", meta.session_b, scenario.name_b) if agent_b else Actor(id="b", session=meta.session_b, name=scenario.name_b)
+        actor_a = (
+            agent_a.make_actor("a", meta.session_a, scenario.name_a)
+            if agent_a
+            else Actor(id="a", session=meta.session_a, name=scenario.name_a)
+        )
+        actor_b = (
+            agent_b.make_actor("b", meta.session_b, scenario.name_b)
+            if agent_b
+            else Actor(id="b", session=meta.session_b, name=scenario.name_b)
+        )
 
         return cls(
             meta=meta,

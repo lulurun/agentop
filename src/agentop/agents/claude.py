@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import socket
-import subprocess
 import time
 from pathlib import Path
 from typing import Optional
@@ -56,19 +55,22 @@ class ClaudeAgent(BaseAgent):
                                 break
                 except OSError:
                     continue
-                sessions.append({
-                    "session_id": f.stem,
-                    "title": title,
-                    "cwd": cwd or "",
-                    "tool": self.name,
-                    "last_active": f.stat().st_mtime,
-                })
+                sessions.append(
+                    {
+                        "session_id": f.stem,
+                        "title": title,
+                        "cwd": cwd or "",
+                        "tool": self.name,
+                        "last_active": f.stat().st_mtime,
+                    }
+                )
         sessions.sort(key=lambda x: x["last_active"], reverse=True)
         return sessions[:limit]
 
     def post_start_hook(self, tmux_session: str) -> None:
         """Accept Claude's trust / safety-check prompt automatically."""
         from agentop.tmux import CapturePane, Session
+
         for _ in range(40):
             time.sleep(0.25)
             content = CapturePane.screen(tmux_session).lower()
