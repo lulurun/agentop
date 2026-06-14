@@ -134,11 +134,22 @@ agentop dialogue stop <id> --close   # also kill both agent tmux sessions
 
 ### 2.4 dialogue remove
 
-Remove stopped or completed dialogue data from disk.
+Remove dialogue data from disk.
 
 ```bash
-agentop dialogue remove <id>
-agentop dialogue remove --all        # remove all stopped/completed dialogues
+# Remove all stopped dialogues (default, with confirmation)
+agentop dialogue remove
+
+# Remove all completed dialogues
+agentop dialogue remove --status completed
+
+# Remove a specific dialogue by ID (any status, no confirmation)
+agentop dialogue remove --id <id>
+
+# Skip confirmation prompt
+agentop dialogue remove --status stopped --yes
 ```
 
-Running dialogues are refused. Removable statuses: `stopped`, `completed`, `error`, `agent_missing_delimiter`.
+`--status` bulk removal only accepts `stopped` or `completed`. Any other status requires `--id`.
+
+If the dialogue has open tmux sessions (e.g. status is `running`), they are stopped and closed automatically before the directory is deleted.

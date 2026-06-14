@@ -338,14 +338,23 @@ def cmd_dialogue_stop(args):
 
 def cmd_dialogue_remove(args):
     ops = _dialogue_ops()
-    if getattr(args, "all", False):
-        candidates = ops.list_removable_dialogues()
+    if args.id:
+        result = ops.remove_dialogue(args.id)
+        if not result.get("ok"):
+            print(f"Error: {result['error']}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Removed {args.id}.")
+    else:
+        status = args.status
+        candidates = ops.list_dialogues_by_status(status)
         if not candidates:
-            print("No stopped/completed dialogues to remove.")
+            print(f"No dialogues with status '{status}'.")
             return
-        print("Will remove:")
+        from agentop.tmux import Session
+        print(f"Will remove ({status}):")
         for meta in candidates:
-            print(f"  {meta.id}  [{meta.status}]  {meta.agent_a} vs {meta.agent_b}")
+            open_note = " [sessions open]" if Session.has(meta.session_a) or Session.has(meta.session_b) else ""
+            print(f"  {meta.id}  {meta.agent_a} vs {meta.agent_b}{open_note}")
         if not getattr(args, "yes", False):
             try:
                 answer = input(f"\nRemove {len(candidates)} dialogue(s)? [y/N] ").strip().lower()
@@ -355,15 +364,9 @@ def cmd_dialogue_remove(args):
             if answer != "y":
                 print("Aborted.")
                 return
-        result = ops.remove_all_stopped_dialogues()
+        result = ops.remove_dialogues_by_status(status)
         for did in result["removed"]:
             print(f"Removed {did}")
-    else:
-        result = ops.remove_dialogue(args.id)
-        if not result.get("ok"):
-            print(f"Error: {result['error']}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Removed dialogue {args.id}.")
 
 
 # ---------------------------------------------------------------------------
@@ -491,10 +494,14 @@ def main():
     p_dstop.add_argument("id", help="Dialogue ID")
     p_dstop.add_argument("--close", action="store_true", help="Also kill both agent tmux sessions")
 
-    p_dremove = dsub.add_parser("remove", help="Remove stopped/completed dialogue(s)")
-    p_dremove_group = p_dremove.add_mutually_exclusive_group(required=True)
-    p_dremove_group.add_argument("id", nargs="?", help="Dialogue ID to remove")
-    p_dremove_group.add_argument("--all", action="store_true", help="Remove all stopped/completed dialogues")
+    p_dremove = dsub.add_parser("remove", help="Remove dialogue(s)")
+    p_dremove.add_argument("--id", metavar="ID", default="", help="Remove a specific dialogue by ID (any status)")
+    p_dremove.add_argument(
+        "--status",
+        choices=["stopped", "completed"],
+        default="stopped",
+        help="Remove all dialogues with this status (default: stopped)",
+    )
     p_dremove.add_argument("--yes", action="store_true", help="Skip confirmation prompt (for scripting)")
 
     args = parser.parse_args()

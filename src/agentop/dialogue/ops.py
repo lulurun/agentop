@@ -102,34 +102,50 @@ def list_dialogues() -> list[dict]:
     return result
 
 
-_REMOVABLE_STATUSES = {"stopped", "completed", "error", "agent_missing_delimiter"}
+def _close_open_sessions(meta: DialogueMeta) -> None:
+    """Stop the orchestrator and kill any still-open tmux sessions."""
+    if meta.pid:
+        try:
+            os.kill(meta.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    for session in (meta.session_a, meta.session_b):
+        if Session.has(session):
+            Session.send_keys(session, "/exit", "Enter")
+            time.sleep(3)
+            Session.kill(session)
 
 
-def remove_dialogue(dialogue_id: str) -> dict:
-    meta = DialogueMeta.load(dialogue_id)
-    if not meta:
-        return {"ok": False, "error": f"Dialogue {dialogue_id!r} not found"}
-    if meta.status not in _REMOVABLE_STATUSES:
-        return {"ok": False, "error": f"Dialogue {dialogue_id!r} is {meta.status} — only stopped/completed dialogues can be removed"}
-    shutil.rmtree(meta._dir())
-    return {"ok": True}
-
-
-def list_removable_dialogues() -> list[DialogueMeta]:
+def list_dialogues_by_status(status: str) -> list[DialogueMeta]:
     if not DIALOGUES_DIR.exists():
         return []
     result = []
     for meta_file in DIALOGUES_DIR.glob("*/meta.json"):
         meta = DialogueMeta.load(meta_file.parent.name)
-        if meta and meta.status in _REMOVABLE_STATUSES:
+        if meta and meta.status == status:
             result.append(meta)
     return result
 
 
-def remove_all_stopped_dialogues() -> dict:
-    candidates = list_removable_dialogues()
+def remove_dialogue(dialogue_id: str) -> dict:
+    """Remove a specific dialogue by ID regardless of status.
+
+    If the dialogue has open tmux sessions, stops and closes them first.
+    """
+    meta = DialogueMeta.load(dialogue_id)
+    if not meta:
+        return {"ok": False, "error": f"Dialogue {dialogue_id!r} not found"}
+    _close_open_sessions(meta)
+    shutil.rmtree(meta._dir())
+    return {"ok": True}
+
+
+def remove_dialogues_by_status(status: str) -> dict:
+    """Remove all dialogues with the given status."""
+    candidates = list_dialogues_by_status(status)
     removed = []
     for meta in candidates:
+        _close_open_sessions(meta)
         shutil.rmtree(meta._dir())
         removed.append(meta.id)
     return {"ok": True, "removed": removed}
