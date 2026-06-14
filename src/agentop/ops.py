@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from agentop import registry, scanner
+from agentop.agent_instance import AgentInstance
 from agentop.agentclis import AGENTS, get_agent
 
 
@@ -47,8 +48,11 @@ def stop(name: str, sessions: list[dict] | None = None) -> dict:
         return {"ok": False, "error": "Session not found"}
     if not s.get("managed"):
         return {"ok": False, "error": "Not a managed session"}
+    agent = get_agent(s["tool"])
+    if not agent:
+        return {"ok": False, "error": f"Unknown tool: {s['tool']}"}
     tmux_name = (s.get("tmux") or {}).get("session") or name
-    result = scanner.stop_session(s.get("cwd", ""), tmux_name)
+    result = AgentInstance(agent, tmux_name).stop()
     return {"ok": True, **result}
 
 

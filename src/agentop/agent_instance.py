@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import threading
+import time
 
 from agentop.actor import Actor
 from agentop.agentcli import AgentCli
 from agentop.tmux import Session
+
+_EXIT_WAIT = 3.0
 
 
 class AgentInstance:
@@ -24,8 +27,20 @@ class AgentInstance:
         """Send a raw operational command to the agent process (e.g. /exit)."""
         Session.send_keys(self.session, text, "Enter")
 
-    def stop(self) -> None:
-        self.send_command("/exit")
+    def stop(self) -> dict:
+        """Send /exit, wait for the process to quit, then kill the tmux session."""
+        sent_exit = False
+        if Session.has(self.session):
+            self.send_command("/exit")
+            sent_exit = True
+            time.sleep(_EXIT_WAIT)
+
+        tmux_killed = False
+        if Session.has(self.session):
+            Session.kill(self.session)
+            tmux_killed = True
+
+        return {"sent_exit": sent_exit, "tmux_killed": tmux_killed}
 
     def attach(self, stop_event: threading.Event) -> AgentInstance:
         self.actor.attach(stop_event)
