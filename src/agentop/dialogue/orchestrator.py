@@ -8,7 +8,7 @@ import threading
 
 from agentop.dialogue.actor import (
     RECEIVE_COMPLETE,
-    RECEIVE_OK,
+    RECEIVE_CONTINUE,
     RECEIVE_PARSE_ERROR,
     RECEIVE_PARSE_FAILURE,
     Actor,
@@ -28,27 +28,30 @@ _MAX_RETRIES = 2  # retries after first attempt = up to 3 total receives per tur
 
 _PROTOCOL_RULE = f"""\
 OUTPUT FORMAT (mandatory): Do all your thinking freely. When ready to send \
-your message, output it using this exact XML structure at the very end:
+your message, wrap it in BEGIN/END delimiters at the very end:
 
-<agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
+--- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---
 your message here
-<agentop_status>{RECEIVE_OK}</agentop_status>
-</agentop_message>
+--- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---
+
+To signal you are completely done:
+
+--- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_COMPLETE} ---
+your final summary here
+--- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_COMPLETE} ---
 
 Rules:
-- Replace nothing — use the exact turn number, name, and nonce shown above.
-- To signal you are completely done, use <agentop_status>{RECEIVE_COMPLETE}</agentop_status>.
-- Everything outside the XML block is your private workspace and is not forwarded.\
+- Replace nothing — use the exact name, turn number, and nonce shown above.
+- Everything outside the delimiters is your private workspace and is not forwarded.\
 """
 
 _RECOVERY_PROMPT = f"""\
-Your previous response did not contain the required XML block. Please re-send \
-your message now using exactly this format:
+Your previous response did not contain the required BEGIN/END delimiters. \
+Please re-send your message now using exactly this format:
 
-<agentop_message turn="{{turn}}" from="{{name}}" nonce="{{nonce}}">
+--- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---
 your message here
-<agentop_status>{RECEIVE_OK}</agentop_status>
-</agentop_message>\
+--- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{RECEIVE_CONTINUE} ---\
 """
 
 
