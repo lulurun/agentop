@@ -462,7 +462,11 @@ def main():
         "--cwd-b", dest="cwd_b", default=os.path.expanduser("~"), help="Working directory for agent B (default: home)"
     )
     p_dstart.add_argument(
-        "--max-turns", dest="max_turns", type=int, default=0, help="Maximum relay turns (default: use scenario setting, fallback 20)"
+        "--max-turns",
+        dest="max_turns",
+        type=int,
+        default=0,
+        help="Maximum relay turns (default: use scenario setting, fallback 20)",
     )
     p_dstart.add_argument(
         "--scenario", default="", metavar="FILE", help="Path to a scenario TOML file (default: built-in pm-sde)"
@@ -493,9 +497,7 @@ def main():
             "start": cmd_dialogue_start,
             "stop": cmd_dialogue_stop,
             "remove": cmd_dialogue_remove,
-        }[
-            args.dialogue_command
-        ](args)
+        }[args.dialogue_command](args)
         return
 
     {

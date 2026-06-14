@@ -1,6 +1,6 @@
 # agentop
 
-A local dashboard for monitoring running AI agent sessions — Claude Code, Codex, and Gemini CLI.
+Monitor and orchestrate AI agent CLI sessions (Claude Code, Codex, Antigravity).
 
 ![agentop dashboard](https://raw.githubusercontent.com/lulurun/agentop/main/docs/screenshot.png)
 
@@ -8,15 +8,18 @@ A local dashboard for monitoring running AI agent sessions — Claude Code, Code
 
 ## What it does
 
-- Detects running Claude Code, Codex, Gemini CLI, and Antigravity processes
-- Shows session, tool, status, PID, runtime, memory, token usage, and working directory
-- Reads AI-generated conversation titles from Claude Code and Codex sessions
-- Shows token usage (input, output, cache) per session
-- Shows git branch and dirty status for each session's project
-- **In-browser terminal** — click `▶` on any live session to open an xterm.js terminal attached to its tmux pane
-- History tab: browse past sessions with resume support (active sessions excluded)
-- Auto-refreshing web UI at `http://127.0.0.1:9775`
+- Detects running Claude Code, Codex, and Antigravity processes via tmux
+- Web dashboard showing session status, token usage, runtime, and memory
+- In-browser terminal attached to any live session
 - `agentop` CLI for starting, stopping, and browsing session history
+- **Dialogue system** — orchestrates two agents collaborating on a shared task via a structured protocol
+
+## Documentation
+
+- [Architecture](docs/architecture.md) — code structure and module responsibilities
+- [CLI reference](docs/cli.md) — all commands and options
+- [Dialogue system](docs/dialogue.md) — two-agent dialogues, scenarios, and protocol
+- [Dashboard](docs/dashboard.md) — web UI and systemd service setup
 
 ## Requirements
 
@@ -29,62 +32,6 @@ A local dashboard for monitoring running AI agent sessions — Claude Code, Code
 git clone git@github.com:lulurun/agentop.git
 cd agentop
 pip install -e .
-```
-
-## Start the dashboard
-
-```bash
-./run_app.sh
-```
-
-Open [http://127.0.0.1:9775](http://127.0.0.1:9775) in your browser.
-
-To restart:
-
-```bash
-[ -f dashboard.pid ] && kill $(cat dashboard.pid) 2>/dev/null; rm -f dashboard.pid
-./run_app.sh
-```
-
-To stop:
-
-```bash
-kill $(cat dashboard.pid)
-```
-
-Logs are written to `dashboard.log`.
-
-## CLI
-
-List running sessions:
-
-```bash
-agentop list
-agentop list --json
-```
-
-Start a session in a named tmux window:
-
-```bash
-agentop start myapp --tool claude
-agentop start myapp --tool claude --cwd ~/projects/myapp
-agentop start myapp --tool codex
-agentop start myapp --tool gemini
-agentop start myapp --tool antigravity
-```
-
-Stop a session:
-
-```bash
-agentop stop myapp-12345
-```
-
-Browse session history:
-
-```bash
-agentop history
-agentop history --tool claude
-agentop history --limit 20 --json
 ```
 
 ## License

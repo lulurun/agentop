@@ -1,23 +1,31 @@
-## Dashboard server
+## Quick reference
 
-The dashboard runs as a systemd user service and starts automatically at boot.
+| Task | Where to look |
+|------|---------------|
+| CLI commands | [docs/cli.md](docs/cli.md) |
+| Dialogue system | [docs/dialogue.md](docs/dialogue.md) |
+| Code structure | [docs/architecture.md](docs/architecture.md) |
+| Dashboard setup | [docs/dashboard.md](docs/dashboard.md) |
+
+## Key facts
+
+- Dashboard runs at `http://127.0.0.1:9775` as a systemd user service
+- Supported agent tools: `claude`, `codex`, `antigravity`
+- Dialogues are stored in `~/.agent-dashboard/dialogues/<id>/`
+- Only sessions started by agentop (managed) can be stopped or sent prompts
+
+## Dashboard service
 
 ```bash
-# Status / restart / stop
 systemctl --user status agentop
 systemctl --user restart agentop
 systemctl --user stop agentop
-
-# Logs (live)
-journalctl --user -u agentop -f
+journalctl --user -u agentop -f   # live logs
 ```
 
-Runs at http://127.0.0.1:9775. Logs also written to `dashboard.log`.
-
-### First-time service setup
+## First-time service setup
 
 ```bash
-# Create service file
 mkdir -p ~/.config/systemd/user
 cat > ~/.config/systemd/user/agentop.service << 'EOF'
 [Unit]
@@ -25,8 +33,6 @@ Description=Agentop Dashboard
 After=network.target
 
 [Service]
-Type=simple
-WorkingDirectory=/home/lulurun/workspace/agentop
 Type=forking
 WorkingDirectory=/home/lulurun/workspace/agentop
 ExecStart=/bin/bash /home/lulurun/workspace/agentop/run_app.sh
@@ -43,11 +49,5 @@ EOF
 systemctl --user daemon-reload
 systemctl --user enable agentop
 systemctl --user start agentop
-
-# Allow service to start at boot without login
 loginctl enable-linger lulurun
 ```
-
-## CLI
-
-Use `agentop` to list, start, stop, and browse history — run `agentop --help` for full usage.
