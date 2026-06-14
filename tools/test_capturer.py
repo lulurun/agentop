@@ -23,7 +23,6 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agentop.capturer import Capturer
 from agentop.tmux import CapturePane
 
 
@@ -60,7 +59,7 @@ def main() -> None:
     print(f"\n=== SENDING PROMPT ===\n  {args.prompt!r}")
     actor.send(args.prompt)
 
-    print(f"\n=== WAITING FOR IDLE (screen stable for {actor._capturer.idle_seconds}s) ===")
+    print(f"\n=== WAITING FOR IDLE (screen stable for {actor.idle_seconds}s) ===")
     t0 = time.monotonic()
     raw = actor.receive()
     elapsed = time.monotonic() - t0
