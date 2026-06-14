@@ -52,38 +52,32 @@ class Actor:
     def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, str]:
         """Extract the last BEGIN/END delimited block matching turn, name, and nonce.
 
-        Uses rfind on the BEGIN line (which embeds the unique nonce) so that a
-        re-sent block after a recovery prompt takes precedence over an earlier one.
-        The END delimiter is optional: terminal UI spinners can overwrite the last
-        line(s) of output in the tmux scrollback; when END is absent we fall back
-        to taking content to the end of the buffer.
+        Scans lines from the bottom: collect lines once END is found, stop and
+        return once BEGIN is found.  Scanning from the bottom means the last
+        complete block wins (handles retries naturally).  Delimiter matching uses
+        'in' rather than startswith so that a leading '●' from Claude Code's output
+        renderer does not break the match.
         """
-        begin_prefix = f"--- BEGIN {self.name} turn:{turn} nonce:{nonce}"
-        end_prefix = f"--- END {self.name} turn:{turn} nonce:{nonce}"
-        raw_lower = raw.lower()
+        begin_tag = f"--- BEGIN {self.name} turn:{turn} nonce:{nonce}"
+        end_tag = f"--- END {self.name} turn:{turn} nonce:{nonce}"
 
-        idx = raw_lower.rfind(begin_prefix.lower())
-        if idx == -1:
-            LOG.warning("[%s] turn:%d nonce:%s — BEGIN delimiter not found", self.name, turn, nonce)
-            return ("", RECEIVE_PARSE_FAILURE)
+        buffer = []
+        in_block = False
 
-        # Extract the full BEGIN line to read the status
-        line_end = raw.find("\n", idx)
-        begin_line = raw[idx : line_end if line_end >= 0 else len(raw)]
-        sm = re.search(r"status:(\w+)", begin_line, re.IGNORECASE)
-        receive_status = RECEIVE_COMPLETE if (sm and sm.group(1).lower() == RECEIVE_COMPLETE) else RECEIVE_CONTINUE
+        for line in reversed(raw.splitlines()):
+            stripped = line.strip()
+            if not in_block:
+                if end_tag.lower() in stripped.lower():
+                    in_block = True
+            else:
+                if begin_tag.lower() in stripped.lower():
+                    sm = re.search(r"status:(\w+)", stripped, re.IGNORECASE)
+                    receive_status = RECEIVE_COMPLETE if (sm and sm.group(1).lower() == RECEIVE_COMPLETE) else RECEIVE_CONTINUE
+                    body = "\n".join(reversed(buffer)).strip()
+                    LOG.info("[%s] turn:%d receive_status:%s body_len:%d", self.name, turn, receive_status, len(body))
+                    return (body, receive_status)
+                else:
+                    buffer.append(line)
 
-        # Body starts on the line after BEGIN
-        body_start = line_end + 1 if line_end >= 0 else len(raw)
-        rest = raw[body_start:]
-
-        end_idx = rest.lower().find(end_prefix.lower())
-        if end_idx >= 0:
-            body = rest[:end_idx].strip()
-        else:
-            # END overwritten by terminal spinner — fall back to end of buffer
-            LOG.debug("[%s] turn:%d END delimiter missing, using content to end of buffer", self.name, turn)
-            body = rest.strip()
-
-        LOG.info("[%s] turn:%d receive_status:%s body_len:%d", self.name, turn, receive_status, len(body))
-        return (body, receive_status)
+        LOG.warning("[%s] turn:%d nonce:%s — delimiters not found", self.name, turn, nonce)
+        return ("", RECEIVE_PARSE_FAILURE)
