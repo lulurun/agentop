@@ -11,12 +11,6 @@ from agentop.tmux import Session
 
 LOG = logging.getLogger(__name__)
 
-# <agentop_message turn="N" from="NAME" nonce="HEX">...</agentop_message>
-_MSG_RE = re.compile(
-    r'<agentop_message\s+turn="(\d+)"\s+from="([^"]+)"\s+nonce="([0-9a-f]+)"\s*>' r"(.*?)" r"</agentop_message>",
-    re.DOTALL | re.IGNORECASE,
-)
-
 # <agentop_status>VALUE</agentop_status>
 _STATUS_RE = re.compile(
     r"<agentop_status>(.*?)</agentop_status>",
@@ -28,6 +22,8 @@ RECEIVE_OK = "ok"
 RECEIVE_COMPLETE = "complete"
 RECEIVE_PARSE_FAILURE = "parse_failure"  # no valid block found; orchestrator may retry
 RECEIVE_PARSE_ERROR = "parse_error"  # retries exhausted; orchestrator halts
+
+_CLOSE_TAG = "</agentop_message>"
 
 
 class Actor:
@@ -62,35 +58,40 @@ class Actor:
         return self._parse_output(content, self._turn, nonce)
 
     def _parse_output(self, raw: str, turn: int, nonce: str) -> tuple[str, str]:
-        """Extract the last valid <agentop_message> block matching turn, name, and nonce."""
-        body = None
-        receive_status = RECEIVE_OK
+        """Extract the last <agentop_message> block matching turn, name, and nonce.
 
-        for m in _MSG_RE.finditer(raw):
-            msg_turn = int(m.group(1))
-            msg_from = m.group(2)
-            msg_nonce = m.group(3)
-            msg_body = m.group(4).strip()
+        Searches by opening tag (which embeds the unique nonce) using rfind so
+        that a re-sent block after a recovery prompt takes precedence.  The
+        closing tag is optional: terminal UI spinners (e.g. Claude Code's
+        '✻ Brewed for Ns') use cursor-up sequences that can overwrite the last
+        line(s) of the agent's output, causing the closing tag to disappear
+        from the tmux scrollback buffer.  When the closing tag is absent we
+        fall back to taking content to the end of the buffer.
+        """
+        open_tag = f'<agentop_message turn="{turn}" from="{self.name}" nonce="{nonce}">'
+        raw_lower = raw.lower()
 
-            if msg_turn != turn:
-                continue
-            if msg_from.lower() != self.name.lower():
-                continue
-            if msg_nonce != nonce:
-                continue
-
-            body = msg_body
-
-            # Look for a status tag inside this message block
-            sm = _STATUS_RE.search(msg_body)
-            if sm:
-                receive_status = sm.group(1).strip().lower()
-                # Remove the status tag from the body
-                body = _STATUS_RE.sub("", msg_body).strip()
-
-        if body is None:
-            LOG.warning("[%s] turn:%d nonce:%s — no valid message found", self.name, turn, nonce)
+        idx = raw_lower.rfind(open_tag.lower())
+        if idx == -1:
+            LOG.warning("[%s] turn:%d nonce:%s — opening tag not found", self.name, turn, nonce)
             return ("", RECEIVE_PARSE_FAILURE)
+
+        content_start = idx + len(open_tag)
+        rest = raw[content_start:]
+
+        close_idx = rest.lower().find(_CLOSE_TAG.lower())
+        if close_idx >= 0:
+            body = rest[:close_idx].strip()
+        else:
+            # Closing tag overwritten by terminal spinner — use content to end
+            LOG.debug("[%s] turn:%d closing tag missing, falling back to end of buffer", self.name, turn)
+            body = rest.strip()
+
+        receive_status = RECEIVE_OK
+        sm = _STATUS_RE.search(body)
+        if sm:
+            receive_status = sm.group(1).strip().lower()
+            body = _STATUS_RE.sub("", body).strip()
 
         LOG.info("[%s] turn:%d receive_status:%s body_len:%d", self.name, turn, receive_status, len(body))
         return (body, receive_status)
