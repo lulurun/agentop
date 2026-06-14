@@ -9,7 +9,6 @@ import subprocess
 import time
 
 from agentop.agentclis import AGENTS, get_agent
-from agentop.files import get_recent_project_files, scan_agent_dirs
 from agentop.git import get_git_info
 from agentop.process import get_ancestor_and_child_pids, get_process_tree, scan_processes
 from agentop.tmux import Session
@@ -17,9 +16,7 @@ from agentop.tmux import Session
 __all__ = [
     "build_sessions",
     "get_process_tree",
-    "get_recent_project_files",
     "map_process_to_tmux",
-    "scan_agent_dirs",
     "send_to_session",
     "stop_session",
 ]

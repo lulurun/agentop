@@ -117,7 +117,10 @@ class DialogueOrchestrator(threading.Thread):
                 return (body, receive_status)
             if attempt < _MAX_RETRIES:
                 LOG.warning(
-                    "[%s] turn:%d attempt:%d delimiter not found — sending recovery prompt", actor.name, turn, attempt + 1
+                    "[%s] turn:%d attempt:%d delimiter not found — sending recovery prompt",
+                    actor.name,
+                    turn,
+                    attempt + 1,
                 )
                 actor.send(_recovery_prompt(actor.name, turn, nonce))
         LOG.error("[%s] turn:%d exhausted retries", actor.name, turn)
@@ -149,7 +152,10 @@ class DialogueOrchestrator(threading.Thread):
 
             if receive_status == ReceiveStatus.DELIMITER_NOT_FOUND_RETRIES_EXHAUSTED:
                 d.update(
-                    {"status": DialogueStatus.AGENT_REPEATEDLY_MISSING_DELIMITER, "error": f"actor {actor.name} turn {turn} exhausted retries"}
+                    {
+                        "status": DialogueStatus.AGENT_REPEATEDLY_MISSING_DELIMITER,
+                        "error": f"actor {actor.name} turn {turn} exhausted retries",
+                    }
                 )
                 break
 

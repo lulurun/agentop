@@ -11,7 +11,7 @@ from pathlib import Path
 from agentop.agent_instance import AgentInstance
 from agentop.agentclis import get_agent
 from agentop.dialogue.scenarios.reader import load as load_scenario
-from agentop.dialogue.status import DialogueStatus, ReceiveStatus
+from agentop.dialogue.status import DialogueStatus
 
 LOG = logging.getLogger(__name__)
 

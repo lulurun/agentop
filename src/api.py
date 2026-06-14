@@ -23,7 +23,6 @@ from agentop import ops, scanner
 
 _cache: dict[str, Any] = {
     "sessions": [],
-    "files": [],
     "last_updated": 0,
 }
 _cache_lock = asyncio.Lock()
@@ -37,10 +36,8 @@ async def _refresh_loop():
     while True:
         try:
             sessions = await asyncio.to_thread(ops.get_sessions)
-            files = await asyncio.to_thread(scanner.scan_agent_dirs)
             async with _cache_lock:
                 _cache["sessions"] = sessions
-                _cache["files"] = files
                 _cache["last_updated"] = time.time()
         except Exception as exc:  # noqa: BLE001
             print(f"[agentop] refresh error: {exc}")
@@ -172,20 +169,10 @@ async def get_session(name: str):
                 result = dict(s)
                 if result.get("pid"):
                     result["process_tree"] = await asyncio.to_thread(scanner.get_process_tree, result["pid"])
-                    result["recent_project_files"] = await asyncio.to_thread(
-                        scanner.get_recent_project_files, result.get("cwd") or "", 15
-                    )
                 else:
                     result["process_tree"] = []
-                    result["recent_project_files"] = []
                 return result
     raise HTTPException(status_code=404, detail="Session not found")
-
-
-@app.get("/api/files/recent")
-async def recent_files():
-    async with _cache_lock:
-        return list(_cache["files"])
 
 
 # ---------------------------------------------------------------------------
