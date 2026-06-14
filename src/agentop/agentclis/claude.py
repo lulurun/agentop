@@ -11,7 +11,7 @@ from agentop.agentcli import AgentCli
 _PROJECTS_DIR = Path("~/.claude/projects")
 
 
-class ClaudeAgent(AgentCli):
+class ClaudeAgentCli(AgentCli):
     name = "claude"
 
     @property

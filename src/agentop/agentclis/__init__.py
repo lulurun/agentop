@@ -3,17 +3,15 @@ from __future__ import annotations
 from typing import Optional
 
 from agentop.agentcli import AgentCli
-from agentop.agentclis.antigravity import AntigravityAgent
-from agentop.agentclis.claude import ClaudeAgent
-from agentop.agentclis.codex import CodexAgent
-from agentop.agentclis.gemini import GeminiAgent
+from agentop.agentclis.antigravity import AntigravityAgentCli
+from agentop.agentclis.claude import ClaudeAgentCli
+from agentop.agentclis.codex import CodexAgentCli
 
 # Order matters: more specific entries first
 AGENTS: list[AgentCli] = [
-    ClaudeAgent(),
-    CodexAgent(),
-    GeminiAgent(),
-    AntigravityAgent(),
+    ClaudeAgentCli(),
+    CodexAgentCli(),
+    AntigravityAgentCli(),
 ]
 
 

@@ -10,7 +10,7 @@ import psutil
 from agentop.agentcli import AgentCli
 
 
-class CodexAgent(AgentCli):
+class CodexAgentCli(AgentCli):
     name = "codex"
 
     # Tolerance for matching process start time to thread created_at_ms (30 seconds)

@@ -17,7 +17,7 @@ _USER_INPUT_RE = re.compile(r'HandleUserInput called with text: "(.+)"')
 _START_TOLERANCE_SEC = 15
 
 
-class AntigravityAgent(AgentCli):
+class AntigravityAgentCli(AgentCli):
     name = "antigravity"
     idle_seconds = 15.0       # agy updates the screen after completion (token banner, input prompt)
     use_bracketed_paste = True # bare newlines act as Enter in agy
