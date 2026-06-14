@@ -39,7 +39,7 @@ def start_dialogue(
         scenario = load_scenario(resolved_scenario)
         max_turns = scenario.max_turns or 20
 
-    dialogue_params = {"model": "claude-opus-4-8"}
+    dialogue_params = {}  # {"model": "claude-opus-4-8"}
 
     result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a", params=dialogue_params)
     if not result_a.get("ok"):
