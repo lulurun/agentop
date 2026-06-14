@@ -9,7 +9,6 @@ import subprocess
 import time
 
 from agentop.agentclis import AGENTS, get_agent
-from agentop.git import get_git_info
 from agentop.process import get_ancestor_and_child_pids, get_process_tree, scan_processes
 from agentop.tmux import Session
 
@@ -102,8 +101,6 @@ def build_sessions(managed_names: set | None = None) -> list[dict]:
     sessions = []
     for proc in procs:
         tmux = map_process_to_tmux(proc["pid"], tmux_panes)
-        git = get_git_info(proc["cwd"]) if proc["cwd"] else None
-
         tmux_session = (tmux or {}).get("session", "")
         managed = bool(tmux_session.startswith("agentop_") or tmux_session in managed_names)
 
@@ -123,7 +120,6 @@ def build_sessions(managed_names: set | None = None) -> list[dict]:
                 **proc,
                 "name": name,
                 "tmux": tmux,
-                "git": git,
                 "cwd": proc.get("cwd") or "",
                 "managed": managed,
                 **session_meta,
