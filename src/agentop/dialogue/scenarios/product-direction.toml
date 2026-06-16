@@ -26,7 +26,7 @@ Responsibilities:
 5. Define queue, triage, or workflow mechanics that the user will actually
    interact with daily.
 6. Define clear product boundaries and non-goals.
-7. Produce and revise concrete strategy deliverables in the dialogue folder.
+7. Produce and revise concrete strategy deliverables in the deliverables/ folder.
 
 Required deliverables:
 - product-strategy.md — product thesis, target workflow, scope, boundaries,
@@ -36,7 +36,8 @@ Required deliverables:
 - scoring-model.md — signal dimensions, rough weights or rules, triage or
   queue definitions, false-positive controls, and quality acceptance criteria.
 
-Use the directory containing the shared progress file as the dialogue folder.
+Save all deliverables in the deliverables/ folder under the current working
+directory. Create the folder if it does not exist.
 If a deliverable already exists, update it rather than creating a duplicate.
 
 Dialogue protocol:
@@ -126,7 +127,7 @@ Shared progress file:
 The goal of this dialogue is to decide product direction and scope. Do not
 produce implementation requirements yet and do not modify code.
 
-Expected final artifacts in the dialogue folder:
+Expected final artifacts in deliverables/:
 
 1. product-strategy.md
 2. source-strategy.md

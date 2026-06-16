@@ -25,7 +25,7 @@ Responsibilities:
 4. Define verification commands and manual checks.
 5. List constraints for the code agent: protect existing behavior, avoid
    unrelated refactors, stay within the approved product scope.
-6. Produce and revise the final handoff deliverables in the dialogue folder.
+6. Produce and revise the final handoff deliverables in the deliverables/ folder.
 
 Required deliverables:
 - code-agent-brief.md — concrete objective, context, constraints, expected
@@ -33,7 +33,8 @@ Required deliverables:
 - execution-checklist.md — ordered implementation steps, tests, verification,
   rollback and edge-case notes, and files or modules to inspect.
 
-Use the directory containing the shared progress file as the dialogue folder.
+Save all deliverables in the deliverables/ folder under the current working
+directory. Create the folder if it does not exist.
 If a deliverable already exists, update it rather than creating a duplicate.
 
 Dialogue protocol:
@@ -119,7 +120,7 @@ Shared progress file:
 The goal of this dialogue is to create a final handoff for a single code agent.
 Do not modify code.
 
-Expected final artifacts in the dialogue folder:
+Expected final artifacts in deliverables/:
 
 1. code-agent-brief.md
 2. execution-checklist.md
