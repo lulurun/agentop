@@ -30,8 +30,12 @@ class DialogueMeta:
     status: str
     pid: int | None = None
     error: str | None = None
+    scenario_name: str = ""
+    brief_name: str = ""
 
     def _dir(self) -> Path:
+        if self.scenario_name and self.brief_name:
+            return DIALOGUES_DIR / f"{self.scenario_name}_{self.brief_name}_{self.id}"
         return DIALOGUES_DIR / self.id
 
     def _meta_path(self) -> Path:
@@ -58,6 +62,8 @@ class DialogueMeta:
                     "status": self.status,
                     "pid": self.pid,
                     "error": self.error,
+                    "scenario_name": self.scenario_name,
+                    "brief_name": self.brief_name,
                 },
                 indent=2,
             )
@@ -78,6 +84,8 @@ class DialogueMeta:
         agent_a: str,
         agent_b: str,
         max_turns: int,
+        scenario_name: str = "",
+        brief_name: str = "",
     ) -> DialogueMeta:
         meta = cls(
             id=dialogue_id,
@@ -88,15 +96,22 @@ class DialogueMeta:
             max_turns=max_turns,
             start_time=datetime.now(timezone.utc).isoformat(),
             status=DialogueStatus.STARTING,
+            scenario_name=scenario_name,
+            brief_name=brief_name,
         )
         meta.save()
         return meta
 
     @classmethod
     def load(cls, dialogue_id: str) -> DialogueMeta | None:
-        p = (DIALOGUES_DIR / dialogue_id) / "meta.json"
+        # Try exact match first (full folder name or legacy ID-only folder)
+        p = DIALOGUES_DIR / dialogue_id / "meta.json"
         if not p.exists():
-            return None
+            # Fall back to searching for any folder ending with the ID
+            matches = list(DIALOGUES_DIR.glob(f"*{dialogue_id}/meta.json"))
+            if not matches:
+                return None
+            p = matches[0]
         try:
             data = json.loads(p.read_text())
             return cls(
@@ -110,6 +125,8 @@ class DialogueMeta:
                 status=data["status"],
                 pid=data.get("pid"),
                 error=data.get("error"),
+                scenario_name=data.get("scenario_name", ""),
+                brief_name=data.get("brief_name", ""),
             )
         except (json.JSONDecodeError, KeyError, TypeError):
             return None

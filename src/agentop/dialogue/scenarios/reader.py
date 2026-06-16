@@ -9,6 +9,7 @@ from pathlib import Path
 
 @dataclass
 class Scenario:
+    name: str  # top-level scenario name (e.g. "explorer-critic")
     name_a: str
     name_b: str
     role_a: str
@@ -63,6 +64,7 @@ def load(path: str | Path) -> Scenario:
         opening = data.get("opening", {}).get("prompt")
 
         return Scenario(
+            name=data.get("name", p.stem),
             name_a=name_a,
             name_b=name_b,
             role_a=role_a_section["prompt"],

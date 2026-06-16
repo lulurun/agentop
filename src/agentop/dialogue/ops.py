@@ -28,15 +28,17 @@ def start_dialogue(
     scenario_file: str = "",
 ) -> dict:
     dialogue_id = uuid.uuid4().hex[:8]
-    dialogue_dir = DIALOGUES_DIR / dialogue_id
+    resolved_scenario = scenario_file or scenarios.default_path()
+    scenario = load_scenario(resolved_scenario)
+    scenario_name = scenario.name
+    brief_name = Path(brief_file).stem
+    dialogue_dir = DIALOGUES_DIR / f"{scenario_name}_{brief_name}_{dialogue_id}"
     dialogue_dir.mkdir(parents=True, exist_ok=True)
 
-    resolved_scenario = scenario_file or scenarios.default_path()
     shutil.copy2(brief_file, dialogue_dir / "brief.md")
     shutil.copy2(resolved_scenario, dialogue_dir / "scenario.toml")
 
     if not max_turns:
-        scenario = load_scenario(resolved_scenario)
         max_turns = scenario.max_turns or 20
 
     dialogue_params = {}  # {"model": "claude-opus-4-8"}
@@ -58,6 +60,8 @@ def start_dialogue(
         agent_a=agent_a,
         agent_b=agent_b,
         max_turns=max_turns,
+        scenario_name=scenario_name,
+        brief_name=brief_name,
     )
 
     runner = Path(__file__).parent / "runner.py"
