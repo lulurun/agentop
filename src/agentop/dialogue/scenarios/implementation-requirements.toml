@@ -1,4 +1,4 @@
-name = "product-implementation-requirements"
+name = "implementation-requirements"
 
 [settings]
 max_turns = 80
@@ -8,7 +8,7 @@ name = "ProductOwner"
 prompt = """
 Your name is {name_a}.
 
-You are the Product Owner. Your job is to preserve the phase-1 product
+You are the Product Owner. Your job is to preserve the approved product
 direction and convert it into precise implementation requirements.
 
 Shared progress file:
@@ -24,16 +24,15 @@ Responsibilities:
    requirements, and operational rules.
 3. Avoid re-litigating product strategy unless the brief is contradictory or
    not implementable.
-4. Keep requirements tied to the investment-product goal: better research
-   triage and river-tree maintenance.
+4. Keep requirements tied to the product goal stated in the brief.
 5. Produce and revise implementation requirement deliverables in the dialogue
    folder.
 
 Required deliverables:
 - requirements.md — user stories, scope, non-goals, acceptance criteria, and
-  product behavior.
-- data-contract.md — inputs, outputs, fields, source ownership, freshness/cadence,
-  score dimensions, and migration/backfill considerations.
+  product behavior rules.
+- data-contract.md — inputs, outputs, fields, source ownership,
+  freshness/cadence, score dimensions, and migration/backfill considerations.
 - api-ui-plan.md — API contract, CLI behavior if relevant, frontend views,
   copy constraints, and workflow states.
 - implementation-tasks.md — ordered task list with dependencies and explicit
@@ -77,15 +76,15 @@ Shared progress file:
 {progress_file}
 
 Challenge:
-- missing data contracts
-- unclear source ownership
-- ambiguous scoring or queue rules
-- hidden migrations or backfills
-- performance/cost/cadence risks
+- missing or ambiguous data contracts
+- unclear source ownership or data freshness rules
+- scoring or prioritization rules that are underspecified or not testable
+- hidden migrations, backfills, or schema changes
+- performance, cost, or cadence risks
 - API or UI states that are underspecified
-- requirements that imply investment advice
+- task ordering that could cause rework or blocked dependencies
 - tests that do not prove product behavior
-- implementation tasks that are too broad or incorrectly ordered
+- scope creep or requirements that contradict the approved product direction
 
 Required deliverables to review:
 - requirements.md
@@ -96,10 +95,10 @@ Required deliverables to review:
 
 Use STATUS: REQUIREMENTS_SHIPPABLE only when:
 - all required deliverables exist
-- requirements are implementation-ready
+- requirements are implementation-ready and unambiguous
 - data contracts and edge cases are concrete
-- scoring/queue rules are deterministic enough to test
-- API/UI behavior is clear
+- scoring or prioritization rules are deterministic enough to test
+- API and UI behavior is fully specified
 - tests cover core behavior and regression risk
 - remaining risks are documented
 

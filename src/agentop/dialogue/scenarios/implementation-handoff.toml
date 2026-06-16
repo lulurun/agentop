@@ -1,4 +1,4 @@
-name = "implementation-handoff-review"
+name = "implementation-handoff"
 
 [settings]
 max_turns = 60
@@ -21,24 +21,24 @@ Shared progress file:
 Responsibilities:
 1. Read the brief as the source of approved implementation requirements.
 2. Produce a concise execution handoff for a code agent.
-3. Identify exact files/modules likely to change, without editing them.
+3. Identify exact files or modules likely to change, without editing them.
 4. Define verification commands and manual checks.
 5. List constraints for the code agent: protect existing behavior, avoid
-   unrelated refactors, preserve product boundaries.
+   unrelated refactors, stay within the approved product scope.
 6. Produce and revise the final handoff deliverables in the dialogue folder.
 
 Required deliverables:
-- code-agent-brief.md — concrete objective, context, constraints, expected code
-  changes, non-goals, and done criteria.
+- code-agent-brief.md — concrete objective, context, constraints, expected
+  code changes, non-goals, and done criteria.
 - execution-checklist.md — ordered implementation steps, tests, verification,
-  rollback/edge-case notes, and files/modules to inspect.
+  rollback and edge-case notes, and files or modules to inspect.
 
 Use the directory containing the shared progress file as the dialogue folder.
 If a deliverable already exists, update it rather than creating a duplicate.
 
 Dialogue protocol:
-1. First turn: draft the code-agent handoff and ask {name_b} for review. Do not
-   declare HANDOFF_READY on the first turn.
+1. First turn: draft the code-agent handoff and ask {name_b} for review. Do
+   not declare HANDOFF_READY on the first turn.
 2. Middle turns: revise the handoff in response to {name_b}'s concerns.
 3. Completion: declare HANDOFF_READY only after {name_b} has written
    STATUS: HANDOFF_SHIPPABLE in a previous turn and final deliverables reflect
@@ -69,13 +69,13 @@ Shared progress file:
 {progress_file}
 
 Challenge:
-- unclear implementation objective
-- missing constraints or non-goals
-- task order that could cause rework
+- unclear or ambiguous implementation objective
+- missing constraints, non-goals, or scope boundaries
+- task order that could cause rework or blocked dependencies
 - missing tests or verification commands
-- requirements that are too vague for a code agent
-- risks to existing behavior
-- product-language drift into buy/sell recommendations
+- requirements that are too vague for a code agent to act on
+- risks to existing behavior that are not flagged
+- scope that exceeds what was approved in the brief
 
 Required deliverables to review:
 - code-agent-brief.md
@@ -83,11 +83,11 @@ Required deliverables to review:
 
 Use STATUS: HANDOFF_SHIPPABLE only when:
 - both deliverables exist
-- the objective is concrete
-- code boundaries and non-goals are clear
-- verification is explicit
+- the objective is concrete and unambiguous
+- code boundaries and non-goals are explicit
+- verification steps are actionable
 - residual risks are documented
-- the handoff can be given directly to a code agent
+- the handoff can be given directly to a code agent without further discussion
 
 Even when the handoff is shippable, use delimiter status:continue so {name_a}
 receives the final turn and can declare HANDOFF_READY.
