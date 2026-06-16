@@ -19,30 +19,33 @@ _MAX_RETRIES = 2  # retries after first attempt = up to 3 total receives per tur
 
 _PROTOCOL_RULE = f"""\
 OUTPUT FORMAT (mandatory): Do all your thinking freely. When ready to send \
-your message, wrap it in BEGIN/END delimiters at the very end:
+your message, wrap it in BEGIN/END delimiters at the very end.
 
---- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---
+Your values for this turn: name={{name}}, turn={{turn}}, nonce={{nonce}}
+
+Delimiter format (NAME / TURN / NONCE are placeholders — replace them with \
+your exact values above):
+
+--- BEGIN NAME turn:TURN nonce:NONCE status:{ReceiveStatus.CONTINUE} ---
 your message here
---- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---
+--- END NAME turn:TURN nonce:NONCE status:{ReceiveStatus.CONTINUE} ---
 
-To signal you are completely done:
-
---- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.COMPLETE} ---
-your final summary here
---- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.COMPLETE} ---
+To signal you are completely done, change status:{ReceiveStatus.CONTINUE} to \
+status:{ReceiveStatus.COMPLETE} in both delimiter lines.
 
 Rules:
-- Replace nothing — use the exact name, turn number, and nonce shown above.
+- Replace NAME, TURN, NONCE with the exact values shown above.
 - Everything outside the delimiters is your private workspace and is not forwarded.\
 """
 
 _RECOVERY_PROMPT = f"""\
 Your previous response did not contain the required BEGIN/END delimiters. \
-Please re-send your message now using exactly this format:
+Re-send your message now using your exact values: \
+name={{name}}, turn={{turn}}, nonce={{nonce}}
 
---- BEGIN {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---
+--- BEGIN NAME turn:TURN nonce:NONCE status:{ReceiveStatus.CONTINUE} ---
 your message here
---- END {{name}} turn:{{turn}} nonce:{{nonce}} status:{ReceiveStatus.CONTINUE} ---\
+--- END NAME turn:TURN nonce:NONCE status:{ReceiveStatus.CONTINUE} ---\
 """
 
 
