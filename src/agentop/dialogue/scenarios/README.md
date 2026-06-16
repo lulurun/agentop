@@ -1,20 +1,29 @@
-# AgentOp Dialogue Scenario TOML Files
+# AgentOp Dialogue Scenarios
 
-This package contains proposed dialogue scenarios:
+This directory contains the active scenario workflow. Older general-purpose
+scenarios live under `shelf/`.
 
-1. builder-reviewer.toml
-2. researcher-skeptic.toml
-3. architect-implementer.toml
-4. planner-executor.toml
-5. trading-researcher-reviewer.toml
-6. productive-pessimistic.toml
-7. junior-senior.toml
-8. bull-bear-judge.toml
-9. red-team-blue-team.toml
-10. software-team.toml
-11. investment-product-strategy.toml
+## Active Workflow
 
-Notes:
-- Some files use the existing two-role style: [role_a] and [role_b].
-- Multi-agent examples use [agents.*] and [routing], which may require orchestrator changes.
-- All scenarios assume the presence of {brief} and {progress_file}.
+1. `investment-product-direction.toml`
+   - High-level business product direction.
+   - Decides product scope, tree maintenance strategy, source strategy, and
+     research-worthiness scoring.
+   - Produces `product-strategy.md`, `source-strategy.md`, and
+     `scoring-model.md`.
+
+2. `product-implementation-requirements.toml`
+   - Converts approved product direction into implementation requirements.
+   - Produces `requirements.md`, `data-contract.md`, `api-ui-plan.md`,
+     `implementation-tasks.md`, and `test-plan.md`.
+
+3. `implementation-handoff-review.toml`
+   - Optional final handoff review before giving work to a single code agent.
+   - Produces `code-agent-brief.md` and `execution-checklist.md`.
+   - Skip this scenario when phase 2 requirements are already clear enough.
+
+## Completion Protocol
+
+Each scenario requires a review loop. Role B should approve with a domain
+specific `STATUS: ..._SHIPPABLE` while using delimiter `status:continue`, so
+Role A gets the final turn and declares the scenario-specific ready marker.

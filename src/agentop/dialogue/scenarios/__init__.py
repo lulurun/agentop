@@ -8,4 +8,4 @@ _BUILTIN_DIR = Path(__file__).parent
 
 
 def default_path() -> Path:
-    return _BUILTIN_DIR / "pm-sde.toml"
+    return _BUILTIN_DIR / "product-implementation-requirements.toml"
