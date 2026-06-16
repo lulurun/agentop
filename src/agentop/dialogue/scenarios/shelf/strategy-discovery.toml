@@ -31,7 +31,7 @@ Before producing any deliverable, explore the following:
 
 3. Read the existing strategy to understand how strategies are built:
    - /home/lulurun/workspace/potential-panda-orion/src/orion/template.py
-   - Skim 2–3 versioned files (v1.py, v5.py, v9.py or similar) to understand
+   - Skim 2–3 versioned files (v6.py, v601.py) to understand
      how the strategy evolved
    - Read common.py and config.py to understand shared primitives
 
