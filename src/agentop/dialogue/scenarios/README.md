@@ -24,12 +24,15 @@ scenarios live under `shelf/`.
 ## Research Workflow
 
 4. `strategy-discovery.toml`
-   - Trading strategy hypothesis discovery grounded in available market data.
-   - StrategyResearcher proposes hypotheses; StrategySkeptic challenges on
-     statistical validity, data integrity (look-ahead/survivorship/snooping),
-     execution realism, and edge durability.
-   - Produces `research_ideas.md`, `prioritized_research_roadmap.md`,
-     `feature_catalog.md`, and `validation_framework.md`.
+   - Both agents explore the Makalu codebase (`/home/lulurun/workspace/Makalu/`),
+     the data warehouse (`/panda/makalu-data/`), and the existing orion strategy
+     (`/home/lulurun/workspace/potential-panda-orion/`) before producing any
+     deliverable. No pre-written data description needed — agents discover it.
+   - StrategyExplorer proposes a repeatable discovery workflow; WorkflowCritic
+     verifies by reading the same sources and challenges executability,
+     look-ahead controls, and quality bar.
+   - Produces `ecosystem-map.md`, `discovery-workflow.md`, and
+     `hypothesis-backlog.md`.
    - Pair with `briefs/trading-strategy-discovery.md`.
 
 ## Completion Protocol
