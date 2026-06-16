@@ -21,6 +21,17 @@ scenarios live under `shelf/`.
    - Produces `code-agent-brief.md` and `execution-checklist.md`.
    - Skip this scenario when requirements are already clear enough.
 
+## Research Workflow
+
+4. `strategy-discovery.toml`
+   - Trading strategy hypothesis discovery grounded in available market data.
+   - StrategyResearcher proposes hypotheses; StrategySkeptic challenges on
+     statistical validity, data integrity (look-ahead/survivorship/snooping),
+     execution realism, and edge durability.
+   - Produces `research_ideas.md`, `prioritized_research_roadmap.md`,
+     `feature_catalog.md`, and `validation_framework.md`.
+   - Pair with `briefs/trading-strategy-discovery.md`.
+
 ## Completion Protocol
 
 Each scenario requires a review loop. Role B should approve with a domain
