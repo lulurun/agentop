@@ -686,19 +686,6 @@ td.muted { color: var(--text2); }
 }
 
 /* ============================================================
-   Files tab
-   ============================================================ */
-#files-tab td { white-space: nowrap; }
-#files-tab .path-cell {
-  max-width: 360px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-.size-cell { text-align: right; font-family: var(--mono); font-size: 12px; }
-
-/* ============================================================
    Modal
    ============================================================ */
 .modal-overlay {
@@ -924,7 +911,6 @@ td.muted { color: var(--text2); }
       <span class="tab-count" id="sessions-count">—</span>
     </a>
     <a href="#history" class="nav-link" id="nav-history">History</a>
-    <a href="#files" class="nav-link" id="nav-files">Agent Files</a>
   </nav>
 
   <div class="header-right">
@@ -1051,40 +1037,7 @@ td.muted { color: var(--text2); }
     </div>
   </div>
 
-  <!-- Files tab -->
-  <div id="files-tab" class="tab-panel" hidden>
-    <div class="page-head">
-      <div>
-        <div class="page-title">Agent Files</div>
-        <div class="page-subtitle">Recently modified files from local agent state directories.</div>
-      </div>
-    </div>
-    <div class="table-card">
-      <div class="table-wrap">
-        <table id="files-table">
-          <thead>
-            <tr>
-              <th data-sort="tool"     onclick="setFilesSort('tool')">Tool <span class="sort-arrow"></span></th>
-              <th data-sort="type"     onclick="setFilesSort('type')">Type <span class="sort-arrow"></span></th>
-              <th data-sort="path"     onclick="setFilesSort('path')">File <span class="sort-arrow"></span></th>
-              <th data-sort="size"     onclick="setFilesSort('size')" style="text-align:right">Size <span class="sort-arrow"></span></th>
-              <th data-sort="modified" onclick="setFilesSort('modified')" class="sort-active">Modified <span class="sort-arrow">↓</span></th>
-            </tr>
-          </thead>
-          <tbody id="files-body">
-            <tr>
-              <td colspan="5">
-                <div class="empty-state">
-                  <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
-                  <p>Loading files…</p>
-                </div>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+
 
 </div>
 
@@ -1197,7 +1150,6 @@ let selectedSession = null;
 let refreshTimer  = null;
 let lastUpdatedAt = null;
 let homeDir       = '';
-let lastFiles     = [];
 let lastHistory   = [];
 const REFRESH_INTERVAL = 30000;
 
@@ -1232,7 +1184,6 @@ function makeSortCtrl(tableId, defaultKey, defaultDir, descKeys = []) {
 }
 
 const sessionsSort = makeSortCtrl('sessions-table', 'runtime',     'desc', ['runtime', 'tokens', 'memory', 'pid']);
-const filesSort    = makeSortCtrl('files-table',    'modified',    'desc', ['modified', 'size']);
 const histSort     = makeSortCtrl('history-table',  'last_active', 'desc', ['last_active']);
 
 // ============================================================
@@ -1279,7 +1230,6 @@ function showPage(page) {
 function handleRoute() {
   const route = currentRoute();
   showPage(route.page);
-  if (route.page === 'files') fetchFiles();
   if (route.page === 'history') fetchHistory();
   if (route.page === 'session') selectSession(route.sessionName);
   if (route.page === 'sessions') {
@@ -1450,15 +1400,6 @@ function getSessionSortVal(s, key) {
   }
 }
 
-function getFileSortVal(f, key) {
-  switch (key) {
-    case 'modified': return f.modified_time;
-    case 'size':     return f.size_bytes;
-    case 'tool':     return f.tool;
-    case 'type':     return f.type;
-    default:         return f.path;
-  }
-}
 
 function getHistSortVal(h, key) {
   switch (key) {
@@ -1470,7 +1411,6 @@ function getHistSortVal(h, key) {
 }
 
 function setSort(key)      { sessionsSort.set(key); renderSessions(sessions); }
-function setFilesSort(key) { filesSort.set(key);    renderFiles(lastFiles); }
 function setHistSort(key)  { histSort.set(key);     renderHistory(lastHistory); }
 
 function renderSessions(list) {
@@ -1717,42 +1657,6 @@ function renderDetail(s) {
   document.getElementById('detail-body').innerHTML = html;
 }
 
-// ============================================================
-// Files tab
-// ============================================================
-async function fetchFiles() {
-  try {
-    const r = await fetch(API_BASE + '/api/files/recent');
-    lastFiles = await r.json();
-    renderFiles(lastFiles);
-  } catch (e) {
-    document.getElementById('files-body').innerHTML =
-      `<tr><td colspan="5"><div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div></td></tr>`;
-  }
-}
-
-function renderFiles(files) {
-  filesSort.updateUI();
-  const tbody = document.getElementById('files-body');
-  if (!files.length) {
-    tbody.innerHTML = `<tr><td colspan="5">
-      <div class="empty-state">
-        <div class="empty-icon">📂</div>
-        <h3>No agent files found</h3>
-        <p>Agent directories (~/.claude, ~/.codex, ~/.gemini) appear empty.</p>
-      </div>
-    </td></tr>`;
-    return;
-  }
-  const sorted = filesSort.sort(files, getFileSortVal);
-  tbody.innerHTML = sorted.map(f => `<tr>
-    <td>${toolBadge(f.tool)}</td>
-    <td><span class="mono muted">${escHtml(f.type)}</span></td>
-    <td class="path-cell" title="${escHtml(f.path)}">${escHtml(fmtProject(f.path))}</td>
-    <td class="size-cell muted">${fmtBytes(f.size_bytes)}</td>
-    <td class="mono muted" style="font-size:12px">${fmtDate(f.modified_time)}</td>
-  </tr>`).join('');
-}
 
 // ============================================================
 // Auto-refresh
@@ -1763,7 +1667,6 @@ function startRefresh() {
   refreshTimer = setInterval(() => {
     fetchSessions();
     const route = currentRoute();
-    if (route.page === 'files') fetchFiles();
     if (route.page === 'history') fetchHistory();
   }, REFRESH_INTERVAL);
 }
