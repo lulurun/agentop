@@ -1511,7 +1511,7 @@ function renderSessions(list) {
       <td>${sessionCell}</td>
       <td>${toolBadge(s.tool)}</td>
       <td>${statusBadge(s)}</td>
-      <td class="wrap">${(s.description || s.ai_title) ? escHtml(s.description || s.ai_title) : '<span class="text-dim">—</span>'}</td>
+      <td class="wrap">${(s.description || s.ai_title) ? (() => { const full = s.description || s.ai_title; const cut = full.length > 128 ? full.slice(0, 128) + '…' : full; return `<span title="${escHtml(full)}">${escHtml(cut)}</span>`; })() : '<span class="text-dim">—</span>'}</td>
       <td class="wrap muted" title="${escHtml(s.cwd || '')}" style="font-size:12px">${escHtml(fmtProject(s.cwd))}</td>
       <td class="col-tokens muted mono" title="${escHtml(tokTitle)}">${fmtTokens(s.token_usage)}</td>
       <td class="col-pid muted mono">${s.pid || '—'}</td>
