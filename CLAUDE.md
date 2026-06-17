@@ -11,7 +11,7 @@
 
 - Dashboard runs at `http://127.0.0.1:9775` as a systemd user service
 - Supported agent tools: `claude`, `codex`, `antigravity`
-- Dialogues are stored in `~/.agent-dashboard/dialogues/<id>/`
+- Dialogues are stored in `~/.agent-dashboard/dialogues/<scenario>_<brief>_<id>/`
 - Only sessions started by agentop (managed) can be stopped or sent prompts
 
 ## Dashboard service

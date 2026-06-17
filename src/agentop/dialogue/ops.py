@@ -81,6 +81,7 @@ def start_dialogue(
         "session_a": meta.session_a,
         "session_b": meta.session_b,
         "orchestrator_pid": proc.pid,
+        "log_path": str(meta.log_path()),
     }
 
 

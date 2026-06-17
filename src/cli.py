@@ -293,9 +293,7 @@ def cmd_dialogue_start(args):
         f"split-window -h "
         f"\"watch -n1 -t 'tmux capture-pane -t {sb} -p -S -40'\""
     )
-    from agentop.dialogue.model import DIALOGUES_DIR
-
-    log_path = DIALOGUES_DIR / did / "dialogue.log"
+    log_path = result["log_path"]
     print(f"\nDialogue started: {did}")
     print(f"  Session A: {sa}")
     print(f"  Session B: {sb}")
