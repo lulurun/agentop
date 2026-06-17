@@ -94,7 +94,7 @@ def list_dialogues() -> list[dict]:
         if meta:
             result.append(
                 {
-                    "id": meta.id,
+                    "id": meta_file.parent.name,
                     "status": meta.status,
                     "agent_a": meta.agent_a,
                     "agent_b": meta.agent_b,

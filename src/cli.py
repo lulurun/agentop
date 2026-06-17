@@ -308,7 +308,7 @@ def cmd_dialogue_list(args):
     if not dialogues:
         print("No dialogues found.")
         return
-    id_w, status_w, agent_w, sess_w = 10, 10, 10, 24
+    id_w, status_w, agent_w, sess_w = 40, 10, 10, 24
     print(
         f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  "
         f"{'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}"
@@ -352,7 +352,7 @@ def cmd_dialogue_remove(args):
         print(f"Will remove ({status}):")
         for meta in candidates:
             open_note = " [sessions open]" if Session.has(meta.session_a) or Session.has(meta.session_b) else ""
-            print(f"  {meta.id}  {meta.agent_a} vs {meta.agent_b}{open_note}")
+            print(f"  {meta._dir().name}  {meta.agent_a} vs {meta.agent_b}{open_note}")
         if not getattr(args, "yes", False):
             try:
                 answer = input(f"\nRemove {len(candidates)} dialogue(s)? [y/N] ").strip().lower()
