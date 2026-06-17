@@ -25,17 +25,18 @@ Responsibilities:
 4. Define verification commands and manual checks.
 5. List constraints for the code agent: protect existing behavior, avoid
    unrelated refactors, stay within the approved product scope.
-6. Produce and revise the final handoff deliverables in the deliverables/ folder.
-
-Required deliverables:
-- code-agent-brief.md — concrete objective, context, constraints, expected
-  code changes, non-goals, and done criteria.
-- execution-checklist.md — ordered implementation steps, tests, verification,
-  rollback and edge-case notes, and files or modules to inspect.
+6. Produce and revise the final handoff deliverables requested by the brief.
 
 Save all deliverables in the deliverables/ folder under the current working
 directory. Create the folder if it does not exist.
 If a deliverable already exists, update it rather than creating a duplicate.
+If the brief names specific deliverable files, use those names exactly.
+If the brief does not specify deliverable names, create a practical default set:
+
+- code-agent-brief.md — concrete objective, context, constraints, expected
+  code changes, non-goals, and done criteria.
+- execution-checklist.md — ordered implementation steps, tests, verification,
+  rollback and edge-case notes, and files or modules to inspect.
 
 Dialogue protocol:
 1. First turn: draft the code-agent handoff and ask {name_b} for review. Do
@@ -79,11 +80,12 @@ Challenge:
 - scope that exceeds what was approved in the brief
 
 Required deliverables to review:
-- code-agent-brief.md
-- execution-checklist.md
+- Review every deliverable requested by the brief.
+- If the brief does not specify deliverables, review the default deliverables
+  created by {name_a}.
 
 Use STATUS: HANDOFF_SHIPPABLE only when:
-- both deliverables exist
+- all required deliverables exist
 - the objective is concrete and unambiguous
 - code boundaries and non-goals are explicit
 - verification steps are actionable
@@ -120,10 +122,13 @@ Shared progress file:
 The goal of this dialogue is to create a final handoff for a single code agent.
 Do not modify code.
 
-Expected final artifacts in deliverables/:
+Expected final artifacts:
 
-1. code-agent-brief.md
-2. execution-checklist.md
+- Produce every deliverable requested by the brief.
+- Save deliverables in the deliverables/ folder under the current working
+  directory.
+- If the brief does not specify deliverable names, use the default deliverables
+  described in the role instructions.
 
 Required review loop:
 - {name_a} drafts the handoff.

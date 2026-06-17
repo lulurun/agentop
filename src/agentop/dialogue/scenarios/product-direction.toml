@@ -17,28 +17,28 @@ Shared progress file:
 
 Responsibilities:
 1. Define the product's job-to-be-done and the target user workflow.
-2. Define what data sources the product should use and why.
-3. Define how each source should contribute — discovery, evidence, context,
-   noise, or risk — and what the hierarchy of trust between sources is.
-4. Define a prioritization or scoring philosophy: what makes something worth
-   the user's attention, how signals combine, and how false positives are
-   controlled.
-5. Define queue, triage, or workflow mechanics that the user will actually
-   interact with daily.
+2. Define the product scope, boundaries, and non-goals.
+3. Define the evidence, inputs, workflows, or decision points the product
+   depends on, using the brief as the source of topic-specific detail.
+4. Define the product's decision philosophy: what makes an output useful, how
+   quality is judged, and how false confidence is controlled.
+5. Define the user-facing or operator-facing workflow mechanics that matter for
+   the product described in the brief.
 6. Define clear product boundaries and non-goals.
-7. Produce and revise concrete strategy deliverables in the deliverables/ folder.
-
-Required deliverables:
-- product-strategy.md — product thesis, target workflow, scope, boundaries,
-  and non-goals.
-- source-strategy.md — source inventory, source roles, cadence, trust
-  hierarchy, and source risks.
-- scoring-model.md — signal dimensions, rough weights or rules, triage or
-  queue definitions, false-positive controls, and quality acceptance criteria.
+7. Produce and revise the deliverables requested by the brief.
 
 Save all deliverables in the deliverables/ folder under the current working
 directory. Create the folder if it does not exist.
 If a deliverable already exists, update it rather than creating a duplicate.
+If the brief names specific deliverable files, use those names exactly.
+If the brief does not specify deliverable names, create a practical default set:
+
+- product-strategy.md — product thesis, target workflow, scope, boundaries,
+  and non-goals.
+- operating-model.md — inputs, actors, workflow states, review points, cadence,
+  and ownership.
+- decision-model.md — quality criteria, decision rules, prioritization,
+  false-confidence controls, and acceptance criteria.
 
 Dialogue protocol:
 1. First turn: present the initial product direction and ask {name_b} for
@@ -76,25 +76,28 @@ Shared progress file:
 Challenge:
 - whether the product's job-to-be-done is specific enough to guide design
 - whether scope and non-goals are explicit and enforceable
-- whether each source has a clear, distinct role and is not duplicating another
-- whether signal hierarchy distinguishes primary evidence from secondary context
-  from noise
-- whether the prioritization or scoring model can be implemented and tested
-- whether the triage or queue model reflects how the user actually works
+- whether each input, evidence source, actor, or workflow step has a clear role
+- whether the decision model distinguishes primary evidence from secondary
+  context and noise where relevant
+- whether prioritization, scoring, ranking, review, or promotion rules can be
+  implemented and tested where relevant
+- whether the workflow model reflects how the target user or operator actually
+  works
 - whether false-positive controls are real or just aspirational
 - whether the product could drift into outputs it should not produce
 
 Required deliverables to review:
-- product-strategy.md
-- source-strategy.md
-- scoring-model.md
+- Review every deliverable requested by the brief.
+- If the brief does not specify deliverables, review the default deliverables
+  created by {name_a}.
 
 Use STATUS: DIRECTION_SHIPPABLE only when:
 - all required deliverables exist
 - product scope and non-goals are clear and concrete
-- source roles are distinct and the trust hierarchy is explicit
-- the scoring or prioritization model is testable
-- triage or queue mechanics are actionable
+- input, evidence, actor, or workflow roles are clear where relevant
+- decision, prioritization, scoring, ranking, review, or promotion rules are
+  testable where relevant
+- workflow mechanics are actionable
 - remaining risks are documented
 
 Even when the direction is shippable, use delimiter status:continue so
@@ -124,14 +127,17 @@ Product direction brief:
 Shared progress file:
 {progress_file}
 
-The goal of this dialogue is to decide product direction and scope. Do not
-produce implementation requirements yet and do not modify code.
+The goal of this dialogue is to decide product direction and scope for the
+topic in the brief. Do not produce implementation requirements yet and do not
+modify code.
 
-Expected final artifacts in deliverables/:
+Expected final artifacts:
 
-1. product-strategy.md
-2. source-strategy.md
-3. scoring-model.md
+- Produce every deliverable requested by the brief.
+- Save deliverables in the deliverables/ folder under the current working
+  directory.
+- If the brief does not specify deliverable names, use the default deliverables
+  described in the role instructions.
 
 Required review loop:
 - {name_a} presents a direction.
@@ -141,6 +147,5 @@ Required review loop:
 - Only after that may {name_a} declare PRODUCT_DIRECTION_READY.
 
 {name_a}, begin by defining the product job-to-be-done, the key questions to
-resolve about sources and prioritization, and an initial direction for {name_b}
-to challenge.
+resolve from the brief, and an initial direction for {name_b} to challenge.
 """

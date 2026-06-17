@@ -17,11 +17,12 @@ These three scenarios chain together: direction → requirements → handoff.
 
 Style: ProductStrategist debates with ProductCritic.
 
-ProductStrategist defines product direction (job-to-be-done, source strategy,
-prioritisation philosophy). ProductCritic challenges scope, signal logic, and
-false-positive controls.
+ProductStrategist defines product direction, scope, workflow, decision logic,
+and non-goals for the topic in the brief. ProductCritic challenges vague scope,
+weak decision logic, false confidence, and drift from the brief.
 
-Deliverables: `product-strategy.md`, `source-strategy.md`, `scoring-model.md`
+Deliverables: defined by the brief. If the brief does not specify files, the
+scenario uses generic product-direction defaults.
 
 Completion: `PRODUCT_DIRECTION_READY` / `STATUS: DIRECTION_SHIPPABLE`
 
@@ -33,10 +34,10 @@ Style: ProductOwner collaborates with TechnicalArchitect.
 
 ProductOwner translates approved product direction into implementation
 requirements. TechnicalArchitect challenges feasibility, data contracts,
-scoring specificity, and test coverage.
+decision rules, integration surfaces, and test coverage.
 
-Deliverables: `requirements.md`, `data-contract.md`, `api-ui-plan.md`,
-`implementation-tasks.md`, `test-plan.md`
+Deliverables: defined by the brief. If the brief does not specify files, the
+scenario uses generic implementation-requirements defaults.
 
 Completion: `REQUIREMENTS_READY` / `STATUS: REQUIREMENTS_SHIPPABLE`
 
@@ -49,7 +50,8 @@ Style: ImplementationLead prepares a handoff, CodeReviewer audits it.
 Optional final check before handing work to a single code agent. Skip when
 requirements are already unambiguous.
 
-Deliverables: `code-agent-brief.md`, `execution-checklist.md`
+Deliverables: defined by the brief. If the brief does not specify files, the
+scenario uses generic handoff defaults.
 
 Completion: `HANDOFF_READY` / `STATUS: HANDOFF_SHIPPABLE`
 
@@ -70,7 +72,8 @@ executability, and the domain-specific criteria listed in the brief.
 deliverable names and descriptions, challenge criteria, and acceptance
 criteria. The scenario is reusable across topics.
 
-Example brief: `briefs/trading-strategy-discovery.md`
+Example brief: any brief that lists sources to explore, deliverables, challenge
+criteria, and acceptance criteria.
 
 Completion: `WORK_READY` / `STATUS: WORK_APPROVED`
 
