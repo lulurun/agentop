@@ -40,6 +40,7 @@ class ResponseParser:
                     )
                     body = "\n".join(reversed(buffer)).strip()
                     LOG.info("[%s] turn:%d status:%s body_len:%d", name, turn, receive_status, len(body))
+                    LOG.info("[%s] turn:%d body:\n%s", name, turn, body)
                     return (body, receive_status)
                 else:
                     buffer.append(line)

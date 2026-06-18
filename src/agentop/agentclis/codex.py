@@ -20,6 +20,26 @@ class CodexAgentCli(AgentCli):
     def launch_cmd(self) -> str:
         return "codex --dangerously-bypass-hook-trust"
 
+    def start_session(self, cwd: str, short_name: str = "", params: dict | None = None) -> dict:
+        """Pre-trust cwd before launching, otherwise codex's first-run 'Do you
+        trust the contents of this directory?' prompt eats whatever gets typed
+        next (e.g. a dialogue orchestrator's opening prompt, sent unattended).
+        """
+        self._pretrust_dir(cwd)
+        return super().start_session(cwd, short_name, params)
+
+    @staticmethod
+    def _pretrust_dir(cwd: str) -> None:
+        config_path = Path("~/.codex/config.toml").expanduser()
+        if not config_path.exists():
+            return
+        marker = f'[projects."{cwd}"]'
+        text = config_path.read_text()
+        if marker in text:
+            return
+        with open(config_path, "a") as f:
+            f.write(f'\n{marker}\ntrust_level = "trusted"\n')
+
     def _find_thread(self, pid: int, cwd: str) -> Optional[dict]:
         """Query state_5.sqlite for the thread matching this process by cwd + start time.
 

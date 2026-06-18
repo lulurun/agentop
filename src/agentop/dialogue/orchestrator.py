@@ -102,10 +102,25 @@ class DialogueOrchestrator(threading.Thread):
             self._loop()
         except Exception as exc:
             LOG.error("Loop for dialogue %s error: %s", self.dialogue.id, exc)
-            self.dialogue.update({"status": DialogueStatus.ERROR, "error": str(exc)})
+            self.dialogue.update({"status": DialogueStatus.ERROR, "error": str(exc), "pid": None})
+        else:
+            if self.dialogue.status == DialogueStatus.RUNNING:
+                # _loop returned without setting a more specific terminal status itself.
+                dialogue_status = DialogueStatus.STOPPED if self._stop.is_set() else DialogueStatus.COMPLETED
+                self.dialogue.update({"status": dialogue_status, "pid": None})
+            else:
+                self.dialogue.update({"pid": None})
 
-        dialogue_status = DialogueStatus.STOPPED if self._stop.is_set() else DialogueStatus.COMPLETED
-        self.dialogue.update({"status": dialogue_status, "pid": None})
+        if self.dialogue.status in (DialogueStatus.COMPLETED, DialogueStatus.STOPPED):
+            self._close_sessions()
+
+    def _close_sessions(self) -> None:
+        """Send /exit and kill the tmux session for each actor. Safe to call once everything is logged."""
+        for instance in (self.dialogue.instance_a, self.dialogue.instance_b):
+            try:
+                instance.stop()
+            except Exception as exc:
+                LOG.warning("Failed to close session %s: %s", instance.session, exc)
 
     def _receive_with_retry(self, actor: Actor, turn: int, nonce: str) -> tuple[str, ReceiveStatus] | None:
         """Receive from actor, retrying up to _MAX_RETRIES times on delimiter not found."""
@@ -133,6 +148,15 @@ class DialogueOrchestrator(threading.Thread):
         d = self.dialogue
         d.instance_a.attach(self._stop)
         d.instance_b.attach(self._stop)
+
+        # Wait for both panes to settle (boot splash, MCP server startup, etc.)
+        # before sending the first prompt. A still-booting CLI can silently
+        # drop a large paste — e.g. codex's input box stays on its default
+        # placeholder if the paste lands before it's ready to receive input.
+        # receive() already implements idle-polling; call it here purely to
+        # wait, discarding whatever boot-time scrollback it returns.
+        if d.instance_a.actor.receive() is None or d.instance_b.actor.receive() is None:
+            return  # stopped during boot wait
 
         # Turn 1: initialize actor_a with its role + protocol rule
         current_nonce = _new_nonce()

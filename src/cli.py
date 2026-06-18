@@ -254,8 +254,6 @@ def _dialogue_ops():
 
 
 def cmd_dialogue_start(args):
-    cwd_a = os.path.expanduser(args.cwd_a)
-    cwd_b = os.path.expanduser(args.cwd_b)
     brief_path = os.path.abspath(os.path.expanduser(args.brief))
     if not os.path.isfile(brief_path):
         print(f"Error: brief file not found: {brief_path!r}", file=sys.stderr)
@@ -269,15 +267,13 @@ def cmd_dialogue_start(args):
         scenario_file = scenario_path
 
     print("Starting dialogue:")
-    print(f"  Agent A: {args.agent_a}  cwd: {cwd_a}")
-    print(f"  Agent B: {args.agent_b}  cwd: {cwd_b}")
+    print(f"  Agent A: {args.agent_a}")
+    print(f"  Agent B: {args.agent_b}")
     print(f"  Max turns: {args.max_turns}")
 
     result = _dialogue_ops().start_dialogue(
         agent_a=args.agent_a,
         agent_b=args.agent_b,
-        cwd_a=cwd_a,
-        cwd_b=cwd_b,
         max_turns=args.max_turns,
         brief_file=brief_path,
         scenario_file=scenario_file,
@@ -295,6 +291,7 @@ def cmd_dialogue_start(args):
     )
     log_path = result["log_path"]
     print(f"\nDialogue started: {did}")
+    print(f"  Working dir: {result['cwd']}")
     print(f"  Session A: {sa}")
     print(f"  Session B: {sb}")
     print("\n  Watch side-by-side:")
@@ -324,14 +321,11 @@ def cmd_dialogue_list(args):
 
 
 def cmd_dialogue_stop(args):
-    result = _dialogue_ops().stop_dialogue(args.id, close=getattr(args, "close", False))
+    result = _dialogue_ops().stop_dialogue(args.id)
     if not result.get("ok"):
         print(f"Error: {result['error']}", file=sys.stderr)
         sys.exit(1)
-    msg = f"Dialogue {args.id} stopped."
-    if getattr(args, "close", False):
-        msg += " Sessions closed."
-    print(msg)
+    print(f"Dialogue {args.id} stopped. Sessions closed.")
 
 
 def cmd_dialogue_remove(args):
@@ -470,12 +464,6 @@ def main():
         help="Agent for session B (default: claude)",
     )
     p_dstart.add_argument(
-        "--cwd-a", dest="cwd_a", default=os.path.expanduser("~"), help="Working directory for agent A (default: home)"
-    )
-    p_dstart.add_argument(
-        "--cwd-b", dest="cwd_b", default=os.path.expanduser("~"), help="Working directory for agent B (default: home)"
-    )
-    p_dstart.add_argument(
         "--max-turns",
         dest="max_turns",
         type=int,
@@ -488,9 +476,8 @@ def main():
 
     dsub.add_parser("list", help="List all dialogues and their status")
 
-    p_dstop = dsub.add_parser("stop", help="Stop a running dialogue orchestrator")
+    p_dstop = dsub.add_parser("stop", help="Stop a running dialogue orchestrator and close both agent sessions")
     p_dstop.add_argument("id", help="Dialogue ID")
-    p_dstop.add_argument("--close", action="store_true", help="Also kill both agent tmux sessions")
 
     p_dremove = dsub.add_parser("remove", help="Remove dialogue(s)")
     p_dremove.add_argument("--id", metavar="ID", default="", help="Remove a specific dialogue by ID (any status)")

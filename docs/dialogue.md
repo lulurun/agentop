@@ -118,8 +118,9 @@ Each dialogue gets a directory at `~/.agent-dashboard/dialogues/<scenario>_<brie
 | `meta.json` | ID, agent names, tmux sessions, status, PID |
 | `brief.md` | Copy of the `--brief` file |
 | `scenario.toml` | Copy of the scenario file used |
-| `dialogue.log` | Orchestrator logs (idle detection, parse results, status changes) |
+| `dialogue.log` | Orchestrator logs: idle detection, status changes, and each turn's parsed body length plus the full message body |
 | `progress.md` | Shared progress file the agents read and update |
+| `deliverables/` | Created by the agents if the scenario/brief asks for it — both agents share this directory as their cwd |
 
 ## 6 Adding agents to a dialogue
 

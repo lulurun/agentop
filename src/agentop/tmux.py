@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
+
+LOG = logging.getLogger(__name__)
 
 
 class CapturePane:
@@ -106,22 +109,33 @@ class Session:
             return False
 
     @staticmethod
+    def _load_and_paste(name: str, payload: bytes) -> bool:
+        """Load payload into the tmux buffer and paste it into the session.
+
+        paste-buffer writes the payload into the target pane's pty and can
+        block until the receiving process consumes it — slower TUIs (or any
+        load on the box) can make this take much longer than a quick local
+        tmux call. A short timeout here silently drops large pastes, so this
+        is generous and logs instead of swallowing failures.
+        """
+        try:
+            r1 = subprocess.run(["tmux", "load-buffer", "-"], input=payload, capture_output=True, timeout=15)
+            if r1.returncode != 0:
+                LOG.warning("[%s] tmux load-buffer failed: %s", name, r1.stderr.decode(errors="replace"))
+                return False
+            r2 = subprocess.run(["tmux", "paste-buffer", "-t", name], capture_output=True, timeout=30)
+            if r2.returncode != 0:
+                LOG.warning("[%s] tmux paste-buffer failed: %s", name, r2.stderr.decode(errors="replace"))
+                return False
+            return True
+        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError) as exc:
+            LOG.warning("[%s] paste of %d bytes failed: %s", name, len(payload), exc)
+            return False
+
+    @staticmethod
     def paste_text(name: str, text: str) -> None:
         """Load text into the tmux buffer and paste it into the session."""
-        try:
-            subprocess.run(
-                ["tmux", "load-buffer", "-"],
-                input=text.encode(),
-                capture_output=True,
-                timeout=5,
-            )
-            subprocess.run(
-                ["tmux", "paste-buffer", "-t", name],
-                capture_output=True,
-                timeout=5,
-            )
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-            pass
+        Session._load_and_paste(name, text.encode())
 
     @staticmethod
     def paste_text_bracketed(name: str, text: str) -> None:
@@ -132,17 +146,4 @@ class Session:
         multi-line block is delivered as one atomic input.
         """
         bracketed = "\x1b[200~" + text + "\x1b[201~"
-        try:
-            subprocess.run(
-                ["tmux", "load-buffer", "-"],
-                input=bracketed.encode(),
-                capture_output=True,
-                timeout=5,
-            )
-            subprocess.run(
-                ["tmux", "paste-buffer", "-t", name],
-                capture_output=True,
-                timeout=5,
-            )
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
-            pass
+        Session._load_and_paste(name, bracketed.encode())

@@ -85,8 +85,6 @@ agentop dialogue start \
   --brief <path/to/brief.md> \
   [--agent-a <tool>] \
   [--agent-b <tool>] \
-  [--cwd-a <path>] \
-  [--cwd-b <path>] \
   [--scenario <path/to/scenario.toml>] \
   [--max-turns N]
 ```
@@ -96,10 +94,14 @@ agentop dialogue start \
 | `--brief` | required | Markdown file describing the task/goal |
 | `--agent-a` | `claude` | Tool for agent A |
 | `--agent-b` | `claude` | Tool for agent B |
-| `--cwd-a` | home | Working directory for agent A |
-| `--cwd-b` | home | Working directory for agent B |
 | `--scenario` | built-in `pm-sde` | Path to a scenario TOML file |
 | `--max-turns` | from scenario | Maximum relay turns |
+
+Both agents always run with cwd set to the dialogue's own directory at
+`~/.agent-dashboard/dialogues/<id>/` — there is no way to override this. Any
+`deliverables/` folder a scenario asks the agents to create ends up there,
+alongside `brief.md`, `scenario.toml`, and `dialogue.log`. Agents can still
+read or write files elsewhere by using absolute paths.
 
 Example:
 
@@ -125,11 +127,13 @@ Status values: `starting`, `running`, `stopped`, `completed`, `error`, `agent_mi
 
 ### 2.3 dialogue stop
 
-Stop a running dialogue orchestrator.
+Stop a running dialogue orchestrator and close both agent tmux sessions.
+Everything said so far is already in `dialogue.log`, so the sessions are
+safe to drop — the same cleanup happens automatically when a dialogue
+completes on its own.
 
 ```bash
 agentop dialogue stop <id>
-agentop dialogue stop <id> --close   # also kill both agent tmux sessions
 ```
 
 ### 2.4 dialogue remove

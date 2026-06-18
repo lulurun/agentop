@@ -21,8 +21,6 @@ from agentop.tmux import Session
 def start_dialogue(
     agent_a: str,
     agent_b: str,
-    cwd_a: str,
-    cwd_b: str,
     max_turns: int,
     brief_file: str,
     scenario_file: str = "",
@@ -34,6 +32,7 @@ def start_dialogue(
     brief_name = Path(brief_file).stem
     dialogue_dir = DIALOGUES_DIR / f"{scenario_name}_{brief_name}_{dialogue_id}"
     dialogue_dir.mkdir(parents=True, exist_ok=True)
+    cwd = str(dialogue_dir)
 
     shutil.copy2(brief_file, dialogue_dir / "brief.md")
     shutil.copy2(resolved_scenario, dialogue_dir / "scenario.toml")
@@ -43,15 +42,19 @@ def start_dialogue(
 
     dialogue_params = {}  # {"model": "claude-opus-4-8"}
 
-    result_a = agent_ops.start(agent_a, cwd_a, short_name=f"dia{dialogue_id[:4]}a", params=dialogue_params)
+    result_a = agent_ops.start(agent_a, cwd, short_name=f"dia{dialogue_id[:4]}a", params=dialogue_params)
     if not result_a.get("ok"):
         return {"ok": False, "error": f"Failed to start agent A ({agent_a}): {result_a.get('error')}"}
 
-    result_b = agent_ops.start(agent_b, cwd_b, short_name=f"dia{dialogue_id[:4]}b", params=dialogue_params)
+    result_b = agent_ops.start(agent_b, cwd, short_name=f"dia{dialogue_id[:4]}b", params=dialogue_params)
     if not result_b.get("ok"):
         return {"ok": False, "error": f"Failed to start agent B ({agent_b}): {result_b.get('error')}"}
 
-    time.sleep(8)  # Give tmux sessions a moment to start up (codex needs time to boot MCP servers)
+    # Give tmux sessions time to start up. Codex needs longer than claude to boot
+    # its MCP servers; 8s was too tight and caused turn-1 prompts to land before
+    # codex's input was ready, silently dropping the brief.
+    boot_wait = 20 if "codex" in (agent_a, agent_b) else 8
+    time.sleep(boot_wait)
 
     meta = DialogueMeta.create(
         dialogue_id=dialogue_id,
@@ -82,6 +85,7 @@ def start_dialogue(
         "session_b": meta.session_b,
         "orchestrator_pid": proc.pid,
         "log_path": str(meta.log_path()),
+        "cwd": cwd,
     }
 
 
@@ -156,7 +160,7 @@ def remove_dialogues_by_status(status: str) -> dict:
     return {"ok": True, "removed": removed}
 
 
-def stop_dialogue(dialogue_id: str, close: bool = False) -> dict:
+def stop_dialogue(dialogue_id: str) -> dict:
     meta = DialogueMeta.load(dialogue_id)
     if not meta:
         return {"ok": False, "error": f"Dialogue {dialogue_id!r} not found"}
@@ -166,10 +170,8 @@ def stop_dialogue(dialogue_id: str, close: bool = False) -> dict:
         except ProcessLookupError:
             pass
     meta.update({"status": "stopped", "pid": None})
-    if close:
-        for session in (meta.session_a, meta.session_b):
-            if Session.has(session):
-                Session.send_keys(session, "/exit", "Enter")
-                time.sleep(3)
-                Session.kill(session)
+    # The orchestrator process was just killed, so it cannot run its own
+    # session cleanup — close both tmux sessions here instead. Everything
+    # said so far is already in dialogue.log, so the sessions are safe to drop.
+    _close_open_sessions(meta)
     return {"ok": True}
