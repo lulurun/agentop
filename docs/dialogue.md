@@ -50,6 +50,27 @@ If no valid delimiter block is found, the orchestrator sends a recovery prompt (
 
 A scenario TOML file defines the role prompts for both agents. Built-in scenarios are in `src/agentop/dialogue/scenarios/`.
 
+### 4.0 Scenario vs Brief Policy
+
+Keep scenarios generic and deliberate. Put topic-specific substance in the
+brief.
+
+Use this rule of thumb:
+
+- If the difference is **what should the agents review, research, decide, or
+  produce**, write a new brief.
+- If the difference is **how the agents should collaborate, argue, route turns,
+  or decide completion**, write a new scenario.
+- If the dialogue needs a different number of roles, routing pattern,
+  completion protocol, authority structure, or review loop, write a new
+  scenario.
+
+The scenario owns interaction mechanics: role relationship, turn-taking,
+challenge pattern, completion markers, and shared workflow expectations.
+
+The brief owns the domain problem: topic, sources, evidence rules, constraints,
+deliverables, acceptance criteria, and any project-specific decision policy.
+
 ### 4.1 TOML format
 
 ```toml

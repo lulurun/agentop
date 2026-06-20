@@ -911,6 +911,10 @@ td.muted { color: var(--text2); }
       <span class="tab-count" id="sessions-count">—</span>
     </a>
     <a href="#history" class="nav-link" id="nav-history">History</a>
+    <a href="#dialogues" class="nav-link" id="nav-dialogues">
+      Dialogues
+      <span class="tab-count" id="dialogues-count">—</span>
+    </a>
   </nav>
 
   <div class="header-right">
@@ -1037,7 +1041,67 @@ td.muted { color: var(--text2); }
     </div>
   </div>
 
+  <!-- Dialogues tab -->
+  <div id="dialogues-tab" class="tab-panel" hidden>
+    <div class="page-head">
+      <div>
+        <div class="page-title">Dialogues</div>
+        <div class="page-subtitle">Two-agent conversations relayed by the dialogue orchestrator.</div>
+      </div>
+    </div>
+    <div class="table-card">
+      <div class="table-wrap">
+        <table id="dialogues-table">
+          <thead>
+            <tr>
+              <th data-sort="id"         onclick="setDialoguesSort('id')">ID <span class="sort-arrow"></span></th>
+              <th data-sort="status"     onclick="setDialoguesSort('status')">Status <span class="sort-arrow"></span></th>
+              <th data-sort="agent_a"    onclick="setDialoguesSort('agent_a')">Agent A <span class="sort-arrow"></span></th>
+              <th data-sort="agent_b"    onclick="setDialoguesSort('agent_b')">Agent B <span class="sort-arrow"></span></th>
+              <th>Sessions</th>
+              <th data-sort="start_time" onclick="setDialoguesSort('start_time')" class="sort-active">Started <span class="sort-arrow">↓</span></th>
+            </tr>
+          </thead>
+          <tbody id="dialogues-body">
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <div class="spinner" style="width:20px;height:20px;margin:0 auto 12px"></div>
+                <p>Loading dialogues…</p>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
 
+  <!-- Dialogue detail page -->
+  <div id="dialogue-tab" class="tab-panel" hidden>
+    <div class="page-head">
+      <div>
+        <div class="page-title">Dialogue Detail</div>
+        <div class="page-subtitle">Brief, shared progress, and orchestrator log for one dialogue.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" id="dialogue-stop-btn" onclick="stopSelectedDialogue()">Stop</button>
+        <button class="btn btn-secondary" id="dialogue-remove-btn" onclick="removeSelectedDialogue()">Remove</button>
+        <a class="btn btn-secondary" href="#dialogues">Back to Dialogues</a>
+      </div>
+    </div>
+    <div class="detail-page" id="dialogue-detail-page">
+      <div class="detail-header">
+        <div class="detail-header-info">
+          <div class="detail-name" id="dialogue-detail-name">—</div>
+          <div class="detail-meta-row" id="dialogue-detail-badges"></div>
+        </div>
+      </div>
+      <div class="detail-body" id="dialogue-detail-body">
+        <div class="detail-section full-span" style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
+          <span class="spinner"></span> Loading…
+        </div>
+      </div>
+    </div>
+  </div>
 
 </div>
 
@@ -1151,10 +1215,16 @@ let refreshTimer  = null;
 let lastUpdatedAt = null;
 let homeDir       = '';
 let lastHistory   = [];
+let lastDialogues = [];
+let selectedDialogue = null;
 const REFRESH_INTERVAL = 30000;
 
 function sessionHash(name) {
   return '#session/' + encodeURIComponent(name);
+}
+
+function dialogueHash(id) {
+  return '#dialogue/' + encodeURIComponent(id);
 }
 
 // ============================================================
@@ -1183,8 +1253,9 @@ function makeSortCtrl(tableId, defaultKey, defaultDir, descKeys = []) {
   return { set, sort, updateUI };
 }
 
-const sessionsSort = makeSortCtrl('sessions-table', 'runtime',     'desc', ['runtime', 'tokens', 'memory', 'pid']);
-const histSort     = makeSortCtrl('history-table',  'last_active', 'desc', ['last_active']);
+const sessionsSort   = makeSortCtrl('sessions-table',  'runtime',    'desc', ['runtime', 'tokens', 'memory', 'pid']);
+const histSort       = makeSortCtrl('history-table',   'last_active','desc', ['last_active']);
+const dialoguesSort  = makeSortCtrl('dialogues-table', 'start_time', 'desc', ['start_time']);
 
 // ============================================================
 // Theme
@@ -1216,13 +1287,17 @@ function currentRoute() {
   }
   if (raw === '#history') return { page: 'history' };
   if (raw === '#files') return { page: 'files' };
+  if (raw.startsWith('#dialogue/')) {
+    return { page: 'dialogue', dialogueId: decodeURIComponent(raw.slice('#dialogue/'.length)) };
+  }
+  if (raw === '#dialogues') return { page: 'dialogues' };
   return { page: 'sessions' };
 }
 
 function showPage(page) {
   document.querySelectorAll('.tab-panel').forEach(el => { el.hidden = el.id !== `${page}-tab`; });
   document.querySelectorAll('.nav-link').forEach(link => link.classList.remove('active'));
-  const navPage = page === 'session' ? 'sessions' : page;
+  const navPage = page === 'session' ? 'sessions' : page === 'dialogue' ? 'dialogues' : page;
   const nav = document.getElementById('nav-' + navPage);
   if (nav) nav.classList.add('active');
 }
@@ -1236,6 +1311,11 @@ function handleRoute() {
     selectedSession = null;
     renderSessions(sessions);
   }
+  if (route.page === 'dialogues') {
+    selectedDialogue = null;
+    fetchDialogues();
+  }
+  if (route.page === 'dialogue') selectDialogue(route.dialogueId);
 }
 
 function switchTab(name) {
@@ -1281,6 +1361,16 @@ function fmtDate(ts) {
   });
 }
 
+function fmtIsoDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleString([], {
+    year: 'numeric', month: 'short', day: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+  });
+}
+
 function fmtProject(p) {
   if (!p) return '—';
   if (homeDir && (p === homeDir || p.startsWith(homeDir + '/'))) return '~' + p.slice(homeDir.length);
@@ -1303,6 +1393,19 @@ function statusBadge(s) {
   const cls = { running: 'badge-running', stopped: 'badge-stopped', waiting: 'badge-waiting', done: 'badge-done' }[s.status] || 'badge-unknown';
   const animated = s.status === 'running' ? 'animated' : '';
   return `<span class="badge ${cls}"><span class="badge-dot ${animated}"></span>${s.status || 'unknown'}</span>`;
+}
+
+function dialogueStatusBadge(status) {
+  const map = {
+    starting: { cls: 'badge-waiting', animated: 'animated' },
+    running:  { cls: 'badge-running', animated: 'animated' },
+    completed:{ cls: 'badge-done',    animated: '' },
+    stopped:  { cls: 'badge-stopped', animated: '' },
+    error:    { cls: 'badge-stopped', animated: '' },
+    agent_missing_delimiter: { cls: 'badge-stopped', animated: '' },
+  };
+  const m = map[status] || { cls: 'badge-unknown', animated: '' };
+  return `<span class="badge ${m.cls}"><span class="badge-dot ${m.animated}"></span>${escHtml(status || 'unknown')}</span>`;
 }
 
 function toolBadge(tool) {
@@ -1410,8 +1513,20 @@ function getHistSortVal(h, key) {
   }
 }
 
-function setSort(key)      { sessionsSort.set(key); renderSessions(sessions); }
-function setHistSort(key)  { histSort.set(key);     renderHistory(lastHistory); }
+function getDialoguesSortVal(d, key) {
+  switch (key) {
+    case 'id':         return (d.id || '').toLowerCase();
+    case 'status':     return (d.status || '').toLowerCase();
+    case 'agent_a':    return (d.agent_a || '').toLowerCase();
+    case 'agent_b':    return (d.agent_b || '').toLowerCase();
+    case 'start_time': return d.start_time || '';
+    default:           return '';
+  }
+}
+
+function setSort(key)         { sessionsSort.set(key);  renderSessions(sessions); }
+function setHistSort(key)     { histSort.set(key);      renderHistory(lastHistory); }
+function setDialoguesSort(key){ dialoguesSort.set(key);  renderDialogues(lastDialogues); }
 
 function renderSessions(list) {
   sessionsSort.updateUI();
@@ -1663,11 +1778,14 @@ function renderDetail(s) {
 // ============================================================
 function startRefresh() {
   fetchSessions();
+  fetchDialogues();
   handleRoute();
   refreshTimer = setInterval(() => {
     fetchSessions();
     const route = currentRoute();
     if (route.page === 'history') fetchHistory();
+    if (route.page === 'dialogues') fetchDialogues();
+    if (route.page === 'dialogue' && route.dialogueId) selectDialogue(route.dialogueId);
   }, REFRESH_INTERVAL);
 }
 
@@ -1812,6 +1930,151 @@ async function deleteHistorySession(btn) {
     btn.classList.replace('btn-warning', 'btn-danger');
     btn.textContent = '';
     btn.innerHTML = `<svg width="10" height="10" viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/><path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/></svg>`;
+  }
+}
+
+// ============================================================
+// Dialogues tab
+// ============================================================
+async function fetchDialogues() {
+  try {
+    const r = await fetch(API_BASE + '/api/dialogues');
+    lastDialogues = await r.json();
+    document.getElementById('dialogues-count').textContent = lastDialogues.length || '0';
+    renderDialogues(lastDialogues);
+  } catch (e) {
+    document.getElementById('dialogues-body').innerHTML =
+      `<tr><td colspan="6"><div class="empty-state"><p style="color:var(--red)">${escHtml(e.message)}</p></div></td></tr>`;
+  }
+}
+
+function renderDialogues(list) {
+  dialoguesSort.updateUI();
+  const tbody = document.getElementById('dialogues-body');
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="6">
+      <div class="empty-state">
+        <div class="empty-icon">💬</div>
+        <h3>No dialogues found</h3>
+        <p>Start one with <code>agentop dialogue start --brief &lt;file&gt;</code>.</p>
+      </div>
+    </td></tr>`;
+    return;
+  }
+  const sorted = dialoguesSort.sort(list, getDialoguesSortVal);
+  const route = currentRoute();
+  tbody.innerHTML = sorted.map(d => {
+    const selected = route.page === 'dialogue' && route.dialogueId === d.id ? ' selected' : '';
+    const sessA = d.session_a + (d.session_a_alive ? ' [open]' : '');
+    const sessB = d.session_b + (d.session_b_alive ? ' [open]' : '');
+    const started = d.start_time ? fmtIsoDate(d.start_time) : '—';
+    return `<tr class="clickable${selected}" data-id="${escHtml(d.id)}" onclick="window.location.hash=dialogueHash(this.dataset.id)">
+      <td><span class="mono" style="font-size:12px">${escHtml(d.id)}</span></td>
+      <td>${dialogueStatusBadge(d.status)}</td>
+      <td>${toolBadge(d.agent_a)}</td>
+      <td>${toolBadge(d.agent_b)}</td>
+      <td class="muted mono" style="font-size:11px">${escHtml(sessA)}<br>${escHtml(sessB)}</td>
+      <td class="muted mono" style="font-size:12px">${started}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function selectDialogue(id) {
+  const keepContent = selectedDialogue && selectedDialogue.id === id;
+  document.getElementById('dialogue-detail-name').textContent = id;
+  if (!keepContent) {
+    document.getElementById('dialogue-detail-badges').innerHTML = '';
+    document.getElementById('dialogue-detail-body').innerHTML = `
+      <div class="detail-section full-span" style="color:var(--text2);font-size:13px;display:flex;align-items:center;gap:8px">
+        <span class="spinner"></span> Loading…
+      </div>`;
+  }
+  try {
+    const r = await fetch(API_BASE + '/api/dialogues/' + encodeURIComponent(id));
+    if (!r.ok) throw new Error((await r.json()).detail || 'Dialogue not found');
+    const detail = await r.json();
+    selectedDialogue = detail;
+    renderDialogueDetail(detail);
+  } catch (e) {
+    selectedDialogue = null;
+    document.getElementById('dialogue-detail-badges').innerHTML = '';
+    document.getElementById('dialogue-detail-body').innerHTML =
+      `<div class="detail-section full-span" style="color:var(--red);font-size:13px">${escHtml(e.message)}</div>`;
+  }
+}
+
+function renderDialogueDetail(d) {
+  document.getElementById('dialogue-detail-name').textContent = d.id;
+  document.getElementById('dialogue-detail-badges').innerHTML =
+    dialogueStatusBadge(d.status) + ' ' + toolBadge(d.agent_a) + ' vs ' + toolBadge(d.agent_b);
+
+  const stopBtn = document.getElementById('dialogue-stop-btn');
+  stopBtn.style.display = (d.status === 'running' || d.status === 'starting') ? '' : 'none';
+
+  let html = '';
+  html += `<div class="detail-section">
+    <div class="section-title">Overview</div>
+    <div class="kv-grid">
+      <span class="kv-key">Started</span>
+      <span class="kv-val">${d.start_time ? fmtIsoDate(d.start_time) : '—'}</span>
+      <span class="kv-key">Max turns</span>
+      <span class="kv-val">${escHtml(String(d.max_turns ?? '—'))}</span>
+      <span class="kv-key">CWD</span>
+      <span class="kv-val">${escHtml(fmtProject(d.cwd || '—'))}</span>
+      ${d.error ? `<span class="kv-key">Error</span><span class="kv-val" style="color:var(--red)">${escHtml(d.error)}</span>` : ''}
+    </div>
+  </div>`;
+
+  html += `<div class="detail-section">
+    <div class="section-title">Sessions</div>
+    <div class="kv-grid">
+      <span class="kv-key">Agent A</span>
+      <span class="kv-val">${tmuxInfo({ session: d.session_a })} ${d.session_a_alive ? '' : '<span class="text-dim">(closed)</span>'}</span>
+      <span class="kv-key">Agent B</span>
+      <span class="kv-val">${tmuxInfo({ session: d.session_b })} ${d.session_b_alive ? '' : '<span class="text-dim">(closed)</span>'}</span>
+    </div>
+  </div>`;
+
+  html += `<div class="detail-section full-span">
+    <div class="section-title">Brief</div>
+    <div class="notes-box" style="max-height:200px;overflow-y:auto">${escHtml(d.brief) || '<span class="text-dim">—</span>'}</div>
+  </div>`;
+
+  html += `<div class="detail-section full-span">
+    <div class="section-title">Progress</div>
+    <div class="notes-box" style="max-height:300px;overflow-y:auto">${escHtml(d.progress) || '<span class="text-dim">—</span>'}</div>
+  </div>`;
+
+  html += `<div class="detail-section full-span">
+    <div class="section-title">Log (tail)</div>
+    <div class="notes-box mono" style="max-height:300px;overflow-y:auto;font-size:11px">${escHtml(d.log_tail) || '<span class="text-dim">—</span>'}</div>
+  </div>`;
+
+  document.getElementById('dialogue-detail-body').innerHTML = html;
+}
+
+async function stopSelectedDialogue() {
+  if (!selectedDialogue) return;
+  try {
+    const r = await fetch(API_BASE + '/api/dialogues/' + encodeURIComponent(selectedDialogue.id) + '/stop', { method: 'POST' });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to stop dialogue');
+    showToast('Dialogue stopped');
+    selectDialogue(selectedDialogue.id);
+  } catch (e) {
+    showToast('Error: ' + e.message);
+  }
+}
+
+async function removeSelectedDialogue() {
+  if (!selectedDialogue) return;
+  if (!confirm(`Remove dialogue ${selectedDialogue.id}? This deletes its folder.`)) return;
+  try {
+    const r = await fetch(API_BASE + '/api/dialogues/' + encodeURIComponent(selectedDialogue.id), { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json()).detail || 'Failed to remove dialogue');
+    showToast('Dialogue removed');
+    window.location.hash = 'dialogues';
+  } catch (e) {
+    showToast('Error: ' + e.message);
   }
 }
 

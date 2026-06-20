@@ -16,6 +16,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from agentop import ops, scanner
+from agentop.dialogue import ops as dialogue_ops
 
 # ---------------------------------------------------------------------------
 # Cache refreshed by background task
@@ -173,6 +174,40 @@ async def get_session(name: str):
                     result["process_tree"] = []
                 return result
     raise HTTPException(status_code=404, detail="Session not found")
+
+
+# ---------------------------------------------------------------------------
+# Dialogue routes
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/dialogues")
+async def list_dialogues():
+    return await asyncio.to_thread(dialogue_ops.list_dialogues)
+
+
+@app.get("/api/dialogues/{dialogue_id}")
+async def get_dialogue(dialogue_id: str):
+    detail = await asyncio.to_thread(dialogue_ops.get_dialogue, dialogue_id)
+    if detail is None:
+        raise HTTPException(status_code=404, detail="Dialogue not found")
+    return detail
+
+
+@app.post("/api/dialogues/{dialogue_id}/stop")
+async def stop_dialogue(dialogue_id: str):
+    result = await asyncio.to_thread(dialogue_ops.stop_dialogue, dialogue_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error"))
+    return result
+
+
+@app.delete("/api/dialogues/{dialogue_id}")
+async def remove_dialogue(dialogue_id: str):
+    result = await asyncio.to_thread(dialogue_ops.remove_dialogue, dialogue_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=404, detail=result.get("error"))
+    return result
 
 
 # ---------------------------------------------------------------------------

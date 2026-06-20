@@ -106,6 +106,9 @@ def list_dialogues() -> list[dict]:
                     "session_b": meta.session_b,
                     "session_a_alive": Session.has(meta.session_a),
                     "session_b_alive": Session.has(meta.session_b),
+                    "start_time": meta.start_time,
+                    "max_turns": meta.max_turns,
+                    "error": meta.error,
                 }
             )
     return result
@@ -123,6 +126,43 @@ def _close_open_sessions(meta: DialogueMeta) -> None:
             Session.send_keys(session, "/exit", "Enter")
             time.sleep(3)
             Session.kill(session)
+
+
+_LOG_TAIL_CHARS = 20_000
+
+
+def get_dialogue(dialogue_id: str) -> dict | None:
+    meta = DialogueMeta.load(dialogue_id)
+    if not meta:
+        return None
+    dialogue_dir = meta._dir()
+
+    def read_text(name: str, tail_chars: int | None = None) -> str:
+        path = dialogue_dir / name
+        if not path.exists():
+            return ""
+        text = path.read_text(errors="replace")
+        if tail_chars and len(text) > tail_chars:
+            text = text[-tail_chars:]
+        return text
+
+    return {
+        "id": dialogue_dir.name,
+        "status": meta.status,
+        "agent_a": meta.agent_a,
+        "agent_b": meta.agent_b,
+        "session_a": meta.session_a,
+        "session_b": meta.session_b,
+        "session_a_alive": Session.has(meta.session_a),
+        "session_b_alive": Session.has(meta.session_b),
+        "start_time": meta.start_time,
+        "max_turns": meta.max_turns,
+        "error": meta.error,
+        "cwd": str(dialogue_dir),
+        "brief": read_text("brief.md"),
+        "progress": read_text("progress.md"),
+        "log_tail": read_text("dialogue.log", tail_chars=_LOG_TAIL_CHARS),
+    }
 
 
 def list_dialogues_by_status(status: str) -> list[DialogueMeta]:
