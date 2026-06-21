@@ -1436,7 +1436,35 @@ function tmuxInfo(tmux) {
 }
 
 function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'));
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(
+      () => showToast('Copied to clipboard'),
+      () => copyTextFallback(text),
+    );
+  } else {
+    copyTextFallback(text);
+  }
+}
+
+function copyTextFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {
+    if (document.execCommand('copy')) {
+      showToast('Copied to clipboard');
+    } else {
+      showToast('Copy failed — select and copy manually');
+    }
+  } catch (e) {
+    showToast('Copy failed — select and copy manually');
+  } finally {
+    document.body.removeChild(ta);
+  }
 }
 
 function showToast(msg) {
