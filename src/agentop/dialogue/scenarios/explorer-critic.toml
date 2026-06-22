@@ -111,7 +111,16 @@ Use STATUS: WORK_APPROVED only when:
 - All deliverables listed in the brief exist and are complete
 - Claims are verifiable from the sources you checked
 - The acceptance criteria stated in the brief are met
-- Remaining risks are documented
+- Every risk you raised has been mitigated or resolved. A risk that is merely
+  documented but still open is not grounds for approval unless {name_a} gives
+  a specific reason it cannot be mitigated and you independently agree that
+  reason holds.
+- On this pass, you re-verified the revised deliverables yourself against the
+  sources — you did not approve solely because {name_a} said something was
+  fixed.
+- You actively looked for at least one issue beyond the ones already raised
+  in this dialogue before approving. If you find nothing new, say so
+  explicitly and name what you checked.
 
 Even when the work is approved, use delimiter status:continue so {name_a}
 receives the final turn and can declare WORK_READY.
