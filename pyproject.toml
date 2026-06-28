@@ -22,3 +22,6 @@ py-modules = ["cli"]
 
 [tool.setuptools.package-data]
 "agentop.dialogue.scenarios" = ["*.toml"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
