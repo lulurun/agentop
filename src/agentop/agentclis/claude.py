@@ -76,7 +76,9 @@ class ClaudeAgentCli(AgentCli):
             content = CapturePane.screen(tmux_session).lower()
             if "trust" in content or "safety check" in content:
                 time.sleep(0.1)
-                Session.send_keys(tmux_session, "Enter")
+                # "No, exit" is the default selection, so Enter alone declines
+                # and claude quits. Move down to "Yes, I trust this folder".
+                Session.send_keys(tmux_session, "Down", "Enter")
                 return
 
     def _get_jsonl_path(self, pid: int, cwd: str) -> Optional[Path]:
