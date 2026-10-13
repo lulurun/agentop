@@ -7,8 +7,8 @@ agentop has three concerns: detecting and managing agent processes, orchestratin
 ```
 src/
   api.py                   FastAPI web server
-  cli.py                   CLI entry point
   agentop/
+    cli.py                 CLI entry point (the `agentop` command)
     agentcli.py            AgentCli base class
     agentclis/             Concrete agent CLI implementations
     actor.py               Sends/receives over tmux
@@ -98,7 +98,7 @@ JSON file at `~/.agent-dashboard/registry.json`. Tracks which sessions were star
 
 ### 4.3 Ops (`ops.py`)
 
-Business logic layer called by both `api.py` and `cli.py`:
+Business logic layer called by both `api.py` and `agentop/cli.py`:
 
 | Function | What it does |
 |----------|-------------|

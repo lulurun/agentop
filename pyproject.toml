@@ -13,12 +13,18 @@ dependencies = [
 ]
 
 [project.scripts]
-agentop = "cli:main"
+# `agentop.cli`, not a bare `cli`: a top-level `cli` module collides with any
+# other distribution that ships one, and the command then runs the wrong tool.
+agentop = "agentop.cli:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["agentop", "agentop.agents", "agentop.dialogue", "agentop.dialogue.scenarios"]
-py-modules = ["cli"]
+
+# Found rather than listed: the list named `agentop.agents` after it was split into
+# `actors` and `agentclis`, and the build refused to run.
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["agentop*"]
 
 [tool.setuptools.package-data]
 "agentop.dialogue.scenarios" = ["*.toml"]
