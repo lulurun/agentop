@@ -1,0 +1,20 @@
+[Unit]
+Description=Agentop dashboard API on 127.0.0.1:9775
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/lulurun/workspace/agentop
+Environment=PATH=/home/lulurun/.pyenv/versions/3.13.9/bin:/home/lulurun/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/lulurun/.pyenv/versions/3.13.9/bin/python src/api.py
+ExecStartPost=-/home/lulurun/workspace/agentop/deploy/ensure-general-session.sh
+# Agent sessions live in tmux. If this unit starts the tmux server (first
+# session after boot), only the API process may be killed on stop/restart.
+KillMode=process
+Restart=always
+RestartSec=10
+StandardOutput=append:/panda-infra/agentop/api.log
+StandardError=append:/panda-infra/agentop/api.log
+
+[Install]
+WantedBy=default.target

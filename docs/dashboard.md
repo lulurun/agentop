@@ -38,41 +38,26 @@ kill $(cat dashboard.pid)
 
 ### 3.2 Systemd service (recommended)
 
-The service starts automatically at boot and restarts on failure.
+`deploy/agentop-api.service` is the unit. It runs `src/api.py` directly, logs to
+`/panda-infra/agentop/api.log`, restarts on any exit, and after each start runs
+`deploy/ensure-general-session.sh` to make sure a general session exists.
+`KillMode=process` means a stop or restart kills only the API, never the tmux
+sessions, even when the unit started the tmux server.
 
 ```bash
-systemctl --user status agentop
-systemctl --user restart agentop
-systemctl --user stop agentop
-journalctl --user -u agentop -f     # live logs
+systemctl --user status agentop-api
+systemctl --user restart agentop-api
+tail -f /panda-infra/agentop/api.log
 ```
 
 ### 3.3 First-time service setup
 
+The unit is linked from the repo, not copied, so edits here are what systemd runs
+after a `daemon-reload`.
+
 ```bash
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/agentop.service << 'EOF'
-[Unit]
-Description=Agentop Dashboard
-After=network.target
-
-[Service]
-Type=forking
-WorkingDirectory=/home/lulurun/workspace/agentop
-ExecStart=/bin/bash /home/lulurun/workspace/agentop/run_app.sh
-PIDFile=/home/lulurun/workspace/agentop/dashboard.pid
-Restart=on-failure
-RestartSec=5
-StandardOutput=append:/home/lulurun/workspace/agentop/dashboard.log
-StandardError=append:/home/lulurun/workspace/agentop/dashboard.log
-
-[Install]
-WantedBy=default.target
-EOF
-
-systemctl --user daemon-reload
-systemctl --user enable agentop
-systemctl --user start agentop
+mkdir -p /panda-infra/agentop
+systemctl --user enable --now ~/workspace/agentop/deploy/agentop-api.service
 loginctl enable-linger lulurun     # start at boot without login
 ```
 
