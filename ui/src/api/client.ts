@@ -5,6 +5,9 @@ export type Health = components["schemas"]["Health"];
 export type ServiceInfo = components["schemas"]["ServiceInfo"];
 export type ToolInfo = components["schemas"]["ToolInfo"];
 export type DirListing = components["schemas"]["DirListing"];
+export type FileListing = components["schemas"]["FileListing"];
+export type FileEntry = components["schemas"]["FileEntry"];
+export type GitChanges = components["schemas"]["GitChanges"];
 export type CreateSession = components["schemas"]["CreateSession"];
 export type PatchSession = components["schemas"]["PatchSession"];
 
@@ -61,6 +64,9 @@ export class ServiceClient {
   sessions = () => this.get<Session[]>("/sessions");
   dirs = (path: string, hidden = false) =>
     this.get<DirListing>(`/fs/dirs?path=${encodeURIComponent(path)}&hidden=${hidden}`);
+  files = (id: string, path = "") =>
+    this.get<FileListing>(`/sessions/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
+  changes = (id: string) => this.get<GitChanges>(`/sessions/${encodeURIComponent(id)}/changes`);
   create = (body: CreateSession) => this.request<Session>("POST", "/sessions", body);
   stop = (id: string) => this.request("POST", `/sessions/${encodeURIComponent(id)}/stop`);
   close = (id: string) => this.request("DELETE", `/sessions/${encodeURIComponent(id)}`);

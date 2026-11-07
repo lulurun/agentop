@@ -34,12 +34,14 @@ from agentop import ops
 from agentop.agentclis import AGENTS
 from agentop.tmux import Session
 
-from . import API_VERSION, auth, terminal
+from . import API_VERSION, auth, files, terminal
 from .config import Settings
 from .identity import Identity
 from .models import (
     CreateSession,
     DirListing,
+    FileListing,
+    GitChanges,
     Health,
     PatchSession,
     ServiceInfo,
@@ -202,6 +204,32 @@ def create_v2_app(ctx: Context) -> FastAPI:
     @v2.delete("/sessions/{session_id}", dependencies=authed)
     async def delete_session(session_id: str):
         return await ctx.store.close(session_id)
+
+    def working_directory(session_id: str) -> str:
+        row = ctx.store.get(session_id)
+        if row is None:
+            raise HTTPException(404, "Session not found")
+        if not row["cwd"]:
+            raise HTTPException(404, "This session has no known working directory")
+        return row["cwd"]
+
+    @v2.get("/sessions/{session_id}/files", response_model=FileListing, dependencies=authed)
+    async def session_files(session_id: str, path: str = ""):
+        try:
+            return await asyncio.to_thread(files.list_directory, working_directory(session_id), path)
+        except files.OutsideRoot:
+            raise HTTPException(403, "That path is outside the session's directory") from None
+        except (FileNotFoundError, NotADirectoryError):
+            raise HTTPException(404, "No such directory") from None
+        except PermissionError:
+            raise HTTPException(403, "Permission denied") from None
+
+    @v2.get("/sessions/{session_id}/changes", response_model=GitChanges, dependencies=authed)
+    async def session_changes(session_id: str):
+        try:
+            return await asyncio.to_thread(files.git_changes, working_directory(session_id))
+        except FileNotFoundError:
+            raise HTTPException(404, "No such directory") from None
 
     @v2.get("/saved-sessions", dependencies=authed)
     async def saved_sessions(tool: str | None = None, limit: int = 50):

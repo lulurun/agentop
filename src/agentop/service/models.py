@@ -38,6 +38,34 @@ class DirListing(BaseModel):
     dirs: list[str]
 
 
+class FileEntry(BaseModel):
+    name: str
+    path: str
+    is_dir: bool
+    is_link: bool
+
+
+class FileListing(BaseModel):
+    root: str
+    path: str
+    entries: list[FileEntry]
+    truncated: bool
+
+
+class ChangedFile(BaseModel):
+    path: str
+    status: str
+
+
+class GitChanges(BaseModel):
+    is_repo: bool
+    branch: str | None
+    ahead: int
+    behind: int
+    files: list[ChangedFile]
+    truncated: bool
+
+
 class TmuxInfo(BaseModel):
     session: str
     clients: int

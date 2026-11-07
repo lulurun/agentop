@@ -1,6 +1,7 @@
 import type { Session } from "../api/client";
 import { platform } from "../platform";
 import { useApp } from "../store";
+import { FilesSection } from "./FilesSection";
 import { selectedSession } from "./MainArea";
 
 function formatTokens(value: number): string {
@@ -73,6 +74,7 @@ export function DetailsPanel() {
         <h3>Token usage</h3>
         <Usage session={session} />
       </section>
+      {session.cwd && <FilesSection key={session.id} sessionId={session.id} />}
       {session.managed && session.status === "running" && (
         <section className="details-actions">
           <button type="button" onClick={() => void act((client) => client.stop(session.id))}>

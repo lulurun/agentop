@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -234,6 +236,44 @@ test("a different service at a saved address never gets the token", async ({ pag
   await page.getByRole("menuitemradio", { name: /beta/ }).click();
   await expect(page.getByRole("heading", { name: "A different service is now at this address" })).toBeVisible();
   expect(sent).toEqual([]);
+});
+
+test("a path typed before the default directory loads is kept", async ({ page }) => {
+  const s = await service("alpha");
+  await page.route("**/api/v2/fs/dirs?path=%7E*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    await route.continue();
+  });
+  await page.goto(s.signedInUrl);
+  await startSession(page, s, "demo");
+  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
+  await expect(page.locator(".details").getByRole("button", { name: join(s.root, "project") })).toBeVisible();
+});
+
+test("the right panel shows details, changes, and files, and follows the selection", async ({ page }) => {
+  const s = await service("alpha");
+  const project = join(s.root, "project");
+  execFileSync("git", ["-C", project, "init", "-q", "-b", "trunk"]);
+  mkdirSync(join(project, "src"));
+  writeFileSync(join(project, "src", "inner.txt"), "x");
+  writeFileSync(join(project, "notes.txt"), "x");
+  await page.goto(s.signedInUrl);
+  await startSession(page, s, "demo");
+  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
+
+  const details = page.locator(".details");
+  await expect(details.getByText("trunk")).toBeVisible();
+  await expect(details.getByRole("button", { name: "notes.txt" })).toBeVisible();
+
+  await details.getByRole("tab", { name: "All" }).click();
+  await expect(details.getByRole("button", { name: "inner.txt" })).toBeHidden();
+  await details.getByRole("button", { name: "src" }).click();
+  await expect(details.getByRole("button", { name: "inner.txt" })).toBeVisible();
+
+  await page.keyboard.press("Control+Shift+BracketRight");
+  await expect(details).toBeHidden();
+  await page.keyboard.press("Control+Shift+BracketRight");
+  await expect(details).toBeVisible();
 });
 
 test("the WebGL renderer draws the terminal", async ({ page }) => {

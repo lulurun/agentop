@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { DirListing, ToolInfo } from "../api/client";
 import { activeClient, useApp } from "../store";
 import { Dialog } from "./Dialog";
@@ -36,24 +36,31 @@ export function NewSessionDialog() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const recent = useMemo(loadRecent, []);
+  // Answers can arrive out of order, so only the newest request may change the form.
+  const latestRequest = useRef(0);
 
   useEffect(() => {
     client.tools().then((list) => {
       setTools(list);
       setTool((current) => current || (list.find((t) => t.installed)?.name ?? ""));
     }).catch((e) => setError(e.message));
-    client.dirs(recent[0] ?? "~").then((result) => {
+    const request = ++latestRequest.current;
+    // Only a default: by the time this arrives, the user may have typed a path.
+    const useDefault = (result: DirListing) => {
+      if (request !== latestRequest.current) return;
       setListing(result);
       setCwd(result.path);
-    }).catch(() => client.dirs("~").then((result) => {
-      setListing(result);
-      setCwd(result.path);
-    }));
+    };
+    client.dirs(recent[0] ?? "~").then(useDefault).catch(() => client.dirs("~").then(useDefault));
   }, [client, recent]);
 
   function browse(path: string) {
     setCwd(path);
-    client.dirs(path).then(setListing).catch(() => setListing(null));
+    const request = ++latestRequest.current;
+    client.dirs(path).then(
+      (result) => request === latestRequest.current && setListing(result),
+      () => request === latestRequest.current && setListing(null),
+    );
   }
 
   async function submit(event: FormEvent) {

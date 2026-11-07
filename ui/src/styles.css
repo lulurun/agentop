@@ -417,6 +417,29 @@ input::placeholder { color: var(--quiet); }
 .copyable:hover { text-decoration: underline; }
 .details-actions { margin-top: 16px; }
 
+.file-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
+.file-tabs button { padding: 2px 9px; background: none; border-color: transparent; color: var(--quiet); }
+.file-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text); }
+.file-note { margin: 2px 0 6px; color: var(--quiet); font-size: 13px; }
+.file-list, .file-list ul { margin: 0; padding: 0; list-style: none; }
+.file-list ul { padding-left: 12px; }
+.file-row {
+  display: flex;
+  gap: 7px;
+  width: 100%;
+  padding: 1px 4px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  text-align: left;
+}
+.file-row:hover { background: var(--raised); }
+.file-row span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.file-state { flex: none; width: 1ch; color: var(--starting); font-family: var(--code); font-size: 12px; line-height: 20px; }
+.file-state[data-state="A"], .file-state[data-state="?"] { color: var(--running); }
+.file-state[data-state="D"] { color: var(--failed); }
+.file-glyph { flex: none; width: 1ch; color: var(--quiet); font-family: var(--code); font-size: 12px; line-height: 20px; }
+
 .scrim { display: none; }
 
 .dialog {

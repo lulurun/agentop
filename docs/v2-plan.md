@@ -206,11 +206,15 @@ Goal: the main workflow from the design, in a browser.
 
 ## 5 Phase 3: Right panel
 
-- [ ] Identity group: inline-editable name and description, tool, status, directory, copyable tmux attach command, bridge URL.
-- [ ] Process group: PID, uptime, memory.
-- [ ] Usage group: tokens by type, using the existing `token_usage`; shows "not available" for tools that do not report it.
-- [ ] `files.py` and routes: lazy directory listing, git branch, dirty state, and changed files. Respect `.gitignore` where the directory is a repository, and handle non-repositories.
-- [ ] Files UI with Changed and All tabs, and copy-path. Refresh on open, and every 10s only while the panel is visible.
+Status: done on branch `v2`, except inline editing of name and description, which the API supports but the panel does not show yet.
+
+- [ ] Inline editing of name and description.
+- [ ] Bridge URL.
+- [x] Identity group: name, tool, directory, copyable tmux attach command.
+- [x] Process group: PID, uptime, memory.
+- [x] Usage group: tokens by type, using the existing `token_usage`; shows "not available" for tools that do not report it.
+- [x] `files.py` and routes: lazy directory listing, git branch, dirty state, and changed files. Respect `.gitignore` where the directory is a repository, and handle non-repositories.
+- [x] Files UI with Changed and All tabs, and copy-path. Refresh on open, and every 10s only while the panel is visible.
 
 File preview and diff views are deferred until after v2.0.
 

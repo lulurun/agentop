@@ -454,3 +454,26 @@ def test_flood_with_a_slow_client_stays_responsive_and_recovers(service):
         read_until(ws, "flood-is-over", timeout=15)
 
 
+
+
+# ---------------------------------------------------------------------- files
+
+
+def test_session_files_and_changes(service, tmp_path):
+    (tmp_path / "work").mkdir()
+    (tmp_path / "work/a.txt").write_text("x")
+    created = service.create(cwd=str(tmp_path / "work"))
+    service.wait_for(created["id"], "running")
+    listing = service.http.get(f"/sessions/{created['id']}/files").json()
+    assert [e["name"] for e in listing["entries"]] == ["a.txt"]
+    assert service.http.get(f"/sessions/{created['id']}/changes").json()["is_repo"] is False
+
+
+def test_session_files_refuse_escapes_and_need_the_token(service, tmp_path):
+    created = service.create(cwd=str(tmp_path))
+    service.wait_for(created["id"], "running")
+    path = f"/sessions/{created['id']}/files"
+    assert service.http.get(path, params={"path": ".."}).status_code == 403
+    assert service.http.get(path, params={"path": "nope"}).status_code == 404
+    assert httpx.get(service.base + path).status_code == 401
+    assert httpx.get(f"{service.base}/sessions/{created['id']}/changes").status_code == 401

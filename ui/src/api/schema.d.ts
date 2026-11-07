@@ -129,6 +129,40 @@ export interface paths {
         patch: operations["patch_session_sessions__session_id__patch"];
         trace?: never;
     };
+    "/sessions/{session_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Changes */
+        get: operations["session_changes_sessions__session_id__changes_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/sessions/{session_id}/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Files */
+        get: operations["session_files_sessions__session_id__files_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions/{session_id}/stop": {
         parameters: {
             query?: never;
@@ -184,6 +218,13 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** ChangedFile */
+        ChangedFile: {
+            /** Path */
+            path: string;
+            /** Status */
+            status: string;
+        };
         /** CreateSession */
         CreateSession: {
             /** Cwd */
@@ -202,6 +243,43 @@ export interface components {
             parent: string | null;
             /** Path */
             path: string;
+        };
+        /** FileEntry */
+        FileEntry: {
+            /** Is Dir */
+            is_dir: boolean;
+            /** Is Link */
+            is_link: boolean;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+        };
+        /** FileListing */
+        FileListing: {
+            /** Entries */
+            entries: components["schemas"]["FileEntry"][];
+            /** Path */
+            path: string;
+            /** Root */
+            root: string;
+            /** Truncated */
+            truncated: boolean;
+        };
+        /** GitChanges */
+        GitChanges: {
+            /** Ahead */
+            ahead: number;
+            /** Behind */
+            behind: number;
+            /** Branch */
+            branch: string | null;
+            /** Files */
+            files: components["schemas"]["ChangedFile"][];
+            /** Is Repo */
+            is_repo: boolean;
+            /** Truncated */
+            truncated: boolean;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -695,6 +773,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_changes_sessions__session_id__changes_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitChanges"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_files_sessions__session_id__files_get: {
+        parameters: {
+            query?: {
+                path?: string;
+            };
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FileListing"];
                 };
             };
             /** @description Validation Error */
