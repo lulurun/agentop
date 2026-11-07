@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { failureMessage, tokenFromInput } from "../connections";
 import { platform, type LocalControl } from "../platform";
@@ -134,11 +134,10 @@ function ConnectionProblem() {
   );
 }
 
-function SessionBanner({ session }: { session: Session }) {
+function useReplace(session: Session) {
   const act = useApp((s) => s.act);
   const select = useApp((s) => s.select);
-
-  async function replaceWith(resume: boolean) {
+  return async function replaceWith(resume: boolean) {
     const created = await act((client) =>
       client.create({
         tool: session.tool!,
@@ -151,23 +150,40 @@ function SessionBanner({ session }: { session: Session }) {
       select(created.id);
       await act((client) => client.close(session.id));
     }
-  }
+  };
+}
 
-  if (session.status === "exited") {
-    return (
-      <div className="banner">
-        <span>The agent has exited. The shell is still open.</span>
-        {session.tool && session.session_id && (
-          <button type="button" onClick={() => void replaceWith(true)}>
-            Resume
+/** Lies over the terminal of a session whose agent has quit: the screen shows through, but can't be typed into. */
+function ExitedCurtain({ session }: { session: Session }) {
+  const act = useApp((s) => s.act);
+  const replaceWith = useReplace(session);
+  const closeButton = useRef<HTMLButtonElement>(null);
+  useEffect(() => closeButton.current?.focus(), []);
+
+  return (
+    <div className="curtain" role="region" aria-label="Session exited">
+      <div className="curtain-card" role="status">
+        <p className="curtain-title">{session.display_name} has exited</p>
+        <p className="curtain-text">The agent is no longer running. Close the session to remove its terminal.</p>
+        <div className="curtain-actions">
+          {session.tool && session.session_id && (
+            <button type="button" onClick={() => void replaceWith(true)}>
+              Resume
+            </button>
+          )}
+          <button ref={closeButton} type="button" className="primary" onClick={() => void act((client) => client.close(session.id))}>
+            Close session
           </button>
-        )}
-        <button type="button" onClick={() => void act((client) => client.close(session.id))}>
-          Close session
-        </button>
+        </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
+
+function SessionBanner({ session }: { session: Session }) {
+  const act = useApp((s) => s.act);
+  const replaceWith = useReplace(session);
+
   if (session.status === "failed") {
     return (
       <div className="banner banner-failed">
@@ -225,7 +241,14 @@ export function MainArea() {
         <>
           {session && <SessionBanner session={session} />}
           {showTerminal ? (
-            <TerminalView key={`${activeId}/${session.id}/${settings.theme}/${settings.renderer}/${settings.fontSize}`} client={client} sessionId={session.id} focusRequest={0} />
+            <TerminalView
+              key={`${activeId}/${session.id}/${settings.theme}/${settings.renderer}/${settings.fontSize}`}
+              client={client}
+              sessionId={session.id}
+              focusRequest={0}
+              locked={session.status === "exited"}
+              overlay={<ExitedCurtain session={session} />}
+            />
           ) : session?.status === "starting" ? (
             <Starting session={session} />
           ) : session && session.status !== "failed" ? (

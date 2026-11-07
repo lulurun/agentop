@@ -6,7 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ApiError, type ServiceClient } from "../api/client";
 import { isAppShortcut } from "../shortcuts";
 import { platform } from "../platform";
@@ -44,11 +44,15 @@ interface Props {
   client: ServiceClient;
   sessionId: string;
   focusRequest: number;
+  /** Shown but not typed into: input is dropped and the overlay covers the screen. */
+  locked?: boolean;
+  overlay?: ReactNode;
 }
 
 /** The only code that touches xterm, so the terminal library can be replaced in one place. */
-export function TerminalView({ client, sessionId, focusRequest }: Props) {
+export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay }: Props) {
   const host = useRef<HTMLDivElement>(null);
+  const lockedRef = useRef(locked);
   const term = useRef<Terminal | null>(null);
   const search = useRef<SearchAddon | null>(null);
   const reattach = useRef<() => void>(() => {});
@@ -84,7 +88,8 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
     terminal.open(host.current!);
     loadRenderer(terminal);
     fit.fit();
-    terminal.focus();
+    terminal.options.disableStdin = lockedRef.current;
+    if (!lockedRef.current) terminal.focus();
 
     terminal.attachCustomKeyEventHandler((event) => {
       if (isAppShortcut(event)) return false;
@@ -98,6 +103,7 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
     });
 
     const send = (data: string | Uint8Array<ArrayBuffer>) => {
+      if (lockedRef.current) return;
       if (ws?.readyState === WebSocket.OPEN) ws.send(typeof data === "string" ? new TextEncoder().encode(data) : data);
     };
     const inputs = [
@@ -186,8 +192,19 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
   }, [client, sessionId]);
 
   useEffect(() => {
-    if (focusRequest) term.current?.focus();
+    if (focusRequest && !lockedRef.current) term.current?.focus();
   }, [focusRequest]);
+
+  useEffect(() => {
+    lockedRef.current = locked;
+    const terminal = term.current;
+    if (!terminal) return;
+    terminal.options.disableStdin = locked;
+    if (locked) {
+      terminal.blur();
+      setSearching(false);
+    }
+  }, [locked]);
 
   useEffect(() => {
     const open = () => setSearching(true);
@@ -196,8 +213,9 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
   }, []);
 
   return (
-    <div className="terminal" data-status={status}>
-      <div className="terminal-host" ref={host} data-testid="terminal" />
+    <div className="terminal" data-status={status} data-locked={locked || undefined}>
+      <div className="terminal-host" ref={host} data-testid="terminal" inert={locked} />
+      {locked && overlay}
       {searching && (
         <form
           className="terminal-search"
@@ -222,8 +240,8 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
           />
         </form>
       )}
-      {status === "reconnecting" && <div className="terminal-note">Reconnecting…</div>}
-      {status === "detached" && (
+      {status === "reconnecting" && !locked && <div className="terminal-note">Reconnecting…</div>}
+      {status === "detached" && !locked && (
         <div className="terminal-note">
           Detached from tmux. The session is still running.
           <button type="button" onClick={() => reattach.current()}>
@@ -231,7 +249,7 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
           </button>
         </div>
       )}
-      {status === "ended" && <div className="terminal-note">This tmux session has ended.</div>}
+      {status === "ended" && !locked && <div className="terminal-note">This tmux session has ended.</div>}
     </div>
   );
 }

@@ -132,14 +132,26 @@ test("a failed start shows why, and what can be done", async ({ page }) => {
   await expect(row(page, "broken")).toBeHidden();
 });
 
-test("an agent exit offers to close the session", async ({ page }) => {
+test("an agent exit curtains the terminal and offers to close the session", async ({ page }) => {
   const s = await service("alpha");
   await page.goto(s.signedInUrl);
   await startSession(page, s, "demo");
   await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
   await page.getByTestId("terminal").click();
   await page.keyboard.press("Control+d");
-  await expect(page.getByText("The agent has exited")).toBeVisible({ timeout: 10_000 });
+
+  const curtain = page.getByRole("region", { name: "Session exited" });
+  await expect(curtain).toContainText("demo has exited", { timeout: 10_000 });
+  await expect(page.locator(".terminal[data-locked]")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close session" })).toBeFocused();
+
+  // The shell is still behind the curtain, but nothing typed reaches it.
+  await curtain.click({ position: { x: 5, y: 5 } });
+  await page.evaluate(() => document.querySelector<HTMLElement>(".xterm-helper-textarea")?.focus());
+  await page.keyboard.type("echo leaked-through\n");
+  await page.waitForTimeout(500);
+  await expect(terminalText(page)).not.toContainText("leaked-through");
+
   await page.getByRole("button", { name: "Close session" }).click();
   await expect(row(page, "demo")).toBeHidden();
 });
