@@ -44,8 +44,18 @@ works at `http://127.0.0.1:9775/`.
 Print the address to paste into Add service:
 
 ```bash
-agentop service connect-info --url http://157.120.33.185:7700/agentop
+agentop service connect-info --url https://agentop.wolfdrawer.net
 ```
+
+### HTTPS
+
+The devhost is also at `https://agentop.wolfdrawer.net`, which is the address to
+use. `deploy/nginx/setup-wolfdrawer.sh` installs it as its own nginx site with a
+Let's Encrypt certificate, and `certbot.timer` renews it. To remove the site, delete
+`/etc/nginx/sites-enabled/wolfdrawer` on pisces-01 and reload nginx.
+
+It uses port 443, not 7700: nginx can't mix TLS and plain HTTP on one port, and the
+other apps on 7700 are plain HTTP.
 
 ## Connecting from the app
 

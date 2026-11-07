@@ -11,7 +11,7 @@ IP=157.120.33.185
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Let's Encrypt validates through public DNS, so check that first.
-RESOLVED=$(dig +short @8.8.8.8 "$DOMAIN" A | tail -1)
+RESOLVED=$(dig +short @1.1.1.1 "$DOMAIN" A | tail -1)
 if [[ "$RESOLVED" != "$IP" ]]; then
     echo "$DOMAIN resolves to '${RESOLVED:-nothing}', not $IP. Nothing was changed." >&2
     exit 1
