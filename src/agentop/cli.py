@@ -256,7 +256,11 @@ def cmd_service_token(args):
 
     if args.rotate:
         print(identity.rotate_token().token)
-        print("Rotated. Every saved connection needs the new token.", file=sys.stderr)
+        print(
+            "Rotated. The service uses it at once, and the old token stops working. "
+            "Every saved connection needs the new one.",
+            file=sys.stderr,
+        )
     else:
         print(identity.load_or_create().token)
 

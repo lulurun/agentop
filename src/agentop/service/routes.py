@@ -94,6 +94,26 @@ class Context:
     tickets: auth.TicketStore = field(default_factory=auth.TicketStore)
     started_at: float = field(default_factory=time.time)
     background: set = field(default_factory=set)
+    # Set when the identity came from service.json. Then a token rotated by the
+    # CLI takes effect at once, with no restart, and the old one stops working.
+    identity_file: Path | None = None
+    _identity_mtime: int | None = None
+
+    def current_identity(self) -> Identity:
+        if self.identity_file is None:
+            return self.identity
+        try:
+            mtime = self.identity_file.stat().st_mtime_ns
+        except OSError:
+            return self.identity  # keep the last good one rather than locking everyone out
+        if mtime != self._identity_mtime:
+            try:
+                data = json.loads(self.identity_file.read_text())
+                self.identity = Identity(data["token"], data["instance_id"], data["name"])
+            except (OSError, ValueError, KeyError):
+                return self.identity
+            self._identity_mtime = mtime
+        return self.identity
 
 
 def _version() -> str:
@@ -135,7 +155,7 @@ def create_v2_app(ctx: Context) -> FastAPI:
         return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
     def require_token(authorization: str | None = Header(default=None)) -> None:
-        if not auth.bearer_matches(authorization, ctx.identity.token):
+        if not auth.bearer_matches(authorization, ctx.current_identity().token):
             raise HTTPException(401, "Missing or invalid token", {"WWW-Authenticate": "Bearer"})
 
     authed = [Depends(require_token)]

@@ -47,6 +47,7 @@ def create_app(
     store: SessionStore | None = None,
 ) -> FastAPI:
     settings = settings or config.load()
+    identity_file = None if ident else identity.identity_path()
     ident = ident or identity.load_or_create(settings.name)
     store = store or SessionStore()
 
@@ -57,7 +58,7 @@ def create_app(
         await store.shutdown()
 
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-    app.mount("/api/v2", create_v2_app(Context(settings, ident, store)))
+    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file)))
     if _WEB_DIR.is_dir():
         app.mount("/app", AppFiles(directory=str(_WEB_DIR), html=True), name="web")
 

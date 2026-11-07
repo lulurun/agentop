@@ -534,3 +534,25 @@ def test_delete_needs_the_exact_dialogue_name(service, dialogue_id):
 
 def test_dialogues_need_the_token(service):
     assert httpx.get(f"{service.base}/dialogues").status_code == 401
+
+
+def test_a_rotated_token_takes_effect_without_a_restart(service):
+    old = service.headers["Authorization"]
+    instance = service.http.get("/health").json()["instance_id"]
+    new = identity.rotate_token().token
+
+    assert httpx.get(f"{service.base}/sessions", headers={"Authorization": old}).status_code == 401
+    assert httpx.get(f"{service.base}/sessions", headers={"Authorization": f"Bearer {new}"}).status_code == 200
+    assert service.http.get("/health").json()["instance_id"] == instance
+
+
+def test_a_service_given_its_identity_ignores_the_file(fake_agents):
+    from fastapi.testclient import TestClient
+
+    from agentop.service.identity import Identity
+
+    identity.load_or_create()
+    app = create_app(Settings(), ident=Identity("fixed", "i", "box"))
+    identity.rotate_token()
+    client = TestClient(app)
+    assert client.get("/api/v2/sessions", headers={"Authorization": "Bearer fixed"}).status_code == 200
