@@ -148,3 +148,24 @@ def test_generated_api_schema_is_current():
     from agentop.service.openapi import render
 
     assert (Path(__file__).parent.parent / "ui/openapi.json").read_text() == render()
+
+
+@pytest.mark.parametrize(
+    "argv, expected",
+    [
+        (["--host", "10.0.0.5"], "http://10.0.0.5:9775#token=secret"),
+        (["--url", "http://203.0.113.9:7700/agentop/"], "http://203.0.113.9:7700/agentop#token=secret"),
+    ],
+)
+def test_connect_info_can_name_a_proxy_path(argv, expected, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from agentop import cli
+    from agentop.service import config, identity
+
+    monkeypatch.setattr(config, "load", lambda: SimpleNamespace(tls=False, host="127.0.0.1", port=9775))
+    monkeypatch.setattr(identity, "load_or_create", lambda: SimpleNamespace(token="secret"))
+    args = SimpleNamespace(host=None, url=None)
+    setattr(args, argv[0].removeprefix("--"), argv[1])
+    cli.cmd_service_connect_info(args)
+    assert capsys.readouterr().out.strip() == expected

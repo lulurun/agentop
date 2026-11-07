@@ -279,8 +279,9 @@ def cmd_service_connect_info(args):
 
     settings = config.load()
     scheme = "https" if settings.tls else "http"
+    address = args.url.rstrip("/") if args.url else f"{scheme}://{args.host or settings.host}:{settings.port}"
     # The token is in the fragment, which a browser never sends to a server.
-    print(f"{scheme}://{args.host or settings.host}:{settings.port}#token={identity.load_or_create().token}")
+    print(f"{address}#token={identity.load_or_create().token}")
 
 
 # ---------------------------------------------------------------------------
@@ -498,6 +499,7 @@ def main():
     p_token.add_argument("--rotate", action="store_true", help="Replace it; every saved connection then needs it")
     p_connect = service_sub.add_parser("connect-info", help="Print a string to paste into Add Service in the app")
     p_connect.add_argument("--host", help="Address other machines use to reach this service")
+    p_connect.add_argument("--url", help="Full address when behind a proxy, e.g. http://203.0.113.9:7700/agentop")
 
     # dialogue
     p_dialogue = sub.add_parser(

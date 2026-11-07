@@ -156,6 +156,7 @@ export function MainArea() {
   const setDialog = useApp((s) => s.setDialog);
   const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
   const linked = linkState === "connected" || linkState === "reconnecting";
+  const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
   const showTerminal = linked && session?.attachable && session.status !== "starting";
 
   useEffect(() => {
@@ -167,7 +168,16 @@ export function MainArea() {
 
   return (
     <main className="main" data-status={linked ? (session?.status ?? "none") : "none"}>
-      {linked ? (
+      {socketBlocked ? (
+        <div className="placard" role="alert">
+          <h2>This service can't open a live connection</h2>
+          <p>
+            The service answered, but its WebSocket did not. If it's behind a proxy, the proxy needs to forward WebSocket
+            upgrades. In nginx, that means setting the Upgrade and Connection headers. The app keeps trying and continues on
+            its own once this is fixed.
+          </p>
+        </div>
+      ) : linked ? (
         <>
           {session && <SessionBanner session={session} />}
           {showTerminal ? (

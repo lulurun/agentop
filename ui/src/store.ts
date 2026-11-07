@@ -6,7 +6,7 @@ import { platform } from "./platform";
 export type LinkState =
   | { state: "connecting" }
   | { state: "connected"; service: ServiceInfo }
-  | { state: "reconnecting"; service: ServiceInfo }
+  | { state: "reconnecting"; service: ServiceInfo; socketBlocked?: boolean }
   | { state: "failed"; failure: ConnectFailure };
 
 type Dialog = "new-session" | "add-service" | "manage-services" | null;
@@ -114,6 +114,8 @@ export function activeClient(state: Pick<AppState, "connections" | "activeId">):
 }
 
 const RETRY_MS = { first: 500, max: 10_000 };
+/** The service answered but its socket refused this many times: something between them is blocking it. */
+const BLOCKED_AFTER = 3;
 
 export const useApp = create<AppState>((set, get) => {
   // Each connect attempt gets a number, and anything from an older attempt is
@@ -127,13 +129,19 @@ export const useApp = create<AppState>((set, get) => {
     socket = null;
   }
 
-  async function openEvents(mine: number, connection: Connection, service: ServiceInfo, delay = RETRY_MS.first) {
+  async function openEvents(
+    mine: number,
+    connection: Connection,
+    service: ServiceInfo,
+    delay = RETRY_MS.first,
+    socketFailures = 0,
+  ) {
     const client = new ServiceClient(connection.url, connection.token);
-    const retry = () => {
+    const retry = (failures: number) => {
       if (mine !== attempt) return;
-      set({ link: { state: "reconnecting", service } });
+      set({ link: { state: "reconnecting", service, socketBlocked: failures >= BLOCKED_AFTER } });
       setTimeout(() => {
-        if (mine === attempt) void openEvents(mine, connection, service, Math.min(delay * 2, RETRY_MS.max));
+        if (mine === attempt) void openEvents(mine, connection, service, Math.min(delay * 2, RETRY_MS.max), failures);
       }, delay);
     };
 
@@ -142,7 +150,7 @@ export const useApp = create<AppState>((set, get) => {
       url = await client.eventsUrl();
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) void connect(connection);
-      else retry();
+      else retry(0); // the service itself is away, which says nothing about its socket
       return;
     }
     if (mine !== attempt) return;
@@ -152,13 +160,14 @@ export const useApp = create<AppState>((set, get) => {
     ws.onopen = () => {
       if (mine === attempt) {
         delay = RETRY_MS.first;
+        socketFailures = 0;
         set({ link: { state: "connected", service } });
       }
     };
     ws.onmessage = (message) => {
       if (mine === attempt) set({ sessions: applyEvent(get().sessions, JSON.parse(message.data)) });
     };
-    ws.onclose = retry;
+    ws.onclose = () => retry(socketFailures + 1);
   }
 
   async function connect(connection: Connection, trustNewIdentity = false) {

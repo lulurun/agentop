@@ -40,6 +40,11 @@ export function parseConnectInfo(input: string): { url: string; token: string } 
   return { url: `${parsed.protocol}//${parsed.host}${path}`, token };
 }
 
+/** crypto.randomUUID only exists in a secure context, which a plain HTTP address is not. */
+export function newConnectionId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
 export function isLoopback(url: string): boolean {
   const host = new URL(url).hostname.replace(/^\[|\]$/g, "");
   return host === "localhost" || host === "::1" || host.startsWith("127.");

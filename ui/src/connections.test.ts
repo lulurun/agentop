@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkConnection, parseConnectInfo, reachabilityNote, type Connection } from "./connections";
+import { checkConnection, newConnectionId, parseConnectInfo, reachabilityNote, type Connection } from "./connections";
 import { applyEvent, sortedSessions } from "./store";
 
 const HEALTH = { status: "ok", version: "1", api_version: 1, instance_id: "abc", name: "box" };
@@ -34,6 +34,13 @@ describe("parseConnectInfo", () => {
   });
   it("rejects nonsense", () => {
     expect(parseConnectInfo("http://")).toBeNull();
+  });
+});
+
+describe("newConnectionId", () => {
+  it("does not need a secure context", () => {
+    vi.stubGlobal("crypto", { getRandomValues: (a: Uint8Array) => a.fill(255) });
+    expect(newConnectionId()).toBe("ff".repeat(16));
   });
 });
 

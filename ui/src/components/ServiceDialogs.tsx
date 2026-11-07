@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { checkConnection, failureMessage, isEncrypted, isLoopback, parseConnectInfo, reachabilityNote, type ConnectResult, type Connection } from "../connections";
+import { checkConnection, failureMessage, isEncrypted, isLoopback, newConnectionId, parseConnectInfo, reachabilityNote, type ConnectResult, type Connection } from "../connections";
 import { useApp } from "../store";
 import { Dialog } from "./Dialog";
 
@@ -18,7 +18,7 @@ export function AddServiceDialog() {
   const unencrypted = parsed && !isEncrypted(parsed.url) && !isLoopback(parsed.url);
 
   function draft(): Connection {
-    return { id: crypto.randomUUID(), label: label.trim(), url: parsed!.url, token: effectiveToken };
+    return { id: newConnectionId(), label: label.trim(), url: parsed!.url, token: effectiveToken };
   }
 
   async function test(event: FormEvent) {

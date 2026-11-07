@@ -6,6 +6,7 @@
 | Dialogue system | [docs/dialogue.md](docs/dialogue.md) |
 | Code structure | [docs/architecture.md](docs/architecture.md) |
 | Dashboard setup | [docs/dashboard.md](docs/dashboard.md) |
+| v2 service and app setup | [docs/v2-setup.md](docs/v2-setup.md) |
 
 ## Key facts
 

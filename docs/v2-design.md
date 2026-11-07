@@ -365,7 +365,7 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. The old `/api` routes have no token, so until they are removed their only protection on that path is whatever the proxy on `pisces-01` enforces.
-- That proxy's public host name must be in `AGENTOP_ALLOWED_ORIGINS`, or the Phase 0 guard will refuse it.
+- The proxy has no authentication and no host name, so it stays out of `AGENTOP_ALLOWED_ORIGINS`: the guard refuses any request with forwarding headers on the old routes, and only `/api/v2` and `/app` work through the proxy.
 
 ## 8 Service lifecycle
 
