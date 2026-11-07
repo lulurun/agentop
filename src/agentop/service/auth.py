@@ -10,7 +10,7 @@ from __future__ import annotations
 import hmac
 import secrets
 import time
-from typing import Callable
+from collections.abc import Callable
 
 TICKET_TTL_SECONDS = 30.0
 EVENTS_SCOPE = "events"

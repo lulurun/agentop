@@ -68,8 +68,8 @@ def api(monkeypatch):
     """/api/v2 with its token check out of the way."""
     from pathlib import Path
 
-    from agentop.service.identity import Identity
     from agentop.service.config import Settings
+    from agentop.service.identity import Identity
 
     monkeypatch.setattr(routes, "LIFECYCLE_DELAY_SECONDS", 0)
     ident = Identity(token="t", instance_id="i", name="box")

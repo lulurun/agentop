@@ -208,10 +208,10 @@ Goal: the main workflow from the design, in a browser.
 
 ## 5 Phase 3: Right panel
 
-Status: done on branch `v2`, except inline editing of name and description, which the API supports but the panel does not show yet.
+Status: done.
 
-- [ ] Inline editing of name and description.
-- [ ] Bridge URL.
+- [x] Inline editing of name and description.
+- [x] Bridge URL.
 - [x] Identity group: name, tool, directory, copyable tmux attach command.
 - [x] Process group: PID, uptime, memory.
 - [x] Usage group: tokens by type, using the existing `token_usage`; shows "not available" for tools that do not report it.
@@ -229,17 +229,19 @@ File preview and diff views are deferred until after v2.0.
 
 ## 6 Phase 4: Service control
 
-- [ ] Add `ServiceManager`, `SystemdManager`, and `NoManager`.
-- [ ] Add `agentop service status|start|stop|restart|token`.
-- [ ] Add `/service` routes and capability reporting.
-- [ ] Add `deploy/update.sh` with pre-checks, status file, health poll, and rollback, plus `update.py` to launch it through `systemd-run`.
-- [ ] Add `agentop service update`.
-- [ ] Add the service panel, opened from the switcher, with disconnected view and update progress. It always acts on the selected service, and its confirmations name that service.
+Status: done, and tested on a throwaway install with a real systemd unit: a good commit applied, a commit that could not start rolled back by itself, and restart, stop, and start all worked with tmux sessions intact. It has not yet run on the production install.
+
+- [x] Add `ServiceManager`, `SystemdManager`, and `NoManager`.
+- [x] Add `agentop service status|start|stop|restart|token`.
+- [x] Add `/service` routes and capability reporting.
+- [x] Add `deploy/update.sh` with pre-checks, status file, health poll, and rollback, plus `update.py` to launch it through `systemd-run`.
+- [x] Add `agentop service update`.
+- [x] Add the service panel, opened from the switcher, with disconnected view and update progress. It always acts on the selected service, and its confirmations name that service.
 
 Testing update needs care, since this is the production install:
 
-- [ ] Test `update.sh` against a throwaway clone with a separate port, unit, and registry path, before any use on the real service.
-- [ ] Simulate each failure: dirty tree, non-fast-forward, build failure, and a commit that fails health.
+- [x] Test `update.sh` against a throwaway clone with a separate port, unit, and registry path, before any use on the real service.
+- [x] Simulate each failure: dirty tree, non-fast-forward, build failure, and a commit that fails health.
 
 **Done when:**
 

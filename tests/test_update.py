@@ -64,7 +64,7 @@ class Install:
         git(self.dev, "push", "origin", "main")
 
     def run(self, **env):
-        restart = f'test ! -f BAD_START || {{ rm -f {self.www}/health; exit 0; }}; cp VERSION {self.www}/health'
+        restart = f"test ! -f BAD_START || {{ rm -f {self.www}/health; exit 0; }}; cp VERSION {self.www}/health"
         return subprocess.run(
             ["/bin/bash", str(SCRIPT)],
             env={
@@ -80,6 +80,7 @@ class Install:
             },
             capture_output=True,
             text=True,
+            check=False,
         )
 
     @property
@@ -199,6 +200,7 @@ def test_a_replaced_script_does_not_disturb_the_run(install):
         },
         capture_output=True,
         text=True,
+        check=False,
     )
     assert result.returncode == 0
     assert install.status["state"] == "done"
