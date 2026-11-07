@@ -609,7 +609,139 @@ Everything else is shared. A CI check forbids importing `@tauri-apps/*` outside 
 
 `tauri://localhost` reaching `ws://127.0.0.1` and plain `ws://` on a remote host has not been verified, and the available documentation does not settle it. The remote case is the harder one, since the loopback exemption from mixed-content rules does not apply. Spike S2 tests both. If it is blocked, the fallback is to route through Tauri's HTTP and WebSocket plugins inside `platform/tauri.ts`, which leaves the rest of the UI unchanged.
 
-## 12 Migration
+## 12 Plugins
+
+Agentop grows from here through plugins. The features that exist today are the **core**: they are what agentop is, and they cannot be turned off. Anything new on the service side is built as a plugin in its own folder, and the core must stay fully usable whatever happens to a plugin.
+
+### 12.1 Core and plugins
+
+**Core** is every feature that exists at v2.0. It is always loaded and has no off switch:
+
+- Sessions: scan, start, stop, close, resume, rename and describe, managed and external sessions.
+- The terminal bridge and tmux integration.
+- The right panel: details, token usage, changed and all files.
+- History and dialogues.
+- Service status, stop, restart, update, and token handling.
+- Connections and service switching, settings, and the plugin loader itself (12.3).
+
+**A plugin** is an optional, additive feature. It may add API routes, react to core events, and add UI in defined places. It may not change or remove core behaviour, and core code never imports a plugin.
+
+The rule that everything else follows: **a plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
+
+### 12.2 Layout
+
+Each plugin is one folder under `src/agentop/plugins/`, with its UI in a matching folder under `ui/src/plugins/`:
+
+```
+src/agentop/plugins/
+  attention/
+    plugin.toml         manifest
+    __init__.py         defines register(api)
+    ...
+ui/src/plugins/
+  attention/
+    index.ts            the UI pieces, keyed by slot
+```
+
+The manifest declares what the plugin is, without running any of its code:
+
+```toml
+id = "attention"                 # folder name; [a-z0-9-]+
+name = "Waiting for input"
+version = "0.1.0"
+description = "Marks sessions whose agent is waiting for you."
+plugin_api = 1                   # the core plugin API version it was written for
+default_enabled = true
+ui = ["session-badge", "settings-section"]   # UI slots it fills (12.5)
+```
+
+Only folders inside the agentop install are scanned. Loading code from a user directory such as `~/.agent-dashboard/plugins/` would let anything that can write there run inside the service, so it is left for the security review.
+
+### 12.3 Loader
+
+The loader is part of the core. At service start it:
+
+1. Scans `src/agentop/plugins/*/plugin.toml`.
+2. Reads each manifest. A missing or invalid manifest gives state `failed`, with the reason.
+3. Checks `plugin_api` against the core's supported range. Outside it gives `incompatible`.
+4. Reads the saved enabled flag, falling back to `default_enabled`.
+5. For each enabled plugin, imports it and calls `register(api)`, each inside its own `try`, with a time limit. An exception or timeout gives `failed`, and the error is logged and kept for the API.
+6. Builds the **plugin list**: every plugin found, with its state.
+
+States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails never stops the loader, the remaining plugins, or the service from starting. With no `plugins` folder at all, the service runs exactly as the core alone.
+
+**What `register(api)` gets.** A narrow object, not the service internals:
+
+| Facility | Rule |
+|----------|------|
+| `api.router` | A FastAPI router mounted at `/api/v2/plugins/{id}/`. It inherits token auth. A plugin cannot add routes anywhere else |
+| `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. Each handler runs isolated: an exception is logged and counted, and never reaches the core. Handlers run off the event loop, with a time limit, and the core never waits for their result |
+| `api.task(coro)` | A supervised background task. If it raises, the plugin goes to `failed` and the task is not restarted |
+| `api.sessions()` | A read-only snapshot of the session list |
+| `api.store` | A JSON file at `~/.agent-dashboard/plugins/{id}.json` for the plugin's own data |
+| `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
+
+Repeated handler errors (for example 5 in a minute) move the plugin to `failed` automatically, so a broken plugin stops being called.
+
+### 12.4 Enable and disable
+
+Python cannot reliably unload a module, so disabling is a gate rather than an unload:
+
+- **Disable**: requests to its routes return 404, its event handlers stop being called, its tasks are cancelled, and its UI disappears. The flag is saved.
+- **Enable** of a plugin that was loaded: the gate opens again, and its tasks are started again.
+- **Enable** of a plugin that was never imported (disabled at start) is imported then. If that fails, the state is `failed` and nothing else changes.
+- **Retry** of a `failed` plugin needs a service restart; the UI says so. This keeps half-initialised plugin state out of the running service.
+
+Flags live in `~/.agent-dashboard/plugins.json`: `{"attention": {"enabled": false}}`. They belong to the service, not the client, because a plugin is a service feature: disabling it affects every client of that service.
+
+### 12.5 API
+
+All require the token.
+
+```
+GET   /api/v2/plugins          → [{id, name, version, description, state, error, ui}]
+PATCH /api/v2/plugins/{id}     {enabled: bool} → the updated entry
+*     /api/v2/plugins/{id}/…   the plugin's own routes, 404 unless enabled
+```
+
+`GET /api/v2/service` gains a `plugins` count, and every change to the list is pushed on the events socket as `{"type": "plugins"}`, so open clients update without polling. `/api/v2/health` stays plugin-free, so a connection's checks (4.5) never depend on a plugin.
+
+### 12.6 UI
+
+The web and desktop builds are static, and the desktop app has a strict script CSP, so a service never sends UI code. Plugin UI ships in the app build under `ui/src/plugins/`, and the app turns it on per service:
+
+- After connecting, the app reads `GET /api/v2/plugins`. Plugins differ by service, so the list is kept per connection.
+- A plugin's UI shows only when **both** the service lists it as `enabled` **and** the app has a matching module in `ui/src/plugins/`. If either side is missing (an older app, an older service, a removed or failed plugin), the feature is hidden.
+- Plugin UI goes into fixed **slots**: a row in the right panel, a view in the left column's footer (beside History and Dialogues), a badge on a session row, and a section in Settings. Core layout code renders each slot from the plugin list and never names a plugin.
+- Each slot is wrapped in an error boundary. A plugin component that throws hides itself; the rest of the page keeps rendering.
+- Plugin UI calls its own routes only through a client scoped to `/api/v2/plugins/{id}/`.
+
+**Settings → Plugins** lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".
+
+### 12.7 Tests
+
+- The whole core suite (pytest and Playwright) runs with no plugins present. This is the proof that the core does not depend on them.
+- A set of broken test plugins: one with a bad manifest, one that raises on import, one that raises in `register`, one whose route raises, one whose event handler raises or hangs, one whose task crashes, and one whose UI component throws. With all of them installed, the core suite still passes and each one shows the right state in the list.
+- Disabling a plugin from Settings removes its UI at once and its routes return 404; enabling brings both back.
+
+### 12.8 First plugins
+
+The later features (plan 9.2) become plugins one at a time, where they are service features:
+
+| Feature | Plugin? |
+|---------|---------|
+| Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
+| File preview and diff view | Yes: routes for file content and diffs, a right-panel slot |
+| Grouping sessions by project | Yes: stores groups, a left-column view |
+| A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |
+| Offline app shell for the web app | No: client-only |
+| Desktop auto-update | No: desktop-only, and a non-goal (2.2) |
+| macOS host support (`LaunchdManager`) | No: the core needs it to run at all |
+| Non-git install kinds for update | No: part of core service update |
+
+The security review and retiring the old dashboard (both in [TODO.md](../TODO.md)) are core work, not plugins.
+
+## 13 Migration
 
 - Existing tmux sessions are not touched. They appear as `running` with their current names and are attachable at once.
 - `sessions.json` is extended, not replaced.
@@ -630,7 +762,7 @@ Parity list for the old dashboard, so nothing is lost by accident:
 | Copy tmux command | Right panel |
 | Light and dark theme | Settings |
 
-## 13 Risks
+## 14 Risks
 
 | Risk | Likelihood | Mitigation |
 |------|------------|------------|
@@ -645,7 +777,7 @@ Parity list for the old dashboard, so nothing is lost by accident:
 | A bad update leaves the service down | Low | Pre-checks, health poll, automatic rollback; agents unaffected |
 | Ready-marker detection breaks when agents change their TUI | Medium | The timeout fallback means only slower starts, never failed ones |
 
-## 14 Open decisions
+## 15 Open decisions
 
 Each has a recommended default, which the plan assumes. D6 and D7 are decided for v2.0, and both are to be revisited in the security review in [section 9 of the plan](v2-plan.md#9-after-v20).
 
@@ -658,8 +790,9 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D5 | Host platforms | Linux with systemd | Add macOS with launchd, as later work |
 | D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
+| D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
 
-## 15 Sources
+## 16 Sources
 
 External claims above were checked against:
 

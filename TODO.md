@@ -6,7 +6,7 @@ Work agreed but not started. Details of the v2 work are in [docs/v2-plan.md](doc
 
 Do this only after the parity walk passes and a full day of normal use needs no fallback to the old dashboard (manual tests J1 and J2).
 
-- [ ] Walk the parity table in [v2-design.md section 12](docs/v2-design.md#12-migration), item by item, in both the web app and the desktop app.
+- [ ] Walk the parity table in [v2-design.md section 13](docs/v2-design.md#13-migration), item by item, in both the web app and the desktop app.
 - [ ] Use v2 alone for a full day of normal work.
 - [ ] Serve the web app at `/` instead of `/app/`.
 - [ ] Delete `html/index.html`, the old `/api` routes, the `/ws/sessions` endpoint, and `HostOriginGuard`'s special handling for them.
@@ -29,3 +29,14 @@ The v2 security model is deliberately simple. Review it before recommending that
 - [ ] Agents started with skip-permissions flags, reachable by anyone who holds the token.
 - [ ] The HTTPS proxy on pisces-01: public on 443 with only the token in front. Consider an IP allow-list or a second factor at nginx.
 - [ ] Stop over the API: `Ctrl-C` then `/exit` is typed into the agent's terminal. Confirm no tool treats either differently in a way that matters.
+
+## Plugin system
+
+Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
+
+- [ ] Plugin loader in the core: scan `src/agentop/plugins/*/plugin.toml`, load each in isolation, keep the plugin list with states.
+- [ ] `GET /api/v2/plugins` and `PATCH /api/v2/plugins/{id}`, saved flags in `~/.agent-dashboard/plugins.json`, `plugins` events.
+- [ ] The `register(api)` surface: scoped router, isolated event handlers, supervised tasks, read-only sessions, per-plugin store.
+- [ ] UI: per-connection plugin list, slots with error boundaries, Settings → Plugins with switches and errors.
+- [ ] Broken test plugins, and the core suites passing with them installed and with none.
+- [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.

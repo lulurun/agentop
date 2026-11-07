@@ -136,5 +136,5 @@ The desktop window has never been opened; every case here is Not run.
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| J1 | Walk the parity table in [v2-design.md section 12](v2-design.md#12-migration) in both the web app and the desktop app | Every old feature has a working v2 home | Not run |
+| J1 | Walk the parity table in [v2-design.md section 13](v2-design.md#13-migration) in both the web app and the desktop app | Every old feature has a working v2 home | Not run |
 | J2 | Use v2 alone for a full day of normal work | No need to fall back to the old dashboard | Not run |

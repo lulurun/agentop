@@ -1,6 +1,6 @@
 # Agentop v2 Implementation Plan
 
-This plan implements [v2-design.md](v2-design.md). It assumes the defaults in the design's section 14. Changing D1 or D4 changes Phases 1 and 6.
+This plan implements [v2-design.md](v2-design.md). It assumes the defaults in the design's section 15. Changing D1 or D4 changes Phases 1 and 6.
 
 ## 1 Overview
 
@@ -281,7 +281,7 @@ The remaining cutover steps are tracked in [TODO.md](../TODO.md#retire-the-old-d
 - [x] History view: list, filter, resume through the normal start flow, delete.
 - [x] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
 - [x] Settings: theme, renderer, font size.
-- [ ] Walk the parity table in design section 12, item by item.
+- [ ] Walk the parity table in design section 13, item by item.
 - [ ] Move the web app to `/`. Delete `html/index.html` and the old `/api` routes and `/ws/sessions` endpoint.
 - [ ] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/dashboard.md`, and `docs/cli.md`, including the stale unit name and registry path.
 - [ ] Document exposing a service safely: tunnel, proxy, or TLS, and what plain HTTP gives away.
@@ -302,6 +302,8 @@ The v2.0 security model is deliberately simple and is to be revisited. Do this b
 - [ ] Review the rest of design section 7: open CORS, token storage in `localStorage`, what `/health` exposes without auth, and agents running with skip-permissions.
 
 ### 9.2 Features
+
+Service-side features are built as plugins, after the plugin loader (design section 12). The design's 12.8 says which of these are plugins and which stay core or client-only.
 
 - File preview and diff view.
 - Grouping sessions by project.
