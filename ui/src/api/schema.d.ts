@@ -92,6 +92,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/service/restart": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Route */
+        post: operations["route_service_restart_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Route */
+        post: operations["route_service_stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service/update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Update Info */
+        get: operations["update_info_service_update_get"];
+        put?: never;
+        /** Start Update */
+        post: operations["start_update_service_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/sessions": {
         parameters: {
             query?: never;
@@ -218,6 +270,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Accepted */
+        Accepted: {
+            /** Status */
+            status: string;
+        };
         /** ChangedFile */
         ChangedFile: {
             /** Path */
@@ -442,6 +499,41 @@ export interface components {
             /** Supports Resume */
             supports_resume: boolean;
         };
+        /** UpdateInfo */
+        UpdateInfo: {
+            /** Behind */
+            behind: number | null;
+            /** Check Error */
+            check_error: string | null;
+            /** Current */
+            current: string | null;
+            last_run: components["schemas"]["UpdateRun"] | null;
+            /** Running */
+            running: boolean;
+            /** Upstream */
+            upstream: string | null;
+        };
+        /**
+         * UpdateRun
+         * @description The latest update, as deploy/update.sh reports it.
+         */
+        UpdateRun: {
+            /** From Commit */
+            from_commit?: string | null;
+            /** Message */
+            message?: string | null;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "running" | "done" | "failed" | "rolled_back" | "rollback_failed";
+            /** Step */
+            step?: string | null;
+            /** To Commit */
+            to_commit?: string | null;
+            /** Updated At */
+            updated_at?: number | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -604,6 +696,130 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ServiceInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    route_service_restart_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    route_service_stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_info_service_update_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    start_update_service_update_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Accepted"];
                 };
             };
             /** @description Validation Error */

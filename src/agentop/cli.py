@@ -274,6 +274,84 @@ def cmd_open(args):
         print(url)
 
 
+def _service_health(settings):
+    import json
+    import urllib.error
+    import urllib.request
+
+    scheme = "https" if settings.tls else "http"
+    host = "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
+    try:
+        with urllib.request.urlopen(f"{scheme}://{host}:{settings.port}/api/v2/health", timeout=3) as response:
+            return json.load(response)
+    except (OSError, ValueError):
+        return None
+
+
+def cmd_service_status(args):
+    from agentop.service import config, manager
+
+    settings = config.load()
+    current = manager.for_cli()
+    health = _service_health(settings)
+    if health:
+        print(f"{health['name']}: running on {settings.host}:{settings.port}, version {health['version']}")
+    else:
+        print(f"Nothing is answering on {settings.host}:{settings.port}")
+    if current.can_control:
+        print(f"Managed by systemd ({current.unit}): {'active' if current.status().active else 'not active'}")
+    else:
+        print("Not managed by systemd. Start it with: agentop serve")
+
+
+def cmd_service_control(args):
+    from agentop.service import manager
+
+    current = manager.for_cli()
+    try:
+        getattr(current, args.service_command)()
+    except manager.ManagerError as exc:
+        print(f"Error: {exc} Run agentop serve instead.", file=sys.stderr)
+        sys.exit(1)
+
+
+def cmd_service_update(args):
+    import time
+    from pathlib import Path
+
+    from agentop.service import config, manager, update
+
+    if not manager.for_cli().can_control:
+        print("Error: this needs the service to be managed by systemd.", file=sys.stderr)
+        sys.exit(1)
+    repo = Path(__file__).resolve().parents[2]
+    settings = config.load()
+    scheme = "https" if settings.tls else "http"
+    previous = update.read_status()
+    try:
+        update.launch(repo, f"{scheme}://127.0.0.1:{settings.port}/api/v2/health")
+    except update.UpdateError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    shown = None
+    while True:
+        time.sleep(1)
+        run = update.read_status()
+        if not run or run == previous:
+            continue
+        if run["state"] == "running":
+            if run["step"] != shown:
+                print(f"{run['step']}...")
+                shown = run["step"]
+            continue
+        if run["state"] == "done":
+            print(run["message"] or f"Updated to {run['to_commit']}.")
+            return
+        print(f"Error: {run['message']}", file=sys.stderr)
+        sys.exit(1)
+
+
 def cmd_service_connect_info(args):
     from agentop.service import config, identity
 
@@ -493,8 +571,13 @@ def main():
     sub.add_parser("open", help="Open the web app in a browser, signed in")
 
     # service
-    p_service = sub.add_parser("service", help="Service access details")
+    p_service = sub.add_parser("service", help="Control the service, and get its access details")
     service_sub = p_service.add_subparsers(dest="service_command", metavar="<subcommand>")
+    service_sub.add_parser("status", help="Show whether the service is running")
+    service_sub.add_parser("start", help="Start the service")
+    service_sub.add_parser("stop", help="Stop the service. Sessions keep running")
+    service_sub.add_parser("restart", help="Restart the service. Sessions keep running")
+    service_sub.add_parser("update", help="Update from git, and go back if the new version fails")
     p_token = service_sub.add_parser("token", help="Print the access token")
     p_token.add_argument("--rotate", action="store_true", help="Replace it; every saved connection then needs it")
     p_connect = service_sub.add_parser("connect-info", help="Print a string to paste into Add Service in the app")
@@ -580,7 +663,15 @@ def main():
         if not args.service_command:
             p_service.print_help()
             sys.exit(0)
-        {"token": cmd_service_token, "connect-info": cmd_service_connect_info}[args.service_command](args)
+        {
+            "status": cmd_service_status,
+            "start": cmd_service_control,
+            "stop": cmd_service_control,
+            "restart": cmd_service_control,
+            "update": cmd_service_update,
+            "token": cmd_service_token,
+            "connect-info": cmd_service_connect_info,
+        }[args.service_command](args)
         return
 
     {

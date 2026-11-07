@@ -5,6 +5,7 @@ import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog, ManageServicesDialog } from "./ServiceDialogs";
 import { MainArea, selectedSession } from "./MainArea";
 import { NewSessionDialog } from "./NewSessionDialog";
+import { ServicePanel } from "./ServicePanel";
 import { Sidebar } from "./Sidebar";
 import { ToolbarIcon } from "./icons";
 
@@ -88,6 +89,7 @@ export function App() {
       {state.dialog === "new-session" && <NewSessionDialog />}
       {state.dialog === "add-service" && <AddServiceDialog />}
       {state.dialog === "manage-services" && <ManageServicesDialog />}
+      {state.dialog === "service" && <ServicePanel />}
       {state.error && (
         <div className="toast" role="alert">
           {state.error}

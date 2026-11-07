@@ -547,3 +547,25 @@ input::placeholder { color: var(--quiet); }
 @media (prefers-reduced-motion: reduce) {
   .mark-starting, .steps li[data-state="active"]::before { animation: none; }
 }
+
+/* Inline editing in the details panel */
+.editable {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: text;
+}
+.editable:hover { text-decoration: underline dotted; }
+.editable-empty { color: var(--quiet); }
+.editable-input { width: 100%; }
+
+/* Service panel */
+.service-facts { margin: 0 0 12px; }
+.service-note { margin: 12px 0 0; color: var(--quiet); }
+.service-progress { margin: 12px 0 0; color: var(--starting); }
+.dialog-text { margin: 0; color: var(--quiet); }
+.dialog-action-start { margin-right: auto; }

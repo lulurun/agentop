@@ -34,10 +34,11 @@ from agentop import ops
 from agentop.agentclis import AGENTS
 from agentop.tmux import Session
 
-from . import API_VERSION, auth, files, terminal
+from . import API_VERSION, auth, files, manager, terminal, update
 from .config import Settings
 from .identity import Identity
 from .models import (
+    Accepted,
     CreateSession,
     DirListing,
     FileListing,
@@ -49,13 +50,20 @@ from .models import (
     Ticket,
     TicketRequest,
     ToolInfo,
+    UpdateInfo,
 )
 from .store import SessionStore, StoreError
 
 WS_INVALID_TICKET = 4401
 WS_NO_SESSION = 4404
+# Long enough for the response to leave before the service goes away.
+LIFECYCLE_DELAY_SECONDS = 0.3
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
+
+
+def _install_kind() -> str:
+    return "git" if (_REPO_ROOT / ".git").exists() else "unknown"
 
 
 @dataclass
@@ -65,6 +73,7 @@ class Context:
     store: SessionStore
     tickets: auth.TicketStore = field(default_factory=auth.TicketStore)
     started_at: float = field(default_factory=time.time)
+    background: set = field(default_factory=set)
 
 
 def _version() -> str:
@@ -124,17 +133,64 @@ def create_v2_app(ctx: Context) -> FastAPI:
     async def health():
         return health_body()
 
+    def capabilities() -> tuple[manager.ServiceManager, dict[str, bool]]:
+        current = manager.for_process(os.getpid())
+        updatable = current.can_control and _install_kind() == "git"
+        return current, {"stop": current.can_control, "restart": current.can_control, "update": updatable}
+
+    async def after_responding(action) -> None:
+        await asyncio.sleep(LIFECYCLE_DELAY_SECONDS)
+        await asyncio.to_thread(action)
+
+    def lifecycle(action: str):
+        async def route():
+            current, allowed = await asyncio.to_thread(capabilities)
+            if not allowed[action]:
+                raise HTTPException(409, "This service was started by hand, so it can't do this.")
+            task = asyncio.create_task(after_responding(getattr(current, action)))
+            ctx.background.add(task)
+            task.add_done_callback(ctx.background.discard)
+            return {"status": action}
+
+        return route
+
+    v2.post("/service/restart", response_model=Accepted, status_code=202, dependencies=authed)(lifecycle("restart"))
+    v2.post("/service/stop", response_model=Accepted, status_code=202, dependencies=authed)(lifecycle("stop"))
+
+    @v2.get("/service/update", response_model=UpdateInfo, dependencies=authed)
+    async def update_info():
+        running = await asyncio.to_thread(update.is_running)
+        return {
+            **await asyncio.to_thread(update.available, _REPO_ROOT),
+            "running": running,
+            "last_run": update.read_status(),
+        }
+
+    @v2.post("/service/update", response_model=Accepted, status_code=202, dependencies=authed)
+    async def start_update():
+        _, allowed = await asyncio.to_thread(capabilities)
+        if not allowed["update"]:
+            raise HTTPException(409, "This service can't update itself. It needs systemd and a git install.")
+        scheme = "https" if ctx.settings.tls else "http"
+        health_url = f"{scheme}://127.0.0.1:{ctx.settings.port}/api/v2/health"
+        try:
+            await asyncio.to_thread(update.launch, _REPO_ROOT, health_url)
+        except update.UpdateError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return {"status": "updating"}
+
     @v2.get("/service", response_model=ServiceInfo, dependencies=authed)
     async def service():
+        current, allowed = await asyncio.to_thread(capabilities)
         return {
             **health_body(),
             "commit": await asyncio.to_thread(_git_commit),
             "uptime_seconds": int(time.time() - ctx.started_at),
             "pid": os.getpid(),
             "tmux_version": await asyncio.to_thread(Session.version),
-            "manager": "none",
-            "capabilities": {"stop": False, "restart": False, "update": False},
-            "install_kind": "git" if (_REPO_ROOT / ".git").exists() else "unknown",
+            "manager": current.name,
+            "capabilities": allowed,
+            "install_kind": _install_kind(),
             "tls": ctx.settings.tls,
         }
 

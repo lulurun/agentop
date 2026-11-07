@@ -1,21 +1,15 @@
+import { useState } from "react";
 import type { Session } from "../api/client";
 import { platform } from "../platform";
 import { useApp } from "../store";
 import { FilesSection } from "./FilesSection";
+import { formatDuration } from "./format";
 import { selectedSession } from "./MainArea";
 
 function formatTokens(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
   return String(value);
-}
-
-function formatDuration(seconds: number): string {
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  if (seconds < 60) return "Under a minute";
-  if (hours >= 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
-  return hours ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
 function Row({ label, value, copy }: { label: string; value: string; copy?: string }) {
@@ -30,6 +24,68 @@ function Row({ label, value, copy }: { label: string; value: string; copy?: stri
         ) : (
           value
         )}
+      </dd>
+    </div>
+  );
+}
+
+/** Shows a value that becomes a text box on click. Enter or leaving it saves, Escape cancels. */
+function EditableRow({
+  label,
+  value,
+  placeholder,
+  maxLength,
+  onSave,
+}: {
+  label: string;
+  value: string;
+  placeholder: string;
+  maxLength: number;
+  onSave(value: string): void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const finish = () => {
+    if (draft !== null && draft.trim() !== value) onSave(draft);
+    setDraft(null);
+  };
+
+  return (
+    <div className="detail-row">
+      <dt>{label}</dt>
+      <dd>
+        {draft === null ? (
+          <button type="button" className="editable" title={`Edit ${label.toLowerCase()}`} onClick={() => setDraft(value)}>
+            {value || <span className="editable-empty">{placeholder}</span>}
+          </button>
+        ) : (
+          <input
+            autoFocus
+            className="editable-input"
+            aria-label={label}
+            maxLength={maxLength}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={finish}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") finish();
+              if (event.key === "Escape") setDraft(null);
+            }}
+          />
+        )}
+      </dd>
+    </div>
+  );
+}
+
+function BridgeRow({ url }: { url: string }) {
+  if (!/^https?:\/\//i.test(url)) return null; // reported by the agent, so only ever a web link
+  return (
+    <div className="detail-row">
+      <dt>Bridge</dt>
+      <dd>
+        <a href={url} target="_blank" rel="noopener noreferrer">
+          {url}
+        </a>
       </dd>
     </div>
   );
@@ -60,10 +116,32 @@ export function DetailsPanel() {
       <section>
         <h3>Details</h3>
         <dl>
-          <Row label="Name" value={session.display_name} />
+          {session.managed ? (
+            <>
+              <EditableRow
+                key={`${session.id}/name`}
+                label="Name"
+                value={session.display_name}
+                placeholder="Add a name"
+                maxLength={64}
+                onSave={(display_name) => void act((client) => client.patch(session.id, { display_name }))}
+              />
+              <EditableRow
+                key={`${session.id}/description`}
+                label="Description"
+                value={session.description ?? ""}
+                placeholder="Add a description"
+                maxLength={500}
+                onSave={(description) => void act((client) => client.patch(session.id, { description }))}
+              />
+            </>
+          ) : (
+            <Row label="Name" value={session.display_name} />
+          )}
           {session.ai_title && <Row label="Title" value={session.ai_title} />}
           <Row label="Tool" value={session.tool ?? "Unknown"} />
           <Row label="Directory" value={session.cwd || "Unknown"} copy={session.cwd} />
+          {session.bridge_url && <BridgeRow url={session.bridge_url} />}
           {attach && <Row label="Attach" value={session.tmux!.session} copy={attach} />}
           {session.pid != null && <Row label="Process" value={String(session.pid)} />}
           {session.runtime_seconds != null && <Row label="Running for" value={formatDuration(session.runtime_seconds)} />}

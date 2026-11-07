@@ -26,6 +26,30 @@ class ServiceInfo(Health):
     tls: bool
 
 
+class Accepted(BaseModel):
+    status: str
+
+
+class UpdateRun(BaseModel):
+    """The latest update, as deploy/update.sh reports it."""
+
+    state: Literal["running", "done", "failed", "rolled_back", "rollback_failed"]
+    step: str | None = None
+    message: str | None = None
+    from_commit: str | None = None
+    to_commit: str | None = None
+    updated_at: int | None = None
+
+
+class UpdateInfo(BaseModel):
+    current: str | None
+    upstream: str | None
+    behind: int | None
+    check_error: str | None
+    running: bool
+    last_run: UpdateRun | None
+
+
 class ToolInfo(BaseModel):
     name: str
     installed: bool

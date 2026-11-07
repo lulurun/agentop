@@ -3,6 +3,7 @@ import type { components } from "./schema";
 export type Session = components["schemas"]["SessionModel"];
 export type Health = components["schemas"]["Health"];
 export type ServiceInfo = components["schemas"]["ServiceInfo"];
+export type UpdateInfo = components["schemas"]["UpdateInfo"];
 export type ToolInfo = components["schemas"]["ToolInfo"];
 export type DirListing = components["schemas"]["DirListing"];
 export type FileListing = components["schemas"]["FileListing"];
@@ -60,6 +61,10 @@ export class ServiceClient {
   }
 
   service = () => this.get<ServiceInfo>("/service");
+  updateInfo = () => this.get<UpdateInfo>("/service/update");
+  restartService = () => this.request("POST", "/service/restart");
+  stopService = () => this.request("POST", "/service/stop");
+  startUpdate = () => this.request("POST", "/service/update");
   tools = () => this.get<ToolInfo[]>("/tools");
   sessions = () => this.get<Session[]>("/sessions");
   dirs = (path: string, hidden = false) =>

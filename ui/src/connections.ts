@@ -15,6 +15,7 @@ export interface Connection {
 
 export type ConnectFailure =
   | { kind: "unreachable" }
+  | { kind: "stopped" }
   | { kind: "not_agentop" }
   | { kind: "identity_changed"; health: Health }
   | { kind: "incompatible"; health: Health }
@@ -121,6 +122,11 @@ export function failureMessage(failure: ConnectFailure, label: string): { title:
       return {
         title: `Can't reach ${label}`,
         detail: "The service may be stopped, a tunnel may be down, or your browser may be blocking the connection.",
+      };
+    case "stopped":
+      return {
+        title: `${label} is stopped`,
+        detail: "Its sessions are still running. To start it, run systemctl --user start agentop-api on that machine, then try again.",
       };
     case "not_agentop":
       return { title: "This is not an agentop service", detail: "Check the address." };

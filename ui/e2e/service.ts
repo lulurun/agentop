@@ -1,5 +1,5 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -11,6 +11,19 @@ while read line; do echo "got: $line"; done
 // Installed, but the shell reports it missing, so the start fails at once.
 const BROKEN = `#!/bin/sh
 echo "agy: command not found"
+`;
+
+/** Stands in for systemd: asks for a restart or stop by leaving a file for the test. */
+const SYSTEMCTL = (root: string) => `#!/bin/sh
+case "$*" in
+  *" show "*) echo LoadState=loaded; echo ActiveState=active; echo MainPID=$PPID ;;
+  *is-active*) test -f ${root}/updating && echo active || echo inactive ;;
+  *" restart "*) touch ${root}/restart ;;
+  *" stop "*) touch ${root}/stop ;;
+esac
+`;
+const SYSTEMD_RUN = (root: string) => `#!/bin/sh
+touch ${root}/updating
 `;
 
 const PYTHON = `${process.env.HOME}/.pyenv/versions/3.13.9/bin/python`;
@@ -53,6 +66,25 @@ export class Service {
       AGENTOP_TMUX_SOCKET: this.socket,
       PYTHONPATH: resolve("../src"),
     };
+  }
+
+  /** Make the next start look like it runs under systemd. */
+  managed() {
+    for (const [file, body] of [["systemctl", SYSTEMCTL(this.root)], ["systemd-run", SYSTEMD_RUN(this.root)]]) {
+      writeFileSync(join(this.root, "bin", file), body);
+      chmodSync(join(this.root, "bin", file), 0o755);
+    }
+    return this;
+  }
+
+  requested(action: "restart" | "stop") {
+    return existsSync(join(this.root, action));
+  }
+
+  /** What deploy/update.sh would write. Passing nothing means the update has ended. */
+  reportUpdate(state: string, fields: Record<string, string | null> = {}) {
+    writeFileSync(join(this.root, "state/update-status.json"), JSON.stringify({ state, ...fields }));
+    if (state !== "running") rmSync(join(this.root, "updating"), { force: true });
   }
 
   tmux(...args: string[]): string {

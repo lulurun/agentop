@@ -9,7 +9,7 @@ export type LinkState =
   | { state: "reconnecting"; service: ServiceInfo; socketBlocked?: boolean }
   | { state: "failed"; failure: ConnectFailure };
 
-type Dialog = "new-session" | "add-service" | "manage-services" | null;
+type Dialog = "new-session" | "add-service" | "manage-services" | "service" | null;
 
 interface AppState {
   connections: Connection[];
@@ -28,6 +28,8 @@ interface AppState {
   switchTo(id: string): void;
   retry(trustNewIdentity?: boolean): void;
   setToken(token: string): void;
+  /** The service was stopped on purpose, so don't keep trying to reach it. */
+  markStopped(): void;
   addConnection(connection: Connection): void;
   updateConnection(id: string, fields: Partial<Connection>): void;
   removeConnection(id: string): void;
@@ -227,6 +229,11 @@ export const useApp = create<AppState>((set, get) => {
     setToken(token) {
       get().updateConnection(get().activeId, { token });
       void connect(activeConnection(get()));
+    },
+
+    markStopped() {
+      closeLink();
+      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {} });
     },
 
     addConnection(connection) {

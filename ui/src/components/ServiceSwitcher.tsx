@@ -92,6 +92,9 @@ export function ServiceSwitcher() {
               <button type="button" role="menuitem" onClick={() => setDialog("manage-services")}>
                 Manage services
               </button>
+              <button type="button" role="menuitem" onClick={() => setDialog("service")}>
+                {name} status
+              </button>
             </div>
           </div>
         </>
