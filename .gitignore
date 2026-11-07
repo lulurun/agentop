@@ -7,4 +7,8 @@ __pycache__/
 .vscode
 .python-version
 briefs/
+node_modules/
+src/agentop/service/webdist/
+ui/test-results/
+ui/playwright-report/
 

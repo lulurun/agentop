@@ -87,6 +87,7 @@ def merge_sessions(
             {
                 "tool": s.get("tool") or row["tool"],
                 "status": "running",
+                "display_name": row["display_name"] if s.get("managed") else session_id,
                 "managed": bool(s.get("managed")),
                 "attachable": attached is not None,
                 "cwd": s.get("cwd") or row["cwd"],
@@ -97,7 +98,6 @@ def merge_sessions(
                 "tmux": {"session": tmux_name, "clients": attached} if attached is not None else None,
             }
         )
-        row.update(meta.get(session_id, {}))
         rows[session_id] = row
 
     for session_id, record in records.items():
@@ -110,6 +110,9 @@ def merge_sessions(
             if failed:
                 row.update(status="failed", error=record.get("error"))
             rows[session_id] = row
+
+    for session_id, row in rows.items():
+        row.update(meta.get(session_id, {}))
 
     for session_id, record in starting.items():
         row = rows.get(session_id) or _base_row(session_id, record, tmux_sessions)
@@ -206,11 +209,13 @@ class SessionStore:
             return
 
         if with_meta:
-            self._meta = {s["name"]: {k: s[k] for k in META_KEYS if k in s} for s in scan}
+            # Merged, not replaced: an exited session keeps the ID it can be resumed with.
+            self._meta.update({s["name"]: {k: s[k] for k in META_KEYS if k in s} for s in scan})
         self.last_scan = scan
         self.last_updated = time.time()
 
         rows = merge_sessions(scan, tmux_sessions, records, self._starting, self._meta, time.time())
+        self._meta = {k: v for k, v in self._meta.items() if k in rows}
         self._publish_changes(rows, include_volatile=with_meta)
         self._sessions = rows
 

@@ -22,6 +22,7 @@ from .store import SessionStore
 LOG = logging.getLogger(__name__)
 
 _OLD_UI_DIR = Path(__file__).resolve().parents[3] / "html"
+_WEB_DIR = Path(__file__).resolve().parent / "webdist"
 
 
 def create_app(
@@ -41,10 +42,12 @@ def create_app(
 
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/api/v2", create_v2_app(Context(settings, ident, store)))
+    if _WEB_DIR.is_dir():
+        app.mount("/app", StaticFiles(directory=str(_WEB_DIR), html=True), name="web")
 
     # The old dashboard has no token, so it must never be listening on a network.
     if settings.is_loopback:
-        app.add_middleware(HostOriginGuard, exempt_prefixes=("/api/v2",))
+        app.add_middleware(HostOriginGuard, exempt_prefixes=("/api/v2", "/app"))
         app.include_router(create_legacy_router(store))
         if _OLD_UI_DIR.is_dir():
 

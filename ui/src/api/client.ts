@@ -1,0 +1,82 @@
+import type { components } from "./schema";
+
+export type Session = components["schemas"]["SessionModel"];
+export type Health = components["schemas"]["Health"];
+export type ServiceInfo = components["schemas"]["ServiceInfo"];
+export type ToolInfo = components["schemas"]["ToolInfo"];
+export type DirListing = components["schemas"]["DirListing"];
+export type CreateSession = components["schemas"]["CreateSession"];
+export type PatchSession = components["schemas"]["PatchSession"];
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+/** The request never completed. A browser gives no more detail than that. */
+export class NetworkError extends Error {}
+
+export function fetchHealth(baseUrl: string): Promise<Health> {
+  return new ServiceClient(baseUrl, "").get<Health>("/health");
+}
+
+/** One service, addressed by base URL. Nothing here is global, so services stay separate. */
+export class ServiceClient {
+  constructor(
+    readonly baseUrl: string,
+    readonly token: string,
+  ) {}
+
+  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/api/v2${path}`, {
+        method,
+        headers: {
+          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch {
+      throw new NetworkError(`Could not reach ${this.baseUrl}`);
+    }
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new ApiError(response.status, typeof detail?.detail === "string" ? detail.detail : response.statusText);
+    }
+    return response.json() as Promise<T>;
+  }
+
+  get<T>(path: string): Promise<T> {
+    return this.request("GET", path);
+  }
+
+  service = () => this.get<ServiceInfo>("/service");
+  tools = () => this.get<ToolInfo[]>("/tools");
+  sessions = () => this.get<Session[]>("/sessions");
+  dirs = (path: string, hidden = false) =>
+    this.get<DirListing>(`/fs/dirs?path=${encodeURIComponent(path)}&hidden=${hidden}`);
+  create = (body: CreateSession) => this.request<Session>("POST", "/sessions", body);
+  stop = (id: string) => this.request("POST", `/sessions/${encodeURIComponent(id)}/stop`);
+  close = (id: string) => this.request("DELETE", `/sessions/${encodeURIComponent(id)}`);
+  patch = (id: string, body: PatchSession) =>
+    this.request<Session>("PATCH", `/sessions/${encodeURIComponent(id)}`, body);
+
+  async socketUrl(path: string, purpose: "events" | "terminal", sessionId?: string, params = ""): Promise<string> {
+    const { ticket } = await this.request<{ ticket: string }>("POST", "/tickets", {
+      purpose,
+      session_id: sessionId ?? null,
+    });
+    const base = this.baseUrl.replace(/^http/, "ws");
+    return `${base}/api/v2${path}?ticket=${encodeURIComponent(ticket)}${params}`;
+  }
+
+  eventsUrl = () => this.socketUrl("/ws/events", "events");
+  terminalUrl = (id: string, cols: number, rows: number) =>
+    this.socketUrl(`/ws/sessions/${encodeURIComponent(id)}/terminal`, "terminal", id, `&cols=${cols}&rows=${rows}`);
+}

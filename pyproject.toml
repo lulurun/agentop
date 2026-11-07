@@ -31,6 +31,7 @@ include = ["agentop*"]
 
 [tool.setuptools.package-data]
 "agentop.dialogue.scenarios" = ["*.toml"]
+"agentop.service" = ["webdist/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

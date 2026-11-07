@@ -139,3 +139,12 @@ def test_config_file_and_overrides(tmp_path, monkeypatch):
 @pytest.mark.parametrize("host, expected", [("127.0.0.1", True), ("localhost", True), ("::1", True), ("0.0.0.0", False)])
 def test_is_loopback(host, expected):
     assert config.Settings(host=host).is_loopback is expected
+
+
+def test_generated_api_schema_is_current():
+    """If this fails, run `npm run gen:api` in ui/ and commit the result."""
+    from pathlib import Path
+
+    from agentop.service.openapi import render
+
+    assert (Path(__file__).parent.parent / "ui/openapi.json").read_text() == render()

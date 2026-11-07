@@ -148,47 +148,49 @@ Goal: a complete v2 API, usable with curl and a test client, running alongside t
 
 ## 4 Phase 2: Web app
 
+Status: done on branch `v2`. The web app is at `/app`. The right panel already shows identity, process, and usage; files remain for Phase 3.
+
 Goal: the main workflow from the design, in a browser.
 
 ### 4.1 Foundation
 
-- [ ] Scaffold `ui/` with Vite, React, and TypeScript. Generate the API client from OpenAPI, with a CI check for drift.
-- [ ] Serve the build from the service at `/app` during development, moving to `/` at cutover. Ship `webdist/` as package data.
-- [ ] Add theme tokens for light and dark, and the `Platform` interface with `web.ts`.
-- [ ] Add a CSP with `script-src 'self'`.
-- [ ] Add the connection layer: saved list, active connection per tab, token from the URL fragment, API and socket clients built per connection, not global.
-- [ ] Add the Zustand store, keyed by `(connection id, session id)` from the start and fed from the events socket with automatic reconnect.
-- [ ] Add the first-visit screen for a missing token.
+- [x] Scaffold `ui/` with Vite, React, and TypeScript. Generate the API client from OpenAPI, with a CI check for drift.
+- [x] Serve the build from the service at `/app` during development, moving to `/` at cutover. Ship `webdist/` as package data.
+- [x] Add theme tokens for light and dark, and the `Platform` interface with `web.ts`.
+- [x] Add a CSP with `script-src 'self'`.
+- [x] Add the connection layer: saved list, active connection per tab, token from the URL fragment, API and socket clients built per connection, not global.
+- [x] Add the Zustand store, keyed by `(connection id, session id)` from the start and fed from the events socket with automatic reconnect.
+- [x] Add the first-visit screen for a missing token.
 
 ### 4.2 Shell and terminal
 
-- [ ] Three-column layout with resizable, collapsible sides, remembered per client, and the overlay mode below 900px.
-- [ ] Session list with status, filter, and selection.
-- [ ] `TerminalView`: all xterm imports, addons, renderer setting, fit on resize, reconnect with backoff.
-- [ ] All main-area states from design 10.2.
-- [ ] Keyboard shortcuts from design 10.4, and the `beforeunload` guard.
+- [x] Three-column layout with resizable, collapsible sides, remembered per client, and the overlay mode below 900px.
+- [x] Session list with status, filter, and selection.
+- [x] `TerminalView`: all xterm imports, addons, renderer setting, fit on resize, reconnect with backoff.
+- [x] All main-area states from design 10.2.
+- [x] Keyboard shortcuts from design 10.4, and the `beforeunload` guard.
 
 ### 4.3 New session
 
-- [ ] Modal with tool list, directory picker from `/fs/dirs`, and optional name.
-- [ ] Optimistic row, loading state with step text, then automatic attach.
-- [ ] Failed state with retry.
-- [ ] Stop, Close, and Resume actions.
+- [x] Modal with tool list, directory picker from `/fs/dirs`, and optional name.
+- [x] Optimistic row, loading state with step text, then automatic attach.
+- [x] Failed state with retry.
+- [x] Stop, Close, and Resume actions.
 
 ### 4.4 Service switching
 
-- [ ] Add the connect checks from design 4.5, with a distinct message for each failure.
-- [ ] Add the switcher menu, with live reachability while open.
-- [ ] Add the Add Service form: Test, `connect-info` parsing, encryption and browser-block warnings.
-- [ ] Add Manage Services: rename, edit, and remove.
-- [ ] Switching flow: close sockets, loading state, restore that connection's selected session.
-- [ ] Show the service name in the header when the left column is collapsed.
+- [x] Add the connect checks from design 4.5, with a distinct message for each failure.
+- [x] Add the switcher menu, with live reachability while open.
+- [x] Add the Add Service form: Test, `connect-info` parsing, encryption and browser-block warnings.
+- [x] Add Manage Services: rename, edit, and remove.
+- [x] Switching flow: close sockets, loading state, restore that connection's selected session.
+- [x] Show the service name in the header when the left column is collapsed.
 
 ### 4.5 Tests and acceptance
 
-- [ ] Vitest for store logic, the status-to-view mapping, and connection checks, including a changed `instance_id`.
-- [ ] Playwright with a fake agent script in a private tmux server: create, loading, attach, type, see output, stop.
-- [ ] Playwright with two services on different ports: add, switch, and confirm each one's sessions stay separate, including two sessions with the same ID.
+- [x] Vitest for store logic, the status-to-view mapping, and connection checks, including a changed `instance_id`.
+- [x] Playwright with a fake agent script in a private tmux server: create, loading, attach, type, see output, stop.
+- [x] Playwright with two services on different ports: add, switch, and confirm each one's sessions stay separate, including two sessions with the same ID.
 
 **Done when:**
 

@@ -131,7 +131,7 @@ class AgentCli:
             if tool_pid:
                 break
             if self._launch_failed(name, cmd):
-                return self._start_failed(name, f"Could not run `{cmd.split()[0]}`: command not found")
+                return self._start_failed(name, f"{cmd.split()[0]} is not installed, or not on the shell's PATH")
             time.sleep(0.25)
 
         if not tool_pid:

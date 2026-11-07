@@ -285,7 +285,7 @@ def test_disconnecting_does_not_end_the_session(service):
 def test_missing_binary_ends_failed_with_the_terminal_available(service):
     created = service.create(tool="brokenagent")
     failed = service.wait_for(created["id"], "failed")
-    assert "not found" in failed["error"] and failed["attachable"]
+    assert "not installed" in failed["error"] and failed["attachable"]
     with service.terminal(created["id"]) as ws:
         read_until(ws, "not found")
 

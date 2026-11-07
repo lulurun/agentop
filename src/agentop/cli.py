@@ -261,6 +261,19 @@ def cmd_service_token(args):
         print(identity.load_or_create().token)
 
 
+def cmd_open(args):
+    import webbrowser
+
+    from agentop.service import config, identity
+
+    settings = config.load()
+    scheme = "https" if settings.tls else "http"
+    host = "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
+    url = f"{scheme}://{host}:{settings.port}/app/#token={identity.load_or_create().token}"
+    if not webbrowser.open(url):
+        print(url)
+
+
 def cmd_service_connect_info(args):
     from agentop.service import config, identity
 
@@ -475,6 +488,9 @@ def main():
     p_serve.add_argument("--tls-cert", help="TLS certificate file")
     p_serve.add_argument("--tls-key", help="TLS private key file")
 
+    # open
+    sub.add_parser("open", help="Open the web app in a browser, signed in")
+
     # service
     p_service = sub.add_parser("service", help="Service access details")
     service_sub = p_service.add_subparsers(dest="service_command", metavar="<subcommand>")
@@ -571,6 +587,7 @@ def main():
         "start": cmd_start,
         "stop": cmd_stop,
         "serve": cmd_serve,
+        "open": cmd_open,
     }[
         args.command
     ](args)

@@ -39,7 +39,7 @@ def test_missing_binary_fails_fast_and_keeps_the_error_visible(fake_agents, cwd)
     result = ops.start("brokenagent", cwd, "demo")
     assert time.monotonic() - started < 3
     assert not result["ok"]
-    assert "not found" in result["error"]
+    assert "not installed" in result["error"]
     assert "not found" in CapturePane.screen(result["name"])
     assert registry.load()["sessions"][result["name"]]["status"] == "failed"
 
