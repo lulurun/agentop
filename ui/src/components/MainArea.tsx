@@ -3,6 +3,8 @@ import type { Session } from "../api/client";
 import { failureMessage, tokenFromInput } from "../connections";
 import { activeClient, activeConnection, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
+import { DialoguesView } from "./DialoguesView";
+import { HistoryView } from "./HistoryView";
 
 type Selection = { sessions: Record<string, Session>; selected: Record<string, string>; activeId: string };
 
@@ -157,6 +159,8 @@ export function MainArea() {
   const setDialog = useApp((s) => s.setDialog);
   const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
   const linked = linkState === "connected" || linkState === "reconnecting";
+  const view = useApp((s) => s.view);
+  const settings = useApp((s) => s.settings);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
   const showTerminal = linked && session?.attachable && session.status !== "starting";
 
@@ -178,11 +182,15 @@ export function MainArea() {
             its own once this is fixed.
           </p>
         </div>
+      ) : linked && view === "history" ? (
+        <HistoryView client={client} />
+      ) : linked && view === "dialogues" ? (
+        <DialoguesView client={client} />
       ) : linked ? (
         <>
           {session && <SessionBanner session={session} />}
           {showTerminal ? (
-            <TerminalView key={`${activeId}/${session.id}`} client={client} sessionId={session.id} focusRequest={0} />
+            <TerminalView key={`${activeId}/${session.id}/${settings.theme}/${settings.renderer}/${settings.fontSize}`} client={client} sessionId={session.id} focusRequest={0} />
           ) : session?.status === "starting" ? (
             <Starting session={session} />
           ) : session && session.status !== "failed" ? (

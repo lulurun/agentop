@@ -4,6 +4,58 @@
  */
 
 export interface paths {
+    "/dialogues": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Dialogues */
+        get: operations["list_dialogues_dialogues_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dialogues/{dialogue_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Dialogue */
+        get: operations["get_dialogue_dialogues__dialogue_id__get"];
+        put?: never;
+        post?: never;
+        /** Remove Dialogue */
+        delete: operations["remove_dialogue_dialogues__dialogue_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/dialogues/{dialogue_id}/stop": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Stop Dialogue */
+        post: operations["stop_dialogue_dialogues__dialogue_id__stop_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/fs/dirs": {
         parameters: {
             query?: never;
@@ -292,6 +344,76 @@ export interface components {
             /** Tool */
             tool: string;
         };
+        /** DialogueDetail */
+        DialogueDetail: {
+            /** Agent A */
+            agent_a?: string | null;
+            /** Agent B */
+            agent_b?: string | null;
+            /** Brief */
+            brief: string;
+            /** Cwd */
+            cwd: string;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Log Tail */
+            log_tail: string;
+            /** Max Turns */
+            max_turns?: number | null;
+            /** Progress */
+            progress: string;
+            /** Session A */
+            session_a?: string | null;
+            /**
+             * Session A Alive
+             * @default false
+             */
+            session_a_alive: boolean;
+            /** Session B */
+            session_b?: string | null;
+            /**
+             * Session B Alive
+             * @default false
+             */
+            session_b_alive: boolean;
+            /** Start Time */
+            start_time?: string | null;
+            /** Status */
+            status: string;
+        };
+        /** DialogueSummary */
+        DialogueSummary: {
+            /** Agent A */
+            agent_a?: string | null;
+            /** Agent B */
+            agent_b?: string | null;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Max Turns */
+            max_turns?: number | null;
+            /** Session A */
+            session_a?: string | null;
+            /**
+             * Session A Alive
+             * @default false
+             */
+            session_a_alive: boolean;
+            /** Session B */
+            session_b?: string | null;
+            /**
+             * Session B Alive
+             * @default false
+             */
+            session_b_alive: boolean;
+            /** Start Time */
+            start_time?: string | null;
+            /** Status */
+            status: string;
+        };
         /** DirListing */
         DirListing: {
             /** Dirs */
@@ -367,6 +489,21 @@ export interface components {
         ResumeRef: {
             /** Session Id */
             session_id: string;
+        };
+        /** SavedSession */
+        SavedSession: {
+            /** Cwd */
+            cwd?: string | null;
+            /** Last Active */
+            last_active?: number | null;
+            /** Session Id */
+            session_id: string;
+            /** Title */
+            title?: string | null;
+            /** Tool */
+            tool: string;
+        } & {
+            [key: string]: unknown;
         };
         /** ServiceInfo */
         ServiceInfo: {
@@ -556,6 +693,136 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_dialogues_dialogues_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DialogueSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_dialogue_dialogues__dialogue_id__get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                dialogue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DialogueDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    remove_dialogue_dialogues__dialogue_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                dialogue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stop_dialogue_dialogues__dialogue_id__stop_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                dialogue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_dirs_fs_dirs_get: {
         parameters: {
             query?: {
@@ -630,7 +897,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SavedSession"][];
                 };
             };
             /** @description Validation Error */

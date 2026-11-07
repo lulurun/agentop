@@ -477,3 +477,60 @@ def test_session_files_refuse_escapes_and_need_the_token(service, tmp_path):
     assert service.http.get(path, params={"path": "nope"}).status_code == 404
     assert httpx.get(service.base + path).status_code == 401
     assert httpx.get(f"{service.base}/sessions/{created['id']}/changes").status_code == 401
+
+
+def seed_dialogue(name="debate_topic_abc12345", status="completed", session_a="diaabc12a-1", session_b="diaabc12b-1"):
+    from agentop.dialogue import model
+
+    directory = model.DIALOGUES_DIR / name
+    directory.mkdir(parents=True)
+    (directory / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": name.rsplit("_", 1)[-1],
+                "session_a": session_a,
+                "session_b": session_b,
+                "agent_a": "claude",
+                "agent_b": "codex",
+                "max_turns": 10,
+                "start_time": "2026-11-01T00:00:00+00:00",
+                "status": status,
+                "scenario_name": "_".join(name.split("_")[:-2]),
+                "brief_name": name.split("_")[-2],
+            }
+        )
+    )
+    (directory / "brief.md").write_text("The brief.")
+    (directory / "progress.md").write_text("Agreed on a plan.")
+    return directory
+
+
+def test_dialogues_list_detail_and_remove(service):
+    directory = seed_dialogue()
+    listed = service.http.get("/dialogues").json()
+    assert [d["id"] for d in listed] == [directory.name]
+    assert listed[0]["agent_b"] == "codex"
+
+    detail = service.http.get(f"/dialogues/{directory.name}").json()
+    assert detail["brief"] == "The brief." and detail["progress"] == "Agreed on a plan."
+
+    assert service.http.delete(f"/dialogues/{directory.name}").status_code == 200
+    assert not directory.exists()
+    assert service.http.get("/dialogues").json() == []
+
+
+def test_stopping_a_dialogue_records_it(service):
+    directory = seed_dialogue(status="running")
+    assert service.http.post(f"/dialogues/{directory.name}/stop").status_code == 200
+    assert service.http.get(f"/dialogues/{directory.name}").json()["status"] == "stopped"
+
+
+@pytest.mark.parametrize("dialogue_id", ["abc12345", "debate", "a", "..", ".hidden", "%2e%2e", "de*"])
+def test_delete_needs_the_exact_dialogue_name(service, dialogue_id):
+    directory = seed_dialogue()
+    assert service.http.delete(f"/dialogues/{dialogue_id}").status_code in (404, 405)
+    assert directory.exists()
+
+
+def test_dialogues_need_the_token(service):
+    assert httpx.get(f"{service.base}/dialogues").status_code == 401

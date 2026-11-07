@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { ApiError, ServiceClient, type Session, type ServiceInfo } from "./api/client";
 import { checkConnection, type ConnectFailure, type Connection } from "./connections";
 import { platform } from "./platform";
+import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 
 export type LinkState =
   | { state: "connecting" }
@@ -9,11 +10,16 @@ export type LinkState =
   | { state: "reconnecting"; service: ServiceInfo; socketBlocked?: boolean }
   | { state: "failed"; failure: ConnectFailure };
 
-type Dialog = "new-session" | "add-service" | "manage-services" | "service" | null;
+type Dialog = "new-session" | "add-service" | "manage-services" | "service" | "settings" | null;
+export type View = "sessions" | "history" | "dialogues";
 
 interface AppState {
   connections: Connection[];
   activeId: string;
+  view: View;
+  settings: Settings;
+  /** Sessions that belong to a dialogue, so the list can label them. */
+  dialogueSessions: Set<string>;
   link: LinkState;
   sessions: Record<string, Session>;
   /** Selected session per connection. Session IDs are only unique within one service. */
@@ -28,6 +34,9 @@ interface AppState {
   switchTo(id: string): void;
   retry(trustNewIdentity?: boolean): void;
   setToken(token: string): void;
+  setView(view: View): void;
+  updateSettings(changes: Partial<Settings>): void;
+  setDialogueSessions(sessions: Set<string>): void;
   /** The service was stopped on purpose, so don't keep trying to reach it. */
   markStopped(): void;
   addConnection(connection: Connection): void;
@@ -191,6 +200,9 @@ export const useApp = create<AppState>((set, get) => {
 
   return {
     connections: [],
+    view: "sessions",
+    settings: loadSettings(),
+    dialogueSessions: new Set(),
     activeId: "",
     link: { state: "connecting" },
     sessions: {},
@@ -231,6 +243,21 @@ export const useApp = create<AppState>((set, get) => {
       void connect(activeConnection(get()));
     },
 
+    setView(view) {
+      set({ view });
+    },
+
+    updateSettings(changes) {
+      const settings = { ...get().settings, ...changes };
+      saveSettings(settings);
+      applyTheme(settings.theme);
+      set({ settings });
+    },
+
+    setDialogueSessions(dialogueSessions) {
+      set({ dialogueSessions });
+    },
+
     markStopped() {
       closeLink();
       set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {} });
@@ -258,7 +285,7 @@ export const useApp = create<AppState>((set, get) => {
 
     select(sessionId) {
       const selected = { ...get().selected, [get().activeId]: sessionId };
-      set({ selected });
+      set({ selected, view: "sessions" });
       try {
         localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
       } catch {

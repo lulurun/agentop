@@ -72,6 +72,236 @@
         "title": "CreateSession",
         "type": "object"
       },
+      "DialogueDetail": {
+        "properties": {
+          "agent_a": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent A"
+          },
+          "agent_b": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent B"
+          },
+          "brief": {
+            "title": "Brief",
+            "type": "string"
+          },
+          "cwd": {
+            "title": "Cwd",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "log_tail": {
+            "title": "Log Tail",
+            "type": "string"
+          },
+          "max_turns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Turns"
+          },
+          "progress": {
+            "title": "Progress",
+            "type": "string"
+          },
+          "session_a": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session A"
+          },
+          "session_a_alive": {
+            "default": false,
+            "title": "Session A Alive",
+            "type": "boolean"
+          },
+          "session_b": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session B"
+          },
+          "session_b_alive": {
+            "default": false,
+            "title": "Session B Alive",
+            "type": "boolean"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "cwd",
+          "brief",
+          "progress",
+          "log_tail"
+        ],
+        "title": "DialogueDetail",
+        "type": "object"
+      },
+      "DialogueSummary": {
+        "properties": {
+          "agent_a": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent A"
+          },
+          "agent_b": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent B"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "max_turns": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Turns"
+          },
+          "session_a": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session A"
+          },
+          "session_a_alive": {
+            "default": false,
+            "title": "Session A Alive",
+            "type": "boolean"
+          },
+          "session_b": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session B"
+          },
+          "session_b_alive": {
+            "default": false,
+            "title": "Session B Alive",
+            "type": "boolean"
+          },
+          "start_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Start Time"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status"
+        ],
+        "title": "DialogueSummary",
+        "type": "object"
+      },
       "DirListing": {
         "properties": {
           "dirs": {
@@ -299,6 +529,58 @@
           "session_id"
         ],
         "title": "ResumeRef",
+        "type": "object"
+      },
+      "SavedSession": {
+        "additionalProperties": true,
+        "properties": {
+          "cwd": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cwd"
+          },
+          "last_active": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Active"
+          },
+          "session_id": {
+            "title": "Session Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "tool"
+        ],
+        "title": "SavedSession",
         "type": "object"
       },
       "ServiceInfo": {
@@ -894,6 +1176,215 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/dialogues": {
+      "get": {
+        "operationId": "list_dialogues_dialogues_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DialogueSummary"
+                  },
+                  "title": "Response List Dialogues Dialogues Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Dialogues"
+      }
+    },
+    "/dialogues/{dialogue_id}": {
+      "delete": {
+        "operationId": "remove_dialogue_dialogues__dialogue_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dialogue_id",
+            "required": true,
+            "schema": {
+              "title": "Dialogue Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Remove Dialogue"
+      },
+      "get": {
+        "operationId": "get_dialogue_dialogues__dialogue_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dialogue_id",
+            "required": true,
+            "schema": {
+              "title": "Dialogue Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DialogueDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Dialogue"
+      }
+    },
+    "/dialogues/{dialogue_id}/stop": {
+      "post": {
+        "operationId": "stop_dialogue_dialogues__dialogue_id__stop_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "dialogue_id",
+            "required": true,
+            "schema": {
+              "title": "Dialogue Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stop Dialogue"
+      }
+    },
     "/fs/dirs": {
       "get": {
         "description": "Browse the service's filesystem. The path may be on a machine the client cannot see.",
@@ -1030,7 +1521,13 @@
           "200": {
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SavedSession"
+                  },
+                  "title": "Response Saved Sessions Saved Sessions Get",
+                  "type": "array"
+                }
               }
             },
             "description": "Successful Response"

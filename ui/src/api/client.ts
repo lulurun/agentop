@@ -4,6 +4,9 @@ export type Session = components["schemas"]["SessionModel"];
 export type Health = components["schemas"]["Health"];
 export type ServiceInfo = components["schemas"]["ServiceInfo"];
 export type UpdateInfo = components["schemas"]["UpdateInfo"];
+export type SavedSession = components["schemas"]["SavedSession"];
+export type DialogueSummary = components["schemas"]["DialogueSummary"];
+export type DialogueDetail = components["schemas"]["DialogueDetail"];
 export type ToolInfo = components["schemas"]["ToolInfo"];
 export type DirListing = components["schemas"]["DirListing"];
 export type FileListing = components["schemas"]["FileListing"];
@@ -72,6 +75,13 @@ export class ServiceClient {
   files = (id: string, path = "") =>
     this.get<FileListing>(`/sessions/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
   changes = (id: string) => this.get<GitChanges>(`/sessions/${encodeURIComponent(id)}/changes`);
+  savedSessions = (limit = 100) => this.get<SavedSession[]>(`/saved-sessions?limit=${limit}`);
+  deleteSavedSession = (tool: string, id: string) =>
+    this.request("DELETE", `/saved-sessions/${encodeURIComponent(tool)}/${encodeURIComponent(id)}`);
+  dialogues = () => this.get<DialogueSummary[]>("/dialogues");
+  dialogue = (id: string) => this.get<DialogueDetail>(`/dialogues/${encodeURIComponent(id)}`);
+  stopDialogue = (id: string) => this.request("POST", `/dialogues/${encodeURIComponent(id)}/stop`);
+  removeDialogue = (id: string) => this.request("DELETE", `/dialogues/${encodeURIComponent(id)}`);
   create = (body: CreateSession) => this.request<Session>("POST", "/sessions", body);
   stop = (id: string) => this.request("POST", `/sessions/${encodeURIComponent(id)}/stop`);
   close = (id: string) => this.request("DELETE", `/sessions/${encodeURIComponent(id)}`);

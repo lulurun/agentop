@@ -273,9 +273,9 @@ Testing update needs care, since this is the production install:
 
 ## 8 Phase 6: Parity and cutover
 
-- [ ] History view: list, filter, resume through the normal start flow, delete.
-- [ ] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
-- [ ] Settings: theme, renderer, font size.
+- [x] History view: list, filter, resume through the normal start flow, delete.
+- [x] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
+- [x] Settings: theme, renderer, font size.
 - [ ] Walk the parity table in design section 12, item by item.
 - [ ] Move the web app to `/`. Delete `html/index.html` and the old `/api` routes and `/ws/sessions` endpoint.
 - [ ] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/dashboard.md`, and `docs/cli.md`, including the stale unit name and registry path.

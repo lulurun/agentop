@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { ApiError, type ServiceClient } from "../api/client";
 import { isAppShortcut } from "../shortcuts";
 import { platform } from "../platform";
+import { loadSettings } from "../settings";
 
 type Status = "connecting" | "live" | "reconnecting" | "detached" | "ended";
 
@@ -28,7 +29,7 @@ function themeFromTokens(): ITheme {
 }
 
 function loadRenderer(term: Terminal) {
-  const setting = localStorage.getItem("agentop.renderer") ?? "auto";
+  const setting = loadSettings().renderer;
   if (setting === "dom") return;
   try {
     const webgl = new WebglAddon();
@@ -63,7 +64,7 @@ export function TerminalView({ client, sessionId, focusRequest }: Props) {
 
     const terminal = new Terminal({
       fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-      fontSize: 13,
+      fontSize: loadSettings().fontSize,
       lineHeight: 1.2,
       cursorBlink: true,
       allowProposedApi: true, // unicode11 needs it

@@ -9,6 +9,8 @@ import pytest
 
 from agentop import agentclis, ops, scanner, tmux
 from agentop.agentcli import AgentCli
+from agentop.dialogue import model as dialogue_model
+from agentop.dialogue import ops as dialogue_ops
 
 
 class FakeAgent(AgentCli):
@@ -61,6 +63,9 @@ def tmux_server(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
     monkeypatch.setenv("SHELL", "/bin/sh")
     monkeypatch.setenv("HOME", str(tmp_path))
+    # This path is fixed at import, so HOME alone would leave tests on the real one.
+    for module in (dialogue_model, dialogue_ops):
+        monkeypatch.setattr(module, "DIALOGUES_DIR", tmp_path / "dialogues")
 
     # The keeper stops the server from exiting when a test has no sessions left.
     tmux.run("-f", "/dev/null", "new-session", "-d", "-s", "keeper", "-x", "80", "-y", "24")
