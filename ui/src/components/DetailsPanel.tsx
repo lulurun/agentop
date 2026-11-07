@@ -200,9 +200,9 @@ export function DetailsPanel() {
         <h3>Token usage</h3>
         <Usage session={session} />
       </section>
-      {session.cwd && <FilesSection key={session.id} sessionId={session.id} />}
+      {session.cwd && <FilesSection key={`files/${session.id}`} sessionId={session.id} />}
       {session.managed && session.status === "running" && (
-        <StopSession key={session.id} id={session.id} name={session.display_name} />
+        <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />
       )}
     </aside>
   );

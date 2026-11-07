@@ -24,10 +24,10 @@ test.beforeEach(async ({ page }) => {
 
 const terminalText = (page: Page) => page.getByTestId("terminal").locator(".xterm-rows");
 
-async function startSession(page: Page, s: Service, name: string, tool = "claude") {
+async function startSession(page: Page, s: Service, name: string, tool = "claude", cwd = join(s.root, "project")) {
   await page.getByRole("button", { name: "New session" }).first().click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
+  await dialog.getByLabel("Working directory").fill(cwd);
   await dialog.getByText(tool, { exact: true }).click();
   await dialog.getByLabel("Name").fill(name);
   await dialog.getByRole("button", { name: "Start session" }).click();
@@ -292,6 +292,35 @@ test("the right panel shows details, changes, and files, and follows the selecti
   await expect(details).toBeHidden();
   await page.keyboard.press("Control+Shift+BracketRight");
   await expect(details).toBeVisible();
+});
+
+test("switching sessions shows one Files section, for the selected session's directory", async ({ page }) => {
+  const s = await service("alpha");
+  const first = join(s.root, "project");
+  const second = join(s.root, "other");
+  mkdirSync(second);
+  writeFileSync(join(first, "first-only.txt"), "x");
+  writeFileSync(join(second, "second-only.txt"), "x");
+  await page.goto(s.signedInUrl);
+  await startSession(page, s, "one", "claude", first);
+  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
+  await startSession(page, s, "two", "claude", second);
+  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
+
+  const details = page.locator(".details");
+  for (const [name, mine, theirs] of [
+    ["one", "first-only.txt", "second-only.txt"],
+    ["two", "second-only.txt", "first-only.txt"],
+    ["one", "first-only.txt", "second-only.txt"],
+    ["two", "second-only.txt", "first-only.txt"],
+  ]) {
+    await row(page, name).click();
+    await details.getByRole("tab", { name: "All" }).click();
+    await expect(details.getByRole("button", { name: mine })).toBeVisible();
+    await expect(details.getByRole("button", { name: theirs })).toHaveCount(0);
+    await expect(details.getByRole("heading", { name: "Files" })).toHaveCount(1);
+    await expect(details.getByRole("button", { name: "Stop session" })).toHaveCount(1);
+  }
 });
 
 test("the WebGL renderer draws the terminal", async ({ page }) => {
