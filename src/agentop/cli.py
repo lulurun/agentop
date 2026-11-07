@@ -185,6 +185,8 @@ def cmd_start(args):
     result = _ops().start(args.tool, cwd, args.session_name)
     if not result.get("ok"):
         print(f"Error: {result.get('error', 'Failed to start session')}", file=sys.stderr)
+        if result.get("name"):
+            print(f"The tmux session was kept: tmux attach-session -t {result['name']}", file=sys.stderr)
         sys.exit(1)
     name = result["name"]
     print(f"Started:  {name}")
@@ -389,8 +391,10 @@ def main():
 
     # start
     def _session_name_type(val):
-        if len(val) >= 32:
-            raise argparse.ArgumentTypeError("session name must be less than 32 characters")
+        if not _ops().is_valid_short_name(val):
+            raise argparse.ArgumentTypeError(
+                "session name must be 1-32 letters, digits, '-' or '_', starting with a letter or digit"
+            )
         return val
 
     p_start = sub.add_parser(

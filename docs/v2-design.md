@@ -256,7 +256,7 @@ A background tick (2s, since a scan costs about 0.12s) reconciles the sources an
 
 ### 5.4 Registry
 
-The file stays at `~/.agent-dashboard/sessions.json`, with additive fields: `display_name`, `status`, `step`, `error`, `created_at`, `ended_at`. Records for ended sessions are pruned after 30 days. The existing `flock` protection covers the CLI and service writing concurrently.
+The file stays at `~/.agent-dashboard/sessions.json`, with additive fields: `display_name`, `status`, `step`, `error`, `created_at`, `ended_at`. Records for ended sessions are pruned after 30 days. The old `flock` was held on the temp file, so it protected nothing. Writes now hold a separate lock file, because the CLI and service both write here.
 
 ## 6 Terminal
 

@@ -20,13 +20,13 @@ class CodexAgentCli(AgentCli):
     def launch_cmd(self) -> str:
         return "codex --dangerously-bypass-hook-trust"
 
-    def start_session(self, cwd: str, short_name: str = "", params: dict | None = None) -> dict:
+    def start_session(self, cwd: str, short_name: str = "", params: dict | None = None, **kwargs) -> dict:
         """Pre-trust cwd before launching, otherwise codex's first-run 'Do you
         trust the contents of this directory?' prompt eats whatever gets typed
         next (e.g. a dialogue orchestrator's opening prompt, sent unattended).
         """
         self._pretrust_dir(cwd)
-        return super().start_session(cwd, short_name, params)
+        return super().start_session(cwd, short_name, params, **kwargs)
 
     @staticmethod
     def _pretrust_dir(cwd: str) -> None:

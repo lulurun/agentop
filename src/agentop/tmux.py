@@ -1,11 +1,42 @@
-"""Low-level tmux wrappers: pane capture and session control."""
+"""Low-level tmux wrappers: pane capture and session control.
+
+Every tmux call goes through `run`, so the socket and target rules live in one
+place. tmux matches a bare target by prefix (`-t general` finds `general-41185`),
+so one session can silently act on another. Targets here are always exact:
+`=name` for commands that take a session, `=name:` for those that take a pane.
+Passing the wrong form fails with "can't find pane".
+"""
 
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 
 LOG = logging.getLogger(__name__)
+
+SOCKET_ENV = "AGENTOP_TMUX_SOCKET"
+
+
+def argv(*args: str) -> list[str]:
+    """Build a tmux command line. AGENTOP_TMUX_SOCKET selects a private server."""
+    socket = os.environ.get(SOCKET_ENV)
+    return ["tmux", *(["-L", socket] if socket else []), *args]
+
+
+def run(*args: str, timeout: float = 5, **kwargs) -> subprocess.CompletedProcess:
+    return subprocess.run(argv(*args), capture_output=True, timeout=timeout, check=False, **kwargs)
+
+
+def session_target(name: str) -> str:
+    return f"={name}"
+
+
+def pane_target(name: str) -> str:
+    return f"={name}:"
+
+
+_ERRORS = (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError)
 
 
 class CapturePane:
@@ -15,28 +46,18 @@ class CapturePane:
     def screen(session: str) -> str:
         """Return the text currently visible on screen (no scrollback)."""
         try:
-            r = subprocess.run(
-                ["tmux", "capture-pane", "-t", session, "-p"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
+            r = run("capture-pane", "-t", pane_target(session), "-p", text=True)
             return r.stdout if r.returncode == 0 else ""
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        except _ERRORS:
             return ""
 
     @staticmethod
     def scrollback(session: str) -> str:
         """Return the full scrollback history plus the current screen."""
         try:
-            r = subprocess.run(
-                ["tmux", "capture-pane", "-t", session, "-p", "-S", "-"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
+            r = run("capture-pane", "-t", pane_target(session), "-p", "-S", "-", text=True)
             return r.stdout if r.returncode == 0 else ""
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        except _ERRORS:
             return ""
 
 
@@ -47,27 +68,43 @@ class Session:
     def has(name: str) -> bool:
         """Return True if the named tmux session exists."""
         try:
-            r = subprocess.run(
-                ["tmux", "has-session", "-t", name],
-                capture_output=True,
-                timeout=3,
-            )
-            return r.returncode == 0
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            return run("has-session", "-t", session_target(name), timeout=3).returncode == 0
+        except _ERRORS:
             return False
+
+    @staticmethod
+    def list_all() -> dict[str, int] | None:
+        """Return {session name: attached client count}, or None if tmux could not be asked.
+
+        No server running is an empty dict, not an error.
+        """
+        try:
+            r = run("list-sessions", "-F", "#{session_attached}|#{session_name}", timeout=3, text=True)
+        except _ERRORS:
+            return None
+        if r.returncode != 0:
+            return {} if "no server" in r.stderr or "No such file" in r.stderr else None
+        sessions = {}
+        for line in r.stdout.splitlines():
+            attached, _, name = line.partition("|")
+            sessions[name] = int(attached) if attached.isdigit() else 0
+        return sessions
+
+    @staticmethod
+    def version() -> str | None:
+        try:
+            r = run("-V", timeout=3, text=True)
+            return r.stdout.strip() if r.returncode == 0 else None
+        except _ERRORS:
+            return None
 
     @staticmethod
     def list_panes(name: str, fmt: str = "#{pane_pid}") -> list[str]:
         """Return pane field values for the given session using the given format string."""
         try:
-            r = subprocess.run(
-                ["tmux", "list-panes", "-t", name, "-F", fmt],
-                capture_output=True,
-                text=True,
-                timeout=3,
-            )
+            r = run("list-panes", "-t", pane_target(name), "-F", fmt, timeout=3, text=True)
             return r.stdout.strip().splitlines() if r.returncode == 0 else []
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+        except _ERRORS:
             return []
 
     @staticmethod
@@ -75,37 +112,32 @@ class Session:
         """Send one or more key strings to the session (each as a separate send-keys call)."""
         for key in keys:
             try:
-                subprocess.run(
-                    ["tmux", "send-keys", "-t", name, key],
-                    capture_output=True,
-                    timeout=5,
-                )
-            except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+                run("send-keys", "-t", pane_target(name), key)
+            except _ERRORS:
                 pass
 
     @staticmethod
     def kill(name: str) -> None:
         """Kill the named tmux session."""
         try:
-            subprocess.run(
-                ["tmux", "kill-session", "-t", name],
-                capture_output=True,
-                timeout=5,
-            )
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            run("kill-session", "-t", session_target(name))
+        except _ERRORS:
             pass
 
     @staticmethod
     def new(name: str, cwd: str) -> bool:
         """Create a new detached session. Returns True on success."""
         try:
-            r = subprocess.run(
-                ["tmux", "new-session", "-d", "-s", name, "-c", cwd],
-                capture_output=True,
-                timeout=5,
-            )
-            return r.returncode == 0
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError):
+            return run("new-session", "-d", "-s", name, "-c", cwd).returncode == 0
+        except _ERRORS:
+            return False
+
+    @staticmethod
+    def set_option(name: str, option: str, value: str) -> bool:
+        """Set an option on one session, leaving the global value and other sessions alone."""
+        try:
+            return run("set-option", "-t", pane_target(name), option, value).returncode == 0
+        except _ERRORS:
             return False
 
     @staticmethod
@@ -119,16 +151,16 @@ class Session:
         is generous and logs instead of swallowing failures.
         """
         try:
-            r1 = subprocess.run(["tmux", "load-buffer", "-"], input=payload, capture_output=True, timeout=15)
+            r1 = run("load-buffer", "-", input=payload, timeout=15)
             if r1.returncode != 0:
                 LOG.warning("[%s] tmux load-buffer failed: %s", name, r1.stderr.decode(errors="replace"))
                 return False
-            r2 = subprocess.run(["tmux", "paste-buffer", "-t", name], capture_output=True, timeout=30)
+            r2 = run("paste-buffer", "-t", pane_target(name), timeout=30)
             if r2.returncode != 0:
                 LOG.warning("[%s] tmux paste-buffer failed: %s", name, r2.stderr.decode(errors="replace"))
                 return False
             return True
-        except (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError) as exc:
+        except _ERRORS as exc:
             LOG.warning("[%s] paste of %d bytes failed: %s", name, len(payload), exc)
             return False
 

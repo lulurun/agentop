@@ -14,6 +14,9 @@ _PROJECTS_DIR = Path("~/.claude/projects")
 class ClaudeAgentCli(AgentCli):
     name = "claude"
 
+    # Shown under the input box, and not on the trust prompt.
+    READY_MARKER = "shift+tab to cycle"
+
     @property
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions --remote-control"
@@ -68,12 +71,18 @@ class ClaudeAgentCli(AgentCli):
         return sessions[:limit]
 
     def post_start_hook(self, tmux_session: str) -> None:
-        """Accept Claude's trust / safety-check prompt automatically."""
+        """Accept Claude's trust / safety-check prompt, or stop as soon as Claude is ready.
+
+        The ready marker is checked first, because a resumed conversation can
+        have the word "trust" on screen.
+        """
         from agentop.tmux import CapturePane, Session
 
         for _ in range(40):
             time.sleep(0.25)
             content = CapturePane.screen(tmux_session).lower()
+            if self.READY_MARKER in content:
+                return
             if "trust" in content or "safety check" in content:
                 time.sleep(0.1)
                 # "No, exit" is the default selection, so Enter alone declines

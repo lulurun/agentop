@@ -39,14 +39,14 @@ Launch a new agent session in a managed tmux session.
 agentop start <session_name> --tool <tool> [--cwd <path>]
 ```
 
-- `session_name` — must be under 32 characters; the tmux session is named `{session_name}-{pid}`
+- `session_name` — must be under 32 characters; the tmux session is named `{session_name}-{random}`, and keeps that name for life
 - `--tool` — `claude`, `codex`, or `antigravity`
 - `--cwd` — working directory (default: home directory)
 
 After starting:
 
 ```bash
-tmux attach-session -t <session_name>-<pid>
+tmux attach-session -t <session_name>-<random>
 ```
 
 ### 1.3 stop

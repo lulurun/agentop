@@ -78,8 +78,6 @@ def test_exempt_prefix_skips_the_check(client):
 def test_websocket_handshake_rejected(client):
     with client.websocket_connect("/ws", headers={"Host": "127.0.0.1:9775"}) as ws:
         assert ws.receive_text() == "hello"
-    with pytest.raises(WebSocketDisconnect):
-        with client.websocket_connect(
-            "/ws", headers={"Host": "127.0.0.1:9775", "Origin": "https://evil.example"}
-        ):
-            pass
+    hostile = {"Host": "127.0.0.1:9775", "Origin": "https://evil.example"}
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect("/ws", headers=hostile):
+        pass

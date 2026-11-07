@@ -2,17 +2,27 @@
 
 from __future__ import annotations
 
+import re
+import time
+
 from agentop import registry, scanner
 from agentop.agent_instance import AgentInstance
 from agentop.agentclis import AGENTS, get_agent
 
+# Goes into a tmux session name, where "." and ":" separate target parts.
+_SHORT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
 
-def get_sessions() -> list[dict]:
+
+def is_valid_short_name(name: str) -> bool:
+    return bool(_SHORT_NAME.fullmatch(name))
+
+
+def get_sessions(with_meta: bool = True) -> list[dict]:
     """Return all live agent sessions enriched with managed-session registry data."""
     reg = registry.load()
     reg_sessions = reg.get("sessions", {})
     managed_names = {k for k, v in reg_sessions.items() if v.get("managed")}
-    sessions = scanner.build_sessions(managed_names)
+    sessions = scanner.build_sessions(managed_names, with_meta=with_meta)
     for s in sessions:
         reg_data = reg_sessions.get(s["name"], {})
         if reg_data.get("description"):
@@ -20,19 +30,44 @@ def get_sessions() -> list[dict]:
     return sessions
 
 
-def start(tool: str, cwd: str, short_name: str = "", params: dict | None = None) -> dict:
+def _record_start(result: dict, tool: str, cwd: str, short_name: str) -> dict:
+    """Register the outcome of a start. A failure with a tmux session is kept, to be seen and closed."""
+    name = result.get("name")
+    if name:
+        registry.upsert_session(
+            name,
+            {
+                "managed": True,
+                "tool": tool,
+                "cwd": cwd,
+                "display_name": short_name or name,
+                "created_at": time.time(),
+                "status": "running" if result.get("ok") else "failed",
+                "step": None,
+                "error": result.get("error"),
+            },
+        )
+    return result
+
+
+def start(
+    tool: str,
+    cwd: str,
+    short_name: str = "",
+    params: dict | None = None,
+    name: str | None = None,
+    on_progress=None,
+) -> dict:
     """Launch a new managed agent session.
 
     Returns {"ok": True, "name": …, "pid": …}
-         or {"ok": False, "error": …}.
+         or {"ok": False, "error": …}, with "name" if a tmux session was left behind.
     """
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}
-    result = agent.start_session(cwd, short_name, params)
-    if result.get("ok"):
-        registry.upsert_session(result["name"], {"managed": True})
-    return result
+    result = agent.start_session(cwd, short_name, params, name=name, on_progress=on_progress)
+    return _record_start(result, tool, cwd, short_name)
 
 
 def stop(name: str, sessions: list[dict] | None = None) -> dict:
@@ -98,15 +133,20 @@ def get_saved_sessions(
     return results[:limit]
 
 
-def resume_session(tool: str, session_id: str, cwd: str, short_name: str = "") -> dict:
+def resume_session(
+    tool: str,
+    session_id: str,
+    cwd: str,
+    short_name: str = "",
+    name: str | None = None,
+    on_progress=None,
+) -> dict:
     """Resume a saved agent session in a new tmux window."""
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}
-    result = agent.resume_session(session_id, cwd, short_name)
-    if result.get("ok"):
-        registry.upsert_session(result["name"], {"managed": True})
-    return result
+    result = agent.resume_session(session_id, cwd, short_name, name=name, on_progress=on_progress)
+    return _record_start(result, tool, cwd, short_name)
 
 
 def delete_saved_session(tool: str, session_id: str) -> dict:

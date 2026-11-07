@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
 from typing import Optional
 
 import psutil
 
+from agentop import tmux as tmux_cli
 from agentop.agentclis import AGENTS, get_agent
 
 __all__ = [
@@ -34,7 +36,12 @@ def _detect_tool(name: str, cmdline: str) -> Optional[str]:
 
 
 def _should_ignore(cmdline: str) -> bool:
-    return any(pat in cmdline for pat in IGNORE_CMDLINE_PATTERNS)
+    """Skip our own tooling, judged by what is running and not by its arguments.
+
+    An agent with a path containing "agentop" among its arguments is still an agent.
+    """
+    program = " ".join(os.path.basename(token) for token in cmdline.split()[:2])
+    return any(pat in program for pat in IGNORE_CMDLINE_PATTERNS)
 
 
 def scan_processes() -> list[dict]:
@@ -132,17 +139,12 @@ def get_ancestor_and_child_pids(pid: int) -> set[int]:
 def scan_tmux() -> list[dict]:
     """Return list of tmux pane dicts."""
     try:
-        result = subprocess.run(
-            [
-                "tmux",
-                "list-panes",
-                "-a",
-                "-F",
-                "#{session_name}|#{window_name}|#{pane_index}|#{pane_pid}|#{pane_current_path}|#{pane_current_command}",
-            ],
-            capture_output=True,
+        result = tmux_cli.run(
+            "list-panes",
+            "-a",
+            "-F",
+            "#{session_name}|#{window_name}|#{pane_index}|#{pane_pid}|#{pane_current_path}|#{pane_current_command}",
             text=True,
-            timeout=5,
         )
         if result.returncode != 0:
             return []
@@ -181,8 +183,11 @@ def map_process_to_tmux(pid: int, tmux_panes: list[dict]) -> dict | None:
     return None
 
 
-def build_sessions(managed_names: set | None = None) -> list[dict]:
-    """Derive session list from live processes and agent metadata. Fully stateless."""
+def build_sessions(managed_names: set | None = None, with_meta: bool = True) -> list[dict]:
+    """Derive session list from live processes and agent metadata. Fully stateless.
+
+    with_meta=False skips the per-agent metadata files, for frequent refreshes.
+    """
     if managed_names is None:
         managed_names = set()
     procs = scan_processes()
@@ -203,7 +208,9 @@ def build_sessions(managed_names: set | None = None) -> list[dict]:
             name = f"{proc['tool']}-{proc['pid']}"
 
         agent = get_agent(proc["tool"])
-        session_meta = agent.get_session_meta(proc["pid"], proc["cwd"] or "") if agent and proc.get("cwd") else {}
+        session_meta = {}
+        if with_meta and agent and proc.get("cwd"):
+            session_meta = agent.get_session_meta(proc["pid"], proc["cwd"])
 
         sessions.append(
             {

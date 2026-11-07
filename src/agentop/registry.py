@@ -1,32 +1,52 @@
-"""Manual session registry backed by ~/.agent-dashboard/sessions.json."""
+"""Managed-session registry backed by ~/.agent-dashboard/sessions.json.
+
+Both the CLI and the service write this file, so every read-modify-write holds
+a lock on a separate file. Locking the JSON file itself would not work: writes
+replace it, so two processes would hold locks on different inodes.
+"""
+
+from __future__ import annotations
 
 import fcntl
 import json
 import os
 import tempfile
 import threading
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
-REGISTRY_PATH = Path("~/.agent-dashboard/sessions.json").expanduser()
+from agentop.paths import data_dir
+
+ENDED_RETENTION_SECONDS = 30 * 24 * 3600
 
 _lock = threading.Lock()
 
 
+def registry_path() -> Path:
+    return data_dir() / "sessions.json"
+
+
 def _ensure_dir():
-    REGISTRY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    registry_path().parent.mkdir(parents=True, exist_ok=True)
+
+
+@contextmanager
+def _exclusive():
+    """Hold the registry lock, across threads and across processes."""
+    _ensure_dir()
+    with _lock, open(registry_path().with_suffix(".lock"), "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        yield
 
 
 def load() -> dict:
-    _ensure_dir()
-    if not REGISTRY_PATH.exists():
+    path = registry_path()
+    if not path.exists():
         return {"sessions": {}}
     try:
-        with open(REGISTRY_PATH) as f:
-            fcntl.flock(f, fcntl.LOCK_SH)
-            try:
-                data = json.load(f)
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
+        with open(path) as f:
+            data = json.load(f)
         if "sessions" not in data:
             data["sessions"] = {}
         return data
@@ -36,16 +56,12 @@ def load() -> dict:
 
 def save(data: dict):
     _ensure_dir()
-    dir_path = REGISTRY_PATH.parent
-    fd, tmp_path = tempfile.mkstemp(dir=dir_path, suffix=".tmp")
+    path = registry_path()
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            fcntl.flock(f, fcntl.LOCK_EX)
-            try:
-                json.dump(data, f, indent=2)
-            finally:
-                fcntl.flock(f, fcntl.LOCK_UN)
-        os.replace(tmp_path, REGISTRY_PATH)
+            json.dump(data, f, indent=2)
+        os.replace(tmp_path, path)
     except Exception:
         try:
             os.unlink(tmp_path)
@@ -55,18 +71,29 @@ def save(data: dict):
 
 
 def upsert_session(name: str, fields: dict):
-    with _lock:
+    """Merge fields into a record. A value of None removes that field."""
+    with _exclusive():
         data = load()
-        existing = data["sessions"].get(name, {})
-        existing.update({k: v for k, v in fields.items() if v is not None})
-        data["sessions"][name] = existing
+        record = data["sessions"].setdefault(name, {})
+        for key, value in fields.items():
+            if value is None:
+                record.pop(key, None)
+            else:
+                record[key] = value
         save(data)
 
 
-def set_description(name: str, description: str | None):
-    with _lock:
+def remove_session(name: str):
+    with _exclusive():
         data = load()
-        if name not in data.get("sessions", {}):
+        if data["sessions"].pop(name, None) is not None:
+            save(data)
+
+
+def set_description(name: str, description: str | None):
+    with _exclusive():
+        data = load()
+        if name not in data["sessions"]:
             return False
         if description:
             data["sessions"][name]["description"] = description
@@ -74,3 +101,30 @@ def set_description(name: str, description: str | None):
             data["sessions"][name].pop("description", None)
         save(data)
         return True
+
+
+def mark_ended_and_prune(live_names: set[str], now: float | None = None) -> list[str]:
+    """Stamp records whose tmux session is gone, and drop those that have been gone too long.
+
+    Failed starts are kept: they are the user's to dismiss.
+    Returns the names that were removed.
+    """
+    now = time.time() if now is None else now
+    removed = []
+    with _exclusive():
+        data = load()
+        changed = False
+        for name, record in list(data["sessions"].items()):
+            if name in live_names or record.get("status") in ("starting", "failed"):
+                continue
+            ended_at = record.get("ended_at")
+            if ended_at is None:
+                record["ended_at"] = now
+                changed = True
+            elif now - ended_at > ENDED_RETENTION_SECONDS:
+                del data["sessions"][name]
+                removed.append(name)
+                changed = True
+        if changed:
+            save(data)
+    return removed
