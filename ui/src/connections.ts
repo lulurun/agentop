@@ -142,7 +142,7 @@ export function failureMessage(failure: ConnectFailure, label: string): { title:
     case "token_rejected":
       return {
         title: `${failure.health.name} rejected the token`,
-        detail: "It may have been rotated. On that machine, run agentop service token.",
+        detail: `Each service has its own token. Run agentop service token on ${failure.health.name} itself, not on this computer.`,
       };
   }
 }
