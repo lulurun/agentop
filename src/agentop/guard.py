@@ -93,7 +93,8 @@ class HostOriginGuard:
 
         # Someone following an old bookmark through the proxy lands in the app.
         if proxied and scope["type"] == "http" and scope["path"] == "/":
-            await send({"type": "http.response.start", "status": 307, "headers": [(b"location", b"app/")]})
+            headers = [(b"location", b"app/"), (b"cache-control", b"no-store")]
+            await send({"type": "http.response.start", "status": 307, "headers": headers})
             await send({"type": "http.response.body", "body": b""})
             return
 

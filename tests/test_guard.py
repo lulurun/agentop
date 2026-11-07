@@ -95,6 +95,7 @@ def test_proxied_requests_are_refused_even_with_a_loopback_host(client, header):
 def test_the_old_address_through_a_proxy_leads_to_the_app(client):
     response = client.get("/", headers={"X-Forwarded-For": "203.0.113.9"}, follow_redirects=False)
     assert response.status_code == 307 and response.headers["location"] == "app/"
+    assert response.headers["cache-control"] == "no-store"
 
 
 def test_exempt_prefix_skips_the_check(client):

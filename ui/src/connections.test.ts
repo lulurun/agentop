@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkConnection, newConnectionId, parseConnectInfo, reachabilityNote, type Connection } from "./connections";
+import { checkConnection, newConnectionId, parseConnectInfo, tokenFromInput, reachabilityNote, type Connection } from "./connections";
 import { applyEvent, sortedSessions } from "./store";
 
 const HEALTH = { status: "ok", version: "1", api_version: 1, instance_id: "abc", name: "box" };
@@ -34,6 +34,17 @@ describe("parseConnectInfo", () => {
   });
   it("rejects nonsense", () => {
     expect(parseConnectInfo("http://")).toBeNull();
+  });
+});
+
+describe("tokenFromInput", () => {
+  it("takes a bare token or the whole connect-info string", () => {
+    expect(tokenFromInput("  abc123 ")).toBe("abc123");
+    expect(tokenFromInput("http://203.0.113.9:7700/agentop#token=abc123")).toBe("abc123");
+  });
+
+  it("has no token to use from an address without one", () => {
+    expect(tokenFromInput("http://203.0.113.9:7700/agentop#")).toBe("");
   });
 });
 

@@ -25,6 +25,22 @@ _OLD_UI_DIR = Path(__file__).resolve().parents[3] / "html"
 _WEB_DIR = Path(__file__).resolve().parent / "webdist"
 
 
+class AppFiles(StaticFiles):
+    """Static files that can't go stale.
+
+    With no Cache-Control, a browser decides for itself how long a file stays
+    fresh, based on its age, and may not ask the server again for weeks. So pages
+    are always revalidated. Files under assets/ have a content hash in their
+    name, so they can be kept forever.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        hashed = path.startswith("assets/")
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if hashed else "no-cache"
+        return response
+
+
 def create_app(
     settings: Settings | None = None,
     ident: Identity | None = None,
@@ -43,7 +59,7 @@ def create_app(
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/api/v2", create_v2_app(Context(settings, ident, store)))
     if _WEB_DIR.is_dir():
-        app.mount("/app", StaticFiles(directory=str(_WEB_DIR), html=True), name="web")
+        app.mount("/app", AppFiles(directory=str(_WEB_DIR), html=True), name="web")
 
     # The old dashboard has no token, so it must never be listening on a network.
     if settings.is_loopback:
@@ -55,7 +71,7 @@ def create_app(
             async def root():
                 return FileResponse(_OLD_UI_DIR / "index.html")
 
-            app.mount("/", StaticFiles(directory=str(_OLD_UI_DIR), html=True), name="static")
+            app.mount("/", AppFiles(directory=str(_OLD_UI_DIR), html=True), name="static")
 
     return app
 

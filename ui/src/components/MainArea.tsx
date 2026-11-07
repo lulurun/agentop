@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../api/client";
-import { failureMessage } from "../connections";
+import { failureMessage, tokenFromInput } from "../connections";
 import { activeClient, activeConnection, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 
@@ -60,7 +60,8 @@ function ConnectionProblem() {
           className="token-form"
           onSubmit={(event) => {
             event.preventDefault();
-            if (token.trim()) setToken(token.trim());
+            const value = tokenFromInput(token);
+            if (value) setToken(value);
           }}
         >
           <input

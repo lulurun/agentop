@@ -40,6 +40,12 @@ export function parseConnectInfo(input: string): { url: string; token: string } 
   return { url: `${parsed.protocol}//${parsed.host}${path}`, token };
 }
 
+/** What to use from the token box, which also accepts the whole connect-info string. */
+export function tokenFromInput(input: string): string {
+  const text = input.trim();
+  return text.includes("#") ? (parseConnectInfo(text)?.token ?? "") : text;
+}
+
 /** crypto.randomUUID only exists in a secure context, which a plain HTTP address is not. */
 export function newConnectionId(): string {
   return Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, "0")).join("");
