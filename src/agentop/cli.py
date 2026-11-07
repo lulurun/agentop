@@ -233,7 +233,9 @@ def cmd_stop(args):
     print(f"Stopping '{args.name}' …")
     if result.get("sent_exit"):
         print("  Sent /exit to agent.")
-    if result.get("tmux_killed"):
+    if result.get("forced"):
+        print("  The agent didn't exit in time, so its tmux session was killed.")
+    elif result.get("tmux_killed"):
         print("  Tmux session killed.")
     print("Done.")
 

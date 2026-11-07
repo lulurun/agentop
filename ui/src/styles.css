@@ -435,6 +435,8 @@ input::placeholder { color: var(--quiet); }
 }
 .copyable:hover { text-decoration: underline; }
 .details-actions { margin-top: 16px; }
+.stop-note { margin: 0 0 8px; color: var(--quiet); font-size: 13px; }
+.stop-buttons { display: flex; gap: 8px; }
 
 .file-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
 .file-tabs button { padding: 2px 9px; background: none; border-color: transparent; color: var(--quiet); }

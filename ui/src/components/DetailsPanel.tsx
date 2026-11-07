@@ -104,6 +104,54 @@ function Usage({ session }: { session: Session }) {
   );
 }
 
+function StopSession({ id, name }: { id: string; name: string }) {
+  const act = useApp((s) => s.act);
+  const setError = useApp((s) => s.setError);
+  const [confirming, setConfirming] = useState(false);
+  const [stopping, setStopping] = useState(false);
+
+  async function stop() {
+    setStopping(true);
+    const result = (await act((client) => client.stop(id))) as { forced?: boolean } | undefined;
+    if (result?.forced) setError(`${name} didn't exit within 10 seconds, so its terminal was closed.`);
+    setStopping(false);
+    setConfirming(false);
+  }
+
+  if (stopping) {
+    return (
+      <section className="details-actions">
+        <p className="stop-note" role="status">Stopping {name}…</p>
+      </section>
+    );
+  }
+  if (!confirming) {
+    return (
+      <section className="details-actions">
+        <button type="button" onClick={() => setConfirming(true)}>
+          Stop session
+        </button>
+      </section>
+    );
+  }
+  return (
+    <section className="details-actions" aria-label={`Stop ${name}?`}>
+      <p className="stop-note">
+        Stop {name}? Anything typed in its input is cleared, then the agent is asked to exit. If it's still running
+        after 10 seconds, its terminal is closed.
+      </p>
+      <div className="stop-buttons">
+        <button type="button" onClick={() => setConfirming(false)}>
+          Cancel
+        </button>
+        <button type="button" className="primary" onClick={() => void stop()}>
+          Stop {name}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 export function DetailsPanel() {
   const session = useApp(selectedSession);
   const act = useApp((s) => s.act);
@@ -154,11 +202,7 @@ export function DetailsPanel() {
       </section>
       {session.cwd && <FilesSection key={session.id} sessionId={session.id} />}
       {session.managed && session.status === "running" && (
-        <section className="details-actions">
-          <button type="button" onClick={() => void act((client) => client.stop(session.id))}>
-            Stop session
-          </button>
-        </section>
+        <StopSession key={session.id} id={session.id} name={session.display_name} />
       )}
     </aside>
   );

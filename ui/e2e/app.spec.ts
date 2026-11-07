@@ -150,7 +150,13 @@ test("stop ends the session and leaves the rest of the app working", async ({ pa
   await startSession(page, s, "demo");
   await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
   await page.getByRole("button", { name: "Stop session" }).click();
-  await expect(row(page, "demo")).toBeHidden({ timeout: 10_000 });
+  await expect(page.getByText("Anything typed in its input is cleared")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(row(page, "demo")).toBeVisible();
+
+  await page.getByRole("button", { name: "Stop session" }).click();
+  await page.getByRole("button", { name: "Stop demo" }).click();
+  await expect(row(page, "demo")).toBeHidden({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
 });
 
