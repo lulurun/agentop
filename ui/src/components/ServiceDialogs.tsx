@@ -51,7 +51,7 @@ export function AddServiceDialog() {
         {!parsed?.token && (
           <label className="field">
             Token
-            <input type="password" autoComplete="off" value={token} onChange={(event) => { setToken(event.target.value); setResult(null); }} />
+            <input type="text" spellCheck={false} autoCapitalize="off" autoComplete="off" value={token} onChange={(event) => { setToken(event.target.value); setResult(null); }} />
           </label>
         )}
         <label className="field">

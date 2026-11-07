@@ -65,7 +65,7 @@ function ConnectionProblem() {
           }}
         >
           <input
-            type="password"
+            type="text" spellCheck={false} autoCapitalize="off"
             aria-label="Token"
             placeholder="Paste the token"
             autoComplete="off"

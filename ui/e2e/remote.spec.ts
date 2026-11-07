@@ -93,6 +93,24 @@ test("a proxy that drops WebSockets is named, and the app recovers when it is fi
   await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
 });
 
+test("a rejected token can be seen and replaced, even after a reload", async ({ page }) => {
+  const devhost = await service("devhost");
+  const proxy = await proxied(devhost);
+  const box = page.getByLabel("Token");
+  await page.goto(`http://127.0.0.1:${proxy.port}/agentop/app/`);
+
+  await expect(box).toHaveAttribute("type", "text");
+  await box.fill("not-the-token");
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByRole("heading", { name: "devhost rejected the token" })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "devhost rejected the token" })).toBeVisible();
+  await box.fill(devhost.token);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+});
+
 test("the old routes cannot be reached through the proxy", async ({ request }) => {
   const devhost = await service("devhost");
   const proxy = await proxied(devhost);
