@@ -7,6 +7,8 @@
 | Code structure | [docs/architecture.md](docs/architecture.md) |
 | Dashboard setup | [docs/dashboard.md](docs/dashboard.md) |
 | v2 service and app setup | [docs/v2-setup.md](docs/v2-setup.md) |
+| v2 manual tests (real user and PC) | [docs/v2-manual-tests.md](docs/v2-manual-tests.md) |
+| Agreed work not started | [TODO.md](TODO.md) |
 
 ## Key facts
 

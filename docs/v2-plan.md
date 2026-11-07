@@ -276,6 +276,8 @@ Status: built and packaged on a machine with no display, so **the window has nev
 
 ## 8 Phase 6: Parity and cutover
 
+The remaining cutover steps are tracked in [TODO.md](../TODO.md#retire-the-old-dashboard). Tests that need a real user and PC are in [v2-manual-tests.md](v2-manual-tests.md).
+
 - [x] History view: list, filter, resume through the normal start flow, delete.
 - [x] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
 - [x] Settings: theme, renderer, font size.
@@ -290,6 +292,8 @@ Status: built and packaged on a machine with no display, so **the window has nev
 ## 9 After v2.0
 
 ### 9.1 Security review (TODO)
+
+Tracked, with additions, in [TODO.md](../TODO.md#security-review).
 
 The v2.0 security model is deliberately simple and is to be revisited. Do this before recommending that anyone expose a service beyond loopback.
 
