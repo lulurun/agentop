@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27"]
+dev = ["pytest>=8", "httpx>=0.27", "websockets>=13"]
 
 [project.scripts]
 # `agentop.cli`, not a bare `cli`: a top-level `cli` module collides with any

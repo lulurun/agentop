@@ -33,9 +33,9 @@ Rules for every phase:
 
 The WebSocket exposure (design P1) exists in production today and should not wait for v2.
 
-- [ ] Add Host and Origin checks to the current `src/api.py`, as HTTP middleware and on the WebSocket handshake.
-- [ ] Accept loopback hosts on any port, plus entries from an `AGENTOP_ALLOWED_ORIGINS` environment variable.
-- [ ] Treat this as a stopgap for the old routes only. The v2 API replaces it with tokens (design 7.1).
+- [x] Add Host and Origin checks to the current `src/api.py`, as HTTP middleware and on the WebSocket handshake.
+- [x] Accept loopback hosts on any port, plus entries from an `AGENTOP_ALLOWED_ORIGINS` environment variable.
+- [x] Treat this as a stopgap for the old routes only. The v2 API replaces it with tokens (design 7.1).
 - [ ] Before deploying, set `AGENTOP_ALLOWED_ORIGINS` to the public host name of the proxy on `pisces-01`, so that access is not cut off. The dashboard reaches it through `eiger-tunnel` (design 7.3).
 - [ ] Check that the proxy on `pisces-01` requires authentication. Until cutover, it is the only thing protecting the old routes on that path.
 
@@ -83,58 +83,60 @@ Each spike is throwaway code that outputs a decision, recorded back in the desig
 
 ## 3 Phase 1: Service core
 
+Status: done on branch `v2`. `agentop open` moved to Phase 2, since it opens the new web app. Dialogue routes and file routes are not in `/api/v2` yet; they arrive with Phases 6 and 3.
+
 Goal: a complete v2 API, usable with curl and a test client, running alongside the old routes.
 
 ### 3.1 Packaging and tmux wrapper
 
-- [ ] Move `src/api.py` to `src/agentop/service/app.py` as an app factory. Add `agentop serve`.
-- [ ] Change the unit to `ExecStart=agentop serve`, and add `Environment=TERM=xterm-256color`.
-- [ ] Add `~/.agent-dashboard/config.toml`: `host`, `port`, `name`, `tls_cert`, `tls_key`, with matching `agentop serve` flags. Loopback stays the default.
-- [ ] Route every tmux call through one wrapper in `tmux.py`, including those in `scanner.py` and `agentcli.py`. It adds a socket option and exact targets: `=id` for sessions, `=id:` for panes.
-- [ ] Add `pytest` as a dev dependency, a `tests/` directory, and a fixture that provides a private tmux server.
+- [x] Move `src/api.py` to `src/agentop/service/app.py` as an app factory. Add `agentop serve`.
+- [x] Change the unit to `ExecStart=agentop serve`, and add `Environment=TERM=xterm-256color`.
+- [x] Add `~/.agent-dashboard/config.toml`: `host`, `port`, `name`, `tls_cert`, `tls_key`, with matching `agentop serve` flags. Loopback stays the default.
+- [x] Route every tmux call through one wrapper in `tmux.py`, including those in `scanner.py` and `agentcli.py`. It adds a socket option and exact targets: `=id` for sessions, `=id:` for panes.
+- [x] Add `pytest` as a dev dependency, a `tests/` directory, and a fixture that provides a private tmux server.
 
 ### 3.2 Session lifecycle
 
-- [ ] Choose `{slug}-{rand6}` up front in `_run_in_tmux`. Remove the temp name and rename.
-- [ ] Add `on_progress` to `start_session` and `resume_session`. Keep the synchronous return value for `ops.start` and dialogues.
-- [ ] Report a real failure when no agent process appears, replacing today's `ok: True, pid: None`.
-- [ ] Add agent ready markers, and stop `post_start_hook` as soon as one is visible. Keep the timeout.
-- [ ] Set `mouse on` per session at creation, according to S3.
-- [ ] Add the registry fields, and prune ended records after 30 days.
-- [ ] Update `docs/cli.md` for the new name format.
+- [x] Choose `{slug}-{rand6}` up front in `_run_in_tmux`. Remove the temp name and rename.
+- [x] Add `on_progress` to `start_session` and `resume_session`. Keep the synchronous return value for `ops.start` and dialogues.
+- [x] Report a real failure when no agent process appears, replacing today's `ok: True, pid: None`.
+- [x] Add agent ready markers, and stop `post_start_hook` as soon as one is visible. Keep the timeout.
+- [x] Set `mouse on` per session at creation, according to S3.
+- [x] Add the registry fields, and prune ended records after 30 days.
+- [x] Update `docs/cli.md` for the new name format.
 
 ### 3.3 SessionStore and API
 
-- [ ] Build `SessionStore`: merged state, 2s and 10s ticks, the state machine, change events.
-- [ ] On boot, reconcile `starting` records.
-- [ ] Define Pydantic models in `service/models.py`.
-- [ ] Implement `/api/v2`: health, tools, fs/dirs, sessions (with 202 async create and resume), stop, delete, saved sessions.
-- [ ] Add the events WebSocket: snapshot, then deltas.
+- [x] Build `SessionStore`: merged state, 2s and 10s ticks, the state machine, change events.
+- [x] On boot, reconcile `starting` records.
+- [x] Define Pydantic models in `service/models.py`.
+- [x] Implement `/api/v2`: health, tools, fs/dirs, sessions (with 202 async create and resume), stop, delete, saved sessions.
+- [x] Add the events WebSocket: snapshot, then deltas.
 
 ### 3.4 Terminal bridge
 
-- [ ] Rewrite the bridge per design 6.1: `add_reader`, `cols` and `rows` at connect, awaited cleanup, `-u` and `TERM`, direct tmux existence check.
-- [ ] Add close codes and the `closed` control frame.
+- [x] Rewrite the bridge per design 6.1: `add_reader`, `cols` and `rows` at connect, awaited cleanup, `-u` and `TERM`, direct tmux existence check.
+- [x] Add close codes and the `closed` control frame.
 
 ### 3.5 Auth
 
-- [ ] Generate `service.json` at mode `0600` on first run, with `token`, `instance_id`, and `name`.
-- [ ] Add bearer middleware on `/api/v2`, with open CORS and no credentials mode, outside auth so preflights pass.
-- [ ] Add tickets: single use, 30s, bound to a purpose.
-- [ ] Add `agentop open`, and `agentop service connect-info` with a `--host` option for the address other machines use.
-- [ ] Add TLS through uvicorn, and a startup warning for non-loopback plain HTTP.
-- [ ] Keep the old `/api` routes behind the Phase 0 checks, and do not register them when bound to a non-loopback address. They have no token, so they must never be exposed.
+- [x] Generate `service.json` at mode `0600` on first run, with `token`, `instance_id`, and `name`.
+- [x] Add bearer middleware on `/api/v2`, with open CORS and no credentials mode, outside auth so preflights pass.
+- [x] Add tickets: single use, 30s, bound to a purpose.
+- [x] Add `agentop service connect-info` with a `--host` option for the address other machines use.
+- [x] Add TLS through uvicorn, and a startup warning for non-loopback plain HTTP.
+- [x] Keep the old `/api` routes behind the Phase 0 checks, and do not register them when bound to a non-loopback address. They have no token, so they must never be exposed.
 
 ### 3.6 Tests and acceptance
 
-- [ ] State machine: success, missing binary, timeout, agent exit, tmux killed, service restart during start.
-- [ ] Prefix safety: with `foo-1` and `foo-10` both present, each action hits only its target.
-- [ ] Auth matrix: no token, wrong token, reused ticket, expired ticket, a ticket for a different session, and a foreign Origin without a token (rejected) and with one (accepted).
-- [ ] CORS: a preflight from an arbitrary origin succeeds, and a foreign origin can read `/health` and nothing else.
-- [ ] Old routes are absent on a non-loopback bind.
-- [ ] Path confinement, including symlinks that leave the directory.
-- [ ] PTY leak: 100 connect and disconnect cycles leave no extra file descriptors, zombies, or tmux clients.
-- [ ] Flood: `yes` in a session with a slow client. The service stays responsive, and the terminal recovers.
+- [x] State machine: success, missing binary, timeout, agent exit, tmux killed, service restart during start.
+- [x] Prefix safety: with `foo-1` and `foo-10` both present, each action hits only its target.
+- [x] Auth matrix: no token, wrong token, reused ticket, expired ticket, a ticket for a different session, and a foreign Origin without a token (rejected) and with one (accepted).
+- [x] CORS: a preflight from an arbitrary origin succeeds, and a foreign origin can read `/health` and nothing else.
+- [x] Old routes are absent on a non-loopback bind.
+- [x] Path confinement, including symlinks that leave the directory.
+- [x] PTY leak: 100 connect and disconnect cycles leave no extra file descriptors, zombies, or tmux clients.
+- [x] Flood: `yes` in a session with a slow client. The service stays responsive, and the terminal recovers.
 
 **Done when:**
 

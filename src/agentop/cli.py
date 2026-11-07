@@ -239,6 +239,38 @@ def cmd_stop(args):
 
 
 # ---------------------------------------------------------------------------
+# Service commands
+# ---------------------------------------------------------------------------
+
+
+def cmd_serve(args):
+    from agentop.service import app, config
+
+    app.serve(
+        config.load(host=args.host, port=args.port, name=args.name, tls_cert=args.tls_cert, tls_key=args.tls_key)
+    )
+
+
+def cmd_service_token(args):
+    from agentop.service import identity
+
+    if args.rotate:
+        print(identity.rotate_token().token)
+        print("Rotated. Every saved connection needs the new token.", file=sys.stderr)
+    else:
+        print(identity.load_or_create().token)
+
+
+def cmd_service_connect_info(args):
+    from agentop.service import config, identity
+
+    settings = config.load()
+    scheme = "https" if settings.tls else "http"
+    # The token is in the fragment, which a browser never sends to a server.
+    print(f"{scheme}://{args.host or settings.host}:{settings.port}#token={identity.load_or_create().token}")
+
+
+# ---------------------------------------------------------------------------
 # Dialogue commands
 # ---------------------------------------------------------------------------
 
@@ -435,6 +467,22 @@ def main():
     )
     p_stop.add_argument("name", help="Session name (from 'agentop list')")
 
+    # serve
+    p_serve = sub.add_parser("serve", help="Run the service in the foreground")
+    p_serve.add_argument("--host", help="Address to listen on (default: 127.0.0.1)")
+    p_serve.add_argument("--port", type=int, help="Port to listen on (default: 9775)")
+    p_serve.add_argument("--name", help="Name shown to clients (default: hostname)")
+    p_serve.add_argument("--tls-cert", help="TLS certificate file")
+    p_serve.add_argument("--tls-key", help="TLS private key file")
+
+    # service
+    p_service = sub.add_parser("service", help="Service access details")
+    service_sub = p_service.add_subparsers(dest="service_command", metavar="<subcommand>")
+    p_token = service_sub.add_parser("token", help="Print the access token")
+    p_token.add_argument("--rotate", action="store_true", help="Replace it; every saved connection then needs it")
+    p_connect = service_sub.add_parser("connect-info", help="Print a string to paste into Add Service in the app")
+    p_connect.add_argument("--host", help="Address other machines use to reach this service")
+
     # dialogue
     p_dialogue = sub.add_parser(
         "dialogue",
@@ -510,11 +558,19 @@ def main():
         }[args.dialogue_command](args)
         return
 
+    if args.command == "service":
+        if not args.service_command:
+            p_service.print_help()
+            sys.exit(0)
+        {"token": cmd_service_token, "connect-info": cmd_service_connect_info}[args.service_command](args)
+        return
+
     {
         "list": cmd_list,
         "history": cmd_history,
         "start": cmd_start,
         "stop": cmd_stop,
+        "serve": cmd_serve,
     }[
         args.command
     ](args)

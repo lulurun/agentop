@@ -6,7 +6,12 @@ After=network.target
 Type=simple
 WorkingDirectory=/home/lulurun/workspace/agentop
 Environment=PATH=/home/lulurun/.pyenv/versions/3.13.9/bin:/home/lulurun/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/home/lulurun/.pyenv/versions/3.13.9/bin/python src/api.py
+# tmux clients attached by the service need a real terminal type.
+Environment=TERM=xterm-256color
+# Public host names of any proxy in front of this service. The old dashboard
+# refuses others. Set this in an override, or here, before deploying:
+# Environment=AGENTOP_ALLOWED_ORIGINS=agents.example.com
+ExecStart=/home/lulurun/.pyenv/versions/3.13.9/bin/agentop serve
 ExecStartPost=-/home/lulurun/workspace/agentop/deploy/ensure-general-session.sh
 # Agent sessions live in tmux. If this unit starts the tmux server (first
 # session after boot), only the API process may be killed on stop/restart.

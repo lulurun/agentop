@@ -109,7 +109,9 @@ Tauri can ship a sidecar binary, but that ties the service's lifetime and versio
 ```
 src/agentop/
   service/
-    app.py          FastAPI app factory; `agentop serve` entry
+    app.py          assembles the service; `agentop serve` runs it
+    config.py       config.toml
+    identity.py     token, instance_id, and name, in service.json
     auth.py         token, Host/Origin checks, terminal tickets
     store.py        SessionStore: merged live state, change events
     terminal.py     PTY bridge
@@ -117,7 +119,8 @@ src/agentop/
     update.py       update check and launch
     files.py        safe directory listing and git status
     models.py       Pydantic request/response models
-    routes/         sessions, service, files, saved_sessions, dialogues, events
+    routes.py       the /api/v2 application
+    legacy.py       the old dashboard's routes, until cutover
     webdist/        built web app (gitignored, shipped as package data)
   tmux.py           all tmux calls go through one wrapper
   ...               existing modules unchanged
@@ -203,8 +206,11 @@ The current rename exists only to put the PID in the name. Dropping it removes t
      ▼                                        │      ▼
    failed                        tmux gone    │   exited
      │                                        ▼      │
-     └──────────────── tmux gone ──────────► ended ◄─┘
+     │ dismissed                                     │
+     └─────────────────────────────────────► ended ◄─┘
 ```
+
+A failed session stays listed until it is dismissed, even if its tmux session has gone, so that its error is not lost.
 
 | Status | Meaning | Main area |
 |--------|---------|-----------|
@@ -236,7 +242,8 @@ UI                        Service                       tmux
 - Validation errors (unknown tool, missing directory, bad name) return 4xx synchronously. Everything slower happens after the 202.
 - `AgentCli` gains an optional `on_progress(step)` callback and keeps its synchronous contract, so `agentop start` and dialogues behave as before.
 - `post_start_hook` must stop as soon as the agent is ready, not only when it sees a trust prompt. Each agent gains a ready marker (its input prompt on screen). The 10s timeout stays as a fallback.
-- Start timeout: 30s without an agent process sets `failed`. The tmux session stays open for inspection until the user closes it.
+- Measured with real Claude Code on a private tmux server: `POST` returned in 40ms, and the session was `running` at 1.4s. The old hook always took at least 10s here.
+- Start timeout: 30s without an agent process sets `failed`, or within a second or so when the shell reports the command is missing. The tmux session stays open for inspection until the user closes it.
 - Resume uses the same endpoint and flow: `POST /api/v2/sessions` with `{resume: {tool, session_id}, cwd, name}`.
 - If the service restarts during a start, the record is marked `failed` on boot, unless reconciliation finds the agent alive.
 
@@ -271,7 +278,8 @@ tmux -u attach-session -t =<id>      TERM=xterm-256color, COLORTERM=truecolor
 - The client passes `cols` and `rows` in the URL, so the PTY starts at the right size.
 - The master fd is non-blocking and read through `loop.add_reader`, which removes the per-read thread and the close race (P7).
 - Disconnect closes the PTY and awaits the client process. Detaching never affects the session.
-- Backpressure: the bridge stops reading while a send is pending. tmux is designed to handle slow clients by discarding output and redrawing, so the web layer needs no ack protocol. Phase 1 confirms this with a flood test.
+- Resize sends `SIGWINCH` to the client directly. The kernel only signals a tty's controlling process group, which the attach client is not, so setting the size alone does nothing.
+- Backpressure: the bridge stops reading while a send is pending, and tmux handles a slow client by discarding output and redrawing, so the web layer needs no ack protocol. The flood test confirms it: with `yes` running and the client not reading, `/health` stayed responsive, and after Ctrl-C the terminal caught up in about 0.1s.
 
 Protocol, kept close to today's:
 
@@ -279,7 +287,7 @@ Protocol, kept close to today's:
 |-----------|-------|---------|
 | Both | Binary | Raw terminal bytes |
 | Client to server | Text `{"type":"resize","cols":N,"rows":N}` | Resize the PTY |
-| Server to client | Text `{"type":"closed","reason":"session_ended"}` | tmux session ended |
+| Server to client | Text `{"type":"closed","reason":"session_ended"}` | tmux session ended, or `detached` if the client detached |
 
 Close codes: `4401` invalid ticket, `4404` no such session. Any other close triggers reconnect with backoff (0.5s up to 10s), which also carries the terminal through a service restart.
 
