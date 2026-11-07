@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 
 from agentop import ops, scanner
 from agentop.dialogue import ops as dialogue_ops
+from agentop.guard import HostOriginGuard
 
 # ---------------------------------------------------------------------------
 # Cache refreshed by background task
@@ -57,6 +58,7 @@ async def lifespan(app: FastAPI):
 # ---------------------------------------------------------------------------
 
 app = FastAPI(title="Agent Session Dashboard", lifespan=lifespan)
+app.add_middleware(HostOriginGuard)
 
 
 # ---------------------------------------------------------------------------

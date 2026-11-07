@@ -12,6 +12,9 @@ dependencies = [
     "psutil>=5.9.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27"]
+
 [project.scripts]
 # `agentop.cli`, not a bare `cli`: a top-level `cli` module collides with any
 # other distribution that ships one, and the command then runs the wrong tool.
@@ -28,6 +31,10 @@ include = ["agentop*"]
 
 [tool.setuptools.package-data]
 "agentop.dialogue.scenarios" = ["*.toml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
