@@ -43,7 +43,7 @@ What v2 builds on, and what was found while checking it. "Measured" means tested
 
 ### 3.1 What carries over unchanged
 
-`AgentCli`, `Actor`, `AgentInstance`, the dialogue system, and `ops.py` stay as the domain layer. `scanner.py` remains the source of process information. The FastAPI + WebSocket PTY approach is proven and stays.
+`AgentCli`, `Actor`, `AgentInstance`, the dialogue system, and `ops.py` stay as the domain layer. Dialogues later move out of the core into a plugin (12.9). `scanner.py` remains the source of process information. The FastAPI + WebSocket PTY approach is proven and stays.
 
 The scan is cheap: `ops.get_sessions()` takes about 0.12s for 12 sessions (measured), so there is no need to rework it. Agent sessions already survive service restarts through `KillMode=process`.
 
@@ -452,7 +452,7 @@ All routes are under `/api/v2`. The existing `/api` routes stay until cutover, s
 | `GET` | `/sessions/{id}/files?path=` | One directory of the working tree |
 | `GET` | `/sessions/{id}/changes` | Git branch, dirty state, changed files |
 | `GET`, `DELETE` | `/saved-sessions`, `/saved-sessions/{tool}/{id}` | History |
-| `GET`, `POST`, `DELETE` | `/dialogues`, `/dialogues/{id}`, `/dialogues/{id}/stop` | Dialogues |
+| `GET`, `POST`, `DELETE` | `/dialogues`, `/dialogues/{id}`, `/dialogues/{id}/stop` | Dialogues. Moves to `/plugins/dialogue/…` (12.9) |
 | `WS` | `/ws/events?ticket=` | Change stream |
 | `WS` | `/ws/sessions/{id}/terminal?ticket=&cols=&rows=` | Terminal |
 
@@ -620,9 +620,11 @@ Agentop grows from here through plugins. The features that exist today are the *
 - Sessions: scan, start, stop, close, resume, rename and describe, managed and external sessions.
 - The terminal bridge and tmux integration.
 - The right panel: details, token usage, changed and all files.
-- History and dialogues.
+- History.
 - Service status, stop, restart, update, and token handling.
 - Connections and service switching, settings, and the plugin loader itself (12.3).
+
+Dialogues exist today but are **not** core: they are one way of using agents, not what an agent is. They become the first plugin (12.9).
 
 **A plugin** is an optional, additive feature. It may add API routes, react to core events, and add UI in defined places. It may not change or remove core behaviour, and core code never imports a plugin.
 
@@ -678,10 +680,13 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 | `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. Each handler runs isolated: an exception is logged and counted, and never reaches the core. Handlers run off the event loop, with a time limit, and the core never waits for their result |
 | `api.task(coro)` | A supervised background task. If it raises, the plugin goes to `failed` and the task is not restarted |
 | `api.sessions()` | A read-only snapshot of the session list |
+| `api.agents` | For plugins that drive agents: start a managed session, send text, read its output, stop it. It goes through the same core code as the UI (`ops.start`, `Actor`, `AgentInstance.stop`), and each session it starts is tagged with the plugin's id. The sessions are ordinary core sessions: they show in the list and can be attached, stopped, and closed whether or not the plugin is still running |
 | `api.store` | A JSON file at `~/.agent-dashboard/plugins/{id}.json` for the plugin's own data |
 | `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
 
 Repeated handler errors (for example 5 in a minute) move the plugin to `failed` automatically, so a broken plugin stops being called.
+
+**CLI.** A plugin may add an `agentop` subcommand by defining `register_cli(subparsers)`, declared with `cli = true` in its manifest. The CLI reads manifests and saved flags without starting the service. A missing plugin's command does not exist. A disabled or failed plugin's command is still listed, and running it says so and how to enable it. The core commands never depend on a plugin.
 
 ### 12.4 Enable and disable
 
@@ -730,6 +735,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 
 | Feature | Plugin? |
 |---------|---------|
+| Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
 | File preview and diff view | Yes: routes for file content and diffs, a right-panel slot |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
@@ -740,6 +746,27 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 | Non-git install kinds for update | No: part of core service update |
 
 The security review and retiring the old dashboard (both in [TODO.md](../TODO.md)) are core work, not plugins.
+
+### 12.9 Dialogues as a plugin
+
+Dialogues are built already, so moving them is also the test of the plugin system: if the loader and its API can carry dialogues, they can carry the features after it.
+
+**What moves into `src/agentop/plugins/dialogue/`:** today's `src/agentop/dialogue/` package (model, orchestrator, parser, status, scenarios), the `/api/v2/dialogues…` routes, which become `/api/v2/plugins/dialogue/…`, and the `agentop dialogue` CLI commands, through `register_cli`. The orchestrator drives its two agents through `api.agents` instead of calling `ops` and `AgentInstance` directly.
+
+**What moves into `ui/src/plugins/dialogue/`:** the Dialogues view, filling the left-column view slot, and the "dialogue" label on session rows, filling the session-badge slot. Core files stop naming dialogues: the session list, the store, and the API client.
+
+**What stays in the core:** nothing dialogue-specific. The core keeps the generic pieces dialogues needed: starting a session under a given short name, `Actor` send and receive, and stop. A dialogue's agents (`dia{id}a`, `dia{id}b`) remain ordinary managed sessions.
+
+**Data.** Saved dialogues stay where they are, in `~/.agent-dashboard/dialogues/`, in the same format. Removing or disabling the plugin never deletes them, and enabling it again shows them all.
+
+**When the plugin is disabled, removed, or fails:**
+
+- The Dialogues view, the session labels, and the `/plugins/dialogue/` routes disappear. `agentop dialogue` says the plugin is disabled.
+- A running dialogue is stopped as if its Stop button were pressed: the relay ends and the dialogue is saved as stopped. Settings warns before disabling while any dialogue is running.
+- The dialogue's agent sessions, if still open, stay in the session list as plain sessions that can be attached, stopped, and closed.
+- Sessions, terminals, history, and service control are unaffected.
+
+**Done when:** the core test suites pass with the `dialogue` folder deleted, the dialogue tests pass with the plugin enabled, and disabling it from Settings hides every trace of dialogues in the UI without touching other sessions.
 
 ## 13 Migration
 
@@ -756,7 +783,7 @@ Parity list for the old dashboard, so nothing is lost by accident:
 | Session table with metrics | Left list plus right panel |
 | In-browser terminal | Main area |
 | History, resume, delete | History view |
-| Dialogues list, detail, stop, remove | Dialogues view |
+| Dialogues list, detail, stop, remove | Dialogues view, from the dialogue plugin (12.9) |
 | Session description | Right panel |
 | Bridge URL, AI title | Right panel |
 | Copy tmux command | Right panel |
@@ -786,7 +813,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D1 | Token login for the web app | Required for every client, one-time per browser through `agentop open` | None. Connecting to any reachable service rules out trusting the network or the origin |
 | D2 | Web cannot start a stopped service | Accept the difference; show the command | None is possible without a separate always-on helper process |
 | D3 | Scroll through `mouse on` per session | On for new managed sessions | Leave off, losing wheel scrollback |
-| D4 | Dialogues in the new UI | Ported in the final phase | Drop from the UI and keep them CLI-only |
+| D4 | Dialogues in the new UI | Ported in the final phase, then moved into a plugin (12.9) | Drop from the UI and keep them CLI-only |
 | D5 | Host platforms | Linux with systemd | Add macOS with launchd, as later work |
 | D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |

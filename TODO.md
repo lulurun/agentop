@@ -39,4 +39,7 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 - [ ] The `register(api)` surface: scoped router, isolated event handlers, supervised tasks, read-only sessions, per-plugin store.
 - [ ] UI: per-connection plugin list, slots with error boundaries, Settings → Plugins with switches and errors.
 - [ ] Broken test plugins, and the core suites passing with them installed and with none.
+- [ ] `api.agents` for plugins that drive agents, and `register_cli` for plugin CLI commands.
+- [ ] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9): package, routes under `/api/v2/plugins/dialogue/`, `agentop dialogue` through `register_cli`, the Dialogues view and the session-row label through UI slots. Saved dialogues stay in place.
+- [ ] Prove it: the core suites pass with the dialogue folder deleted; disabling the plugin stops running dialogues, hides every dialogue UI, and leaves other sessions untouched.
 - [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.

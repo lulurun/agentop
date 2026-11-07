@@ -23,7 +23,7 @@ src/
 
 ### Core and plugins
 
-Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by a core plugin loader that lists them for the UI and lets Settings enable or disable them. A missing, failing, or disabled plugin only hides its own feature. The design is in [v2-design.md section 12](v2-design.md#12-plugins).
+Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by a core plugin loader that lists them for the UI and lets Settings enable or disable them. A missing, failing, or disabled plugin only hides its own feature. The design is in [v2-design.md section 12](v2-design.md#12-plugins). Dialogues (section 5 below) are planned as the first plugin and will move to `src/agentop/plugins/dialogue/`.
 
 ## 2 Agent layer
 
