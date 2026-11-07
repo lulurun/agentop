@@ -11,7 +11,7 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src http: https: ws: wss:",
+  "connect-src ipc: http: https: ws: wss:", // ipc: is how the desktop window reaches its own commands
 ].join("; ");
 
 function contentSecurityPolicy(): Plugin {

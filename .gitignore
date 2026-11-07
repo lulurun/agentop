@@ -12,3 +12,8 @@ src/agentop/service/webdist/
 ui/test-results/
 ui/playwright-report/
 
+
+# Desktop app
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

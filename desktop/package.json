@@ -1,0 +1,12 @@
+{
+  "name": "agentop-desktop",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build --no-bundle",
+    "package": "tauri build --bundles deb"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

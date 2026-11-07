@@ -64,6 +64,43 @@ Add service in the service menu. A browser allows a loopback page to reach other
 addresses. A page loaded from the proxy can use only the proxy: it can't reach your
 machine's loopback.
 
+## Controlling a service
+
+```bash
+agentop service status
+agentop service start      # or stop, restart. Sessions keep running
+agentop service update     # pull, install, build, restart; goes back if that fails
+```
+
+The same actions are in the app, under the service menu. They need the service to
+run under systemd. One started by hand with `agentop serve` says so, and is stopped
+in its terminal.
+
+`update` needs a clean checkout on `main` that can reach its git remote. It writes
+progress to `update-status.json` and detail to `update.log`, in `~/.agent-dashboard`.
+If the new version fails to install or start, it resets to the previous commit and
+says so, and the failed commit stays on the remote until it is fixed.
+
+## Desktop app
+
+Needs everything above, plus Rust and the WebKitGTK 4.1 development files. On Arch
+those are `webkit2gtk-4.1`, `gtk3`, `libsoup3`, and `librsvg`.
+
+```bash
+(cd desktop && npm ci && npm run build)     # binary in src-tauri/target/release/
+(cd desktop && npm run package)             # a .deb in src-tauri/target/release/bundle/
+```
+
+The app connects to this computer's service by itself, reading `service.json`, and
+keeps other services' tokens in the OS keychain, which needs a running secret service
+such as GNOME Keyring or KeePassXC. Unlike a browser, it has no rule against reaching
+either loopback or plain HTTP addresses, so HTTPS-Only Mode and similar limits don't
+apply.
+
+If this computer's service is stopped and has a systemd unit, the app offers to start
+it. It decides that from the service's `instance_id`, not its address, so a tunnel to
+another machine is never treated as this computer.
+
 ## Old routes and proxies
 
 The old routes have no token, so requests with forwarding headers

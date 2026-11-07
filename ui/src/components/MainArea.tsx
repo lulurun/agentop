@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../api/client";
 import { failureMessage, tokenFromInput } from "../connections";
+import { platform, type LocalControl } from "../platform";
 import { activeClient, activeConnection, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { DialoguesView } from "./DialoguesView";
@@ -42,6 +43,28 @@ function ConnectionProblem() {
   const setToken = useApp((s) => s.setToken);
   const setSwitcherOpen = useApp((s) => s.setSwitcherOpen);
   const [token, setTokenText] = useState("");
+  const [control, setControl] = useState<LocalControl | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
+
+  const down = link.state === "failed" && (link.failure.kind === "unreachable" || link.failure.kind === "stopped");
+  useEffect(() => {
+    let cancelled = false;
+    setControl(null);
+    if (down) void platform.localControl(connection).then((found) => !cancelled && setControl(found));
+    return () => {
+      cancelled = true;
+    };
+  }, [down, connection]);
+
+  async function start() {
+    setStartError(null);
+    try {
+      await control!.start();
+      retry();
+    } catch (error) {
+      setStartError(String(error));
+    }
+  }
 
   if (link.state === "connecting") {
     return (
@@ -51,7 +74,13 @@ function ConnectionProblem() {
     );
   }
   if (link.state !== "failed") return null;
-  const { title, detail } = failureMessage(link.failure, connection.label);
+  const noService = down && !control && platform.kind === "desktop" && connection.isHome;
+  const { title, detail } = noService
+    ? {
+        title: "No service on this computer",
+        detail: "Install agentop here and run agentop serve, or add a service running on another machine.",
+      }
+    : failureMessage(link.failure, connection.label);
   const needsToken = link.failure.kind === "no_token" || link.failure.kind === "token_rejected";
   return (
     <div className="placard">
@@ -79,7 +108,13 @@ function ConnectionProblem() {
           </button>
         </form>
       )}
+      {startError && <p className="form-error" role="alert">{startError}</p>}
       <div className="placard-actions">
+        {control && (
+          <button type="button" className="primary" onClick={() => void start()}>
+            Start service
+          </button>
+        )}
         {link.failure.kind === "identity_changed" ? (
           <button type="button" onClick={() => retry(true)}>
             Trust this service

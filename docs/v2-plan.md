@@ -254,13 +254,16 @@ Testing update needs care, since this is the production install:
 
 ## 7 Phase 5: Desktop app
 
-- [ ] Create the Tauri project in `desktop/`, loading the `ui/` build.
-- [ ] Add `platform/tauri.ts`, with the S2 outcome and the S1 renderer default.
-- [ ] Add the Rust commands `read_service_info` and `service_control`, with no general shell permission, and a strict CSP.
-- [ ] Implement `ConnectionStore` with tokens in the OS keychain, and the default connection from `service.json`.
-- [ ] Decide what is local by `instance_id`, as in design 8.3. Test this with a tunnel whose loopback URL points at another machine.
-- [ ] Add a first-run view for when no service is installed.
-- [ ] Build a Linux package. Add a `make` or `npm` script that builds the whole project.
+Status: built and packaged on a machine with no display, so **the window has never been opened**. The Rust commands and the platform layer have tests, including that a tunnel is never treated as local. Everything below "Done when" still needs a real desktop, as do spikes S1 and S2.
+
+- [x] Create the Tauri project in `desktop/`, loading the `ui/` build.
+- [x] Add `platform/tauri.ts`.
+- [ ] Apply the S2 outcome and the S1 renderer default, once those are known.
+- [x] Add the Rust commands `read_service_info` and `service_control`, with no general shell permission, and a strict CSP.
+- [x] Implement `ConnectionStore` with tokens in the OS keychain, and the default connection from `service.json`.
+- [x] Decide what is local by `instance_id`, as in design 8.3. Test this with a tunnel whose loopback URL points at another machine.
+- [x] Add a first-run view for when no service is installed.
+- [x] Build a Linux package. Add a `make` or `npm` script that builds the whole project.
 
 **Done when:**
 

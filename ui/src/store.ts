@@ -30,7 +30,7 @@ interface AppState {
   dialog: Dialog;
   error: string | null;
 
-  init(): void;
+  init(): Promise<void>;
   switchTo(id: string): void;
   retry(trustNewIdentity?: boolean): void;
   setToken(token: string): void;
@@ -212,9 +212,9 @@ export const useApp = create<AppState>((set, get) => {
     dialog: null,
     error: null,
 
-    init() {
-      const saved = platform.loadConnections();
-      const home = platform.defaultConnection();
+    async init() {
+      const saved = await platform.loadConnections();
+      const home = await platform.defaultConnection();
       let connections = saved;
       if (home) {
         const known = saved.find((c) => c.id === home.id);

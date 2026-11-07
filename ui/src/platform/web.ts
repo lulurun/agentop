@@ -54,9 +54,12 @@ async function copyWithFallback(text: string) {
 }
 
 export const webPlatform: Platform = {
-  loadConnections: () => read<Connection[]>(localStorage, SAVED_KEY) ?? [],
+  kind: "web",
+  loadConnections: async () => read<Connection[]>(localStorage, SAVED_KEY) ?? [],
   saveConnections: (connections) => write(localStorage, SAVED_KEY, connections),
-  defaultConnection() {
+  // A page can't start a service, however close the service is.
+  localControl: async () => null,
+  async defaultConnection() {
     return { id: HOME_ID, label: "This service", url: homeUrl(), token: consumeFragmentToken(), isHome: true };
   },
   // Per tab first, so two tabs can show two services. A new tab starts on the last used.

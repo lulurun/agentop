@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "agentop",
+  "identifier": "dev.agentop.desktop",
+  "version": "0.1.0",
+  "build": {
+    "frontendDist": "../../src/agentop/service/webdist",
+    "beforeBuildCommand": "npm --prefix ../ui run build",
+    "beforeDevCommand": "npm --prefix ../ui run dev",
+    "devUrl": "http://localhost:5173"
+  },
+  "app": {
+    "windows": [{ "title": "agentop", "width": 1280, "height": 800, "minWidth": 640, "minHeight": 420 }],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http: https: ws: wss:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.png"]
+  }
+}

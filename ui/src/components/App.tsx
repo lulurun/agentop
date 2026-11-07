@@ -14,7 +14,9 @@ export function App() {
   const state = useApp();
   const { leftOpen, rightOpen, toggleLeft, toggleRight, setDialog, setSwitcherOpen, connections, activeId } = state;
 
-  useEffect(() => useApp.getState().init(), []);
+  useEffect(() => {
+    void useApp.getState().init();
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
