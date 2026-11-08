@@ -1,3 +1,4 @@
+import type { PluginClient } from "../plugins/types";
 import type { components } from "./schema";
 
 export type Session = components["schemas"]["SessionModel"];
@@ -14,6 +15,7 @@ export type FileEntry = components["schemas"]["FileEntry"];
 export type GitChanges = components["schemas"]["GitChanges"];
 export type CreateSession = components["schemas"]["CreateSession"];
 export type PatchSession = components["schemas"]["PatchSession"];
+export type PluginInfo = components["schemas"]["PluginInfo"];
 
 export class ApiError extends Error {
   constructor(
@@ -87,6 +89,21 @@ export class ServiceClient {
   close = (id: string) => this.request("DELETE", `/sessions/${encodeURIComponent(id)}`);
   patch = (id: string, body: PatchSession) =>
     this.request<Session>("PATCH", `/sessions/${encodeURIComponent(id)}`, body);
+  plugins = () => this.get<PluginInfo[]>("/plugins");
+  setPluginEnabled = (id: string, enabled: boolean) =>
+    this.request<PluginInfo>("PATCH", `/plugins/${encodeURIComponent(id)}`, { enabled });
+
+  /** A client for one plugin's own routes. */
+  plugin(id: string): PluginClient {
+    const base = `/plugins/${encodeURIComponent(id)}`;
+    const at = (path: string) => `${base}${path.startsWith("/") ? path : `/${path}`}`;
+    return {
+      get: (path) => this.request("GET", at(path)),
+      post: (path, body) => this.request("POST", at(path), body),
+      patch: (path, body) => this.request("PATCH", at(path), body),
+      delete: (path) => this.request("DELETE", at(path)),
+    };
+  }
 
   async socketUrl(path: string, purpose: "events" | "terminal", sessionId?: string, params = ""): Promise<string> {
     const { ticket } = await this.request<{ ticket: string }>("POST", "/tickets", {

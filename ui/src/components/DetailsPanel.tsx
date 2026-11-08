@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Session } from "../api/client";
 import { platform } from "../platform";
+import { PluginSlot } from "../plugins/Slot";
 import { useApp } from "../store";
 import { FilesSection } from "./FilesSection";
 import { formatDuration } from "./format";
@@ -201,6 +202,7 @@ export function DetailsPanel() {
         <Usage session={session} />
       </section>
       {session.cwd && <FilesSection key={`files/${session.id}`} sessionId={session.id} />}
+      <PluginSlot slot="right-panel" session={session} />
       {session.managed && session.status === "running" && (
         <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />
       )}

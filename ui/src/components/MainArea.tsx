@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { failureMessage, tokenFromInput } from "../connections";
 import { platform, type LocalControl } from "../platform";
+import { pluginsFor } from "../plugins/registry";
+import { PluginSlot } from "../plugins/Slot";
 import { activeClient, activeConnection, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { DialoguesView } from "./DialoguesView";
@@ -211,6 +213,11 @@ export function MainArea() {
   const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
   const linked = linkState === "connected" || linkState === "reconnecting";
   const view = useApp((s) => s.view);
+  const plugins = useApp((s) => s.plugins);
+  // A view whose plugin was disabled, or isn't on this service, falls back to the sessions.
+  const pluginView = view.startsWith("plugin:")
+    ? pluginsFor("left-view", plugins).find(({ info }) => `plugin:${info.id}` === view)?.info.id
+    : undefined;
   const settings = useApp((s) => s.settings);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
   const showTerminal = linked && session?.attachable && session.status !== "starting";
@@ -237,6 +244,10 @@ export function MainArea() {
         <HistoryView client={client} />
       ) : linked && view === "dialogues" ? (
         <DialoguesView client={client} />
+      ) : linked && pluginView ? (
+        <div className="plugin-view">
+          <PluginSlot slot="left-view" only={pluginView} />
+        </div>
       ) : linked ? (
         <>
           {session && <SessionBanner session={session} />}

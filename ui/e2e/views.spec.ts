@@ -131,3 +131,65 @@ test("settings change the theme and terminal font, and persist", async ({ page }
   expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
   expect(await page.evaluate(() => localStorage.getItem("agentop.fontSize"))).toBe("16");
 });
+
+test("settings list the service's plugins, and switch them", async ({ page }) => {
+  await open(page);
+  const plugin = (id: string, fields: Record<string, unknown>) => ({
+    id,
+    name: id,
+    version: "0.1.0",
+    description: `The ${id} plugin`,
+    state: "enabled",
+    error: null,
+    ui: [],
+    ...fields,
+  });
+  let plugins = [
+    plugin("attention", { name: "Waiting for input", state: "disabled" }),
+    plugin("broken", { state: "failed", error: "RuntimeError: boom" }),
+    plugin("future", { state: "incompatible", error: "Written for plugin API 2. Update this service." }),
+    plugin("screens", { ui: ["left-view"] }),
+  ];
+  const patches: unknown[] = [];
+  await page.route("**/api/v2/plugins", (route) => route.fulfill({ json: plugins }));
+  await page.route("**/api/v2/plugins/*", (route) => {
+    const id = route.request().url().split("/").pop()!;
+    const { enabled } = route.request().postDataJSON();
+    patches.push({ id, enabled });
+    plugins = plugins.map((p) => (p.id === id ? { ...p, state: enabled ? "enabled" : "disabled", error: null } : p));
+    return route.fulfill({ json: plugins.find((p) => p.id === id) });
+  });
+  await page.reload();
+  await expect(page.locator(".link-connected")).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  const section = page.getByRole("region", { name: "Plugins" });
+  await expect(section.getByRole("heading")).toHaveText("Plugins on box");
+
+  const attention = section.getByRole("listitem").filter({ hasText: "Waiting for input" });
+  await expect(attention).toContainText("The attention plugin");
+  // The switch follows the service: it changes once the service confirms.
+  await attention.getByRole("switch").click();
+  await expect(attention.getByRole("switch")).toBeChecked();
+  await expect(attention).toContainText("On");
+  expect(patches).toEqual([{ id: "attention", enabled: true }]);
+
+  const broken = section.getByRole("listitem").filter({ hasText: "broken" });
+  await expect(broken).toContainText("RuntimeError: boom");
+  await expect(broken).toContainText("Restart the service to try loading it again.");
+  await expect(broken.getByRole("switch")).toBeDisabled();
+  await broken.getByRole("button", { name: "Turn it off" }).click();
+  await expect(broken.getByRole("switch")).toBeEnabled();
+
+  const future = section.getByRole("listitem").filter({ hasText: "future" });
+  await expect(future).toContainText("Incompatible");
+  await expect(future.getByRole("switch")).toBeDisabled();
+
+  await expect(section.getByRole("listitem").filter({ hasText: "screens" })).toContainText("Not available in this app");
+});
+
+test("a service with no plugins says so in settings", async ({ page }) => {
+  await open(page);
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByText("This service has no plugins.")).toBeVisible();
+});

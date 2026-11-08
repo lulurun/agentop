@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../api/client";
+import { pluginsFor } from "../plugins/registry";
+import { PluginSlot } from "../plugins/Slot";
 import { activeClient, sessionTitle, sortedSessions, useApp } from "../store";
 import { StatusMark } from "./icons";
 import { ServiceSwitcher } from "./ServiceSwitcher";
@@ -30,6 +32,7 @@ function SessionRow({ session, selected }: { session: Session; selected: boolean
       <span className="session-meta">
         <span>{STATUS_TEXT[session.status] ?? session.tool}</span>
         {inDialogue && <span className="session-tag">Dialogue</span>}
+        <PluginSlot slot="session-badge" session={session} />
         <span>{basename(session.cwd)}</span>
       </span>
     </button>
@@ -47,6 +50,7 @@ export function Sidebar() {
   const connections = useApp((s) => s.connections);
   const activeId = useApp((s) => s.activeId);
   const [filter, setFilter] = useState("");
+  const pluginViews = pluginsFor("left-view", useApp((s) => s.plugins));
 
   // Refreshed when the set of sessions changes, which is when a dialogue can start or end.
   const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
@@ -124,6 +128,14 @@ export function Sidebar() {
             <button type="button" aria-current={view === "dialogues" ? "page" : undefined} onClick={() => setView(view === "dialogues" ? "sessions" : "dialogues")}>
               Dialogues
             </button>
+            {pluginViews.map(({ info, ui }) => {
+              const id = `plugin:${info.id}` as const;
+              return (
+                <button key={id} type="button" aria-current={view === id ? "page" : undefined} onClick={() => setView(view === id ? "sessions" : id)}>
+                  {ui.leftView!.label}
+                </button>
+              );
+            })}
           </>
         )}
         <button type="button" onClick={() => setDialog("settings")}>

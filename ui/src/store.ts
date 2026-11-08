@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ApiError, ServiceClient, type Session, type ServiceInfo } from "./api/client";
+import { ApiError, ServiceClient, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
 import { checkConnection, type ConnectFailure, type Connection } from "./connections";
 import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
@@ -11,7 +11,8 @@ export type LinkState =
   | { state: "failed"; failure: ConnectFailure };
 
 type Dialog = "new-session" | "add-service" | "manage-services" | "service" | "settings" | null;
-export type View = "sessions" | "history" | "dialogues";
+/** A plugin's left-column view is `plugin:{id}`. */
+export type View = "sessions" | "history" | "dialogues" | `plugin:${string}`;
 
 interface AppState {
   connections: Connection[];
@@ -22,6 +23,8 @@ interface AppState {
   dialogueSessions: Set<string>;
   link: LinkState;
   sessions: Record<string, Session>;
+  /** The connected service's plugins. Plugins differ by service, so this is reset on every switch. */
+  plugins: PluginInfo[];
   /** Selected session per connection. Session IDs are only unique within one service. */
   selected: Record<string, string>;
   leftOpen: boolean;
@@ -35,6 +38,7 @@ interface AppState {
   retry(trustNewIdentity?: boolean): void;
   setToken(token: string): void;
   setView(view: View): void;
+  setPluginEnabled(id: string, enabled: boolean): Promise<void>;
   updateSettings(changes: Partial<Settings>): void;
   setDialogueSessions(sessions: Set<string>): void;
   /** The service was stopped on purpose, so don't keep trying to reach it. */
@@ -89,8 +93,30 @@ function persist(connections: Connection[]) {
 type Event =
   | { type: "snapshot"; sessions: Session[] }
   | { type: "session.upserted"; session: Session }
-  | { type: "session.removed"; id: string };
+  | { type: "session.removed"; id: string }
+  | { type: "plugins" }
+  | { type: "plugin"; id: string; data: unknown };
 
+const pluginListeners = new Map<string, Set<(data: unknown) => void>>();
+
+/** Listen for one plugin's events from the active service. Returns a function that stops listening. */
+export function onPluginEvent(id: string, listener: (data: unknown) => void): () => void {
+  if (!pluginListeners.has(id)) pluginListeners.set(id, new Set());
+  pluginListeners.get(id)!.add(listener);
+  return () => pluginListeners.get(id)?.delete(listener);
+}
+
+function dispatchPluginEvent(id: string, data: unknown) {
+  for (const listener of pluginListeners.get(id) ?? []) {
+    try {
+      listener(data);
+    } catch (error) {
+      console.error(`Plugin ${id} event listener failed`, error);
+    }
+  }
+}
+
+/** Events that aren't about sessions, including ones from a newer service, leave the list as it is. */
 export function applyEvent(sessions: Record<string, Session>, event: Event): Record<string, Session> {
   switch (event.type) {
     case "snapshot":
@@ -101,6 +127,8 @@ export function applyEvent(sessions: Record<string, Session>, event: Event): Rec
       const { [event.id]: _removed, ...rest } = sessions;
       return rest;
     }
+    default:
+      return sessions;
   }
 }
 
@@ -133,6 +161,16 @@ export const useApp = create<AppState>((set, get) => {
   // ignored. Without this, a slow service could overwrite the one switched to.
   let attempt = 0;
   let socket: WebSocket | null = null;
+
+  async function loadPlugins(mine: number, client: ServiceClient) {
+    try {
+      const plugins = await client.plugins();
+      if (mine === attempt) set({ plugins });
+    } catch {
+      // An older service has no plugins. Any other failure shows up elsewhere.
+      if (mine === attempt) set({ plugins: [] });
+    }
+  }
 
   function closeLink() {
     attempt += 1;
@@ -173,10 +211,16 @@ export const useApp = create<AppState>((set, get) => {
         delay = RETRY_MS.first;
         socketFailures = 0;
         set({ link: { state: "connected", service } });
+        // On every open, so a reconnect also catches changes made while away.
+        void loadPlugins(mine, client);
       }
     };
     ws.onmessage = (message) => {
-      if (mine === attempt) set({ sessions: applyEvent(get().sessions, JSON.parse(message.data)) });
+      if (mine !== attempt) return;
+      const event = JSON.parse(message.data) as Event;
+      if (event.type === "plugins") void loadPlugins(mine, client);
+      else if (event.type === "plugin") dispatchPluginEvent(event.id, event.data);
+      else set({ sessions: applyEvent(get().sessions, event) });
     };
     ws.onclose = () => retry(socketFailures + 1);
   }
@@ -184,7 +228,7 @@ export const useApp = create<AppState>((set, get) => {
   async function connect(connection: Connection, trustNewIdentity = false) {
     closeLink();
     const mine = attempt;
-    set({ link: { state: "connecting" }, sessions: {} });
+    set({ link: { state: "connecting" }, sessions: {}, plugins: [] });
     const result = await checkConnection(connection, trustNewIdentity);
     if (mine !== attempt) return;
     if (!result.ok) {
@@ -206,6 +250,7 @@ export const useApp = create<AppState>((set, get) => {
     activeId: "",
     link: { state: "connecting" },
     sessions: {},
+    plugins: [],
     selected: loadSelected(),
     ...loadLayout(),
     switcherOpen: false,
@@ -247,6 +292,11 @@ export const useApp = create<AppState>((set, get) => {
       set({ view });
     },
 
+    async setPluginEnabled(id, enabled) {
+      const updated = await get().act((client) => client.setPluginEnabled(id, enabled));
+      if (updated) set({ plugins: get().plugins.map((p) => (p.id === id ? updated : p)) });
+    },
+
     updateSettings(changes) {
       const settings = { ...get().settings, ...changes };
       saveSettings(settings);
@@ -260,7 +310,7 @@ export const useApp = create<AppState>((set, get) => {
 
     markStopped() {
       closeLink();
-      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {} });
+      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {}, plugins: [] });
     },
 
     addConnection(connection) {

@@ -649,3 +649,21 @@ input::placeholder { color: var(--quiet); }
   font: inherit;
 }
 .settings-field select:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 1px; }
+
+/* Plugins: Settings → Plugins, and the box a plugin's left-column view renders into. */
+.settings-plugins { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.settings-plugins h3 { margin: 0 0 8px; font-size: 14px; }
+.plugin-list { margin: 0; padding: 0; list-style: none; max-height: 50vh; overflow-y: auto; }
+.plugin-entry { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.plugin-entry:last-child { border-bottom: 0; }
+.plugin-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.plugin-switch { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.plugin-switch input { flex: none; width: auto; margin: 0; padding: 0; }
+.plugin-switch strong { overflow-wrap: anywhere; }
+.plugin-meta { display: flex; gap: 8px; flex: none; color: var(--quiet); font-size: 13px; }
+.plugin-entry[data-state="failed"] .plugin-state,
+.plugin-entry[data-state="incompatible"] .plugin-state { color: var(--failed); }
+.plugin-description, .plugin-note { margin: 4px 0 0; color: var(--quiet); font-size: 13px; }
+.plugin-entry .form-error { margin: 4px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.plugin-settings { margin-top: 8px; }
+.plugin-view { flex: 1; min-height: 0; overflow: auto; }

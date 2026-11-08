@@ -723,6 +723,8 @@ The web and desktop builds are static, and the desktop app has a strict script C
 - Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a view in the left column's footer, beside History and Dialogues (`left-view`), a badge on a session row (`session-badge`), and a section in Settings (`settings-section`). A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
 - Each slot is wrapped in an error boundary. A plugin component that throws hides itself; the rest of the page keeps rendering.
 - Plugin UI calls its own routes only through a client scoped to `/api/v2/plugins/{id}/`.
+- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `leftView` (a label and a component), `rightPanel`, and `settingsSection`. Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
+- The app fetches the plugin list each time its events socket opens, and again on every `plugins` event. Events of a type the app doesn't know are ignored, so an older app keeps working against a newer service.
 
 **Settings → Plugins** lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".
 
