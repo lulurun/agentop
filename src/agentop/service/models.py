@@ -24,6 +24,21 @@ class ServiceInfo(Health):
     capabilities: dict[str, bool]
     install_kind: str
     tls: bool
+    plugins: int = Field(description="How many plugins the service found, in any state")
+
+
+class PluginInfo(BaseModel):
+    id: str
+    name: str
+    version: str
+    description: str
+    state: Literal["enabled", "disabled", "failed", "incompatible"]
+    error: str | None
+    ui: list[str] = Field(description="The UI slots the plugin fills")
+
+
+class PatchPlugin(BaseModel):
+    enabled: bool
 
 
 class Accepted(BaseModel):

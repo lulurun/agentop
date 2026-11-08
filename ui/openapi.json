@@ -488,6 +488,19 @@
         "title": "Health",
         "type": "object"
       },
+      "PatchPlugin": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "PatchPlugin",
+        "type": "object"
+      },
       "PatchSession": {
         "properties": {
           "description": {
@@ -516,6 +529,66 @@
           }
         },
         "title": "PatchSession",
+        "type": "object"
+      },
+      "PluginInfo": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "enabled",
+              "disabled",
+              "failed",
+              "incompatible"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "ui": {
+            "description": "The UI slots the plugin fills",
+            "items": {
+              "type": "string"
+            },
+            "title": "Ui",
+            "type": "array"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "version",
+          "description",
+          "state",
+          "error",
+          "ui"
+        ],
+        "title": "PluginInfo",
         "type": "object"
       },
       "ResumeRef": {
@@ -627,6 +700,11 @@
             "title": "Pid",
             "type": "integer"
           },
+          "plugins": {
+            "description": "How many plugins the service found, in any state",
+            "title": "Plugins",
+            "type": "integer"
+          },
           "status": {
             "title": "Status",
             "type": "string"
@@ -668,7 +746,8 @@
           "manager",
           "capabilities",
           "install_kind",
-          "tls"
+          "tls",
+          "plugins"
         ],
         "title": "ServiceInfo",
         "type": "object"
@@ -1468,6 +1547,121 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/plugins": {
+      "get": {
+        "operationId": "list_plugins_plugins_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PluginInfo"
+                  },
+                  "title": "Response List Plugins Plugins Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Plugins"
+      }
+    },
+    "/plugins/{plugin_id}": {
+      "patch": {
+        "operationId": "patch_plugin_plugins__plugin_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "plugin_id",
+            "required": true,
+            "schema": {
+              "title": "Plugin Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchPlugin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Plugin"
       }
     },
     "/saved-sessions": {

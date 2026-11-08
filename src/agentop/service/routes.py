@@ -49,7 +49,9 @@ from .models import (
     FileListing,
     GitChanges,
     Health,
+    PatchPlugin,
     PatchSession,
+    PluginInfo,
     SavedSession,
     ServiceInfo,
     SessionModel,
@@ -58,6 +60,7 @@ from .models import (
     ToolInfo,
     UpdateInfo,
 )
+from .plugins import PluginHost
 from .store import SessionStore, StoreError
 
 WS_INVALID_TICKET = 4401
@@ -98,6 +101,7 @@ class Context:
     # CLI takes effect at once, with no restart, and the old one stops working.
     identity_file: Path | None = None
     _identity_mtime: int | None = None
+    plugins: PluginHost | None = None
 
     def current_identity(self) -> Identity:
         if self.identity_file is None:
@@ -159,6 +163,9 @@ def create_v2_app(ctx: Context) -> FastAPI:
             raise HTTPException(401, "Missing or invalid token", {"WWW-Authenticate": "Bearer"})
 
     authed = [Depends(require_token)]
+    if ctx.plugins is not None:
+        # Plugin routes go under /plugins/{id}/, behind the same token.
+        ctx.plugins.attach(v2, authed)
 
     def health_body() -> dict:
         return {
@@ -232,7 +239,21 @@ def create_v2_app(ctx: Context) -> FastAPI:
             "capabilities": allowed,
             "install_kind": _install_kind(),
             "tls": ctx.settings.tls,
+            "plugins": len(ctx.plugins.plugins) if ctx.plugins else 0,
         }
+
+    @v2.get("/plugins", response_model=list[PluginInfo], dependencies=authed)
+    async def list_plugins():
+        return ctx.plugins.list() if ctx.plugins else []
+
+    @v2.patch("/plugins/{plugin_id}", response_model=PluginInfo, dependencies=authed)
+    async def patch_plugin(plugin_id: str, body: PatchPlugin):
+        if ctx.plugins is None:
+            raise HTTPException(404, "No such plugin")
+        try:
+            return await ctx.plugins.set_enabled(plugin_id, body.enabled)
+        except KeyError:
+            raise HTTPException(404, "No such plugin") from None
 
     @v2.post("/tickets", response_model=Ticket, dependencies=authed)
     async def issue_ticket(body: TicketRequest):

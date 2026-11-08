@@ -93,6 +93,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/plugins": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Plugins */
+        get: operations["list_plugins_plugins_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/plugins/{plugin_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Patch Plugin */
+        patch: operations["patch_plugin_plugins__plugin_id__patch"];
+        trace?: never;
+    };
     "/saved-sessions": {
         parameters: {
             query?: never;
@@ -478,12 +512,40 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** PatchPlugin */
+        PatchPlugin: {
+            /** Enabled */
+            enabled: boolean;
+        };
         /** PatchSession */
         PatchSession: {
             /** Description */
             description?: string | null;
             /** Display Name */
             display_name?: string | null;
+        };
+        /** PluginInfo */
+        PluginInfo: {
+            /** Description */
+            description: string;
+            /** Error */
+            error: string | null;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "enabled" | "disabled" | "failed" | "incompatible";
+            /**
+             * Ui
+             * @description The UI slots the plugin fills
+             */
+            ui: string[];
+            /** Version */
+            version: string;
         };
         /** ResumeRef */
         ResumeRef: {
@@ -525,6 +587,11 @@ export interface components {
             name: string;
             /** Pid */
             pid: number;
+            /**
+             * Plugins
+             * @description How many plugins the service found, in any state
+             */
+            plugins: number;
             /** Status */
             status: string;
             /** Tls */
@@ -873,6 +940,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    list_plugins_plugins_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    patch_plugin_plugins__plugin_id__patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                plugin_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PatchPlugin"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PluginInfo"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

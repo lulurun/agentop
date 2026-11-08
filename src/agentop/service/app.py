@@ -16,6 +16,7 @@ from . import config, identity
 from .config import Settings
 from .identity import Identity
 from .legacy import create_legacy_router
+from .plugins import PluginHost
 from .routes import Context, create_v2_app
 from .store import SessionStore
 
@@ -45,20 +46,25 @@ def create_app(
     settings: Settings | None = None,
     ident: Identity | None = None,
     store: SessionStore | None = None,
+    plugins: PluginHost | None = None,
 ) -> FastAPI:
     settings = settings or config.load()
     identity_file = None if ident else identity.identity_path()
     ident = ident or identity.load_or_create(settings.name)
     store = store or SessionStore()
+    plugins = plugins or PluginHost(store)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         await store.startup()
+        # After the first scan, so plugins don't hear every existing session as new.
+        await plugins.startup()
         yield
+        await plugins.shutdown()
         await store.shutdown()
 
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file)))
+    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file, plugins=plugins)))
     if _WEB_DIR.is_dir():
         app.mount("/app", AppFiles(directory=str(_WEB_DIR), html=True), name="web")
 

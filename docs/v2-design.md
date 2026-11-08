@@ -677,12 +677,15 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 | Facility | Rule |
 |----------|------|
 | `api.router` | A FastAPI router mounted at `/api/v2/plugins/{id}/`. It inherits token auth. A plugin cannot add routes anywhere else |
-| `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. Each handler runs isolated: an exception is logged and counted, and never reaches the core. Handlers run off the event loop, with a time limit, and the core never waits for their result |
-| `api.task(coro)` | A supervised background task. If it raises, the plugin goes to `failed` and the task is not restarted |
+| `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. The handler is a plain function, called with the session row (or, for `scan`, the session list). Each handler runs isolated: an exception is logged and counted, and never reaches the core. Handlers run in a thread off the event loop, with a time limit (10s), and the core never waits for their result |
+| `api.task(fn)` | A supervised background task. `fn` is an async function, not a coroutine, so the task can be started again when the plugin is enabled again. If it raises, the plugin goes to `failed` and the task is not restarted |
 | `api.sessions()` | A read-only snapshot of the session list |
 | `api.agents` | For plugins that drive agents: start a managed session, send text, read its output, stop it. It goes through the same core code as the UI (`ops.start`, `Actor`, `AgentInstance.stop`), and each session it starts is tagged with the plugin's id. The sessions are ordinary core sessions: they show in the list and can be attached, stopped, and closed whether or not the plugin is still running |
 | `api.store` | A JSON file at `~/.agent-dashboard/plugins/{id}.json` for the plugin's own data |
 | `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
+| `api.log` | A logger named `agentop.plugins.{id}` |
+
+`register(api)` only declares routes, handlers, and tasks. The loader switches them on after `register` returns in time (5s), so a plugin that fails part way through leaves nothing behind. A plugin's own modules import as `agentop.plugins.{id}.…`, so relative imports work.
 
 Repeated handler errors (for example 5 in a minute) move the plugin to `failed` automatically, so a broken plugin stops being called.
 
@@ -695,7 +698,7 @@ Python cannot reliably unload a module, so disabling is a gate rather than an un
 - **Disable**: requests to its routes return 404, its event handlers stop being called, its tasks are cancelled, and its UI disappears. The flag is saved.
 - **Enable** of a plugin that was loaded: the gate opens again, and its tasks are started again.
 - **Enable** of a plugin that was never imported (disabled at start) is imported then. If that fails, the state is `failed` and nothing else changes.
-- **Retry** of a `failed` plugin needs a service restart; the UI says so. This keeps half-initialised plugin state out of the running service.
+- **Retry** of a `failed` plugin needs a service restart; the UI says so. This holds for a plugin that failed while running too (a crashed task, repeated handler errors): enabling it again leaves it `failed`, with the restart note in its error. This keeps half-initialised plugin state out of the running service.
 
 Flags live in `~/.agent-dashboard/plugins.json`: `{"attention": {"enabled": false}}`. They belong to the service, not the client, because a plugin is a service feature: disabling it affects every client of that service.
 
@@ -717,7 +720,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 - After connecting, the app reads `GET /api/v2/plugins`. Plugins differ by service, so the list is kept per connection.
 - A plugin's UI shows only when **both** the service lists it as `enabled` **and** the app has a matching module in `ui/src/plugins/`. If either side is missing (an older app, an older service, a removed or failed plugin), the feature is hidden.
-- Plugin UI goes into fixed **slots**: a row in the right panel, a view in the left column's footer (beside History and Dialogues), a badge on a session row, and a section in Settings. Core layout code renders each slot from the plugin list and never names a plugin.
+- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a view in the left column's footer, beside History and Dialogues (`left-view`), a badge on a session row (`session-badge`), and a section in Settings (`settings-section`). A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
 - Each slot is wrapped in an error boundary. A plugin component that throws hides itself; the rest of the page keeps rendering.
 - Plugin UI calls its own routes only through a client scoped to `/api/v2/plugins/{id}/`.
 

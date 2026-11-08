@@ -32,6 +32,8 @@ include = ["agentop*"]
 [tool.setuptools.package-data]
 "agentop.dialogue.scenarios" = ["*.toml"]
 "agentop.service" = ["webdist/**/*"]
+# Each plugin folder is a package with its manifest beside it.
+"*" = ["plugin.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

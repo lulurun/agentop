@@ -141,6 +141,7 @@ class SessionStore:
         self._tick_task: asyncio.Task | None = None
         self._start_tasks: set[asyncio.Task] = set()
         self._ticks = 0
+        self._listeners: list = []
 
     # ------------------------------------------------------------------ lifecycle
 
@@ -217,7 +218,8 @@ class SessionStore:
         rows = merge_sessions(scan, tmux_sessions, records, self._starting, self._meta, time.time())
         self._meta = {k: v for k, v in self._meta.items() if k in rows}
         self._publish_changes(rows, include_volatile=with_meta)
-        self._sessions = rows
+        old, self._sessions = self._sessions, rows
+        self._notify_listeners(old, rows)
 
         if self._ticks % PRUNE_EVERY_TICKS == 0:
             await asyncio.to_thread(registry.mark_ended_and_prune, set(tmux_sessions))
@@ -236,6 +238,40 @@ class SessionStore:
 
     def unsubscribe(self, queue: asyncio.Queue) -> None:
         self._subscribers.discard(queue)
+
+    def publish(self, event: dict) -> None:
+        """Send an event to every events socket."""
+        self._publish(event)
+
+    # Plugins hear about sessions through these, never through the events socket.
+
+    def add_listener(self, listener) -> None:
+        """Call `listener(event, payload)` on the event loop after each refresh. It must not block."""
+        self._listeners.append(listener)
+
+    def remove_listener(self, listener) -> None:
+        if listener in self._listeners:
+            self._listeners.remove(listener)
+
+    def _notify_listeners(self, old: dict[str, dict], rows: dict[str, dict]) -> None:
+        if not self._listeners:
+            return
+        events = []
+        for session_id in old.keys() - rows.keys():
+            events.append(("session.closed", copy.deepcopy(old[session_id])))
+        for session_id, row in rows.items():
+            was = (old.get(session_id) or {}).get("status")
+            if row["status"] == "running" and was != "running":
+                events.append(("session.started", copy.deepcopy(row)))
+            elif row["status"] == "exited" and was == "running":
+                events.append(("session.exited", copy.deepcopy(row)))
+        events.append(("scan", self.list()))
+        for listener in list(self._listeners):
+            for event, payload in events:
+                try:
+                    listener(event, payload)
+                except Exception:
+                    LOG.exception("Session listener failed")
 
     def _publish(self, event: dict) -> None:
         for queue in self._subscribers:
