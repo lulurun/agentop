@@ -738,6 +738,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 | Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
 | File preview and diff view | Yes: routes for file content and diffs, a right-panel slot |
+| Delegation: one session asks another to do a task and reply | Yes: `agentop ask` and `reply`, a request queue, a Requests view (12.10) |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |
 | Offline app shell for the web app | No: client-only |
@@ -767,6 +768,110 @@ Dialogues are built already, so moving them is also the test of the plugin syste
 - Sessions, terminals, history, and service control are unaffected.
 
 **Done when:** the core test suites pass with the `dialogue` folder deleted, the dialogue tests pass with the plugin enabled, and disabling it from Settings hides every trace of dialogues in the UI without touching other sessions.
+
+### 12.10 Delegation: one session asks another
+
+Status: designed, not started. Plugin id `delegate`.
+
+**The problem.** Context stays where it was built. A qate development session knows a change in detail but not how to deploy it. An eiger session knows how to deploy, and which hosts and environments exist, but not the change. Today there are two ways to bridge them, and both are poor:
+
+1. Load eiger's skills into the qate session. This only works if everything eiger knows is written down, and it breaks across hosts: the qate machine may have no access to production at all.
+2. Summarise the change, switch to the eiger session, explain it there, and come back to verify. The user does the copying by hand.
+
+**The workflow.** In the qate session the user writes:
+
+```
+@agentop #eiger please deploy k2 for env QIN_TENGFEI
+```
+
+The qate agent knows neither how to deploy nor what `QIN_TENGFEI` is. A skill tells it to hand the request over with `agentop ask`, adding what the target needs to know (the change, the branch, what to check). Agentop delivers the request to the eiger session. Eiger deploys and answers with `agentop reply`. Agentop delivers the answer back to the qate session, which still holds the full context of the change and goes on to verify it.
+
+This is not a dialogue (12.9). A dialogue is a loop the orchestrator runs between two new sessions, following a scenario. Delegation is a single request and reply, started by an agent, often to a session that already exists. The two share only the core pieces: starting a session, `Actor` send and receive.
+
+#### 12.10.1 Transport: tmux only
+
+Requests and replies are typed into the agents' terminals through tmux, like every other message agentop sends. Agentop does not call any LLM API, and does not run agents headless (`claude -p`, `codex exec`).
+
+Why:
+
+- The agent CLIs (claude, codex, agy) are built to run in a terminal, and tmux is the native way to run them. Agentop's job is to bring those tmux sessions into one window, not to become a different agent runtime.
+- Every delegated task is an ordinary session: the user can see it, attach, take over, or stop it. Nothing runs hidden.
+- Billing, login, and permissions stay exactly as they are for interactive use. Interactive sessions are covered by the user's subscription plan. Calling the LLM API directly would need a separate pay-as-you-go API key, and headless runs follow their own rules: on Claude plans, `claude -p` usage moved to a separate monthly Agent SDK credit in June 2026. (See section 16.)
+- A new agent CLI works with no new integration, because it is just another terminal program.
+
+tmux is weak at two things, and the design deals with both: knowing when an agent has finished, and getting its answer back reliably. The rest of this section is mostly about those two.
+
+#### 12.10.2 Commands
+
+Agents use these through their shell. Every supported tool can run shell commands, so one CLI serves all of them, and no MCP setup is needed for each tool. An MCP wrapper can be added later if it proves useful.
+
+| Command | Does |
+|---------|------|
+| `agentop ask <target> "<message>"` | Queues a request and prints its id (`r-7f3a`) at once. It does not wait |
+| `agentop reply <id> "<message>"` | Run by the target: answers the request |
+| `agentop request <id>` | Status and reply of one request, for the sender to check |
+| `agentop requests` | Recent requests on this service |
+
+The sender knows its own session from the environment agentop sets when it starts a managed session. Only managed sessions can send or receive requests.
+
+**Targets.**
+
+| Form | Meaning |
+|------|---------|
+| `#eiger-a1b2c3` or `#eiger` (a display name) | A live session. Its conversation state matters, or the user wants to watch the work in it |
+| `#project:eiger` | A new session started in the eiger project's directory for this one request, closed after the reply. It still has the repo's CLAUDE.md and skills, but does not fill up, or get in the way of, the session the user is working in. Probably the better default for tasks like deploys |
+
+A name that matches more than one session is an error that lists the matches. Cross-host targets (`service/session`) come in phase 2 (12.10.6).
+
+**The skill.** A short skill file is installed for each tool. It teaches two things: when the user writes `@agentop #X …`, send it with `agentop ask`, including the context the target lacks; and when a message arrives that starts with an agentop request header, do the work, then answer with `agentop reply`.
+
+#### 12.10.3 Delivery
+
+A delivered request looks like this in the target's terminal:
+
+```
+[agentop request r-7f3a from qate-dev-91c2e0]
+please deploy k2 for env QIN_TENGFEI. The change is on branch fix-k2-timeout …
+When done, run: agentop reply r-7f3a "<result>"
+```
+
+The reply arrives in the sender's terminal the same way, marked `[agentop reply r-7f3a from eiger-a1b2c3]`.
+
+Rules:
+
+- **Deliver only when idle.** Text is typed only when the agent is idle at its input prompt and no client has typed in the session in the last few seconds. Typing while an agent is in the middle of a turn, or while the user is typing, would mangle both. Requests queue per session and go in order.
+- **One idle check, in the core.** The same check is needed by the start flow (the ready marker in 5.2) and by the attention plugin (12.8). It belongs in the core and is offered to plugins through `api.sessions()`, so it is written once.
+- **Explicit replies.** The answer comes from `agentop reply`, not from reading the screen. Reading the scrollback, using the dialogue delimiter parser (nonce and all), is only a fallback for when an agent finishes without calling `reply`.
+- **Status.** `queued` → `delivered` → `replied`, or `timed_out`, `cancelled`, `rejected`. Each request has a timeout (default 30 minutes, settable per request). A timeout is reported back to the sender like a reply, so the sender is never left waiting.
+- **Stored.** Requests and replies are kept in `api.store` and shown in a Requests view, with cancel and approve buttons.
+
+#### 12.10.4 Safety
+
+Without delegation, making a session do something takes the token or the keyboard. With it, one agent can make another act, and some agents run with skip-permissions flags and can reach production. A prompt injection into one session (for example from a web page it read) could then make another session deploy. So:
+
+- **Allowlist.** Which sessions or projects may send to which targets. Default: same service only, and every target must be allowed explicitly.
+- **Approval.** A target can be marked "approve each request". Its requests wait in the UI until the user clicks Approve. Suggested for anything that touches production.
+- **Hop limit.** A request carries its chain of senders. A request made while handling another request may go one hop further (default limit 2). A loop such as A → B → A is refused.
+- **Audit log.** Every request, delivery, reply, and refusal, with times and sessions, is kept in the plugin store.
+
+These go into the security review (TODO.md) together with D6 and D7.
+
+#### 12.10.5 Other uses
+
+The same mechanism also covers:
+
+- **Questions.** "#infra, what is QIN_TENGFEI and where are its logs?" or "#frontend, what reads this field?" A mode that only answers questions has much lower risk, so it is a good first feature to ship.
+- **Changes across repos.** The backend session changes an API, then asks the frontend or SDK session to update its client.
+- **Second opinion from another model.** A claude session asks a codex session to review its diff. That is cheaper than starting a full dialogue.
+- **Work tied to a machine.** Benchmarks or slow test suites in a session on a GPU or build host (phase 2).
+- **Fan-out.** Ask sessions on several hosts to check logs or versions, then gather the answers (phase 2).
+- **Verify, then follow up.** If the qate check fails after the deploy, qate asks eiger for logs. That is a short dialogue the agent starts itself, with no scenario file.
+
+#### 12.10.6 Phases
+
+1. **Same service.** Commands, skill, queue and idle delivery, explicit replies, timeouts, allowlist, approval, hop limit, audit log, the Requests view. Targets are live sessions on the same service.
+2. **New sessions for each request.** `#project:<name>` targets: start a session in the project's directory, deliver, close it after the reply or the timeout.
+3. **Across hosts.** Today connections belong only to clients (4.5), and services never talk to each other. Cross-host delegation needs links from one service to another, each with its own token, held by the service. That is a core change, and it waits for the security review (per-client tokens, D7) and D9.
 
 ## 13 Migration
 
@@ -818,6 +923,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
+| D9 | Delegation across hosts (12.10.6) | Not in phase 1. Later, through links from one service to another, each with its own token, after the security review | Let the sending service use a client connection's token. Simpler, but any service then holds full control of its peers |
 
 ## 16 Sources
 
@@ -828,6 +934,8 @@ External claims above were checked against:
 - [ghostty-web](https://github.com/coder/ghostty-web)
 - [wterm overview](https://betterstack.com/community/guides/scaling-nodejs/w-term-dom/)
 - [tauri-runtime-cef](https://docs.rs/crate/tauri-runtime-cef/latest/source/src/runtime.rs)
+- [Claude support: Agent SDK and `claude -p` usage credit](https://support.claude.com/articles/15036540) (12.10.1)
+- [OpenAI Codex: non-interactive mode](https://developers.openai.com/codex/noninteractive.md) (12.10.1)
 - [Chrome: Local Network Access](https://developer.chrome.com/blog/local-network-access)
 - [Safari blocking ws://127.0.0.1 from an HTTPS page](https://discussions.apple.com/thread/254087609)
 - [Firefox: localhost as potentially trustworthy](https://bugzilla.mozilla.org/show_bug.cgi?id=903966)
