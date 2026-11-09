@@ -87,7 +87,7 @@ class SelfManager:
         return (
             f"if ps -o args= -p {pid} | grep -q serve && kill -{name} {pid}; then "
             'for _ in $(seq 100); do curl -fsSk -m 1 "$HEALTH_URL" >/dev/null 2>&1 || break; sleep 0.1; done; '
-            f"else (cd {shlex.quote(os.getcwd())} && setsid {again} >>{log} 2>&1 </dev/null &); fi"
+            f"else (cd {shlex.quote(os.getcwd())} && nohup {again} >>{log} 2>&1 </dev/null &); fi"
         )
 
 

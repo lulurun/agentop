@@ -81,7 +81,7 @@ find_node() {
 main() {
     mkdir -p "$DATA"
     exec >>"$DATA/update.log" 2>&1
-    echo "=== update $(date -Is)"
+    echo "=== update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     cd "$REPO" || refuse "The install is missing: $REPO"
     export GIT_SSH_COMMAND="ssh -o BatchMode=yes" GIT_TERMINAL_PROMPT=0
 
