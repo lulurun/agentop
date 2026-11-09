@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
-import { failureMessage, tokenFromInput } from "../connections";
+import { connectionName, failureMessage, tokenFromInput } from "../connections";
 import { platform, type LocalControl } from "../platform";
 import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
@@ -71,7 +71,7 @@ function ConnectionProblem() {
   if (link.state === "connecting") {
     return (
       <div className="placard">
-        <h2>Connecting to {connection.label}</h2>
+        <h2>Connecting to {connectionName(connection)}</h2>
       </div>
     );
   }
@@ -82,7 +82,7 @@ function ConnectionProblem() {
         title: "No service on this computer",
         detail: "Install agentop here and run agentop serve, or add a service running on another machine.",
       }
-    : failureMessage(link.failure, connection.label);
+    : failureMessage(link.failure, connectionName(connection));
   const needsToken = link.failure.kind === "no_token" || link.failure.kind === "token_rejected";
   return (
     <div className="placard">

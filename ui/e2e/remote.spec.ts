@@ -52,7 +52,7 @@ test("the app on a local service connects to a devhost through the proxy", async
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
 
   await page.locator(".switcher-current").click();
-  await page.getByRole("menuitem", { name: "Add service" }).click();
+  await page.getByRole("menuitem", { name: "Connect to a service" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(`http://127.0.0.1:${proxy.port}/agentop#token=${devhost.token}`);
   await dialog.getByRole("button", { name: "Test connection" }).click();
@@ -67,7 +67,7 @@ test("the app on a local service connects to a devhost through the proxy", async
   await expect(terminalText(page)).toContainText("got: through nginx");
 
   await page.locator(".switcher-current").click();
-  await page.getByRole("menuitemradio", { name: /This service/ }).click();
+  await page.getByRole("menuitemradio", { name: /^pc/ }).click();
   await expect(page.locator(".switcher-current")).toContainText("pc");
 });
 
@@ -78,7 +78,7 @@ test("a proxy that drops WebSockets is named, and the app recovers when it is fi
   await page.goto(pc.signedInUrl);
 
   await page.locator(".switcher-current").click();
-  await page.getByRole("menuitem", { name: "Add service" }).click();
+  await page.getByRole("menuitem", { name: "Connect to a service" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(`http://127.0.0.1:${broken.port}/agentop#token=${devhost.token}`);
   await dialog.getByRole("button", { name: "Test connection" }).click();
@@ -144,7 +144,7 @@ test("the app loaded through the proxy over plain HTTP works, including Add serv
   await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
 
   await page.locator(".switcher-current").click();
-  await page.getByRole("menuitem", { name: "Add service" }).click();
+  await page.getByRole("menuitem", { name: "Connect to a service" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(`http://${lanAddress}:${otherProxy.port}/agentop#token=${other.token}`);
   await expect(dialog.getByText(/Not encrypted/)).toBeVisible();

@@ -8,6 +8,8 @@ export function Dialog({ title, children }: { title: string; children: ReactNode
   useEffect(() => {
     const dialog = ref.current;
     if (dialog && !dialog.open) dialog.showModal();
+    // The browser focuses the first field, which on a phone opens the keyboard. A dialog can name another start.
+    dialog?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
   }, []);
 
   return (

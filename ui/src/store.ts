@@ -10,7 +10,7 @@ export type LinkState =
   | { state: "reconnecting"; service: ServiceInfo; socketBlocked?: boolean }
   | { state: "failed"; failure: ConnectFailure };
 
-type Dialog = "new-session" | "add-service" | "manage-services" | "service" | "settings" | null;
+type Dialog = "new-session" | "add-service" | "service" | "settings" | null;
 /** A plugin's left-column view is `plugin:{id}`. */
 export type View = "sessions" | "history" | "dialogues" | `plugin:${string}`;
 
@@ -31,6 +31,8 @@ interface AppState {
   rightOpen: boolean;
   switcherOpen: boolean;
   dialog: Dialog;
+  /** The saved service the status dialog shows. */
+  statusId: string | null;
   error: string | null;
 
   init(): Promise<void>;
@@ -51,6 +53,7 @@ interface AppState {
   toggleRight(): void;
   setSwitcherOpen(open: boolean): void;
   setDialog(dialog: Dialog): void;
+  openStatus(id: string): void;
   setError(error: string | null): void;
   /** Run an action against the service, showing any failure instead of throwing. */
   act<T>(action: (client: ServiceClient) => Promise<T>): Promise<T | undefined>;
@@ -141,6 +144,17 @@ export function sortedSessions(sessions: Record<string, Session>): Session[] {
 /** External agents have no name of their own, so their conversation title is the best label. */
 export function sessionTitle(session: Session): string {
   return session.managed ? session.display_name : (session.ai_title ?? session.display_name);
+}
+
+/**
+ * What the session is about: the user's description, or else the agent's own
+ * summary of the conversation, unless that is already the title.
+ */
+export function sessionSummary(session: Session): string | null {
+  const description = session.description.trim();
+  if (description) return description;
+  const summary = session.ai_title?.trim();
+  return summary && summary !== sessionTitle(session) ? summary : null;
 }
 
 export function activeConnection(state: Pick<AppState, "connections" | "activeId">): Connection {
@@ -255,6 +269,7 @@ export const useApp = create<AppState>((set, get) => {
     ...loadLayout(),
     switcherOpen: false,
     dialog: null,
+    statusId: null,
     error: null,
 
     async init() {
@@ -357,6 +372,7 @@ export const useApp = create<AppState>((set, get) => {
 
     setSwitcherOpen: (switcherOpen) => set({ switcherOpen }),
     setDialog: (dialog) => set({ dialog, switcherOpen: false }),
+    openStatus: (statusId) => set({ dialog: "service", statusId, switcherOpen: false }),
     setError: (error) => set({ error }),
 
     async act(action) {

@@ -158,7 +158,7 @@ A **connection** is a record kept by the client, never by a service:
 
 Every service has a stable `instance_id` and a `name` (default: hostname), set on first run and returned by `/health`.
 
-**Defaults.** The web app always lists the service that served it, labelled "This service". The desktop app lists the local service when `service.json` exists. Each client starts on its last-used connection, or on that default.
+**Defaults.** The web app always lists the service that served it, under that service's name. The desktop app lists the local service when `service.json` exists. Each client starts on its last-used connection, or on that default.
 
 **Adding a service.** The user gives a URL and a token. `agentop service connect-info` prints both as one pasteable string, `http://host:9775#token=…`. The app accepts it in the URL field. A fragment is never sent to a server, which keeps the token out of logs. `agentop open` uses the same format, and the app stores the token and clears it from the address bar.
 
@@ -559,28 +559,26 @@ Browsers keep a few keys for themselves: Ctrl+W closes the tab rather than delet
 
 ### 10.5 Service switcher and panel
 
-The switcher is a menu at the top of the left column:
+The switcher is a menu in the top bar, after the selected session's name:
 
 ```
 ┌──────────────────────────────────┐
-│ SERVICES                         │
-│ ✓ ● build-box        This service│
-│   ● laptop           3 sessions  │
-│   ● gpu-1  ⚠ Not encrypted       │
-│   ○ office-mini      Unreachable │
+│ ● build-box                Status│
+│ ● gpu-1  Not encrypted     Status│
+│ ○ office-mini  Unreachable Status│
 │ ──────────────────────────────── │
-│ + Add service…                   │
-│ ⚙ Manage services…               │
-│ ⓘ build-box status…              │
+│       Connect to a service       │
 └──────────────────────────────────┘
 ```
 
 - Selecting a row switches immediately (4.5).
-- Rows show live reachability from `/health`, polled every 15s only while the menu is open. The session count appears only for services with a saved token.
-- **Add service**: URL (or pasted `connect-info` string), token, and optional label. A Test button runs the 4.5 checks and shows the service's own name and version before saving. The form warns about unencrypted URLs and likely browser blocks.
-- **Manage services**: rename, change URL or token, and remove. Removing a connection deletes the client's record and token. It never affects the service or its sessions.
+- Rows show live reachability from `/health`, polled every 15s only while the menu is open.
+- **Connect to a service**: URL (or pasted `connect-info` string), token, and an optional name. A Test button runs the 4.5 checks and shows the service's own name and version before saving. The form warns about unencrypted URLs and likely browser blocks.
+- **Status**, on each row, opens the service panel for that service, selected or not.
 
-The status item opens the service panel for the selected service: name, address, version and commit, uptime, tmux version, encryption state, and Stop, Start, Restart, and Update buttons, enabled according to section 8.3. Update shows commits available and live step progress.
+The service panel shows a name field, address, version and commit, uptime, tmux version, encryption state, and Stop, Restart, and Update buttons, enabled according to section 8.3. Update shows commits available and live step progress. The name is an alias kept only by this client; left empty, the service's own name shows. Forget removes a saved service from this client, with its token. It never affects the service or its sessions, and the service that served the web app can't be forgotten.
+
+The web app keeps saved services, with their tokens and names, in the browser's `localStorage`. The desktop app keeps them there too, but its tokens go in the OS keychain.
 
 ### 10.6 Platform layer
 

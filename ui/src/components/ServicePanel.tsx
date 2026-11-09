@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ServiceInfo, UpdateInfo } from "../api/client";
-import { ApiError } from "../api/client";
-import { isEncrypted, isLoopback } from "../connections";
-import { activeClient, activeConnection, useApp } from "../store";
+import { ApiError, ServiceClient } from "../api/client";
+import { connectionName, isEncrypted, isLoopback } from "../connections";
+import { activeConnection, useApp } from "../store";
 import { Dialog } from "./Dialog";
 import { formatDuration } from "./format";
 
@@ -69,12 +69,15 @@ function updateSummary(info: UpdateInfo | null): string {
 }
 
 export function ServicePanel() {
-  const connections = useApp((s) => s.connections);
   const activeId = useApp((s) => s.activeId);
-  const connection = useApp(activeConnection);
+  const active = useApp(activeConnection);
+  const connection = useApp((s) => s.connections.find((c) => c.id === s.statusId)) ?? active;
   const setDialog = useApp((s) => s.setDialog);
   const markStopped = useApp((s) => s.markStopped);
-  const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
+  const updateConnection = useApp((s) => s.updateConnection);
+  const removeConnection = useApp((s) => s.removeConnection);
+  const { url, token } = connection;
+  const client = useMemo(() => new ServiceClient(url, token), [url, token]);
 
   const [info, setInfo] = useState<ServiceInfo | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);
@@ -123,7 +126,7 @@ export function ServicePanel() {
       if (action === "stop") {
         await client.stopService();
         setDialog(null);
-        markStopped();
+        if (connection.id === activeId) markStopped();
         return;
       }
       if (action === "restart") {
@@ -141,7 +144,7 @@ export function ServicePanel() {
     }
   }
 
-  const name = info?.name ?? connection.label;
+  const name = connectionName(connection, info?.name);
   const can = info?.capabilities ?? {};
   const asking = pending && confirmation(pending, name, update?.behind);
 
@@ -164,7 +167,18 @@ export function ServicePanel() {
         <>
           {unreachable && !updating && !restarting && <p className="form-error" role="alert">This service isn't answering.</p>}
           {restarting && <p className="service-progress" role="status">Restarting…</p>}
+          <label className="field">
+            Name
+            <input
+              value={connection.alias ?? ""}
+              placeholder={info?.name ?? connection.label}
+              spellCheck={false}
+              onChange={(event) => updateConnection(connection.id, { alias: event.target.value })}
+            />
+          </label>
+          <p className="field-hint">Only this app uses it. Leave it empty to use the service's own name.</p>
           <dl className="service-facts">
+            {info && info.name !== name && <div className="detail-row"><dt>Service name</dt><dd>{info.name}</dd></div>}
             <div className="detail-row"><dt>Address</dt><dd>{connection.url}</dd></div>
             <div className="detail-row"><dt>Connection</dt><dd>{isEncrypted(connection.url) ? "Encrypted" : isLoopback(connection.url) ? "This computer" : "Not encrypted"}</dd></div>
             {info && (
@@ -184,9 +198,21 @@ export function ServicePanel() {
             </p>
           )}
           <div className="dialog-actions">
-            <button type="button" className="dialog-action-start" onClick={() => setDialog(null)}>
+            <button type="button" className="dialog-action-start" data-autofocus onClick={() => setDialog(null)}>
               Close
             </button>
+            {!connection.isHome && (
+              <button
+                type="button"
+                title="Remove it from this app. Its sessions keep running."
+                onClick={() => {
+                  setDialog(null);
+                  removeConnection(connection.id);
+                }}
+              >
+                Forget
+              </button>
+            )}
             <button type="button" disabled={!can.stop || updating || restarting} onClick={() => setPending("stop")}>
               Stop
             </button>

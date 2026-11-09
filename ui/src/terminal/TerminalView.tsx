@@ -11,6 +11,7 @@ import { ApiError, type ServiceClient } from "../api/client";
 import { isAppShortcut } from "../shortcuts";
 import { platform } from "../platform";
 import { loadSettings } from "../settings";
+import { touchScroll } from "./touchScroll";
 
 type Status = "connecting" | "live" | "reconnecting" | "detached" | "ended";
 
@@ -172,6 +173,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
       });
     });
     observer.observe(host.current!);
+    const stopTouchScroll = touchScroll(host.current!);
 
     void document.fonts.ready.then(() => {
       if (disposed) return;
@@ -184,6 +186,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
       clearTimeout(retryTimer);
       cancelAnimationFrame(fitFrame);
       observer.disconnect();
+      stopTouchScroll();
       inputs.forEach((input) => input.dispose());
       ws?.close();
       terminal.dispose();

@@ -11,6 +11,13 @@ export interface Connection {
   instanceId?: string;
   /** Lists the service that served this page, which cannot be removed. */
   isHome?: boolean;
+  /** A name the user gave it in this app. Without one, the service's own name shows. */
+  alias?: string;
+}
+
+/** What the app calls a saved service: the user's name for it, or else the service's. */
+export function connectionName(connection: Connection, serviceName?: string): string {
+  return connection.alias?.trim() || serviceName || connection.label;
 }
 
 export type ConnectFailure =

@@ -18,7 +18,7 @@ export function AddServiceDialog() {
   const unencrypted = parsed && !isEncrypted(parsed.url) && !isLoopback(parsed.url);
 
   function draft(): Connection {
-    return { id: newConnectionId(), label: label.trim(), url: parsed!.url, token: effectiveToken };
+    return { id: newConnectionId(), label: "", alias: label.trim() || undefined, url: parsed!.url, token: effectiveToken };
   }
 
   async function test(event: FormEvent) {
@@ -31,11 +31,11 @@ export function AddServiceDialog() {
 
   function save() {
     if (!result?.ok) return;
-    addConnection({ ...draft(), label: label.trim() || result.health.name, instanceId: result.health.instance_id });
+    addConnection({ ...draft(), label: result.health.name, instanceId: result.health.instance_id });
   }
 
   return (
-    <Dialog title="Add service">
+    <Dialog title="Connect to a service">
       <form onSubmit={(event) => void test(event)}>
         <label className="field">
           Address
@@ -55,7 +55,7 @@ export function AddServiceDialog() {
           </label>
         )}
         <label className="field">
-          Label
+          Name
           <input value={label} placeholder="Optional, taken from the service" onChange={(event) => setLabel(event.target.value)} />
         </label>
         {unencrypted && <p className="form-warning">Not encrypted. Anyone on this network can read the token and terminal. A tunnel or HTTPS is safer.</p>}
@@ -72,37 +72,6 @@ export function AddServiceDialog() {
           <button type="button" className="primary" disabled={!result?.ok} onClick={save}>Add and connect</button>
         </div>
       </form>
-    </Dialog>
-  );
-}
-
-export function ManageServicesDialog() {
-  const connections = useApp((s) => s.connections);
-  const updateConnection = useApp((s) => s.updateConnection);
-  const removeConnection = useApp((s) => s.removeConnection);
-  const setDialog = useApp((s) => s.setDialog);
-
-  return (
-    <Dialog title="Manage services">
-      <p className="field-hint">Removing a service here only forgets it in this app. Its sessions keep running.</p>
-      <ul className="service-list">
-        {connections.map((connection) => (
-          <li key={connection.id}>
-            <input
-              aria-label={`Label for ${connection.url}`}
-              value={connection.label}
-              onChange={(event) => updateConnection(connection.id, { label: event.target.value })}
-            />
-            <span className="service-url">{connection.url}</span>
-            {!connection.isHome && (
-              <button type="button" onClick={() => removeConnection(connection.id)}>Remove</button>
-            )}
-          </li>
-        ))}
-      </ul>
-      <div className="dialog-actions">
-        <button type="button" className="primary" onClick={() => setDialog(null)}>Done</button>
-      </div>
     </Dialog>
   );
 }

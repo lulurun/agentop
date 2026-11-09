@@ -174,7 +174,7 @@ test("stop ends the session and leaves the rest of the app working", async ({ pa
 
 async function addService(page: Page, other: Service) {
   await page.getByRole("button", { name: /Switch service|alpha|beta/ }).first().click();
-  await page.getByRole("menuitem", { name: "Add service" }).click();
+  await page.getByRole("menuitem", { name: "Connect to a service" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(other.connectInfo);
   await dialog.getByRole("button", { name: "Test connection" }).click();
@@ -205,7 +205,7 @@ test("add a second service and switch between them", async ({ page }) => {
 
   // Back to the first: same session, still running, and no reload.
   await page.locator(".switcher-current").click();
-  await page.getByRole("menuitemradio", { name: /This service/ }).click();
+  await page.getByRole("menuitemradio", { name: /^alpha/ }).click();
   await expect(page.locator(".switcher-current")).toContainText("alpha");
   await expect(row(page, "on-alpha")).toHaveAttribute("aria-current", "true");
   await expect(terminalText(page)).toContainText("got: to alpha");
@@ -218,6 +218,37 @@ test("add a second service and switch between them", async ({ page }) => {
   expect(alpha.tmux("list-sessions", "-F", "#S")).toContain("on-alpha-");
 });
 
+test("a service can be renamed in its status, and forgotten", async ({ page }) => {
+  const alpha = await service("alpha");
+  const beta = await service("beta");
+  await page.goto(alpha.signedInUrl);
+  await addService(page, beta);
+  await expect(page.locator(".switcher-current")).toContainText("beta");
+
+  // Rename the first service from its row, without switching to it.
+  await page.locator(".switcher-current").click();
+  await page.getByRole("menuitem", { name: "alpha status" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Name").fill("my pc");
+  await dialog.getByRole("button", { name: "Close" }).click();
+  await expect(page.locator(".switcher-current")).toContainText("beta");
+
+  // The name is kept in this browser.
+  await page.reload();
+  await page.locator(".switcher-current").click();
+  await expect(page.getByRole("menuitemradio", { name: /^my pc/ })).toBeVisible();
+  await page.getByRole("menuitemradio", { name: /^my pc/ }).click();
+  await expect(page.locator(".switcher-current")).toContainText("my pc");
+
+  // Forgetting the other one leaves only this one.
+  await page.locator(".switcher-current").click();
+  await page.getByRole("menuitem", { name: "beta status" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Forget" }).click();
+  await page.locator(".switcher-current").click();
+  await expect(page.getByRole("menuitemradio")).toHaveCount(1);
+  await expect(page.getByRole("menuitem", { name: "my pc status" })).toBeVisible();
+});
+
 test("stopping the selected service leaves the app able to switch", async ({ page }) => {
   const alpha = await service("alpha");
   const beta = await service("beta");
@@ -228,7 +259,7 @@ test("stopping the selected service leaves the app able to switch", async ({ pag
   await page.reload();
   await expect(page.getByRole("heading", { name: /Can't reach beta/ })).toBeVisible();
   await page.getByRole("button", { name: "Switch service" }).click();
-  await page.getByRole("menuitemradio", { name: /This service/ }).click();
+  await page.getByRole("menuitemradio", { name: /^alpha/ }).click();
   await expect(page.locator(".switcher-current")).toContainText("alpha");
 });
 
@@ -239,7 +270,7 @@ test("a different service at a saved address never gets the token", async ({ pag
   await addService(page, beta);
   await expect(page.locator(".switcher-current")).toContainText("beta");
   await page.locator(".switcher-current").click();
-  await page.getByRole("menuitemradio", { name: /This service/ }).click();
+  await page.getByRole("menuitemradio", { name: /^alpha/ }).click();
   await expect(page.locator(".switcher-current")).toContainText("alpha");
 
   const port = beta.port;
@@ -341,4 +372,29 @@ test("the layout fits a phone, with panels as overlays", async ({ page }) => {
   await expect(page.locator(".sidebar")).toBeHidden();
   await page.getByRole("button", { name: "Toggle session list" }).click();
   await expect(page.locator(".sidebar")).toBeVisible();
+});
+
+test.describe("on a touch screen", () => {
+  test.use({ hasTouch: true });
+
+  test("a swipe down on the terminal scrolls tmux back, not the page", async ({ page }) => {
+    const s = await service("alpha");
+    await page.goto(s.signedInUrl);
+    await startSession(page, s, "demo");
+    await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
+    const inMode = () => /^demo\S* 1$/m.test(s.tmux("list-panes", "-a", "-F", "#{session_name} #{pane_in_mode}"));
+    expect(inMode()).toBe(false);
+
+    const box = (await page.getByTestId("terminal").boundingBox())!;
+    const x = box.x + box.width / 2;
+    const cdp = await page.context().newCDPSession(page);
+    const touch = (type: string, y?: number) =>
+      cdp.send("Input.dispatchTouchEvent", { type, touchPoints: y === undefined ? [] : [{ x, y }] });
+    await touch("touchStart", box.y + 40);
+    for (let y = box.y + 60; y < box.y + 300; y += 20) await touch("touchMove", y);
+    await touch("touchEnd");
+
+    await expect.poll(inMode).toBe(true);
+    expect(await page.evaluate(() => getComputedStyle(document.body).overscrollBehaviorY)).toBe("none");
+  });
 });

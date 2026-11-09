@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import type { Session } from "../api/client";
 import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
-import { activeClient, sessionTitle, sortedSessions, useApp } from "../store";
+import { activeClient, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { StatusMark } from "./icons";
-import { ServiceSwitcher } from "./ServiceSwitcher";
 
 const STATUS_TEXT: Record<string, string> = {
   starting: "Starting",
@@ -16,12 +15,25 @@ function basename(path: string): string {
   return path.replace(/\/+$/, "").split("/").pop() ?? "";
 }
 
+/** Tools with a colour of their own. Others get a plain badge. */
+const TOOL_COLOURS = new Set(["claude", "codex", "antigravity"]);
+
+function ToolBadge({ tool }: { tool: string }) {
+  return (
+    <span className="tool-badge" data-tool={TOOL_COLOURS.has(tool) ? tool : undefined}>
+      {tool}
+    </span>
+  );
+}
+
 function SessionRow({ session, selected }: { session: Session; selected: boolean }) {
   const select = useApp((s) => s.select);
   const inDialogue = useApp((s) => s.dialogueSessions.has(session.id));
+  const summary = sessionSummary(session) ?? basename(session.cwd);
   return (
     <button
       type="button"
+      title={summary}
       className="session-row"
       data-status={session.status}
       aria-current={selected ? "true" : undefined}
@@ -30,10 +42,11 @@ function SessionRow({ session, selected }: { session: Session; selected: boolean
       <StatusMark status={session.status} />
       <span className="session-name">{sessionTitle(session)}</span>
       <span className="session-meta">
-        <span>{STATUS_TEXT[session.status] ?? session.tool}</span>
+        {session.tool && <ToolBadge tool={session.tool} />}
+        {STATUS_TEXT[session.status] && <span>{STATUS_TEXT[session.status]}</span>}
         {inDialogue && <span className="session-tag">Dialogue</span>}
         <PluginSlot slot="session-badge" session={session} />
-        <span>{basename(session.cwd)}</span>
+        <span className="session-summary">{summary}</span>
       </span>
     </button>
   );
@@ -79,7 +92,6 @@ export function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <ServiceSwitcher />
       {linked && (
         <>
           <div className="sidebar-actions">

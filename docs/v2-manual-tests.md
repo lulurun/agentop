@@ -32,7 +32,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| B1 | From the PC page on `http://127.0.0.1:9775`, Add service with `https://agentop.wolfdrawer.net` and the devhost token (or its connect-info string) | Test shows the devhost's name and version; after adding, its sessions appear | Seen working |
+| B1 | From the PC page on `http://127.0.0.1:9775`, Connect to a service with `https://agentop.wolfdrawer.net` and the devhost token (or its connect-info string) | Test shows the devhost's name and version; after adding, its sessions appear | Seen working |
 | B2 | Switch between the PC service and the devhost several times | Each switch shows the right sessions; each service remembers its selected session | Seen working |
 | B3 | Add a service with a wrong token | "Token rejected" naming the service | Seen working |
 | B4 | Paste a full connect-info string (`url#token=…`) into the Address field | Address and token are both filled | Seen working |
@@ -44,7 +44,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | B10 | Open the app through `ssh -L 9776:127.0.0.1:9775 devhost`, at `http://127.0.0.1:9776`, then add a second tunnel on another port | Both connect | Not run |
 | B11 | Repeat B1, B5, B8, and B10 in Firefox | Same results as Chrome, or differences noted | Not run |
 | B12 | Point a saved address at a different service (e.g. reuse a tunnel port) and connect | "A different service is now at this address", asked before the token is sent | Not run |
-| B13 | Manage services: rename, change the URL or token, remove | Changes are kept; removing never affects the service or its sessions | Not run |
+| B13 | A service's Status: rename it, then Forget another service | The name is kept after a reload; forgetting never affects the service or its sessions | Not run |
 | B14 | Open two tabs on two different services | Each tab stays on its own service | Not run |
 | B15 | Rotate the devhost token (`agentop service token --rotate`), then use a client with the old token | The old token is refused at once with no restart; the new one works | Seen working |
 

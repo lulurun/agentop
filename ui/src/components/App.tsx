@@ -1,8 +1,9 @@
 import { useEffect } from "react";
 import { isAppShortcut } from "../shortcuts";
-import { activeConnection, sessionTitle, useApp } from "../store";
+import { sessionTitle, useApp } from "../store";
 import { DetailsPanel } from "./DetailsPanel";
-import { AddServiceDialog, ManageServicesDialog } from "./ServiceDialogs";
+import { AddServiceDialog } from "./ServiceDialogs";
+import { ServiceSwitcher } from "./ServiceSwitcher";
 import { MainArea, selectedSession } from "./MainArea";
 import { NewSessionDialog } from "./NewSessionDialog";
 import { ServicePanel } from "./ServicePanel";
@@ -12,7 +13,7 @@ import { ToolbarIcon } from "./icons";
 
 export function App() {
   const state = useApp();
-  const { leftOpen, rightOpen, toggleLeft, toggleRight, setDialog, setSwitcherOpen, connections, activeId } = state;
+  const { leftOpen, rightOpen, toggleLeft, toggleRight, setDialog, connections, activeId } = state;
 
   useEffect(() => {
     void useApp.getState().init();
@@ -35,7 +36,6 @@ export function App() {
           app.setDialog("new-session");
           break;
         case "KeyS":
-          if (!app.leftOpen) app.toggleLeft();
           app.setSwitcherOpen(!app.switcherOpen);
           break;
         case "KeyK":
@@ -52,11 +52,7 @@ export function App() {
   }, []);
 
   if (!activeId || !connections.length) return null;
-  const connection = activeConnection(state);
   const session = selectedSession(state);
-  const label = state.link.state === "connected" || state.link.state === "reconnecting"
-    ? state.link.service.name
-    : connection.label;
 
   return (
     <div className="app" data-left={leftOpen} data-right={rightOpen}>
@@ -64,19 +60,9 @@ export function App() {
         <button type="button" className="icon" aria-label="Toggle session list" aria-pressed={leftOpen} title="Toggle session list (Ctrl+Shift+[)" onClick={toggleLeft}>
           <ToolbarIcon side="left" filled={leftOpen} />
         </button>
-        {!leftOpen && (
-          <button type="button" className="header-service" onClick={() => { toggleLeft(); setSwitcherOpen(true); }}>
-            {label}
-          </button>
-        )}
         <div className="header-title">
-          {session ? (
-            <>
-              <strong>{sessionTitle(session)}</strong>
-              {session.tool && <span>{session.tool}</span>}
-              <span className="header-cwd">{session.cwd}</span>
-            </>
-          ) : null}
+          {session && <strong title={session.cwd}>{sessionTitle(session)}</strong>}
+          <ServiceSwitcher />
         </div>
         <button type="button" className="header-new" onClick={() => setDialog("new-session")} title="New session (Ctrl+Shift+N)">
           New session
@@ -91,7 +77,6 @@ export function App() {
       {(leftOpen || rightOpen) && <div className="scrim" onClick={() => { if (leftOpen) toggleLeft(); if (rightOpen) toggleRight(); }} />}
       {state.dialog === "new-session" && <NewSessionDialog />}
       {state.dialog === "add-service" && <AddServiceDialog />}
-      {state.dialog === "manage-services" && <ManageServicesDialog />}
       {state.dialog === "service" && <ServicePanel />}
       {state.dialog === "settings" && <SettingsDialog />}
       {state.error && (

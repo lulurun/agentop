@@ -41,7 +41,7 @@ Restarting leaves tmux sessions running. The old dashboard then stops working
 through the proxy, and `/agentop/` leads to the app. On the devhost itself it still
 works at `http://127.0.0.1:9775/`.
 
-Print the address to paste into Add service:
+Print the address to paste into Connect to a service:
 
 ```bash
 agentop service connect-info --url https://agentop.wolfdrawer.net
@@ -60,7 +60,7 @@ other apps on 7700 are plain HTTP.
 ## Connecting from the app
 
 Load the app from your own machine's service, `http://127.0.0.1:9775/app/`, then use
-Add service in the service menu. A browser allows a loopback page to reach other
+Connect to a service in the service menu. A browser allows a loopback page to reach other
 addresses. A page loaded from the proxy can use only the proxy: it can't reach your
 machine's loopback.
 

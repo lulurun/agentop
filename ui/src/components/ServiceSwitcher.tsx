@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchHealth } from "../api/client";
-import { isEncrypted, isLoopback } from "../connections";
+import { connectionName, isEncrypted, isLoopback } from "../connections";
 import { activeConnection, useApp } from "../store";
 
 type Reach = "checking" | "reachable" | "unreachable";
@@ -15,6 +15,7 @@ export function ServiceSwitcher() {
   const setOpen = useApp((s) => s.setSwitcherOpen);
   const switchTo = useApp((s) => s.switchTo);
   const setDialog = useApp((s) => s.setDialog);
+  const openStatus = useApp((s) => s.openStatus);
   const active = useApp(activeConnection);
   const [reach, setReach] = useState<Record<string, Reach>>({});
 
@@ -43,7 +44,10 @@ export function ServiceSwitcher() {
     return () => window.removeEventListener("keydown", onKey);
   }, [open, setOpen]);
 
-  const name = link.state === "connected" || link.state === "reconnecting" ? link.service.name : active.label;
+  const name = connectionName(
+    active,
+    link.state === "connected" || link.state === "reconnecting" ? link.service.name : undefined,
+  );
 
   return (
     <div className="switcher">
@@ -63,37 +67,42 @@ export function ServiceSwitcher() {
         <>
           <div className="switcher-dismiss" onClick={() => setOpen(false)} />
           <div className="switcher-menu" role="menu" aria-label="Services">
-            {connections.map((connection) => (
-              <button
-                key={connection.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={connection.id === activeId}
-                className="switcher-row"
-                onClick={() => switchTo(connection.id)}
-              >
-                <span className={`link-dot link-${reach[connection.id] ?? "checking"}`} aria-hidden="true" />
-                <span className="switcher-name">{connection.label}</span>
-                <span className="switcher-note">
-                  {reach[connection.id] === "unreachable"
-                    ? "Unreachable"
-                    : !isEncrypted(connection.url) && !isLoopback(connection.url)
-                      ? "Not encrypted"
-                      : connection.isHome
-                        ? "This service"
-                        : ""}
-                </span>
-              </button>
-            ))}
+            {connections.map((connection) => {
+              const rowName = connection.id === activeId ? name : connectionName(connection);
+              return (
+                <div key={connection.id} className="switcher-row" data-active={connection.id === activeId || undefined}>
+                  <button
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={connection.id === activeId}
+                    className="switcher-pick"
+                    onClick={() => switchTo(connection.id)}
+                  >
+                    <span className={`link-dot link-${reach[connection.id] ?? "checking"}`} aria-hidden="true" />
+                    <span className="switcher-name">{rowName}</span>
+                    <span className="switcher-note">
+                      {reach[connection.id] === "unreachable"
+                        ? "Unreachable"
+                        : !isEncrypted(connection.url) && !isLoopback(connection.url)
+                          ? "Not encrypted"
+                          : ""}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="switcher-status"
+                    aria-label={`${rowName} status`}
+                    onClick={() => openStatus(connection.id)}
+                  >
+                    Status
+                  </button>
+                </div>
+              );
+            })}
             <div className="switcher-footer">
               <button type="button" role="menuitem" onClick={() => setDialog("add-service")}>
-                Add service
-              </button>
-              <button type="button" role="menuitem" onClick={() => setDialog("manage-services")}>
-                Manage services
-              </button>
-              <button type="button" role="menuitem" onClick={() => setDialog("service")}>
-                {name} status
+                Connect to a service
               </button>
             </div>
           </div>
