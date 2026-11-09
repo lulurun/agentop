@@ -128,12 +128,13 @@ export function failureMessage(failure: ConnectFailure, label: string): { title:
     case "unreachable":
       return {
         title: `Can't reach ${label}`,
-        detail: "The service may be stopped, a tunnel may be down, or your browser may be blocking the connection.",
+        detail:
+          "The service may be stopped, a tunnel may be down, or your browser may be blocking the connection. If it's stopped, start it on that machine with agentop serve, or with the system service that runs it.",
       };
     case "stopped":
       return {
         title: `${label} is stopped`,
-        detail: "Its sessions are still running. To start it, run systemctl --user start agentop-api on that machine, then try again.",
+        detail: "Its sessions are still running. Start it on that machine with agentop serve, or with the system service that runs it, then try again.",
       };
     case "not_agentop":
       return { title: "This is not an agentop service", detail: "Check the address." };

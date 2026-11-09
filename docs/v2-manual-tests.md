@@ -116,8 +116,8 @@ The desktop window has never been opened; every case here is Not run.
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
 | H1 | Install the desktop package on the PC and open it | The window opens on the local service, signed in | Not run |
-| H2 | Run the desktop app and the web app side by side | Same sessions, same state, same features (apart from Start) | Not run |
-| H3 | Stop the local service, then open the app | Shows the service as stopped, with Start; Start brings it back | Not run |
+| H2 | Run the desktop app and the web app side by side | Same sessions, same state, same features | Not run |
+| H3 | Stop the local service, then open the app | A red dot, the service shown as stopped, and how to start it; no Start button. `agentop serve` and Try again bring it back | Not run |
 | H4 | Close the app | The service and all sessions keep running | Not run |
 | H5 | Add the devhost through `https://agentop.wolfdrawer.net`, through an `ssh -L` tunnel, and through a plain LAN address | All three connect; switching among them works | Not run |
 | H6 | With an `ssh -L` tunnel to the devhost saved, open its service panel | Start is hidden; no `systemctl` runs on the PC for it, even though its URL is loopback | Not run |

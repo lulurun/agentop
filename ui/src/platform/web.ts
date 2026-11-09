@@ -58,7 +58,6 @@ export const webPlatform: Platform = {
   loadConnections: async () => read<Connection[]>(localStorage, SAVED_KEY) ?? [],
   saveConnections: (connections) => write(localStorage, SAVED_KEY, connections),
   // A page can't start a service, however close the service is.
-  localControl: async () => null,
   async defaultConnection() {
     return { id: HOME_ID, label: "This service", url: homeUrl(), token: consumeFragmentToken(), isHome: true };
   },

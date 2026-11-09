@@ -18,6 +18,8 @@ class Health(BaseModel):
 class ServiceInfo(Health):
     commit: str | None
     uptime_seconds: int
+    # When this process started serving. A restart changes it, even one that keeps the PID.
+    started_at: float | None = None
     pid: int
     tmux_version: str | None
     manager: str
@@ -46,7 +48,7 @@ class Accepted(BaseModel):
 
 
 class UpdateRun(BaseModel):
-    """The latest update, as deploy/update.sh reports it."""
+    """The latest update, as update.sh reports it."""
 
     state: Literal["running", "done", "failed", "rolled_back", "rollback_failed"]
     step: str | None = None

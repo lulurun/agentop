@@ -1,4 +1,4 @@
-"""deploy/update.sh, on throwaway repositories, with a stand-in for the service.
+"""update.sh, on throwaway repositories, with a stand-in for the service.
 
 Nothing here touches the real install: the script is pointed at a clone in
 tmp_path, and "restarting" just publishes that clone's VERSION file for the
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "deploy" / "update.sh"
+SCRIPT = Path(__file__).resolve().parents[1] / "src" / "agentop" / "service" / "update.sh"
 
 
 def git(cwd, *args):

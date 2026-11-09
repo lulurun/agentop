@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Update the service from git, and go back to the old commit if that fails.
 #
-# Runs in its own transient unit, started by agentop.service.update, because it
-# restarts the service. Progress goes to update-status.json, and detail to
-# update.log, both in the agentop data directory.
+# Started by agentop.service.update, apart from the service, because it restarts
+# the service: in a transient unit under systemd, otherwise as a detached
+# process. The service passes the command that restarts it. Progress goes to
+# update-status.json, and detail to update.log, both in the agentop data directory.
 #
 # Everything is inside main, because git pull can replace this file while it runs
 # and bash reads a script as it goes. A function is parsed whole before it starts.
 set -uo pipefail
 
-REPO=${AGENTOP_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
+REPO=${AGENTOP_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}
 DATA=${AGENTOP_HOME:-$HOME/.agent-dashboard}
 UNIT=${AGENTOP_UNIT:-agentop-api.service}
 BRANCH=${AGENTOP_BRANCH:-main}

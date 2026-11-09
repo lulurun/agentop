@@ -65,11 +65,21 @@ export class ServiceClient {
     return this.request("GET", path);
   }
 
+  /** An admin action. A service from before /admin had them under /service, and must stay updatable. */
+  private async admin<T>(method: string, action: string): Promise<T> {
+    try {
+      return await this.request<T>(method, `/admin/${action}`);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) return this.request<T>(method, `/service/${action}`);
+      throw error;
+    }
+  }
+
   service = () => this.get<ServiceInfo>("/service");
-  updateInfo = () => this.get<UpdateInfo>("/service/update");
-  restartService = () => this.request("POST", "/service/restart");
-  stopService = () => this.request("POST", "/service/stop");
-  startUpdate = () => this.request("POST", "/service/update");
+  updateInfo = () => this.admin<UpdateInfo>("GET", "update");
+  restartService = () => this.admin("POST", "restart");
+  stopService = () => this.admin("POST", "stop");
+  startUpdate = () => this.admin("POST", "update");
   tools = () => this.get<ToolInfo[]>("/tools");
   sessions = () => this.get<Session[]>("/sessions");
   dirs = (path: string, hidden = false) =>

@@ -21,7 +21,7 @@ There is no agent-level streaming, chat view, or message parsing. The terminal i
 - Start a session from the UI (tool, working directory, name), with a visible loading state until the terminal is ready.
 - Show the attached tmux terminal in the main area.
 - Three-column layout with collapsible left and right columns.
-- Web and desktop look and behave the same, except where section 8.3 says a browser cannot.
+- Web and desktop look and behave the same.
 - The service runs with no UI open, and sessions outlive both the UI and the service.
 - The UI can read service status and stop, start, restart, and update it.
 - The UI can add, connect to, and switch between services, on this machine or any other reachable machine.
@@ -115,8 +115,9 @@ src/agentop/
     auth.py         token, Host/Origin checks, terminal tickets
     store.py        SessionStore: merged live state, change events
     terminal.py     PTY bridge
-    manager.py      ServiceManager: systemd or none
+    manager.py      ServiceManager: systemd, self, or none
     update.py       update check and launch
+    update.sh       the update itself, run apart from the service
     files.py        safe directory listing and git status
     models.py       Pydantic request/response models
     routes.py       the /api/v2 application
@@ -128,7 +129,6 @@ ui/                 React + TypeScript + Vite; builds web and desktop frontends
   src/platform/     web.ts, tauri.ts: the only platform-specific code
   src/terminal/     TerminalView: the only code that imports xterm
 desktop/            Tauri project (src-tauri/), loads the ui/ build
-deploy/             systemd unit, update.sh
 ```
 
 ### 4.4 Technology choices
@@ -194,7 +194,7 @@ The web build has no hard-coded origin, so it can also be hosted as static files
 
 **A session's `id` is its tmux session name**, chosen before tmux is called and never changed. It has the form `{slug}-{rand6}`, for example `fix-auth-a1b2c3`.
 
-The current rename exists only to put the PID in the name. Dropping it removes the need for a second identifier and solves P4: the loading row and the running session are the same object from the first moment. The human name becomes `display_name`, editable at any time without touching tmux. Existing `{name}-{pid}` sessions are valid IDs as they are, and the `general-` prefix check in `deploy/ensure-general-session.sh` keeps working.
+The current rename exists only to put the PID in the name. Dropping it removes the need for a second identifier and solves P4: the loading row and the running session are the same object from the first moment. The human name becomes `display_name`, editable at any time without touching tmux. Existing `{name}-{pid}` sessions are valid IDs as they are, and the `general-` prefix check in Eiger's `agentop-ensure-general-session.sh` keeps working.
 
 `name` must match `^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`. The slug never contains `.` or `:`, which are tmux target separators.
 
@@ -377,7 +377,7 @@ agentop service status        # or start, stop, restart, update, token
 agentop open                  # open the web app, logged in
 ```
 
-`deploy/agentop-api.service` keeps its name, `KillMode=process`, and `ExecStartPost`. Its `ExecStart` becomes `agentop serve`, and it sets `TERM=xterm-256color`.
+agentop provides the program, and `agentop serve` runs it. Running it as a system service, behind a proxy, or with TLS is up to the machine's owner, and nothing in agentop requires it. The devhost's systemd unit and its nginx setup live in the Eiger repo, which runs the devhost's services. A unit should set `KillMode=process`, so that stopping the service never takes tmux with it, and `TERM=xterm-256color`.
 
 ### 8.2 ServiceManager
 
@@ -389,23 +389,16 @@ class ServiceManager(Protocol):
     def restart(self) -> None: ...
 ```
 
-- `SystemdManager` runs `systemctl --user`. Restart uses `--no-block`, so the service does not wait on its own death.
-- `NoManager` is used when the service was started by hand. It reports the capabilities as false, and the UI disables those buttons.
+- `SystemdManager` is used when the service is its unit's main process. It runs `systemctl --user`. Restart uses `--no-block`, so the service does not wait on its own death.
+- `SelfManager` is used when the service was started by hand with `agentop serve`. Stop ends the process. Restart sends it `SIGUSR1`: it shuts down cleanly and `exec`s the same command line, so it keeps its PID, terminal, and arguments, and runs whatever code is installed now. Not `SIGHUP`, which closing its terminal sends. Nothing can start it again after a stop.
+- `NoManager` is for a process that isn't `agentop serve`, such as tests. It reports the capabilities as false, and the UI disables those buttons.
 - `LaunchdManager` is added if macOS hosts become a target.
 
 ### 8.3 Who can do what
 
-A stopped service has no API, so something else must start it. Only the desktop app can, and only for the service on its own machine. This is the one unavoidable difference between web and desktop.
+Stop, restart, and update are admin actions on the service's own API: `POST /api/v2/admin/stop`, `/admin/restart`, and `/admin/update`. Every client calls them the same way, the web app, the desktop app, and the CLI, whether the service runs under systemd or was started with `agentop serve`. The service knows which (8.2) and runs the right command on itself.
 
-| Action | Desktop, service on this machine | Any other connection, or web |
-|--------|----------------------------------|------------------------------|
-| Status | Rust + API | API; when unreachable, shows "disconnected" |
-| Start | Rust: `systemctl --user start` | Not possible; shows the command to run on that host |
-| Stop | Rust | API, with a warning that it must be started again from that host |
-| Restart | Rust | API |
-| Update | API | API |
-
-"On this machine" is decided by matching `instance_id` against the local `service.json`, never by the URL. A tunnel to a remote service has a loopback URL, and treating it as local would run `systemctl` against the wrong machine.
+There is no start, in any client. A stopped service has no API to answer it. When a service is stopped or can't be reached, the main window shows a red dot and says how to start it on that machine: `agentop serve`, or the system service that runs it.
 
 In every case, stopping the service does not stop agents. The confirmation dialog says so and names the service being stopped, and the sessions are there on restart.
 
@@ -413,13 +406,9 @@ In every case, stopping the service does not stop agents. The confirmation dialo
 
 The current install is an editable git checkout, so v2 implements that install kind. `GET /api/v2/service` reports `install_kind`; other kinds report update as unsupported.
 
-An update must outlive the service it restarts, so it runs in its own transient unit:
+Update needs a git checkout, not systemd. It must outlive the service it restarts, so it runs apart from it: in a transient unit under systemd (`systemd-run --user --unit=agentop-update --collect`), since stopping a unit can take its children with it, and otherwise as a detached process whose PID is kept in `update.pid`. The service passes it the command that restarts it: `systemctl --user restart` for a unit, or a signal for a service started by hand. That command waits until the old process stops answering, and if the process is gone because the new version failed to start, starts it again in the background with the same command line, logging to `serve.log`.
 
-```bash
-systemd-run --user --unit=agentop-update --collect deploy/update.sh
-```
-
-`deploy/update.sh` writes progress to `~/.agent-dashboard/update-status.json`:
+`src/agentop/service/update.sh` writes progress to `~/.agent-dashboard/update-status.json`:
 
 1. Refuse if the tree is dirty or not on `main`.
 2. Record the current commit, then `git pull --ff-only`.
@@ -427,9 +416,9 @@ systemd-run --user --unit=agentop-update --collect deploy/update.sh
 4. Restart the service, then poll `/api/v2/health` for 30s.
 5. On any failure: check out the recorded commit, reinstall, rebuild, restart, and record the failure.
 
-`GET /api/v2/service/update` reports commits available and the status of the last run. Terminals drop briefly and reconnect automatically (6.1); agents are not interrupted.
+`GET /api/v2/admin/update` reports commits available and the status of the last run. Terminals drop briefly and reconnect automatically (6.1); agents are not interrupted.
 
-Any client can now talk to a service of a different version, including the web app when it connects to another host. `/api/v2/health` returns an integer `api_version`, and clients declare the range they support. Outside that range, the connect check (4.5) stops with an explanation. `/health`, `/service`, and `/service/update` must stay compatible across versions, so that an older service can always be updated from a newer client.
+Any client can now talk to a service of a different version, including the web app when it connects to another host. `/api/v2/health` returns an integer `api_version`, and clients declare the range they support. Outside that range, the connect check (4.5) stops with an explanation. `/health`, `/service`, and `/admin/update` must stay compatible across versions, so that an older service can always be updated from a newer client. A service from before `/admin` has these actions under `/service/`, and the client falls back to them on a 404.
 
 ## 9 API
 
@@ -439,8 +428,8 @@ All routes are under `/api/v2`. The existing `/api` routes stay until cutover, s
 |--------|------|---------|
 | `GET` | `/health` | Status, version, `api_version`, `instance_id`, `name` (no auth) |
 | `GET` | `/service` | Name, version, commit, uptime, PID, tmux version, manager, capabilities, `install_kind`, whether TLS is on |
-| `POST` | `/service/restart`, `/service/stop` | Lifecycle |
-| `GET`, `POST` | `/service/update` | Check and status; start an update |
+| `POST` | `/admin/restart`, `/admin/stop` | Admin: restart or stop this service (8.3) |
+| `GET`, `POST` | `/admin/update` | Admin: check and status; start an update |
 | `POST` | `/tickets` | Issue a WebSocket ticket |
 | `GET` | `/tools` | Supported tools, and whether each is installed |
 | `GET` | `/fs/dirs?path=` | Directory listing for the working-directory picker |
@@ -588,9 +577,6 @@ The web app keeps saved services, with their tokens and names, in the browser's 
 interface Platform {
   connections: ConnectionStore                // saved list; keychain or localStorage
   defaultConnection(): Promise<Connection | null>
-  localControl(c: Connection): Promise<LocalServiceControl | null>
-                                              // null on web, and unless instance_id
-                                              // matches this machine's service
   copyText(text: string): Promise<void>
 }
 ```
@@ -599,8 +585,8 @@ Everything else is shared. A CI check forbids importing `@tauri-apps/*` outside 
 
 ## 11 Desktop app
 
-- Tauri 2 window that loads the bundled `ui/` build, not a URL from the service. It has to render when the service is down, which is precisely when its Start button matters.
-- A small Rust command set, with no general shell permission: `read_service_info` and `service_control(action)`, which allow-lists `status`, `start`, `stop`, and `restart`, and calls `systemctl --user` directly. It does not rely on `agentop` being on `PATH`, because GUI apps do not inherit shell setup such as pyenv.
+- Tauri 2 window that loads the bundled `ui/` build, not a URL from the service. It has to render when the service is down, to say so and how to start it.
+- A small Rust command set, with no shell permission: `read_service_info`, and the keychain commands for tokens. Stop, restart, and update go through the service's API (8.3), as in the web app.
 - CSP: strict for scripts. Tauri's CSP is fixed at build time, so `connect-src` cannot list services the user adds later and has to allow `http:`, `https:`, `ws:`, and `wss:`. If S2 moves traffic through plugins, their URL scope needs the same breadth.
 - Connections are saved locally, with tokens in the OS keychain. Default: the service from `service.json`.
 - Build prerequisite on this machine: Rust is not installed. WebKitGTK 2.52.6 is.
@@ -922,7 +908,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D2 | Web cannot start a stopped service | Accept the difference; show the command | None is possible without a separate always-on helper process |
 | D3 | Scroll through `mouse on` per session | On for new managed sessions | Leave off, losing wheel scrollback |
 | D4 | Dialogues in the new UI | Ported in the final phase, then moved into a plugin (12.9) | Drop from the UI and keep them CLI-only |
-| D5 | Host platforms | Linux with systemd | Add macOS with launchd, as later work |
+| D5 | Host platforms | Linux; systemd optional | Add macOS, as later work |
 | D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |

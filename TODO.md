@@ -10,7 +10,7 @@ Do this only after the parity walk passes and a full day of normal use needs no 
 - [ ] Use v2 alone for a full day of normal work.
 - [ ] Serve the web app at `/` instead of `/app/`.
 - [ ] Delete `html/index.html`, the old `/api` routes, the `/ws/sessions` endpoint, and `HostOriginGuard`'s special handling for them.
-- [ ] Retire the old `agentop.service` unit and `run_app.sh` in favour of `agentop-api.service`.
+- [ ] Retire `run_app.sh`. The devhost's `agentop-api` unit, which runs `agentop serve`, is in Eiger.
 - [ ] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/dashboard.md`, and `docs/cli.md`, including the stale unit name and registry path.
 - [ ] Document exposing a service safely: SSH tunnel, HTTPS proxy, or TLS, and what plain HTTP gives away.
 - [ ] Tag `v2.0.0` with release notes.

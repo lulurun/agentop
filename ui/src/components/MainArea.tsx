@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput } from "../connections";
-import { platform, type LocalControl } from "../platform";
+import { platform } from "../platform";
 import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
 import { activeClient, activeConnection, useApp } from "../store";
@@ -45,28 +45,6 @@ function ConnectionProblem() {
   const setToken = useApp((s) => s.setToken);
   const setSwitcherOpen = useApp((s) => s.setSwitcherOpen);
   const [token, setTokenText] = useState("");
-  const [control, setControl] = useState<LocalControl | null>(null);
-  const [startError, setStartError] = useState<string | null>(null);
-
-  const down = link.state === "failed" && (link.failure.kind === "unreachable" || link.failure.kind === "stopped");
-  useEffect(() => {
-    let cancelled = false;
-    setControl(null);
-    if (down) void platform.localControl(connection).then((found) => !cancelled && setControl(found));
-    return () => {
-      cancelled = true;
-    };
-  }, [down, connection]);
-
-  async function start() {
-    setStartError(null);
-    try {
-      await control!.start();
-      retry();
-    } catch (error) {
-      setStartError(String(error));
-    }
-  }
 
   if (link.state === "connecting") {
     return (
@@ -76,7 +54,9 @@ function ConnectionProblem() {
     );
   }
   if (link.state !== "failed") return null;
-  const noService = down && !control && platform.kind === "desktop" && connection.isHome;
+  // The app can't start a service: a stopped one has nothing to answer it. It says how instead.
+  const down = link.failure.kind === "unreachable" || link.failure.kind === "stopped";
+  const noService = down && platform.kind === "desktop" && connection.isHome && !connection.instanceId;
   const { title, detail } = noService
     ? {
         title: "No service on this computer",
@@ -86,7 +66,10 @@ function ConnectionProblem() {
   const needsToken = link.failure.kind === "no_token" || link.failure.kind === "token_rejected";
   return (
     <div className="placard">
-      <h2>{title}</h2>
+      <h2 className="placard-title">
+        {down && <span className="link-dot link-failed" aria-hidden="true" />}
+        {title}
+      </h2>
       <p>{detail}</p>
       {needsToken && (
         <form
@@ -110,13 +93,7 @@ function ConnectionProblem() {
           </button>
         </form>
       )}
-      {startError && <p className="form-error" role="alert">{startError}</p>}
       <div className="placard-actions">
-        {control && (
-          <button type="button" className="primary" onClick={() => void start()}>
-            Start service
-          </button>
-        )}
         {link.failure.kind === "identity_changed" ? (
           <button type="button" onClick={() => retry(true)}>
             Trust this service

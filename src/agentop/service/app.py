@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
+import signal
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -12,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from agentop.guard import HostOriginGuard
 
-from . import config, identity
+from . import config, identity, manager
 from .config import Settings
 from .identity import Identity
 from .legacy import create_legacy_router
@@ -21,6 +24,7 @@ from .routes import Context, create_v2_app
 from .store import SessionStore
 
 LOG = logging.getLogger(__name__)
+GRACEFUL_SHUTDOWN_SECONDS = 5
 
 _OLD_UI_DIR = Path(__file__).resolve().parents[3] / "html"
 _WEB_DIR = Path(__file__).resolve().parent / "webdist"
@@ -94,13 +98,34 @@ def serve(settings: Settings | None = None) -> None:
             "Prefer an SSH tunnel, or set tls_cert and tls_key.",
             settings.host,
         )
-    uvicorn.run(
-        create_app(settings),
-        host=settings.host,
-        port=settings.port,
-        ssl_certfile=settings.tls_cert,
-        ssl_keyfile=settings.tls_key,
+    server = uvicorn.Server(
+        uvicorn.Config(
+            create_app(settings),
+            host=settings.host,
+            port=settings.port,
+            ssl_certfile=settings.tls_cert,
+            ssl_keyfile=settings.tls_key,
+            # Open terminals would otherwise hold a restart up indefinitely.
+            timeout_graceful_shutdown=GRACEFUL_SHUTDOWN_SECONDS,
+        )
     )
+    restarting = False
+
+    def on_restart(signum, frame):
+        nonlocal restarting
+        restarting = True
+        server.should_exit = True
+
+    signal.signal(manager.RESTART_SIGNAL, on_restart)
+    manager.serving_here(lambda: setattr(server, "should_exit", True))
+    server.run()
+    if restarting:
+        # Same process, terminal and arguments, with whatever code is installed now.
+        LOG.info("Restarting")
+        logging.shutdown()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os.execv(sys.executable, [sys.executable, *sys.orig_argv[1:]])
 
 
 if __name__ == "__main__":

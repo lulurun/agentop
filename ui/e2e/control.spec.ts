@@ -36,7 +36,7 @@ async function openPanel(page: Page) {
 
 /** Report one new commit, whatever the machine's real git state is. */
 async function pretendBehind(page: Page) {
-  await page.route("**/api/v2/service/update", async (route) => {
+  await page.route("**/api/v2/admin/update", async (route) => {
     if (route.request().method() !== "GET") return route.continue();
     const response = await route.fetch();
     await route.fulfill({ response, json: { ...(await response.json()), check_error: null, behind: 1 } });
@@ -68,14 +68,25 @@ test("a session's name and description can be edited in place", async ({ page })
   await expect(page.locator(".sidebar")).toContainText("renamed");
 });
 
-test("a service started by hand explains why it can't be controlled", async ({ page }) => {
+test("a service started by hand restarts itself, and its terminal reconnects", async ({ page }) => {
   const s = new Service("by-hand");
   await open(page, s);
+  await startSession(page, s, "keeps-running");
+  const pid = s.process!.pid;
+
   const panel = await openPanel(page);
-  await expect(panel).toContainText("started by hand");
-  for (const name of ["Stop", "Restart", "Update"]) {
-    await expect(panel.getByRole("button", { name, exact: true })).toBeDisabled();
-  }
+  await expect(panel.getByRole("button", { name: "Stop", exact: true })).toBeEnabled();
+  await panel.getByRole("button", { name: "Restart", exact: true }).click();
+  await panel.getByRole("button", { name: "Restart service" }).click();
+  await expect(panel.getByRole("status")).toContainText("Restarting");
+  await expect(panel.getByRole("status")).toBeHidden({ timeout: 20_000 });
+  await panel.getByRole("button", { name: "Close" }).click();
+
+  await page.getByTestId("terminal").click();
+  await page.keyboard.type("after restart\n");
+  await expect(page.getByTestId("terminal").locator(".xterm-rows")).toContainText("got: after restart", { timeout: 15_000 });
+  expect(s.process!.pid).toBe(pid);
+  expect(s.process!.exitCode).toBeNull();
 });
 
 test("restart names the service, keeps the session, and reconnects by itself", async ({ page }) => {
@@ -111,7 +122,10 @@ test("stop warns, shows a stopped state, and comes back when started again", asy
   await panel.getByRole("button", { name: "Stop service" }).click();
 
   await expect(page.getByRole("heading", { name: /is stopped$/ })).toBeVisible();
-  await expect(page.getByText("systemctl --user start agentop-api")).toBeVisible();
+  await expect(page.getByText(/Start it on that machine with agentop serve/)).toBeVisible();
+  // The app has no Start: a stopped service can't answer. It shows the red dot and says how.
+  await expect(page.locator(".placard-title .link-failed")).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Start/ })).toHaveCount(0);
   await expect.poll(() => s.requested("stop")).toBe(true);
 
   await s.stop();

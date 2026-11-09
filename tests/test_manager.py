@@ -31,10 +31,6 @@ def systemctl(tmp_path, monkeypatch):
     return SimpleNamespace(calls=lambda: log.read_text().splitlines() if log.exists() else [], pid=pid)
 
 
-def test_cli_finds_an_installed_unit(systemctl):
-    assert manager.for_cli().name == "systemd"
-
-
 def test_a_process_is_managed_only_if_it_is_the_units_main_process(systemctl):
     assert manager.for_process(os.getpid()).name == "none"
     systemctl.pid.write_text(str(os.getpid()))
@@ -43,7 +39,6 @@ def test_a_process_is_managed_only_if_it_is_the_units_main_process(systemctl):
 
 def test_a_machine_without_systemctl_has_no_manager(monkeypatch, tmp_path):
     monkeypatch.setenv("PATH", str(tmp_path))
-    assert manager.for_cli().name == "none"
     assert manager.for_process(1).name == "none"
 
 
@@ -60,7 +55,7 @@ def test_restart_does_not_wait_for_its_own_death(systemctl):
 def test_a_failed_command_is_reported(systemctl, tmp_path):
     (tmp_path / "systemctl").write_text("#!/bin/sh\necho no such unit >&2\nexit 5\n")
     with pytest.raises(manager.ManagerError, match="no such unit"):
-        manager.SystemdManager().start()
+        manager.SystemdManager().stop()
 
 
 @pytest.fixture
@@ -79,10 +74,14 @@ def api(monkeypatch):
     return client
 
 
-def test_started_by_hand_reports_no_capabilities_and_refuses(api, systemctl):
+def test_there_is_no_start(api):
+    assert api.post("/admin/start").status_code in (404, 405)
+
+
+def test_a_process_that_is_not_agentop_serve_reports_no_capabilities_and_refuses(api, systemctl):
     assert api.get("/service").json()["manager"] == "none"
     assert api.get("/service").json()["capabilities"] == {"stop": False, "restart": False, "update": False}
-    for path in ("/service/restart", "/service/stop", "/service/update"):
+    for path in ("/admin/restart", "/admin/stop", "/admin/update"):
         assert api.post(path).status_code == 409
     assert not any("restart" in call or "stop" in call for call in systemctl.calls())
 
@@ -92,14 +91,14 @@ def test_managed_restart_is_accepted_and_runs(api, systemctl):
     info = api.get("/service").json()
     assert info["manager"] == "systemd" and info["capabilities"]["restart"]
     with api:
-        assert api.post("/service/restart").status_code == 202
+        assert api.post("/admin/restart").status_code == 202
     assert any("restart --no-block" in call for call in systemctl.calls())
 
 
 def test_a_running_update_is_not_started_twice(api, systemctl, monkeypatch):
     systemctl.pid.write_text(str(os.getpid()))
     monkeypatch.setattr(update, "is_running", lambda: True)
-    response = api.post("/service/update")
+    response = api.post("/admin/update")
     assert response.status_code == 409 and "already running" in response.json()["detail"]
 
 
@@ -107,7 +106,7 @@ def test_update_info_keeps_a_stable_shape(api, tmp_path, monkeypatch):
     monkeypatch.setattr(update, "available", lambda repo: dict.fromkeys(("current", "upstream", "behind", "check_error")))
     monkeypatch.setattr(update, "is_running", lambda: False)
     monkeypatch.setattr(update, "read_status", lambda: {"state": "done", "to_commit": "abc1234"})
-    body = api.get("/service/update").json()
+    body = api.get("/admin/update").json()
     assert body["running"] is False and body["last_run"]["state"] == "done"
 
 

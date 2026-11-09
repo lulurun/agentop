@@ -294,51 +294,84 @@ def _service_health(settings):
         return None
 
 
+def _service_api(settings, method, path):
+    """Ask the service on this machine, with its own token. Returns None if it didn't answer."""
+    import json
+    import ssl
+    import urllib.error
+    import urllib.request
+
+    from agentop.service import identity
+
+    scheme = "https" if settings.tls else "http"
+    host = "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
+    request = urllib.request.Request(
+        f"{scheme}://{host}:{settings.port}/api/v2{path}",
+        method=method,
+        headers={"Authorization": f"Bearer {identity.load_or_create().token}"},
+    )
+    # Its own certificate may be self-signed, and this is the service on this machine.
+    context = ssl._create_unverified_context() if settings.tls else None
+    try:
+        with urllib.request.urlopen(request, timeout=10, context=context) as response:
+            return response.status, json.load(response)
+    except urllib.error.HTTPError as exc:
+        try:
+            return exc.code, json.load(exc)
+        except ValueError:
+            return exc.code, {}
+    except (OSError, ValueError):
+        return None
+
+
+_MANAGERS = {"systemd": "Run by its systemd unit.", "self": "Started with agentop serve."}
+_NOT_ANSWERING = "Start it with agentop serve, or with the system service that runs it."
+
+
+def _admin(settings, method, path):
+    """Ask the running service. Exits with an error if it doesn't answer or refuses."""
+    answer = _service_api(settings, method, path)
+    if answer is None:
+        print(f"Error: nothing is answering. {_NOT_ANSWERING}", file=sys.stderr)
+        sys.exit(1)
+    status, body = answer
+    if status >= 400:
+        print(f"Error: {body.get('detail', status)}", file=sys.stderr)
+        sys.exit(1)
+    return body
+
+
 def cmd_service_status(args):
-    from agentop.service import config, manager
+    from agentop.service import config
 
     settings = config.load()
-    current = manager.for_cli()
-    health = _service_health(settings)
-    if health:
-        print(f"{health['name']}: running on {settings.host}:{settings.port}, version {health['version']}")
-    else:
-        print(f"Nothing is answering on {settings.host}:{settings.port}")
-    if current.can_control:
-        print(f"Managed by systemd ({current.unit}): {'active' if current.status().active else 'not active'}")
-    else:
-        print("Not managed by systemd. Start it with: agentop serve")
+    answer = _service_api(settings, "GET", "/service")
+    if answer is None:
+        print(f"Nothing is answering on {settings.host}:{settings.port}. {_NOT_ANSWERING}")
+        return
+    status, info = answer
+    if status >= 400:
+        print(f"Something answered on {settings.host}:{settings.port}, but refused: {info.get('detail', status)}")
+        return
+    print(f"{info['name']}: running on {settings.host}:{settings.port}, version {info['version']}")
+    print(_MANAGERS.get(info["manager"], "It can't stop, restart, or update itself."))
 
 
 def cmd_service_control(args):
-    from agentop.service import manager
+    from agentop.service import config
 
-    current = manager.for_cli()
-    try:
-        getattr(current, args.service_command)()
-    except manager.ManagerError as exc:
-        print(f"Error: {exc} Run agentop serve instead.", file=sys.stderr)
-        sys.exit(1)
+    # The service knows who runs it, systemd or agentop serve, and acts on itself.
+    _admin(config.load(), "POST", f"/admin/{args.service_command}")
 
 
 def cmd_service_update(args):
     import time
-    from pathlib import Path
 
-    from agentop.service import config, manager, update
+    from agentop.service import config, update
 
-    if not manager.for_cli().can_control:
-        print("Error: this needs the service to be managed by systemd.", file=sys.stderr)
-        sys.exit(1)
-    repo = Path(__file__).resolve().parents[2]
-    settings = config.load()
-    scheme = "https" if settings.tls else "http"
+    # The service starts it, since only the service knows how to restart itself.
     previous = update.read_status()
-    try:
-        update.launch(repo, f"{scheme}://127.0.0.1:{settings.port}/api/v2/health")
-    except update.UpdateError as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        sys.exit(1)
+    _admin(config.load(), "POST", "/admin/update")
 
     shown = None
     while True:
@@ -580,7 +613,6 @@ def main():
     p_service = sub.add_parser("service", help="Control the service, and get its access details")
     service_sub = p_service.add_subparsers(dest="service_command", metavar="<subcommand>")
     service_sub.add_parser("status", help="Show whether the service is running")
-    service_sub.add_parser("start", help="Start the service")
     service_sub.add_parser("stop", help="Stop the service. Sessions keep running")
     service_sub.add_parser("restart", help="Restart the service. Sessions keep running")
     service_sub.add_parser("update", help="Update from git, and go back if the new version fails")
@@ -671,7 +703,6 @@ def main():
             sys.exit(0)
         {
             "status": cmd_service_status,
-            "start": cmd_service_control,
             "stop": cmd_service_control,
             "restart": cmd_service_control,
             "update": cmd_service_update,

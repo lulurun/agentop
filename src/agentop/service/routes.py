@@ -193,7 +193,7 @@ def create_v2_app(ctx: Context) -> FastAPI:
         async def route():
             current, allowed = await asyncio.to_thread(capabilities)
             if not allowed[action]:
-                raise HTTPException(409, "This service was started by hand, so it can't do this.")
+                raise HTTPException(409, "This service can't control itself.")
             task = asyncio.create_task(after_responding(getattr(current, action)))
             ctx.background.add(task)
             task.add_done_callback(ctx.background.discard)
@@ -201,10 +201,12 @@ def create_v2_app(ctx: Context) -> FastAPI:
 
         return route
 
-    v2.post("/service/restart", response_model=Accepted, status_code=202, dependencies=authed)(lifecycle("restart"))
-    v2.post("/service/stop", response_model=Accepted, status_code=202, dependencies=authed)(lifecycle("stop"))
+    # Admin actions. Whoever runs this service, systemd or `agentop serve`, the
+    # service acts on itself. There is no start: a stopped service can't answer.
+    v2.post("/admin/restart", response_model=Accepted, status_code=202, dependencies=authed)(lifecycle("restart"))
+    v2.post("/admin/stop", response_model=Accepted, status_code=202, dependencies=authed)(lifecycle("stop"))
 
-    @v2.get("/service/update", response_model=UpdateInfo, dependencies=authed)
+    @v2.get("/admin/update", response_model=UpdateInfo, dependencies=authed)
     async def update_info():
         running = await asyncio.to_thread(update.is_running)
         return {
@@ -213,15 +215,15 @@ def create_v2_app(ctx: Context) -> FastAPI:
             "last_run": update.read_status(),
         }
 
-    @v2.post("/service/update", response_model=Accepted, status_code=202, dependencies=authed)
+    @v2.post("/admin/update", response_model=Accepted, status_code=202, dependencies=authed)
     async def start_update():
-        _, allowed = await asyncio.to_thread(capabilities)
+        current, allowed = await asyncio.to_thread(capabilities)
         if not allowed["update"]:
-            raise HTTPException(409, "This service can't update itself. It needs systemd and a git install.")
+            raise HTTPException(409, "This service can't update itself. It needs to run from a git checkout.")
         scheme = "https" if ctx.settings.tls else "http"
         health_url = f"{scheme}://127.0.0.1:{ctx.settings.port}/api/v2/health"
         try:
-            await asyncio.to_thread(update.launch, _REPO_ROOT, health_url)
+            await asyncio.to_thread(update.launch, _REPO_ROOT, health_url, current)
         except update.UpdateError as exc:
             raise HTTPException(409, str(exc)) from exc
         return {"status": "updating"}
@@ -233,6 +235,7 @@ def create_v2_app(ctx: Context) -> FastAPI:
             **health_body(),
             "commit": await asyncio.to_thread(_git_commit),
             "uptime_seconds": int(time.time() - ctx.started_at),
+            "started_at": ctx.started_at,
             "pid": os.getpid(),
             "tmux_version": await asyncio.to_thread(Session.version),
             "manager": current.name,

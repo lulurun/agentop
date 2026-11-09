@@ -1,5 +1,5 @@
 import type { Connection } from "../connections";
-import type { LocalControl, Platform } from "./index";
+import type { Platform } from "./index";
 
 /**
  * The desktop app. Connections stay in the window's storage, except tokens, which
@@ -15,12 +15,6 @@ interface ServiceInfo {
   token: string;
   instance_id: string;
   name: string;
-}
-
-interface ControlResult {
-  installed: boolean;
-  active: boolean;
-  error: string | null;
 }
 
 async function invoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {
@@ -76,20 +70,6 @@ export const tauriPlatform: Platform = {
       token: service.token,
       instanceId: service.instance_id,
       isHome: true,
-    };
-  },
-
-  async localControl(connection): Promise<LocalControl | null> {
-    // By instance ID, never the address: a tunnel has a loopback address too.
-    const service = await localService();
-    if (!service || connection.instanceId !== service.instance_id) return null;
-    const status = await invoke<ControlResult>("service_control", { action: "status" }).catch(() => null);
-    if (!status?.installed) return null;
-    return {
-      async start() {
-        const result = await invoke<ControlResult>("service_control", { action: "start" });
-        if (result.error) throw new Error(result.error);
-      },
     };
   },
 

@@ -43,7 +43,7 @@ export class Service {
     const bin = join(this.root, "bin");
     mkdirSync(bin);
     mkdirSync(join(this.root, "project"));
-    for (const [file, body] of [["claude", AGENT], ["codex", AGENT], ["agy", BROKEN]]) {
+    for (const [file, body] of [["claude", AGENT], ["codex", AGENT], ["agy", BROKEN], ["update.sh", "exit 0\n"]]) {
       writeFileSync(join(bin, file), body);
       chmodSync(join(bin, file), 0o755);
     }
@@ -64,6 +64,8 @@ export class Service {
       SHELL: "/bin/sh",
       AGENTOP_HOME: join(this.root, "state"),
       AGENTOP_TMUX_SOCKET: this.socket,
+      // Never the real updater, which would act on this checkout.
+      AGENTOP_UPDATE_SCRIPT: join(bin, "update.sh"),
       PYTHONPATH: resolve("../src"),
     };
   }
@@ -81,7 +83,7 @@ export class Service {
     return existsSync(join(this.root, action));
   }
 
-  /** What deploy/update.sh would write. Passing nothing means the update has ended. */
+  /** What update.sh would write. Passing nothing means the update has ended. */
   reportUpdate(state: string, fields: Record<string, string | null> = {}) {
     writeFileSync(join(this.root, "state/update-status.json"), JSON.stringify({ state, ...fields }));
     if (state !== "running") rmSync(join(this.root, "updating"), { force: true });

@@ -20,7 +20,7 @@ const STEPS: Record<string, string> = {
   rolling_back: "Going back to the previous version",
 };
 
-function confirmation(action: Action, name: string, behind: number | null | undefined) {
+function confirmation(action: Action, name: string, behind: number | null | undefined, manager: string | undefined) {
   switch (action) {
     case "restart":
       return {
@@ -31,8 +31,9 @@ function confirmation(action: Action, name: string, behind: number | null | unde
     case "stop":
       return {
         title: `Stop ${name}?`,
-        detail:
-          "Sessions keep running, but this app can't start the service again. To bring it back, run systemctl --user start agentop-api on that machine.",
+        detail: `Sessions keep running, but this app can't start the service again. To bring it back, ${
+          manager === "systemd" ? "start its systemd unit" : "run agentop serve"
+        } on that machine.`,
         button: "Stop service",
       };
     case "update":
@@ -85,7 +86,8 @@ export function ServicePanel() {
   const [pending, setPending] = useState<Action | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [restarting, setRestarting] = useState(false);
+  // The start time before a restart, until a different one shows the restart is done.
+  const [restarting, setRestarting] = useState<{ startedAt: number | null; uptime: number } | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -108,16 +110,22 @@ export function ServicePanel() {
 
   // While something is happening the service may be away, so failures here are expected.
   const updating = update?.running === true;
+  const busyRestarting = restarting !== null;
   useEffect(() => {
     if (!updating && !restarting) return;
     const timer = setInterval(() => {
       void refresh().then((fresh) => {
-        if (fresh && restarting && fresh.uptime_seconds < (info?.uptime_seconds ?? 0)) setRestarting(false);
+        if (!fresh || !restarting) return;
+        const restarted =
+          restarting.startedAt != null && fresh.started_at != null
+            ? fresh.started_at !== restarting.startedAt
+            : fresh.uptime_seconds < restarting.uptime; // a service too old to report started_at
+        if (restarted) setRestarting(null);
       });
       void refreshUpdate();
     }, POLL_MS);
     return () => clearInterval(timer);
-  }, [updating, restarting, refresh, refreshUpdate, info?.uptime_seconds]);
+  }, [updating, restarting, refresh, refreshUpdate]);
 
   async function perform(action: Action) {
     setBusy(true);
@@ -131,7 +139,7 @@ export function ServicePanel() {
       }
       if (action === "restart") {
         await client.restartService();
-        setRestarting(true);
+        setRestarting({ startedAt: info?.started_at ?? null, uptime: info?.uptime_seconds ?? 0 });
       } else {
         await client.startUpdate();
         await refreshUpdate();
@@ -146,7 +154,7 @@ export function ServicePanel() {
 
   const name = connectionName(connection, info?.name);
   const can = info?.capabilities ?? {};
-  const asking = pending && confirmation(pending, name, update?.behind);
+  const asking = pending && confirmation(pending, name, update?.behind, info?.manager);
 
   return (
     <Dialog title={asking ? asking.title : name}>
@@ -165,7 +173,7 @@ export function ServicePanel() {
         </>
       ) : (
         <>
-          {unreachable && !updating && !restarting && <p className="form-error" role="alert">This service isn't answering.</p>}
+          {unreachable && !updating && !busyRestarting && <p className="form-error" role="alert">This service isn't answering.</p>}
           {restarting && <p className="service-progress" role="status">Restarting…</p>}
           <label className="field">
             Name
@@ -193,8 +201,8 @@ export function ServicePanel() {
           {update && <UpdateResult info={update} />}
           {info && info.manager === "none" && (
             <p className="service-note">
-              This service was started by hand, so it can't be stopped, restarted, or updated from here. Use the terminal
-              it's running in.
+              This service can't be stopped, restarted, or updated from here. It's an older version, or wasn't started with
+              agentop serve.
             </p>
           )}
           <div className="dialog-actions">
@@ -213,16 +221,16 @@ export function ServicePanel() {
                 Forget
               </button>
             )}
-            <button type="button" disabled={!can.stop || updating || restarting} onClick={() => setPending("stop")}>
+            <button type="button" disabled={!can.stop || updating || busyRestarting} onClick={() => setPending("stop")}>
               Stop
             </button>
-            <button type="button" disabled={!can.restart || updating || restarting} onClick={() => setPending("restart")}>
+            <button type="button" disabled={!can.restart || updating || busyRestarting} onClick={() => setPending("restart")}>
               Restart
             </button>
             <button
               type="button"
               className="primary"
-              disabled={!can.update || updating || restarting || !update?.behind}
+              disabled={!can.update || updating || busyRestarting || !update?.behind}
               onClick={() => setPending("update")}
             >
               Update

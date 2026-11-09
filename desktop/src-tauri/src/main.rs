@@ -6,9 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::process::Command;
 
-const UNIT: &str = "agentop-api.service";
 const DEFAULT_PORT: u16 = 9775;
 const KEYCHAIN_SERVICE: &str = "agentop";
 
@@ -64,57 +62,6 @@ fn read_service_info() -> Option<ServiceInfo> {
     })
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Action {
-    Status,
-    Start,
-    Stop,
-    Restart,
-}
-
-#[derive(Serialize)]
-struct ControlResult {
-    installed: bool,
-    active: bool,
-    error: Option<String>,
-}
-
-fn systemctl(args: &[&str]) -> std::io::Result<std::process::Output> {
-    Command::new("systemctl").arg("--user").args(args).output()
-}
-
-/// Runs systemctl directly: a GUI app doesn't get a login shell's PATH, so
-/// `agentop` may not be findable. `action` can only be one of the variants above.
-#[tauri::command]
-fn service_control(action: Action) -> ControlResult {
-    let verb = match action {
-        Action::Status => None,
-        Action::Start => Some("start"),
-        Action::Stop => Some("stop"),
-        Action::Restart => Some("restart"),
-    };
-    let mut error = None;
-    if let Some(verb) = verb {
-        match systemctl(&[verb, UNIT]) {
-            Ok(output) if !output.status.success() => {
-                error = Some(String::from_utf8_lossy(&output.stderr).trim().to_string());
-            }
-            Err(failure) => error = Some(failure.to_string()),
-            Ok(_) => {}
-        }
-    }
-    let show = systemctl(&["show", UNIT, "-p", "LoadState,ActiveState"]);
-    let text = show
-        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
-        .unwrap_or_default();
-    ControlResult {
-        installed: text.contains("LoadState=loaded"),
-        active: text.contains("ActiveState=active"),
-        error,
-    }
-}
-
 fn keychain_entry(id: &str) -> Result<keyring::Entry, String> {
     keyring::Entry::new(KEYCHAIN_SERVICE, id).map_err(|error| error.to_string())
 }
@@ -147,7 +94,6 @@ fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             read_service_info,
-            service_control,
             token_get,
             token_set,
             token_delete
@@ -209,13 +155,5 @@ mod tests {
     fn a_wildcard_bind_is_reached_on_loopback() {
         let info = with_home(Some(SERVICE), Some("host = \"0.0.0.0\"\n")).unwrap();
         assert_eq!(info.url, "http://127.0.0.1:9775");
-    }
-
-    #[test]
-    fn actions_outside_the_list_are_refused() {
-        assert!(serde_json::from_str::<Action>("\"start\"").is_ok());
-        for bad in ["\"disable\"", "\"start; rm -rf /\"", "\"edit\""] {
-            assert!(serde_json::from_str::<Action>(bad).is_err());
-        }
     }
 }

@@ -36,29 +36,16 @@ To stop:
 kill $(cat dashboard.pid)
 ```
 
-### 3.2 Systemd service (recommended)
+### 3.2 As a service
 
-`deploy/agentop-api.service` is the unit. It runs `src/api.py` directly, logs to
-`/panda-infra/agentop/api.log`, restarts on any exit, and after each start runs
-`deploy/ensure-general-session.sh` to make sure a general session exists.
-`KillMode=process` means a stop or restart kills only the API, never the tmux
-sessions, even when the unit started the tmux server.
+`agentop serve` runs the service, and the old dashboard with it. On the devhost,
+the `agentop-api` systemd unit in the Eiger repo runs it
+(`Eiger/deploy/agentop-api.service`); see Eiger's `doc/devhost.md`.
 
 ```bash
 systemctl --user status agentop-api
 systemctl --user restart agentop-api
 tail -f /panda-infra/agentop/api.log
-```
-
-### 3.3 First-time service setup
-
-The unit is linked from the repo, not copied, so edits here are what systemd runs
-after a `daemon-reload`.
-
-```bash
-mkdir -p /panda-infra/agentop
-systemctl --user enable --now ~/workspace/agentop/deploy/agentop-api.service
-loginctl enable-linger lulurun     # start at boot without login
 ```
 
 ## 4 API endpoints

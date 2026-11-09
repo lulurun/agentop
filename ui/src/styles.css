@@ -436,6 +436,7 @@ input::placeholder { color: var(--quiet); }
 }
 .placard h2 { margin: 0 0 8px; font-size: 18px; font-weight: 600; line-height: 1.3; }
 .placard p { margin: 0 0 14px; color: var(--quiet); }
+.placard-title { display: flex; align-items: center; gap: 10px; }
 .placard-actions { display: flex; gap: 8px; margin-top: 14px; }
 .token-form { display: flex; gap: 8px; }
 

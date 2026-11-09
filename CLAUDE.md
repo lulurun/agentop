@@ -12,45 +12,22 @@
 
 ## Key facts
 
-- Dashboard runs at `http://127.0.0.1:9775` as a systemd user service
+- `agentop serve` runs the service at `http://127.0.0.1:9775`. agentop ships no systemd unit or proxy config: on the devhost, Eiger owns the `agentop-api` unit (`potential-panda/Eiger/deploy/agentop-api.service`) and the nginx setup
 - Supported agent tools: `claude`, `codex`, `antigravity`
 - Dialogues are stored in `~/.agent-dashboard/dialogues/<scenario>_<brief>_<id>/`
 - Only sessions started by agentop (managed) can be stopped or sent prompts
 
-## Dashboard service
+## Running the service
 
 ```bash
-systemctl --user status agentop
-systemctl --user restart agentop
-systemctl --user stop agentop
-journalctl --user -u agentop -f   # live logs
+agentop serve                              # foreground, http://127.0.0.1:9775
+agentop service status                     # or restart, stop, update
 ```
 
-## First-time service setup
+On the devhost it runs as the `agentop-api` user unit, which Eiger owns:
 
 ```bash
-mkdir -p ~/.config/systemd/user
-cat > ~/.config/systemd/user/agentop.service << 'EOF'
-[Unit]
-Description=Agentop Dashboard
-After=network.target
-
-[Service]
-Type=forking
-WorkingDirectory=/home/lulurun/workspace/agentop
-ExecStart=/bin/bash /home/lulurun/workspace/agentop/run_app.sh
-PIDFile=/home/lulurun/workspace/agentop/dashboard.pid
-Restart=on-failure
-RestartSec=5
-StandardOutput=append:/home/lulurun/workspace/agentop/dashboard.log
-StandardError=append:/home/lulurun/workspace/agentop/dashboard.log
-
-[Install]
-WantedBy=default.target
-EOF
-
-systemctl --user daemon-reload
-systemctl --user enable agentop
-systemctl --user start agentop
-loginctl enable-linger lulurun
+systemctl --user status agentop-api
+systemctl --user restart agentop-api
+tail -f /panda-infra/agentop/api.log
 ```

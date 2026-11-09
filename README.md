@@ -35,7 +35,7 @@ The plugin system is designed and the loader is being built; see [TODO.md](TODO.
 
 ## Requirements
 
-- Linux with systemd, Python 3.11+, and tmux
+- Linux, Python 3.11+, and tmux
 - Node 20.19+ or 22.12+, to build the app
 - At least one agent CLI: `claude`, `codex`, or `agy`
 
@@ -50,7 +50,7 @@ agentop serve                        # http://127.0.0.1:9775
 agentop open                         # opens the app, signed in
 ```
 
-Running it as a service, connecting to other machines, and HTTPS are in [docs/v2-setup.md](docs/v2-setup.md).
+That's all agentop needs. Running it as a system service or behind a proxy is optional, and up to you. Connecting to other machines, updating, and HTTPS are in [docs/v2-setup.md](docs/v2-setup.md).
 
 ## Documentation
 
