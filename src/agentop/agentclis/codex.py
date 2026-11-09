@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Optional
@@ -15,6 +16,19 @@ class CodexAgentCli(AgentCli):
 
     # Tolerance for matching process start time to thread created_at_ms (30 seconds)
     _START_TOLERANCE_MS = 30_000
+    # Codex's own background processes, which share the name but are not agents.
+    _HELPERS = ("app-server", "codex-code-mode-host")
+    _RESUME_RE = re.compile(r"\bresume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
+
+    def __init__(self) -> None:
+        # The last thread seen for each process, keyed by (pid, start time), since codex trims its log.
+        self._threads: dict[tuple[int, float], str] = {}
+
+    def matches(self, proc_name: str, cmdline: str) -> bool:
+        if not super().matches(proc_name, cmdline):
+            return False
+        words = {word.split("/")[-1] for word in cmdline.split()} | {proc_name}
+        return not any(helper in words for helper in self._HELPERS)
 
     @property
     def launch_cmd(self) -> str:
@@ -40,7 +54,74 @@ class CodexAgentCli(AgentCli):
         with open(config_path, "a") as f:
             f.write(f'\n{marker}\ntrust_level = "trusted"\n')
 
+    def _logged_thread_id(self, pid: int, start: float) -> Optional[str]:
+        """The thread this process last logged about, from codex's own log.
+
+        Codex tags each log line with `pid:{pid}:{uuid}` and the thread it concerns,
+        so this follows /new and resumes. Lines from before the process started
+        belong to an earlier process that had the same pid.
+        """
+        db_path = Path("~/.codex/logs_2.sqlite").expanduser()
+        if not db_path.exists():
+            return None
+        prefix = f"pid:{pid}:"
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2) as conn:
+                row = conn.execute(
+                    """
+                    SELECT thread_id FROM logs
+                    WHERE process_uuid >= ? AND process_uuid < ? AND thread_id IS NOT NULL AND ts >= ?
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (prefix, prefix[:-1] + ";", int(start) - 1),
+                ).fetchone()
+        except sqlite3.Error:
+            return None
+        return row[0] if row else None
+
+    def _thread_id(self, pid: int) -> Optional[str]:
+        """The thread a running codex works on: from its log, else from `codex resume <id>`."""
+        try:
+            process = psutil.Process(pid)
+            start = process.create_time()
+            cmdline = " ".join(process.cmdline())
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            return None
+        key = (pid, start)
+        found = self._logged_thread_id(pid, start)
+        if not found:
+            resumed = self._RESUME_RE.search(cmdline)
+            found = self._threads.get(key) or (resumed.group(1) if resumed else None)
+        if found:
+            self._threads[key] = found
+        return found
+
+    def _thread_by_id(self, thread_id: str) -> Optional[dict]:
+        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        if not db_path.exists():
+            return None
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2) as conn:
+                conn.row_factory = sqlite3.Row
+                row = conn.execute(
+                    "SELECT id, title, first_user_message, tokens_used, rollout_path, created_at_ms FROM threads WHERE id = ?",
+                    (thread_id,),
+                ).fetchone()
+        except sqlite3.Error:
+            return None
+        return dict(row) if row else None
+
     def _find_thread(self, pid: int, cwd: str) -> Optional[dict]:
+        """The thread this process works on, by its own record, else by cwd + start time."""
+        thread_id = self._thread_id(pid)
+        if thread_id:
+            thread = self._thread_by_id(thread_id)
+            if thread:
+                return thread
+        return self._thread_by_start(pid, cwd)
+
+    def _thread_by_start(self, pid: int, cwd: str) -> Optional[dict]:
         """Query state_5.sqlite for the thread matching this process by cwd + start time.
 
         Returns a dict with title, first_user_message, tokens_used, rollout_path,

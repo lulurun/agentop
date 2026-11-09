@@ -47,9 +47,11 @@ def _should_ignore(cmdline: str) -> bool:
 def scan_processes() -> list[dict]:
     """Return list of detected agent process dicts."""
     results = []
-    for proc in psutil.process_iter(["pid", "ppid", "name", "cmdline", "create_time", "memory_info"]):
+    for proc in psutil.process_iter(["pid", "ppid", "name", "cmdline", "create_time", "memory_info", "status"]):
         try:
             info = proc.info
+            if info["status"] == psutil.STATUS_ZOMBIE:
+                continue
             cmdline_parts = info["cmdline"] or []
             cmdline = " ".join(cmdline_parts)
             name = info["name"] or ""
