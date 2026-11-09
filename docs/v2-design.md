@@ -727,7 +727,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 | Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
 | File preview and diff view | Yes: routes for file content and diffs, a right-panel slot |
-| Delegation: one session asks another to do a task and reply | Yes: `agentop ask` and `reply`, a request queue, a Requests view (12.10) |
+| Handoff: pass a side task, such as a deploy, to another session and get back only the result | Yes: `agentop handoff`, a queue per target, a Handoffs view (12.10) |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |
 | Offline app shell for the web app | No: client-only |
@@ -758,109 +758,121 @@ Dialogues are built already, so moving them is also the test of the plugin syste
 
 **Done when:** the core test suites pass with the `dialogue` folder deleted, the dialogue tests pass with the plugin enabled, and disabling it from Settings hides every trace of dialogues in the UI without touching other sessions.
 
-### 12.10 Delegation: one session asks another
+### 12.10 Handoff: pass a side task to another session
 
-Status: designed, not started. Plugin id `delegate`.
+Status: designed, not started. Plugin id `handoff`.
 
-**The problem.** Context stays where it was built. A qate development session knows a change in detail but not how to deploy it. An eiger session knows how to deploy, and which hosts and environments exist, but not the change. Today there are two ways to bridge them, and both are poor:
+**The problem.** A development session builds up expensive context: the change, why it was made, what is left to do. Part way through, the work reaches a milestone and needs a side task that belongs elsewhere, typically a deploy to a non-production environment to see results. Today there are two ways to do it, and both are poor:
 
-1. Load eiger's skills into the qate session. This only works if everything eiger knows is written down, and it breaks across hosts: the qate machine may have no access to production at all.
-2. Summarise the change, switch to the eiger session, explain it there, and come back to verify. The user does the copying by hand.
+1. Do the side task in the development session, using the deploy project's skills. When the deploy goes wrong, the investigation (logs, retries, host details) piles into the development context. That wastes the context window and taints it with material that has nothing to do with the change.
+2. Open a session in the deploy project, explain the change there by hand, drive the deploy to the end, then go back to the development session. This keeps the contexts apart, but the user does the explaining and the switching.
 
-**The workflow.** In the qate session the user writes:
+Loading the deploy project's skills into the development session is therefore not the answer, however well they are written: the problem is not missing knowledge, it is where the side task's work accumulates.
+
+**The workflow.** Handoff automates option 2. In the development session (A) the user writes:
 
 ```
-@agentop #eiger please deploy k2 for env QIN_TENGFEI
+@agentop handoff #eiger: deploy k2 to env QIN_TENGFEI
 ```
 
-The qate agent knows neither how to deploy nor what `QIN_TENGFEI` is. A skill tells it to hand the request over with `agentop ask`, adding what the target needs to know (the change, the branch, what to check). Agentop delivers the request to the eiger session. Eiger deploys and answers with `agentop reply`. Agentop delivers the answer back to the qate session, which still holds the full context of the change and goes on to verify it.
+1. A writes a **handoff brief** (12.10.3): what changed, the branch and commit, the target environment, what counts as done, and when to stop and ask the user. A has the full context of the change, so this is the one thing it is best placed to do.
+2. Agentop delivers the brief to the target session (B): a live eiger session if there is one, otherwise a new session started in the eiger project.
+3. B does the work in its own tmux session. The user can watch it, attach, and step in. If B hits something that needs a human decision, it stops and asks the user in B, and the handoff shows as **needs you**.
+4. B ends the handoff with a short report: done, blocked, or failed, and the few facts A needs (the deployed commit, the URL, the error).
+5. Only that report goes back to A. All of B's back-and-forth stays in B. The user returns to A and carries on with the change.
 
-This is not a dialogue (12.9). A dialogue is a loop the orchestrator runs between two new sessions, following a scenario. Delegation is a single request and reply, started by an agent, often to a session that already exists. The two share only the core pieces: starting a session, `Actor` send and receive.
+This is not a dialogue (12.9). A dialogue is a loop the orchestrator runs between two new sessions, following a scenario. A handoff is one side task, started from a working session, often given to a session that already exists, with the user watching and answering in the target. The two share only the core pieces: starting a session, `Actor` send and receive.
 
-#### 12.10.1 Transport: tmux only
+#### 12.10.1 Existing tools
 
-Requests and replies are typed into the agents' terminals through tmux, like every other message agentop sends. Agentop does not call any LLM API, and does not run agents headless (`claude -p`, `codex exec`).
+Before building this, check what the agent CLIs already do.
+
+- **Claude Code's `SendMessage`.** A Claude Code session can list the other Claude sessions on the same machine (`ListAgents`, which also shows each one's tmux pane) and send one a message. For Claude to Claude on one machine, that is already the transport: A can send a brief to a live eiger session, which works on it in its own tmux pane. It does not start a target session when none exists, does not cover codex or agy, has no status view, and has no allowlist or approval. (Checked 2026-11-09.)
+- **Subagents.** A Claude subagent keeps its work out of the caller's context and returns only a summary. But it does not run in a tmux session the user can attach to, and it cannot stop and ask the user part way through. Both are requirements here.
+- **`/rewind`** in Claude Code removes a detour from a conversation after the fact. It is a cheap fix when a deploy has already tainted the context, not a way to avoid it.
+
+So agentop adds: starting the target when none exists, codex and agy as senders and targets, the handoff status (working, needs you, done) in the UI, and the safety rules in 12.10.6. Phase 0 (12.10.8) tries the workflow on `SendMessage` first, with no agentop code.
+
+#### 12.10.2 Transport: tmux only
+
+Briefs and reports are typed into the agents' terminals through tmux, like every other message agentop sends. Agentop does not call any LLM API, and does not run agents headless (`claude -p`, `codex exec`).
 
 Why:
 
 - The agent CLIs (claude, codex, agy) are built to run in a terminal, and tmux is the native way to run them. Agentop's job is to bring those tmux sessions into one window, not to become a different agent runtime.
-- Every delegated task is an ordinary session: the user can see it, attach, take over, or stop it. Nothing runs hidden.
+- Every handoff runs in an ordinary session: the user can see it, attach, answer questions, take over, or stop it. Nothing runs hidden. This is the main requirement of the workflow.
 - Billing, login, and permissions stay exactly as they are for interactive use. Interactive sessions are covered by the user's subscription plan. Calling the LLM API directly would need a separate pay-as-you-go API key, and headless runs follow their own rules: on Claude plans, `claude -p` usage moved to a separate monthly Agent SDK credit in June 2026. (See section 16.)
 - A new agent CLI works with no new integration, because it is just another terminal program.
 
-tmux is weak at two things, and the design deals with both: knowing when an agent has finished, and getting its answer back reliably. The rest of this section is mostly about those two.
+tmux is weak at two things, and the design deals with both: knowing when an agent is idle and can be typed to, and getting its result back reliably.
 
-#### 12.10.2 Commands
+#### 12.10.3 The brief and the skill
 
-Agents use these through their shell. Every supported tool can run shell commands, so one CLI serves all of them, and no MCP setup is needed for each tool. An MCP wrapper can be added later if it proves useful.
+The quality of the brief decides whether the handoff works, so it has a fixed shape:
+
+```
+[agentop handoff h-7f3a from qate-dev-91c2e0]
+Task: deploy k2 to env QIN_TENGFEI.
+Change: <what changed and why, in a few lines>
+Code: branch fix-k2-timeout, commit 3e1c9a0, pushed
+Done when: <what to check to call it deployed>
+Stop and ask the user if: <e.g. a migration is needed, prod config would change>
+When finished, run: agentop handoff report h-7f3a --status done|blocked|failed "<short result>"
+```
+
+A short skill file is installed for each tool. On the sender's side it teaches: when the user writes `@agentop handoff #X: …`, write a brief in this shape and send it with `agentop handoff send`; keep the brief to what the target needs, not the whole history. On the target's side it teaches: when a handoff arrives, do the task; when a decision belongs to the user, mark it with `agentop handoff ask` and ask in the session; finish with `agentop handoff report`, keeping the report short, because it goes into the sender's context.
+
+#### 12.10.4 Commands
+
+Agents use these through their shell. Every supported tool can run shell commands, so one CLI serves all of them, and no MCP setup is needed for each tool.
 
 | Command | Does |
 |---------|------|
-| `agentop ask <target> "<message>"` | Queues a request and prints its id (`r-7f3a`) at once. It does not wait |
-| `agentop reply <id> "<message>"` | Run by the target: answers the request |
-| `agentop request <id>` | Status and reply of one request, for the sender to check |
-| `agentop requests` | Recent requests on this service |
+| `agentop handoff send <target> "<brief>"` | Queues a handoff and prints its id (`h-7f3a`) at once. `--wait` blocks until the report and prints it; `--new` always starts a new target session |
+| `agentop handoff ask <id> "<question>"` | Run by the target: marks the handoff as needing the user |
+| `agentop handoff report <id> --status … "<result>"` | Run by the target: ends the handoff with its result |
+| `agentop handoff show <id>` | Status, open question, and report of one handoff |
+| `agentop handoff list` | Recent handoffs on this service |
 
-The sender knows its own session from the environment agentop sets when it starts a managed session. Only managed sessions can send or receive requests.
+The sender knows its own session from the environment agentop sets when it starts a managed session. Only managed sessions can send or receive handoffs.
 
-**Targets.**
+**Targets.** `#eiger-a1b2c3` names a live session. `#eiger` is a display name or a project name: if exactly one live session matches, the handoff goes there; if none does, agentop starts a new session in that project's directory, which keeps the repo's CLAUDE.md and skills; if several match, it is an error that lists them. A session started for a handoff stays open after the report, so the user can look at it, and is closed by the user like any other. Cross-host targets (`service/session`) come in phase 2.
 
-| Form | Meaning |
-|------|---------|
-| `#eiger-a1b2c3` or `#eiger` (a display name) | A live session. Its conversation state matters, or the user wants to watch the work in it |
-| `#project:eiger` | A new session started in the eiger project's directory for this one request, closed after the reply. It still has the repo's CLAUDE.md and skills, but does not fill up, or get in the way of, the session the user is working in. Probably the better default for tasks like deploys |
+#### 12.10.5 Delivery and status
 
-A name that matches more than one session is an error that lists the matches. Cross-host targets (`service/session`) come in phase 2 (12.10.6).
-
-**The skill.** A short skill file is installed for each tool. It teaches two things: when the user writes `@agentop #X …`, send it with `agentop ask`, including the context the target lacks; and when a message arrives that starts with an agentop request header, do the work, then answer with `agentop reply`.
-
-#### 12.10.3 Delivery
-
-A delivered request looks like this in the target's terminal:
-
-```
-[agentop request r-7f3a from qate-dev-91c2e0]
-please deploy k2 for env QIN_TENGFEI. The change is on branch fix-k2-timeout …
-When done, run: agentop reply r-7f3a "<result>"
-```
-
-The reply arrives in the sender's terminal the same way, marked `[agentop reply r-7f3a from eiger-a1b2c3]`.
-
-Rules:
-
-- **Deliver only when idle.** Text is typed only when the agent is idle at its input prompt and no client has typed in the session in the last few seconds. Typing while an agent is in the middle of a turn, or while the user is typing, would mangle both. Requests queue per session and go in order.
+- **Deliver only when idle.** A brief is typed only when the target agent is idle at its input prompt and no client has typed in the session in the last few seconds. Typing while an agent is in the middle of a turn, or while the user is typing, would mangle both. Handoffs queue per target and go in order. A new session is typed to once its ready marker appears (5.2).
 - **One idle check, in the core.** The same check is needed by the start flow (the ready marker in 5.2) and by the attention plugin (12.8). It belongs in the core and is offered to plugins through `api.sessions()`, so it is written once.
-- **Explicit replies.** The answer comes from `agentop reply`, not from reading the screen. Reading the scrollback, using the dialogue delimiter parser (nonce and all), is only a fallback for when an agent finishes without calling `reply`.
-- **Status.** `queued` → `delivered` → `replied`, or `timed_out`, `cancelled`, `rejected`. Each request has a timeout (default 30 minutes, settable per request). A timeout is reported back to the sender like a reply, so the sender is never left waiting.
-- **Stored.** Requests and replies are kept in `api.store` and shown in a Requests view, with cancel and approve buttons.
+- **The report goes back once, and short.** The report is stored and shown in the UI. It reaches A in one of two ways: with `--wait`, A's shell command prints it as ordinary command output, which suits short tasks (agent shells time out, Claude Code's after at most 10 minutes); otherwise it is typed into A, marked `[agentop handoff h-7f3a report from eiger-a1b2c3]`, when A is next idle. A can also read it any time with `handoff show`.
+- **Explicit reports.** The result comes from `agentop handoff report`, not from reading the screen. Reading B's scrollback with the dialogue delimiter parser (nonce and all) is only a fallback for when B finishes without reporting.
+- **Status.** `queued` → `working` ⇄ `needs_you` → `done`, `blocked`, or `failed`; or `timed_out`, `cancelled`, `rejected`. `needs_you` is set by `handoff ask`, and also by the attention plugin when B is waiting at a question without having called it. The timeout (default 60 minutes, settable per handoff) does not run while the handoff needs the user. A timeout is reported to A like a report, so A is never left waiting.
+- **Stored.** Handoffs, questions, and reports are kept in `api.store` and shown in a Handoffs view: status per handoff, a link to the target session, and cancel and approve buttons. `needs_you` also marks the target session in the session list, so the user sees where to go.
 
-#### 12.10.4 Safety
+#### 12.10.6 Safety
 
-Without delegation, making a session do something takes the token or the keyboard. With it, one agent can make another act, and some agents run with skip-permissions flags and can reach production. A prompt injection into one session (for example from a web page it read) could then make another session deploy. So:
+Without handoff, making a session do something takes the token or the keyboard. With it, one agent can make another act, and some agents run with skip-permissions flags and can reach production. A prompt injection into one session (for example from a web page it read) could then make another session deploy. So:
 
-- **Allowlist.** Which sessions or projects may send to which targets. Default: same service only, and every target must be allowed explicitly.
-- **Approval.** A target can be marked "approve each request". Its requests wait in the UI until the user clicks Approve. Suggested for anything that touches production.
-- **Hop limit.** A request carries its chain of senders. A request made while handling another request may go one hop further (default limit 2). A loop such as A → B → A is refused.
-- **Audit log.** Every request, delivery, reply, and refusal, with times and sessions, is kept in the plugin store.
+- **Allowlist.** Which sessions or projects may hand off to which targets. Default: same service only, and every target must be allowed explicitly.
+- **Approval.** A target can be marked "approve each handoff". Its handoffs wait in the UI until the user clicks Approve. Suggested for anything that touches production.
+- **Hop limit.** A handoff carries its chain of senders. A handoff made while working on another may go one hop further (default limit 2). A loop such as A → B → A is refused.
+- **Audit log.** Every handoff, delivery, question, report, and refusal, with times and sessions, is kept in the plugin store.
 
 These go into the security review (TODO.md) together with D6 and D7.
 
-#### 12.10.5 Other uses
+#### 12.10.7 Other uses
 
 The same mechanism also covers:
 
-- **Questions.** "#infra, what is QIN_TENGFEI and where are its logs?" or "#frontend, what reads this field?" A mode that only answers questions has much lower risk, so it is a good first feature to ship.
-- **Changes across repos.** The backend session changes an API, then asks the frontend or SDK session to update its client.
-- **Second opinion from another model.** A claude session asks a codex session to review its diff. That is cheaper than starting a full dialogue.
+- **Investigations that would flood the context.** "#infra, find out why QIN_TENGFEI's k2 pod restarts", returning only the cause.
+- **Questions.** "#infra, what is QIN_TENGFEI and where are its logs?" A handoff that only answers questions has much lower risk, so it is a good first use.
+- **Changes across repos.** The backend session changes an API, then hands the client update to the frontend or SDK session.
+- **Second opinion from another model.** A claude session hands its diff to a codex session for review. That is cheaper than starting a full dialogue.
 - **Work tied to a machine.** Benchmarks or slow test suites in a session on a GPU or build host (phase 2).
-- **Fan-out.** Ask sessions on several hosts to check logs or versions, then gather the answers (phase 2).
-- **Verify, then follow up.** If the qate check fails after the deploy, qate asks eiger for logs. That is a short dialogue the agent starts itself, with no scenario file.
 
-#### 12.10.6 Phases
+#### 12.10.8 Phases
 
-1. **Same service.** Commands, skill, queue and idle delivery, explicit replies, timeouts, allowlist, approval, hop limit, audit log, the Requests view. Targets are live sessions on the same service.
-2. **New sessions for each request.** `#project:<name>` targets: start a session in the project's directory, deliver, close it after the reply or the timeout.
-3. **Across hosts.** Today connections belong only to clients (4.5), and services never talk to each other. Cross-host delegation needs links from one service to another, each with its own token, held by the service. That is a core change, and it waits for the security review (per-client tokens, D7) and D9.
+0. **Try it with no agentop code.** Write the sender and target skills, and send briefs through Claude Code's `SendMessage` (12.10.1) between a development session and a live eiger session. Use it for real deploys. This settles the brief's shape and whether the report gets back reliably before anything is built.
+1. **Same service.** The plugin: commands, skills for claude, codex, and agy, idle delivery, live-or-new targets, `needs_you`, reports, timeouts, allowlist, approval, hop limit, audit log, the Handoffs view.
+2. **Across hosts.** Today connections belong only to clients (4.5), and services never talk to each other. Handoff across hosts needs links from one service to another, each with its own token, held by the service. That is a core change, and it waits for the security review (per-client tokens, D7) and D9.
 
 ## 13 Migration
 
@@ -912,7 +924,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
-| D9 | Delegation across hosts (12.10.6) | Not in phase 1. Later, through links from one service to another, each with its own token, after the security review | Let the sending service use a client connection's token. Simpler, but any service then holds full control of its peers |
+| D9 | Handoff across hosts (12.10.8) | Not in phase 1. Later, through links from one service to another, each with its own token, after the security review | Let the sending service use a client connection's token. Simpler, but any service then holds full control of its peers |
 
 ## 16 Sources
 
@@ -923,8 +935,8 @@ External claims above were checked against:
 - [ghostty-web](https://github.com/coder/ghostty-web)
 - [wterm overview](https://betterstack.com/community/guides/scaling-nodejs/w-term-dom/)
 - [tauri-runtime-cef](https://docs.rs/crate/tauri-runtime-cef/latest/source/src/runtime.rs)
-- [Claude support: Agent SDK and `claude -p` usage credit](https://support.claude.com/articles/15036540) (12.10.1)
-- [OpenAI Codex: non-interactive mode](https://developers.openai.com/codex/noninteractive.md) (12.10.1)
+- [Claude support: Agent SDK and `claude -p` usage credit](https://support.claude.com/articles/15036540) (12.10.2)
+- [OpenAI Codex: non-interactive mode](https://developers.openai.com/codex/noninteractive.md) (12.10.2)
 - [Chrome: Local Network Access](https://developer.chrome.com/blog/local-network-access)
 - [Safari blocking ws://127.0.0.1 from an HTTPS page](https://discussions.apple.com/thread/254087609)
 - [Firefox: localhost as potentially trustworthy](https://bugzilla.mozilla.org/show_bug.cgi?id=903966)
