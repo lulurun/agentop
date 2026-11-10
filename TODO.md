@@ -48,7 +48,12 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 
 Design: [v2-design.md section 12.10](docs/v2-design.md#1210-handoff-pass-a-side-task-to-another-session). Phase 1 needs the plugin system first.
 
-- [ ] Phase 0: sender and target skills (brief shape, `@agentop handoff #X: …`, short reports), tried on real deploys over Claude Code's `SendMessage`, with no agentop code.
+- Phase 0: sender and target skills over Claude Code's `SendMessage`, with no agentop code.
+  - [x] Skills `handoff` and `handoff-receive` in [skills/](skills/README.md), linked into `~/.claude/skills/`.
+  - [x] First test, 2026-11-09: `#Eiger: scan the fleet` from agentop to a live Eiger session. Target matching, delivery, the target loading its skill, stopping to ask on an unclear task, replacing a stale handoff, the short report, and idle notices all worked.
+  - [ ] A real non-prod deploy of a change made in the sending session, so the brief carries context the target lacks.
+  - [ ] No live target: the skill starts one with `agentop start` and waits for it in `ListAgents`.
+  - [ ] Sessions in different permission modes, where the message waits for approval.
 - [ ] Idle check in the core (agent idle at its prompt, no recent typing), shared with the start flow's ready marker and the attention plugin.
 - [ ] Sender identity: an environment variable set in every managed session.
 - [ ] Phase 1: `agentop handoff send`, `ask`, `report`, `show`, `list`; live-or-new targets; a queue for each target; delivery only when idle; `--wait`; report typed back into the sender when idle; `needs_you`; timeouts; the scrollback parser as a fallback.
