@@ -61,3 +61,14 @@ Design: [v2-design.md section 12.10](docs/v2-design.md#1210-handoff-pass-a-side-
 - [ ] Phase 1 UI: Handoffs view with status, cancel, and approve; `needs_you` marked on the target session.
 - [ ] Skill files for claude, codex, and agy, from the phase 0 skills.
 - [ ] Phase 2: handoff across hosts (D9), after the security review.
+
+## Memory plugin
+
+Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-record-of-conversations). One host only for now.
+
+- [x] Phase 1: archive. Sweep claude, codex, and antigravity transcripts into `~/.agent-dashboard/memory/archive/`, appending only new bytes, never deleting; status route and Settings section.
+- [ ] Phase 2: messages table in SQLite, prompts and final replies only, rebuilt from the archive.
+- [ ] Phase 3: conversation view for transcripts in the File viewer; Transcripts list falls back to the archive.
+- [ ] Phase 4: recall: FTS5 search, a route, `agentop recall`, and a skill.
+- [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.
+- [ ] Later: archives from other hosts, aggregated in one place.

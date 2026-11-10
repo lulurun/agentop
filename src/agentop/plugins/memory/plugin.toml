@@ -1,0 +1,7 @@
+id = "memory"
+name = "Memory"
+version = "0.1.0"
+description = "Keeps agentop's own copy of every agent transcript on this host, and never deletes it, so old conversations can be found later."
+plugin_api = 1
+default_enabled = true
+ui = ["settings-section"]

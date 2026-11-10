@@ -875,6 +875,50 @@ The same mechanism also covers:
 1. **Same service.** The plugin: commands, skills for claude, codex, and agy, idle delivery, live-or-new targets, `needs_you`, reports, timeouts, allowlist, approval, hop limit, audit log, the Handoffs view.
 2. **Across hosts.** Today connections belong only to clients (4.5), and services never talk to each other. Handoff across hosts needs links from one service to another, each with its own token, held by the service. That is a core change, and it waits for the security review (per-client tokens, D7) and D9.
 
+### 12.11 Memory: agentop's own record of conversations
+
+Status: phase 1 (archive) built. Plugin id `memory`.
+
+**The problem.** Conversations with agents carry exact details that matter later: a person's name, a place, a link someone sent. At the time they are on hand, so nobody notes them, and days or months later the keyword itself is forgotten. The agent tools' own memory features don't help: Claude Code writes memory only when it judges a fact worth keeping, per project folder, and Codex's is off by default. Neither records what was said.
+
+**Source: the tools' transcripts, not the screen.** Reading the tmux buffer and picking out prompts and replies is fragile: colour codes, wrapping, redraws, limited scrollback, and only sessions in tmux. Claude Code and Codex already write every session as structured JSONL, with each record marked as the user, the assistant, or a tool. Reading those is easy and exact, and it covers sessions agentop did not start.
+
+**Agentop keeps its own copy.** The tools delete old transcripts (Claude Code after 30 days by default, `cleanupPeriodDays`). Agentop copies them into its own area and never deletes, so the tools' retention stops mattering once the copy runs more often than they clean up.
+
+#### 12.11.1 Decisions (2026-11-10)
+
+- **Keep the raw files, and derive everything else.** The archive is a plain copy of each transcript file. The prompt-and-reply table, the index, and any summaries are built from it and can be rebuilt when the extraction improves. Nothing that a later parser might want is thrown away.
+- **Simple first.** Plain files, no compression. All of the transcripts on the devhost are about 330MB today.
+- **One host for now.** The archive covers the machine the service runs on. Sessions on other machines, and claude.ai or ChatGPT chats, are left out. With one host working, aggregating several later is a matter of shipping archives to one place.
+- **`cleanupPeriodDays` is left alone.** Agentop does not change the tools' settings. The sweep runs every few minutes, far inside 30 days; the risk is only a service that stays down for weeks. Raising the setting stays a TODO.
+- **History already deleted is gone.** On the devhost the oldest Claude transcript left is from 2026-10-09.
+
+#### 12.11.2 The archive
+
+`~/.agent-dashboard/memory/archive/{tool}/…`, mirroring each tool's own layout under its root:
+
+| Tool | Source root | What is copied |
+|------|-------------|----------------|
+| `claude` | `~/.claude/projects/` | Every `*.jsonl` and the files in the session folders beside them (subagents, tool results). Not the `memory/` folders |
+| `codex` | `~/.codex/` | `sessions/**` and `archived_sessions/**` |
+| `antigravity` | `~/.gemini/antigravity-cli/brain/` | Every conversation folder |
+
+A **sweep** walks the source roots and brings the archive up to date. It runs at start, every 5 minutes, and when a session exits, in a thread off the event loop.
+
+- **New file**: copied.
+- **Grown file**: the tools only append, so only the new bytes are appended. The sweep checks that the archived bytes are still the start of the source (a sample at the start and just before the archived length) before appending.
+- **Rewritten or shrunk file**: the old copy is kept as `{name}.{timestamp}` and the file is copied afresh.
+- **Removed from the source**: kept. This is the point of the archive.
+
+Per-file state (size, modification time) is kept in `~/.agent-dashboard/memory/state.json`, so an unchanged file costs one `stat`. The first sweep imports everything on disk.
+
+#### 12.11.3 Phases
+
+1. **Archive.** The sweep above, a status route (files, bytes, last sweep, errors), and a Settings section showing it with a "Sweep now" button.
+2. **Messages.** A SQLite table built from the archive: tool, project folder, session, turn, time, role, text, and the record's own ID so nothing is stored twice. Only the user's prompts and the assistant's final text; no tool calls, tool output, or thinking.
+3. **Conversation view.** The File viewer shows a transcript as a conversation, from the same extraction. The Transcripts list falls back to the archived copy when the tool has deleted the original.
+4. **Recall.** Full-text search (SQLite FTS5) over the messages, a route and an `agentop recall` command, and a skill so a session can ask "what was the link Xxx sent about …". Embeddings only if keyword search misses too often.
+
 ## 13 Migration
 
 - Existing tmux sessions are not touched. They appear as `running` with their current names and are attachable at once.

@@ -832,3 +832,10 @@ input::placeholder { color: var(--quiet); }
 .plugin-entry .form-error { margin: 4px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 .plugin-settings { margin-top: 8px; }
 .plugin-view { flex: 1; min-height: 0; overflow: auto; }
+
+/* The Memory plugin's Settings section */
+.memory-status { margin-top: 6px; }
+.memory-status button { padding: 2px 10px; font-size: 13px; }
+.memory-note { margin: 0 0 6px; color: var(--quiet); font-size: 13px; overflow-wrap: anywhere; }
+.memory-note code { font-family: var(--code); font-size: 12px; }
+.memory-errors { margin: 0 0 6px; padding-left: 18px; color: var(--failed); font-size: 12px; }
