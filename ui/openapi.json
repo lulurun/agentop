@@ -426,6 +426,11 @@
             "title": "Is Repo",
             "type": "boolean"
           },
+          "prefix": {
+            "default": "",
+            "title": "Prefix",
+            "type": "string"
+          },
           "truncated": {
             "title": "Truncated",
             "type": "boolean"
@@ -1068,6 +1073,62 @@
           "supports_resume"
         ],
         "title": "ToolInfo",
+        "type": "object"
+      },
+      "TranscriptFile": {
+        "properties": {
+          "modified": {
+            "title": "Modified",
+            "type": "number"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "path",
+          "size",
+          "modified"
+        ],
+        "title": "TranscriptFile",
+        "type": "object"
+      },
+      "TranscriptListing": {
+        "properties": {
+          "files": {
+            "items": {
+              "$ref": "#/components/schemas/TranscriptFile"
+            },
+            "title": "Files",
+            "type": "array"
+          },
+          "root": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "root",
+          "files",
+          "truncated"
+        ],
+        "title": "TranscriptListing",
         "type": "object"
       },
       "UpdateInfo": {
@@ -2485,6 +2546,61 @@
           }
         },
         "summary": "Stop Session"
+      }
+    },
+    "/sessions/{session_id}/transcripts": {
+      "get": {
+        "operationId": "session_transcripts_sessions__session_id__transcripts_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptListing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Session Transcripts"
       }
     },
     "/tickets": {

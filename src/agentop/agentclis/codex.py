@@ -201,6 +201,14 @@ class CodexAgentCli(AgentCli):
                 raise FileNotFoundError(f"Session {session_id} not found in Codex database")
             conn.commit()
 
+    def transcript_files(self, session_id: str) -> tuple[Optional[Path], list[Path]]:
+        """The thread's rollout log."""
+        thread = self._thread_by_id(session_id)
+        rollout = Path(thread["rollout_path"]) if thread and thread.get("rollout_path") else None
+        if rollout is None or not rollout.is_file():
+            return None, []
+        return rollout.parent, [rollout]
+
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
         db_path = Path("~/.codex/state_5.sqlite").expanduser()
         if not db_path.exists():

@@ -37,7 +37,7 @@ from agentop.dialogue import model as dialogue_model
 from agentop.dialogue import ops as dialogue_ops
 from agentop.tmux import Session
 
-from . import API_VERSION, auth, files, manager, terminal, update
+from . import API_VERSION, auth, files, manager, terminal, transcripts, update
 from .config import Settings
 from .identity import Identity
 from .models import (
@@ -58,6 +58,7 @@ from .models import (
     Ticket,
     TicketRequest,
     ToolInfo,
+    TranscriptListing,
     UpdateInfo,
 )
 from .plugins import PluginHost
@@ -350,6 +351,13 @@ def create_v2_app(ctx: Context) -> FastAPI:
             return await asyncio.to_thread(files.git_changes, working_directory(session_id))
         except FileNotFoundError:
             raise HTTPException(404, "No such directory") from None
+
+    @v2.get("/sessions/{session_id}/transcripts", response_model=TranscriptListing, dependencies=authed)
+    async def session_transcripts(session_id: str):
+        row = ctx.store.get(session_id)
+        if row is None:
+            raise HTTPException(404, "Session not found")
+        return await asyncio.to_thread(transcripts.list_transcripts, row.get("tool"), row.get("session_id"))
 
     @v2.get("/saved-sessions", response_model=list[SavedSession], dependencies=authed)
     async def saved_sessions(tool: str | None = None, limit: int = 50):

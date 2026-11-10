@@ -1,8 +1,9 @@
 import type { ComponentType } from "react";
 import type { PluginInfo, Session } from "../api/client";
+import type { FileRef } from "../tabs";
 
 /** The UI slots a plugin can fill. They match `ui` in a plugin's plugin.toml. */
-export type Slot = "session-badge" | "left-view" | "right-panel" | "settings-section";
+export type Slot = "session-badge" | "left-view" | "right-panel" | "settings-section" | "file-viewer";
 
 /** Requests to the plugin's own routes, `/api/v2/plugins/{id}/…`. It can reach nothing else. */
 export interface PluginClient {
@@ -31,6 +32,11 @@ export interface UiPlugin {
   leftView?: { label: string; Component: ComponentType<{ plugin: PluginContext }> };
   rightPanel?: ComponentType<{ session: Session; plugin: PluginContext }>;
   settingsSection?: ComponentType<{ plugin: PluginContext }>;
+  /**
+   * Shows a file in a main-area tab. While a plugin with one is enabled, the
+   * files listed in the right panel open in a tab when clicked.
+   */
+  fileViewer?: ComponentType<{ file: FileRef; plugin: PluginContext }>;
 }
 
 export const SLOT_KEYS: Record<Slot, keyof UiPlugin> = {
@@ -38,4 +44,5 @@ export const SLOT_KEYS: Record<Slot, keyof UiPlugin> = {
   "left-view": "leftView",
   "right-panel": "rightPanel",
   "settings-section": "settingsSection",
+  "file-viewer": "fileViewer",
 };

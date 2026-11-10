@@ -189,6 +189,7 @@ test("settings list the service's plugins, and switch them", async ({ page }) =>
 });
 
 test("a service with no plugins says so in settings", async ({ page }) => {
+  await page.route("**/api/v2/plugins", (route) => route.fulfill({ json: [] }));
   await open(page);
   await page.getByRole("button", { name: "Settings" }).click();
   await expect(page.getByText("This service has no plugins.")).toBeVisible();

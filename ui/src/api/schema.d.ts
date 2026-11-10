@@ -318,6 +318,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/sessions/{session_id}/transcripts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Session Transcripts */
+        get: operations["session_transcripts_sessions__session_id__transcripts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tickets": {
         parameters: {
             query?: never;
@@ -491,6 +508,11 @@ export interface components {
             files: components["schemas"]["ChangedFile"][];
             /** Is Repo */
             is_repo: boolean;
+            /**
+             * Prefix
+             * @default
+             */
+            prefix: string;
             /** Truncated */
             truncated: boolean;
         };
@@ -704,6 +726,24 @@ export interface components {
             name: string;
             /** Supports Resume */
             supports_resume: boolean;
+        };
+        /** TranscriptFile */
+        TranscriptFile: {
+            /** Modified */
+            modified: number;
+            /** Path */
+            path: string;
+            /** Size */
+            size: number;
+        };
+        /** TranscriptListing */
+        TranscriptListing: {
+            /** Files */
+            files: components["schemas"]["TranscriptFile"][];
+            /** Root */
+            root: string | null;
+            /** Truncated */
+            truncated: boolean;
         };
         /** UpdateInfo */
         UpdateInfo: {
@@ -1494,6 +1534,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    session_transcripts_sessions__session_id__transcripts_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranscriptListing"];
                 };
             };
             /** @description Validation Error */

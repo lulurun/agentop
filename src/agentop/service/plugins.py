@@ -53,7 +53,7 @@ MAX_HANDLER_ERRORS = 5
 HANDLER_ERROR_WINDOW_SECONDS = 60.0
 
 EVENTS = frozenset({"session.started", "session.exited", "session.closed", "scan"})
-UI_SLOTS = frozenset({"session-badge", "left-view", "right-panel", "settings-section"})
+UI_SLOTS = frozenset({"session-badge", "left-view", "right-panel", "settings-section", "file-viewer"})
 
 _ID = re.compile(r"[a-z0-9-]+")
 

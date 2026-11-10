@@ -49,12 +49,16 @@ interface Props {
   /** Shown but not typed into: input is dropped and the overlay covers the screen. */
   locked?: boolean;
   overlay?: ReactNode;
+  /** Whether the search shortcut opens this terminal's search, and the terminal takes the keyboard when it opens. Off for a terminal in a group without focus. */
+  searchable?: boolean;
 }
 
 /** The only code that touches xterm, so the terminal library can be replaced in one place. */
-export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay }: Props) {
+export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay, searchable = true }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const lockedRef = useRef(locked);
+  const searchableRef = useRef(searchable);
+  searchableRef.current = searchable;
   const term = useRef<Terminal | null>(null);
   const search = useRef<SearchAddon | null>(null);
   const reattach = useRef<() => void>(() => {});
@@ -94,7 +98,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     loadRenderer(terminal);
     fit.fit();
     terminal.options.disableStdin = lockedRef.current;
-    if (!lockedRef.current) terminal.focus();
+    if (!lockedRef.current && searchableRef.current) terminal.focus();
 
     terminal.attachCustomKeyEventHandler((event) => {
       if (isAppShortcut(event)) return false;
@@ -214,10 +218,11 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
   }, [locked]);
 
   useEffect(() => {
+    if (!searchable) return;
     const open = () => setSearching(true);
     window.addEventListener("agentop:terminal-search", open);
     return () => window.removeEventListener("agentop:terminal-search", open);
-  }, []);
+  }, [searchable]);
 
   return (
     <div className="terminal" data-status={status} data-locked={locked || undefined}>

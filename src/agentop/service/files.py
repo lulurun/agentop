@@ -105,7 +105,15 @@ def git_changes(root: str) -> dict:
     real_root, _ = resolve_inside(root, "")
     result = _git(real_root, "status", "--porcelain=v2", "--branch", "-z")
     if result is None or result.returncode != 0:
-        return {"is_repo": False, "branch": None, "ahead": 0, "behind": 0, "files": [], "truncated": False}
+        return {"is_repo": False, "branch": None, "ahead": 0, "behind": 0, "files": [], "truncated": False, "prefix": ""}
     status = _parse_status(result.stdout)
     files = status["files"]
-    return {"is_repo": True, **status, "files": files[:MAX_CHANGES], "truncated": len(files) > MAX_CHANGES}
+    # Where the directory sits inside the repository, so a changed path can be found from the directory.
+    prefix = _git(real_root, "rev-parse", "--show-prefix")
+    return {
+        "is_repo": True,
+        **status,
+        "files": files[:MAX_CHANGES],
+        "truncated": len(files) > MAX_CHANGES,
+        "prefix": prefix.stdout.strip() if prefix and prefix.returncode == 0 else "",
+    }

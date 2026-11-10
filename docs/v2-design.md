@@ -603,7 +603,8 @@ Agentop grows from here through plugins. The features that exist today are the *
 
 - Sessions: scan, start, stop, close, resume, rename and describe, managed and external sessions.
 - The terminal bridge and tmux integration.
-- The right panel: details, token usage, changed and all files.
+- The main area's tabs: one or two groups side by side, each tab holding a session's terminal or a file (drawn by a `file-viewer` plugin).
+- The right panel: details, token usage, changed and all files, and the session's transcripts.
 - History.
 - Service status, stop, restart, update, and token handling.
 - Connections and service switching, settings, and the plugin loader itself (12.3).
@@ -704,10 +705,10 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 - After connecting, the app reads `GET /api/v2/plugins`. Plugins differ by service, so the list is kept per connection.
 - A plugin's UI shows only when **both** the service lists it as `enabled` **and** the app has a matching module in `ui/src/plugins/`. If either side is missing (an older app, an older service, a removed or failed plugin), the feature is hidden.
-- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a view in the left column's footer, beside History and Dialogues (`left-view`), a badge on a session row (`session-badge`), and a section in Settings (`settings-section`). A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
+- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a view in the left column's footer, beside History and Dialogues (`left-view`), a badge on a session row (`session-badge`), a section in Settings (`settings-section`), and the contents of a file tab in the main area (`file-viewer`). While a `file-viewer` plugin is enabled, files in the right panel open in a tab when clicked; without one, clicking copies the path. A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
 - Each slot is wrapped in an error boundary. A plugin component that throws hides itself; the rest of the page keeps rendering.
 - Plugin UI calls its own routes only through a client scoped to `/api/v2/plugins/{id}/`.
-- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `leftView` (a label and a component), `rightPanel`, and `settingsSection`. Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
+- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `leftView` (a label and a component), `rightPanel`, `settingsSection`, and `fileViewer` (a component given the file: session, source `workdir` or `transcript`, and path). Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
 - The app fetches the plugin list each time its events socket opens, and again on every `plugins` event. Events of a type the app doesn't know are ignored, so an older app keeps working against a newer service.
 
 **Settings → Plugins** lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".
@@ -726,7 +727,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 |---------|---------|
 | Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
-| File preview and diff view | Yes: routes for file content and diffs, a right-panel slot |
+| File preview and diff view | Yes: the File viewer plugin (`viewer`) serves file text and fills the `file-viewer` slot. Syntax highlighting, Markdown, JSONL conversations, and diffs come next, in the same plugin |
 | Handoff: pass a side task, such as a deploy, to another session and get back only the result | Yes: `agentop handoff`, a queue per target, a Handoffs view (12.10) |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |

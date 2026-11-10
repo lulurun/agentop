@@ -3,6 +3,8 @@ import { ApiError, ServiceClient, type PluginInfo, type Session, type ServiceInf
 import { checkConnection, type ConnectFailure, type Connection } from "./connections";
 import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
+import * as tabs from "./tabs";
+import type { Layout, OpenMode, TabContent } from "./tabs";
 
 export type LinkState =
   | { state: "connecting" }
@@ -25,8 +27,10 @@ interface AppState {
   sessions: Record<string, Session>;
   /** The connected service's plugins. Plugins differ by service, so this is reset on every switch. */
   plugins: PluginInfo[];
-  /** Selected session per connection. Session IDs are only unique within one service. */
+  /** Selected session per connection: the focused tab's session. Session IDs are only unique within one service. */
   selected: Record<string, string>;
+  /** The main area's tabs per connection. */
+  layouts: Record<string, Layout>;
   leftOpen: boolean;
   rightOpen: boolean;
   switcherOpen: boolean;
@@ -48,7 +52,14 @@ interface AppState {
   addConnection(connection: Connection): void;
   updateConnection(id: string, fields: Partial<Connection>): void;
   removeConnection(id: string): void;
-  select(sessionId: string): void;
+  /** Show a session in the main area. By default it takes the place of the session shown now. */
+  select(sessionId: string, mode?: OpenMode): void;
+  openTab(content: TabContent, mode?: OpenMode): void;
+  activateTab(group: number, tabId: string): void;
+  closeTab(group: number, tabId: string): void;
+  splitTab(): void;
+  moveTab(group: number, tabId: string): void;
+  focusGroup(group: number): void;
   toggleLeft(): void;
   toggleRight(): void;
   setSwitcherOpen(open: boolean): void;
@@ -61,6 +72,36 @@ interface AppState {
 
 const LAYOUT_KEY = "agentop.layout";
 const SELECTED_KEY = "agentop.selected";
+const TABS_KEY = "agentop.tabs";
+
+function loadLayouts(): Record<string, Layout> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "{}") as Record<string, unknown>;
+    return Object.fromEntries(
+      Object.entries(saved).flatMap(([id, value]) => {
+        const layout = tabs.parseLayout(value);
+        return layout ? [[id, layout]] : [];
+      }),
+    );
+  } catch {
+    return {};
+  }
+}
+
+const EMPTY_LAYOUT = tabs.emptyLayout();
+// A derived layout must be the same object each time, or every render would see a change.
+const derived = new Map<string, Layout>();
+
+/** The active connection's tabs. Before it has any, the session selected last time gets one. */
+export function layoutOf(state: Pick<AppState, "layouts" | "selected" | "activeId">): Layout {
+  const saved = state.layouts[state.activeId];
+  if (saved) return saved;
+  const selected = state.selected[state.activeId];
+  if (!selected) return EMPTY_LAYOUT;
+  const key = `${state.activeId}\n${selected}`;
+  if (!derived.has(key)) derived.set(key, tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "replace", "t0"));
+  return derived.get(key)!;
+}
 
 function loadSelected(): Record<string, string> {
   try {
@@ -234,9 +275,30 @@ export const useApp = create<AppState>((set, get) => {
       const event = JSON.parse(message.data) as Event;
       if (event.type === "plugins") void loadPlugins(mine, client);
       else if (event.type === "plugin") dispatchPluginEvent(event.id, event.data);
-      else set({ sessions: applyEvent(get().sessions, event) });
+      else {
+        set({ sessions: applyEvent(get().sessions, event) });
+        if (event.type === "session.removed") updateLayout((layout) => tabs.closeSession(layout, event.id));
+      }
     };
     ws.onclose = () => retry(socketFailures + 1);
+  }
+
+  /** Change the active connection's tabs, keeping the selected session in step with the focused tab. */
+  function updateLayout(change: (layout: Layout) => Layout, showSessions = false) {
+    const state = get();
+    const layout = change(layoutOf(state));
+    const layouts = { ...state.layouts, [state.activeId]: layout };
+    const focused = tabs.focusedTab(layout);
+    const selected = { ...state.selected };
+    if (focused) selected[state.activeId] = tabs.sessionOf(focused.content);
+    else delete selected[state.activeId];
+    set({ layouts, selected, ...(showSessions ? { view: "sessions" as View } : {}) });
+    try {
+      localStorage.setItem(TABS_KEY, JSON.stringify(layouts));
+      localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
+    } catch {
+      // Only a convenience.
+    }
   }
 
   async function connect(connection: Connection, trustNewIdentity = false) {
@@ -266,6 +328,7 @@ export const useApp = create<AppState>((set, get) => {
     sessions: {},
     plugins: [],
     selected: loadSelected(),
+    layouts: loadLayouts(),
     ...loadLayout(),
     switcherOpen: false,
     dialog: null,
@@ -348,15 +411,18 @@ export const useApp = create<AppState>((set, get) => {
       if (get().activeId === id && connections[0]) get().switchTo(connections[0].id);
     },
 
-    select(sessionId) {
-      const selected = { ...get().selected, [get().activeId]: sessionId };
-      set({ selected, view: "sessions" });
-      try {
-        localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
-      } catch {
-        // Only a convenience.
-      }
+    select(sessionId, mode = "replace") {
+      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, mode), true);
     },
+
+    openTab(content, mode = "tab") {
+      updateLayout((layout) => tabs.open(layout, content, mode), true);
+    },
+    activateTab: (group, tabId) => updateLayout((layout) => tabs.activate(layout, group, tabId)),
+    closeTab: (group, tabId) => updateLayout((layout) => tabs.close(layout, group, tabId)),
+    splitTab: () => updateLayout((layout) => tabs.split(layout)),
+    moveTab: (group, tabId) => updateLayout((layout) => tabs.moveToOther(layout, group, tabId)),
+    focusGroup: (group) => updateLayout((layout) => tabs.focusGroup(layout, group)),
 
     toggleLeft() {
       const leftOpen = !get().leftOpen;

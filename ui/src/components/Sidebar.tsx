@@ -4,6 +4,7 @@ import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
 import { activeClient, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { StatusMark } from "./icons";
+import { Menu } from "./Workbench";
 
 const STATUS_TEXT: Record<string, string> = {
   starting: "Starting",
@@ -30,14 +31,24 @@ function SessionRow({ session, selected }: { session: Session; selected: boolean
   const select = useApp((s) => s.select);
   const inDialogue = useApp((s) => s.dialogueSessions.has(session.id));
   const summary = sessionSummary(session) ?? basename(session.cwd);
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   return (
+    <>
     <button
       type="button"
       title={summary}
       className="session-row"
       data-status={session.status}
       aria-current={selected ? "true" : undefined}
-      onClick={() => select(session.id)}
+      // Ctrl or Cmd, or the middle button, opens it in a new tab, as in a browser.
+      onClick={(event) => select(session.id, event.ctrlKey || event.metaKey ? "tab" : "replace")}
+      onAuxClick={(event) => {
+        if (event.button === 1) select(session.id, "tab");
+      }}
+      onContextMenu={(event) => {
+        event.preventDefault();
+        setMenu({ x: event.clientX, y: event.clientY });
+      }}
     >
       <StatusMark status={session.status} />
       <span className="session-name">{sessionTitle(session)}</span>
@@ -49,6 +60,19 @@ function SessionRow({ session, selected }: { session: Session; selected: boolean
         <span className="session-summary">{summary}</span>
       </span>
     </button>
+    {menu && (
+      <Menu
+        x={menu.x}
+        y={menu.y}
+        onClose={() => setMenu(null)}
+        items={[
+          ["Open", () => select(session.id, "replace")],
+          ["Open in new tab", () => select(session.id, "tab")],
+          ["Open to the side", () => select(session.id, "side")],
+        ]}
+      />
+    )}
+    </>
   );
 }
 

@@ -136,6 +136,20 @@ class GitChanges(BaseModel):
     behind: int
     files: list[ChangedFile]
     truncated: bool
+    # The directory's path inside the repository, ending in "/", or "" at its top.
+    prefix: str = ""
+
+
+class TranscriptFile(BaseModel):
+    path: str
+    size: int
+    modified: float
+
+
+class TranscriptListing(BaseModel):
+    root: str | None
+    files: list[TranscriptFile]
+    truncated: bool
 
 
 class TmuxInfo(BaseModel):

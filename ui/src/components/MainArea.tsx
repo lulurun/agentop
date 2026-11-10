@@ -8,6 +8,7 @@ import { activeClient, activeConnection, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { DialoguesView } from "./DialoguesView";
 import { HistoryView } from "./HistoryView";
+import { Workbench, type SessionPaneProps } from "./Workbench";
 
 type Selection = { sessions: Record<string, Session>; selected: Record<string, string>; activeId: string };
 
@@ -181,6 +182,52 @@ function SessionBanner({ session }: { session: Session }) {
   return null;
 }
 
+/** A session in a tab: its terminal, or why there isn't one. */
+function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
+  const activeId = useApp((s) => s.activeId);
+  const settings = useApp((s) => s.settings);
+  const loaded = useApp((s) => Object.keys(s.sessions).length > 0);
+
+  if (!session) {
+    if (!loaded) return null;
+    return (
+      <div className="placard">
+        <h2>This session is gone</h2>
+        <p>It was closed, or it ended while the app was away.</p>
+        <div className="placard-actions">
+          <button type="button" onClick={onClose}>
+            Close tab
+          </button>
+        </div>
+      </div>
+    );
+  }
+  const showTerminal = session.attachable && session.status !== "starting";
+  return (
+    <>
+      <SessionBanner session={session} />
+      {showTerminal ? (
+        <TerminalView
+          key={`${activeId}/${session.id}/${settings.theme}/${settings.renderer}/${settings.fontSize}`}
+          client={client}
+          sessionId={session.id}
+          focusRequest={0}
+          searchable={focused}
+          locked={session.status === "exited"}
+          overlay={<ExitedCurtain session={session} />}
+        />
+      ) : session.status === "starting" ? (
+        <Starting session={session} />
+      ) : session.status !== "failed" ? (
+        <div className="placard">
+          <h2>{session.display_name} isn't in tmux</h2>
+          <p>This agent was started outside tmux, so its terminal can't be opened here. Its details are on the right.</p>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 export function MainArea() {
   const session = useApp(selectedSession);
   const linkState = useApp((s) => s.link.state);
@@ -195,11 +242,11 @@ export function MainArea() {
   const pluginView = view.startsWith("plugin:")
     ? pluginsFor("left-view", plugins).find(({ info }) => `plugin:${info.id}` === view)?.info.id
     : undefined;
-  const settings = useApp((s) => s.settings);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
   const showTerminal = linked && session?.attachable && session.status !== "starting";
 
   useEffect(() => {
+    // Leaving the page would cut off the terminal.
     if (!showTerminal) return;
     const guard = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", guard);
@@ -226,25 +273,9 @@ export function MainArea() {
           <PluginSlot slot="left-view" only={pluginView} />
         </div>
       ) : linked ? (
-        <>
-          {session && <SessionBanner session={session} />}
-          {showTerminal ? (
-            <TerminalView
-              key={`${activeId}/${session.id}/${settings.theme}/${settings.renderer}/${settings.fontSize}`}
-              client={client}
-              sessionId={session.id}
-              focusRequest={0}
-              locked={session.status === "exited"}
-              overlay={<ExitedCurtain session={session} />}
-            />
-          ) : session?.status === "starting" ? (
-            <Starting session={session} />
-          ) : session && session.status !== "failed" ? (
-            <div className="placard">
-              <h2>{session.display_name} isn't in tmux</h2>
-              <p>This agent was started outside tmux, so its terminal can't be opened here. Its details are on the right.</p>
-            </div>
-          ) : !session ? (
+        <Workbench
+          renderSession={(props) => <SessionPane key={props.tabKey} {...props} client={client} />}
+          empty={
             <div className="placard">
               <h2>Start a session, or pick one from the list</h2>
               <div className="placard-actions">
@@ -253,8 +284,8 @@ export function MainArea() {
                 </button>
               </div>
             </div>
-          ) : null}
-        </>
+          }
+        />
       ) : (
         <ConnectionProblem />
       )}

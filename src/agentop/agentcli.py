@@ -3,6 +3,7 @@ from __future__ import annotations
 import random
 import string
 import time
+from pathlib import Path
 from typing import Callable, Optional
 
 import psutil
@@ -179,6 +180,14 @@ class AgentCli:
     def delete_session(self, session_id: str) -> None:
         """Permanently remove a saved session from its source storage."""
         raise NotImplementedError(f"{self.name} does not support session deletion")
+
+    def transcript_files(self, session_id: str) -> tuple[Optional[Path], list[Path]]:
+        """Return (base folder, files) holding a session's transcript, or (None, []).
+
+        The files are the conversation log and whatever the tool keeps beside it,
+        such as subagent logs. Their names are shown relative to the base folder.
+        """
+        return None, []
 
     # ------------------------------------------------------------------ metadata
 

@@ -1,0 +1,7 @@
+id = "viewer"
+name = "File viewer"
+version = "0.1.0"
+description = "Opens files from the right panel, working directory or transcripts, in a tab in the main area."
+plugin_api = 1
+default_enabled = true
+ui = ["file-viewer"]
