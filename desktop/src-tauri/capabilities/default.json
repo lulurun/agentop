@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The window can call this app's own commands, and nothing else: no shell, no file access.",
+  "description": "The window can call this app's own commands and write text to the clipboard, and nothing else: no shell, no file access, no clipboard reads.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "clipboard-manager:allow-write-text"]
 }

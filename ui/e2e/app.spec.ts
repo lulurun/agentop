@@ -398,3 +398,22 @@ test.describe("on a touch screen", () => {
     expect(await page.evaluate(() => getComputedStyle(document.body).overscrollBehaviorY)).toBe("none");
   });
 });
+
+test("dragging over the terminal copies the text from tmux", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await startSession(page, s, "demo");
+  const line = terminalText(page).getByText("fake agent ready");
+  await expect(line).toBeVisible({ timeout: 15_000 });
+  await page.evaluate(() => navigator.clipboard.writeText("before"));
+  // tmux has the mouse, so this drag selects in tmux, which copies it out over OSC 52.
+  const box = (await line.boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, y, { steps: 5 });
+  await page.mouse.move(box.x + box.width - 2, y, { steps: 5 });
+  await page.mouse.up();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("fake agent ready");
+});

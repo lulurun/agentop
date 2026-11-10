@@ -2,7 +2,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 //! The small native side of the app. The window gets no shell or file access.
-//! It has these commands only, and each does one fixed thing.
+//! It has these commands only, and each does one fixed thing, plus writing text to
+//! the clipboard.
 
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -92,6 +93,8 @@ fn token_delete(id: String) -> Result<(), String> {
 
 fn main() {
     tauri::Builder::default()
+        // Write-only: the capability grants writing text, never reading the clipboard.
+        .plugin(tauri_plugin_clipboard_manager::init())
         .invoke_handler(tauri::generate_handler![
             read_service_info,
             token_get,

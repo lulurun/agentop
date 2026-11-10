@@ -11,6 +11,7 @@ import { ApiError, type ServiceClient } from "../api/client";
 import { isAppShortcut } from "../shortcuts";
 import { platform } from "../platform";
 import { loadSettings } from "../settings";
+import { terminalClipboard } from "./clipboard";
 import { touchScroll } from "./touchScroll";
 
 type Status = "connecting" | "live" | "reconnecting" | "detached" | "ended";
@@ -75,6 +76,9 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
       allowProposedApi: true, // unicode11 needs it
       scrollback: 2000, // history lives in tmux
       theme: themeFromTokens(),
+      // tmux has the mouse, so a plain drag copies in tmux. Shift-drag, or Option-drag on
+      // a Mac, selects in the page instead, for Ctrl+Shift+C.
+      macOptionClickForcesSelection: true,
     });
     term.current = terminal;
     const fit = new FitAddon();
@@ -84,7 +88,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     terminal.loadAddon(searchAddon);
     terminal.loadAddon(new Unicode11Addon());
     terminal.unicode.activeVersion = "11";
-    terminal.loadAddon(new ClipboardAddon());
+    terminal.loadAddon(new ClipboardAddon(undefined, terminalClipboard(platform.copyText)));
     terminal.loadAddon(new WebLinksAddon((_event, uri) => window.open(uri, "_blank", "noopener")));
     terminal.open(host.current!);
     loadRenderer(terminal);

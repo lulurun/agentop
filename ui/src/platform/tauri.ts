@@ -75,5 +75,10 @@ export const tauriPlatform: Platform = {
 
   loadActiveId: () => localStorage.getItem(ACTIVE_KEY),
   saveActiveId: (id) => localStorage.setItem(ACTIVE_KEY, id),
-  copyText: (text) => navigator.clipboard.writeText(text),
+  // Natively, because WebKit lets a page write the clipboard only during a click or
+  // key press, and a copy made in tmux arrives later, over the terminal socket.
+  async copyText(text) {
+    const clipboard = await import("@tauri-apps/plugin-clipboard-manager");
+    await clipboard.writeText(text);
+  },
 };
