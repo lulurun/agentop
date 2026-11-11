@@ -1,25 +1,53 @@
+"""What every agent tool has in common, and the default for each thing that differs.
+
+Each supported tool has one module beside this one, with a subclass of AgentCli
+that overrides what that tool does differently. That is the one place for a
+tool's differences: how to spot its process, launch and resume it, type into
+it, find its title and token usage, where its transcripts are, and how to read
+them as a conversation. The rest of agentop asks the tool's AgentCli and never
+names a tool itself.
+"""
+
 from __future__ import annotations
 
 import random
 import string
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Callable, Optional
 
 import psutil
 
+from agentop.conversation import Reader
 from agentop.tmux import CapturePane, Session
 
 ProgressCallback = Callable[[str], None]
 
 
+def files_under(base: Path) -> Iterator[Path]:
+    """Every file below base, not following links."""
+    if base.is_dir():
+        for path in base.rglob("*"):
+            if path.is_file() and not path.is_symlink():
+                yield path
+
+
 class AgentCli:
     """Interface and shared implementation for every supported agent CLI tool."""
 
-    name: str = ""  # "claude", "codex", "gemini", …
+    name: str = ""  # "claude", "codex", "antigravity"
 
-    # ------------------------------------------------------------------ actor behaviour
+    # ------------------------------------------------------------------ typing into it
+    # How long the screen must stay still before a reply counts as finished.
     idle_seconds: float = 5.0
+    # How long a dialogue waits after launch before the first prompt.
+    boot_seconds: float = 8.0
+
+    def send_text(self, session: str, text: str) -> None:
+        """Type text into the tool's input and submit it."""
+        Session.paste_text(session, text)
+        Session.send_keys(session, "Enter")
 
     # ------------------------------------------------------------------ startup
     start_timeout: float = 30.0
@@ -181,15 +209,36 @@ class AgentCli:
         """Permanently remove a saved session from its source storage."""
         raise NotImplementedError(f"{self.name} does not support session deletion")
 
+    # ------------------------------------------------------------------ transcripts
+
+    def transcripts_root(self) -> Path | None:
+        """The folder the tool keeps its transcripts in, or None if it keeps none."""
+        return None
+
+    def archive_files(self, root: Path) -> Iterator[Path]:
+        """The files under the transcripts root that the Memory archive keeps a copy of."""
+        return files_under(root)
+
     def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """Return (base folder, files) holding a session's transcript, or (None, []).
 
         The files are the conversation log and whatever the tool keeps beside it,
         such as subagent logs. Their names are shown relative to the base folder.
-        `root` stands in for the tool's own transcript folder: the Memory archive
-        keeps the same layout under a folder per tool.
+        `root` stands in for the transcripts root: the Memory archive keeps the
+        same layout under a folder per tool.
         """
         return None, []
+
+    def conversation_reader(self, path: Path) -> tuple[Reader, dict] | None:
+        """How to read a transcript file as a conversation, and the context to start from, or None.
+
+        `path` is anywhere that keeps the tool's layout: the tool's own folder or the archive.
+        """
+        return None
+
+    def searchable(self, relative: Path) -> bool:
+        """Whether a transcript's messages go in the Memory search table. `relative` is to the transcripts root."""
+        return True
 
     # ------------------------------------------------------------------ metadata
 

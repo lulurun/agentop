@@ -904,6 +904,10 @@ Status: phases 1 to 4 (archive, messages table, conversation view, recall) built
 | `codex` | `~/.codex/` | `sessions/**` and `archived_sessions/**` |
 | `antigravity` | `~/.gemini/antigravity-cli/brain/` | Every conversation folder |
 
+Each tool's module in `agentop/agentclis/` says where its root is and what to copy (`transcripts_root`, `archive_files`), and how to read a transcript (`conversation_reader`, `searchable`); the archive and the messages table name no tool themselves.
+
+Antigravity conversations from before its rename (from Gemini, up to 2026-06-13 on the devhost) have no `transcript.jsonl`: they are only in its binary store, `~/.gemini/antigravity-cli/conversations/` (`.pb`, or SQLite with protobuf steps). They are left out on purpose.
+
 A **sweep** walks the source roots and brings the archive up to date. It runs at start, every 5 minutes, and when a session exits, in a thread off the event loop.
 
 - **New file**: copied.
@@ -930,7 +934,7 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
 
 3. **Conversation view.** The File viewer shows a transcript as a conversation, from the same extraction. The Transcripts list falls back to the archived copy when the tool has deleted the original.
 
-   Built. The extraction moved to the core, `agentop/conversation.py`, so the viewer reads a live transcript without the Memory plugin, and the messages table uses the same rules. The viewer's `/file` says whether a file reads as a conversation, and `GET /api/v2/plugins/viewer/conversation?session=&path=` returns its messages (the latest 5000). The tab opens on Conversation, with Raw beside it; links are clickable, and it opens at the latest message. `AgentCli.transcript_files` takes the archive as its root, and the listing says `archived: true` when that is where the files came from. Codex's own record of a rollout's path goes stale once it compresses or archives the file, so a rollout is also found by name.
+   Built. The extraction moved out of the plugin, to each tool's `AgentCli.conversation_reader` with the shared parts in `agentop/conversation.py`, so the viewer reads a live transcript without the Memory plugin, and the messages table uses the same rules. The viewer's `/file` says whether a file reads as a conversation, and `GET /api/v2/plugins/viewer/conversation?session=&path=` returns its messages (the latest 5000). The tab opens on Conversation, with Raw beside it; links are clickable, and it opens at the latest message. `AgentCli.transcript_files` takes the archive as its root, and the listing says `archived: true` when that is where the files came from. Codex's own record of a rollout's path goes stale once it compresses or archives the file, so a rollout is also found by name.
 4. **Recall.** Full-text search (SQLite FTS5) over the messages, a route and an `agentop recall` command, and a skill so a session can ask "what was the link Xxx sent about …". Embeddings only if keyword search misses too often.
 
    Built. `messages_fts` is an FTS5 index over the text with the `trigram` tokenizer, kept up to date by a trigger, and built from the table when it is first added. Trigrams match any part of a word, ignoring case, so a partial name, a domain, or Japanese text (which has no spaces) is found without word splitting; a word under three characters is matched with `LIKE`. Every word must match; quotes keep a phrase. Results are best match first (bm25), each with its message ID, date, tool, project, session, a snippet, and, for a reply, the prompt it answered. On the devhost a search over 13,000 messages takes about a millisecond.

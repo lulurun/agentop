@@ -11,7 +11,7 @@ import os
 
 from fastapi import APIRouter, HTTPException, WebSocket
 
-from agentop import ops, scanner
+from agentop import agentclis, ops, scanner
 from agentop.dialogue import ops as dialogue_ops
 
 from . import terminal
@@ -38,7 +38,7 @@ def create_legacy_router(store: SessionStore) -> APIRouter:
 
     @router.post("/api/sessions/start")
     async def create_and_start_session(body: dict):
-        tool = body.get("tool", "claude")
+        tool = body.get("tool", agentclis.DEFAULT)
         cwd = os.path.expanduser(body.get("cwd", ""))
         short_name = body.get("short_name", "").strip()
         if not cwd:

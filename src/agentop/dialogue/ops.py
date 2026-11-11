@@ -12,6 +12,7 @@ import uuid
 from pathlib import Path
 
 from agentop import ops as agent_ops
+from agentop.agentclis import get_agent
 from agentop.dialogue import scenarios
 from agentop.dialogue.model import DIALOGUES_DIR, DialogueMeta
 from agentop.dialogue.scenarios.reader import load as load_scenario
@@ -50,11 +51,9 @@ def start_dialogue(
     if not result_b.get("ok"):
         return {"ok": False, "error": f"Failed to start agent B ({agent_b}): {result_b.get('error')}"}
 
-    # Give tmux sessions time to start up. Codex needs longer than claude to boot
-    # its MCP servers; 8s was too tight and caused turn-1 prompts to land before
-    # codex's input was ready, silently dropping the brief.
-    boot_wait = 20 if "codex" in (agent_a, agent_b) else 8
-    time.sleep(boot_wait)
+    # Give the tools time to start up, or the turn-1 prompt lands before the
+    # input is ready and the brief is silently dropped.
+    time.sleep(max(get_agent(tool).boot_seconds for tool in (agent_a, agent_b)))
 
     meta = DialogueMeta.create(
         dialogue_id=dialogue_id,

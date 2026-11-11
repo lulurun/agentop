@@ -16,33 +16,10 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
+from agentop.agentclis import AGENTS
+
 SAMPLE_BYTES = 4096
 MAX_ERRORS = 20
-
-
-def _files_under(base: Path) -> Iterator[Path]:
-    if base.is_dir():
-        for path in base.rglob("*"):
-            if path.is_file() and not path.is_symlink():
-                yield path
-
-
-def claude_files(root: Path) -> Iterator[Path]:
-    """Every session log and the folders beside them. Not Claude Code's own memory notes."""
-    for path in _files_under(root):
-        parts = path.relative_to(root).parts
-        if len(parts) > 2 and parts[1] == "memory":
-            continue
-        yield path
-
-
-def codex_files(root: Path) -> Iterator[Path]:
-    yield from _files_under(root / "sessions")
-    yield from _files_under(root / "archived_sessions")
-
-
-def all_files(root: Path) -> Iterator[Path]:
-    yield from _files_under(root)
 
 
 @dataclass(frozen=True)
@@ -53,12 +30,8 @@ class Source:
 
 
 def default_sources() -> list[Source]:
-    home = Path.home()
-    return [
-        Source("claude", home / ".claude" / "projects", claude_files),
-        Source("codex", home / ".codex", codex_files),
-        Source("antigravity", home / ".gemini" / "antigravity-cli" / "brain", all_files),
-    ]
+    """Each tool's transcripts root, and which of its files to keep: the tool's own module says."""
+    return [Source(a.name, root, a.archive_files) for a in AGENTS if (root := a.transcripts_root())]
 
 
 def _read_at(path: Path, offset: int, size: int) -> bytes:

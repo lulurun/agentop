@@ -8,7 +8,7 @@ import uuid
 import pytest
 
 from agentop import agentclis, ops, scanner, tmux
-from agentop.agentcli import AgentCli
+from agentop.agentclis.base import AgentCli
 from agentop.dialogue import model as dialogue_model
 from agentop.dialogue import ops as dialogue_ops
 

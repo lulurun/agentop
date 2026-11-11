@@ -9,10 +9,9 @@ src/
   api.py                   FastAPI web server
   agentop/
     cli.py                 CLI entry point (the `agentop` command)
-    agentcli.py            AgentCli base class
-    agentclis/             Concrete agent CLI implementations
+    agentclis/             One module per agent tool: everything that differs between tools
+    conversation.py        What every transcript reader shares (Message, JSONL, .zst)
     actor.py               Sends/receives over tmux
-    actors/                Actor subclasses (per-agent send behaviour)
     agent_instance.py      Wires AgentCli + Actor into one runtime object
     scanner.py             Process detection and session building
     ops.py                 Business logic used by both API and CLI
@@ -27,51 +26,41 @@ Everything described here is the **core**: always loaded, never switched off. Ne
 
 ## 2 Agent layer
 
-### 2.1 AgentCli (`agentcli.py`)
+`agentclis/` is the one place for the differences between the agent tools. Each tool has one module there, with a subclass of `AgentCli`. The rest of agentop asks a tool's `AgentCli` (`get_agent(name)`) and never names a tool itself: a new tool is a new module, and a change in how a tool works is a change to its module only.
 
-Base class for every supported agent CLI tool. Defines:
-- `name` — tool identifier (`"claude"`, `"codex"`, `"antigravity"`)
-- `idle_seconds` — how long screen must be stable before treating output as complete
-- `matches(proc_name, cmdline)` — process detection
-- `start_session()`, `resume_session()` — tmux session lifecycle
-- `get_saved_sessions()`, `delete_session()` — history management
-- `get_session_meta()` — token usage, AI title, bridge URL
+### 2.1 AgentCli (`agentclis/base.py`)
 
-### 2.2 `agentclis/`
+The interface, with the default for each thing that differs:
 
-One file per supported tool:
+| What | Members |
+|------|---------|
+| Spotting its process | `matches(proc_name, cmdline)` |
+| Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_session()`, `resume_session()`, `post_start_hook()` |
+| Typing into it | `send_text(session, text)` (plain paste, then Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
+| Saved sessions | `get_saved_sessions()`, `delete_session()` |
+| What it's doing | `get_session_meta()`: session ID, AI title (`get_ai_title()`), token usage, bridge URL |
+| Its transcripts | `transcripts_root()` (the tool's own folder), `archive_files(root)` (what the Memory archive copies), `transcript_files(session_id, root)` (one session's files), `conversation_reader(path)` (how to read one as prompts and replies), `searchable(relative)` (whether it goes in the Memory search table) |
 
-| File | Class | Notes |
-|------|-------|-------|
-| `claude.py` | `ClaudeAgentCli` | Reads `~/.claude/` for session metadata and token usage |
-| `codex.py` | `CodexAgentCli` | Reads `~/.codex/state_5.sqlite` |
-| `antigravity.py` | `AntigravityAgentCli` | `idle_seconds = 15` (post-completion UI updates) |
+### 2.2 The tools
 
-`agentclis/__init__.py` exports `AGENTS` list and `get_agent(name)`.
+| File | Class | Differences |
+|------|-------|-------------|
+| `claude.py` | `ClaudeAgentCli` | Session ID by PID from `~/.claude/sessions/`; title and token usage from the session log in `~/.claude/projects/<slug>/`; accepts the trust prompt. Archives everything but Claude Code's `memory/` notes; only `<project>/<session>.jsonl` is searchable, not subagents or tool output |
+| `codex.py` | `CodexAgentCli` | Thread by PID from `~/.codex/logs_2.sqlite`, title from `state_5.sqlite`, tokens from the rollout; pre-trusts the folder. Bracketed paste and a settle delay; `boot_seconds = 20`. Archives `sessions/` and `archived_sessions/`, `.jsonl.zst` included |
+| `antigravity.py` | `AntigravityAgentCli` | Title from its CLI log; bracketed paste; `idle_seconds = 15`. Transcripts in `~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl`. Conversations from before the rename to Antigravity are only in its binary `conversations/` store, and are not read |
+
+`agentclis/__init__.py` exports `AGENTS`, `get_agent(name)`, `names()` (the CLI's `--tool` choices), and `DEFAULT`, the tool used when none is named.
 
 ## 3 Actor layer
 
 ### 3.1 Actor (`actor.py`)
 
-Generic tmux send/receive. Knows nothing about the dialogue protocol.
+Generic tmux send/receive. Knows nothing about the dialogue protocol or the tool.
 
-- `send(text)` — pastes text into the tmux session and presses Enter
+- `send(text)` — types text in with the tool's `AgentCli.send_text`. Codex and agy submit on a bare newline, so theirs use bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~) and multi-line prompts arrive intact
 - `receive() -> str | None` — polls the screen until stable for `idle_seconds`, returns full scrollback
 
-### 3.2 `actors/`
-
-Subclasses that override `send()` for tools whose terminals treat bare newlines as Enter:
-
-| File | Class | Why needed |
-|------|-------|-----------|
-| `actors/antigravity.py` | `AntigravityActor` | agy submits on bare newline |
-| `actors/codex.py` | `CodexActor` | Codex submits on bare newline |
-
-Both use `Session.paste_text_bracketed()` (ESC[200~…ESC[201~) so multi-line prompts arrive intact.
-
-`actors/__init__.py` exports `get_actor(name) -> type[Actor]`, defaulting to `Actor`.
-
-### 3.3 AgentInstance (`agent_instance.py`)
+### 3.2 AgentInstance (`agent_instance.py`)
 
 Wires one `AgentCli` and one `Actor` together for a single running process.
 
@@ -114,7 +103,7 @@ The folder was `~/.agent-dashboard` with every file at the top until 2026-11-11.
 
 ### 4.1b Transcripts as conversations (`conversation.py`, `service/transcripts.py`)
 
-`service/transcripts.py` lists a session's transcript files, the ones its tool reports (`AgentCli.transcript_files`). When the tool has deleted them it looks in the Memory archive, which keeps each tool's layout, so the same lookup works with the archive as its root. `conversation.py` reads one of those files as prompts and replies, per tool; the File viewer shows it and the Memory plugin's messages table is built from it.
+`service/transcripts.py` lists a session's transcript files, the ones its tool reports (`AgentCli.transcript_files`). When the tool has deleted them it looks in the Memory archive, which keeps each tool's layout, so the same lookup works with the archive as its root. Each tool's `AgentCli.conversation_reader` reads one of those files as prompts and replies, with what every reader shares in `conversation.py`; the File viewer shows it and the Memory plugin's messages table is built from it.
 
 ### 4.2 Registry (`registry.py`)
 

@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agentop import agentclis
-from agentop.agentcli import AgentCli
+from agentop.agentclis.base import AgentCli
 from agentop.service import files, transcripts
 from agentop.service.app import create_app
 from agentop.service.config import Settings

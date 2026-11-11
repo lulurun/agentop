@@ -2,19 +2,60 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import psutil
 
-from agentop.agentcli import AgentCli
+from agentop.agentclis.base import AgentCli
+from agentop.conversation import TRANSCRIPT, Message, Reader, epoch
+from agentop.tmux import Session
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
+# One folder per conversation. Conversations from before the rename to
+# Antigravity are only in its binary store, conversations/, and aren't read.
+_BRAIN_DIR = Path("~/.gemini/antigravity-cli/brain")
+_TRANSCRIPT = Path(".system_generated/logs/transcript.jsonl")
 
 _LOG_NAME_RE = re.compile(r"cli-(\d{8})_(\d{6})\.log")
 _USER_INPUT_RE = re.compile(r'HandleUserInput called with text: "(.+)"')
 _START_TOLERANCE_SEC = 15
+
+# ---------------------------------------------------------------- transcripts as conversations
+
+_REQUEST = re.compile(r"<USER_REQUEST>\s*(.*?)\s*</USER_REQUEST>", re.DOTALL)
+
+
+def messages(record: dict, context: dict) -> Iterator[Message]:
+    """The prompt or reply in one step of an Antigravity transcript."""
+    kind = record.get("type")
+    step = record.get("step_index")
+    content = record.get("content")
+    if step is None or not isinstance(content, str):
+        return
+    if kind == "USER_INPUT":
+        found = _REQUEST.search(content)
+        # Some prompts have no closing tag.
+        text = (found.group(1) if found else content.removeprefix("<USER_REQUEST>")).strip()
+        role = "user"
+        context["turn"] = str(step)
+    elif kind == "PLANNER_RESPONSE":
+        text, role = content.strip(), "assistant"
+    else:
+        return
+    if text:
+        session = context.get("session")
+        yield Message(
+            record=f"{session}:{step}",
+            role=role,
+            text=text,
+            at=epoch(record.get("created_at")),
+            session=session,
+            turn=context.get("turn"),
+        )
 
 
 class AntigravityAgentCli(AgentCli):
@@ -36,6 +77,11 @@ class AntigravityAgentCli(AgentCli):
     @property
     def launch_cmd(self) -> str:
         return "agy --dangerously-skip-permissions"
+
+    def send_text(self, session: str, text: str) -> None:
+        """Bracketed paste, since agy submits on a bare newline."""
+        Session.paste_text_bracketed(session, text)
+        Session.send_keys(session, "Enter")
 
     def _find_log_file(self, pid: int) -> Optional[Path]:
         """Find the log file for this process by matching the filename timestamp to the process start time."""
@@ -100,16 +146,27 @@ class AntigravityAgentCli(AgentCli):
                     continue
         return {c: proj_to_cwd[p] for c, p in conv_to_proj.items() if p in proj_to_cwd}
 
+    # ------------------------------------------------------------------ transcripts
+
+    def transcripts_root(self) -> Path:
+        return _BRAIN_DIR.expanduser()
+
+    def conversation_reader(self, path: Path) -> tuple[Reader, dict] | None:
+        """`<conversation>/.system_generated/logs/transcript.jsonl`; the conversation ID is its folder's name."""
+        if not TRANSCRIPT.search(path.name) or not path.name.startswith("transcript.jsonl") or path.parent.name != "logs":
+            return None
+        return messages, {"session": path.parents[2].name}
+
     def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """Everything in the conversation's brain folder: the transcript and the artifacts beside it."""
-        folder = (root or Path("~/.gemini/antigravity-cli/brain").expanduser()) / session_id
+        folder = (root or self.transcripts_root()) / session_id
         if not folder.is_dir() or folder.name != session_id:
             return None, []
         return folder, sorted(p for p in folder.rglob("*") if p.is_file())
 
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
         """Return saved antigravity sessions from the brain transcript directory."""
-        brain_dir = Path("~/.gemini/antigravity-cli/brain").expanduser()
+        brain_dir = self.transcripts_root()
         if not brain_dir.exists():
             return []
         cwd_map = self._conv_to_cwd_map()
@@ -118,7 +175,7 @@ class AntigravityAgentCli(AgentCli):
             if not conv_dir.is_dir():
                 continue
             session_id = conv_dir.name
-            transcript = conv_dir / ".system_generated/logs/transcript.jsonl"
+            transcript = conv_dir / _TRANSCRIPT
             if not transcript.exists():
                 continue
             title = None
@@ -149,9 +206,7 @@ class AntigravityAgentCli(AgentCli):
         return sessions[:limit]
 
     def delete_session(self, session_id: str) -> None:
-        import shutil
-
-        conv_dir = Path("~/.gemini/antigravity-cli/brain").expanduser() / session_id
+        conv_dir = self.transcripts_root() / session_id
         if not conv_dir.exists():
             raise FileNotFoundError(f"Session {session_id} not found in Antigravity brain")
         shutil.rmtree(conv_dir)

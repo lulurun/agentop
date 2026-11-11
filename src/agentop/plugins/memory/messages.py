@@ -1,7 +1,7 @@
 """The messages table: what the user typed and what the agent wrote back, from the archive.
 
-See docs/v2-design.md, section 12.11. What counts as a message is
-agentop.conversation's call, the same as the File viewer's.
+See docs/v2-design.md, section 12.11. What counts as a message is the
+tool's call (`AgentCli.conversation_reader`), the same as the File viewer's.
 
 The table is derived. Deleting messages.sqlite and indexing again rebuilds it
 from the archive. Each archived file is read from where the last run stopped,
@@ -21,6 +21,7 @@ from pathlib import Path
 import zstandard
 
 from agentop import conversation
+from agentop.agentclis import get_agent
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS messages (
@@ -55,20 +56,16 @@ CREATE TABLE IF NOT EXISTS files (
 
 
 def reader_for(relative: Path) -> tuple[conversation.Reader, dict] | None:
-    """How to read an archived file, or None if it holds nothing for the table.
+    """How to read an archived file, `<tool>/<the tool's own layout>`, or None if it holds nothing for the table.
 
-    Only the main conversations: a Claude session's folder holds its subagents
-    and tool output, which aren't what was said to the user.
+    Only what the tool counts as searchable: for Claude, not the subagents and
+    tool output beside a session, which aren't what was said to the user.
     """
     parts = relative.parts
-    if len(parts) < 3 or not conversation.TRANSCRIPT.search(relative.name):
+    agent = get_agent(parts[0]) if len(parts) > 1 else None
+    if agent is None or not agent.searchable(Path(*parts[1:])):
         return None
-    tool = parts[0]
-    if tool == "claude" and len(parts) != 3:
-        return None
-    if tool == "codex" and parts[1] not in ("sessions", "archived_sessions"):
-        return None
-    return conversation.reader_for(tool, relative)
+    return agent.conversation_reader(relative)
 
 
 # ---------------------------------------------------------------- the table

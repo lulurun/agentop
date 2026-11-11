@@ -9,7 +9,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agentop.plugins.memory import archive as archive_mod
-from agentop.plugins.memory.archive import Archive, Source, all_files, claude_files, codex_files
+from agentop.agentclis.antigravity import AntigravityAgentCli
+from agentop.agentclis.claude import ClaudeAgentCli
+from agentop.agentclis.codex import CodexAgentCli
+from agentop.plugins.memory.archive import Archive, Source
 from agentop.service.app import create_app
 from agentop.service.config import Settings
 from agentop.service.identity import Identity
@@ -37,7 +40,10 @@ def home(tmp_path):
 def archive(home, tmp_path):
     return Archive(
         tmp_path / "memory",
-        [Source("claude", home / ".claude" / "projects", claude_files), Source("codex", home / ".codex", codex_files)],
+        [
+            Source("claude", home / ".claude" / "projects", ClaudeAgentCli().archive_files),
+            Source("codex", home / ".codex", CodexAgentCli().archive_files),
+        ],
     )
 
 
@@ -106,7 +112,7 @@ def test_state_survives_a_restart(archive, tmp_path):
 
 
 def test_a_missing_source_is_skipped(tmp_path):
-    archive = Archive(tmp_path / "memory", [Source("antigravity", tmp_path / "nowhere", all_files)])
+    archive = Archive(tmp_path / "memory", [Source("antigravity", tmp_path / "nowhere", AntigravityAgentCli().archive_files)])
     assert archive.sweep()["copied"] == 0
 
 
@@ -163,3 +169,13 @@ def test_the_plugin_searches_what_it_has_recorded(client, home):
     assert [h["snippet"] for h in hits] == ["the atama link"]
     messages = client.get("/api/v2/plugins/memory/conversation", params={"session": "s1"}, headers=AUTH).json()
     assert [m["text"] for m in messages] == ["the atama link"]
+
+
+def test_each_tool_is_archived_from_where_its_module_says(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    roots = {s.tool: s.root for s in archive_mod.default_sources()}
+    assert roots == {
+        "claude": tmp_path / ".claude" / "projects",
+        "codex": tmp_path / ".codex",
+        "antigravity": tmp_path / ".gemini" / "antigravity-cli" / "brain",
+    }

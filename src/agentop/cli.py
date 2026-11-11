@@ -88,6 +88,9 @@ import json
 import os
 import sys
 
+# No paths at import, so this is safe before `serve` moves the folder.
+from agentop import agentclis
+
 
 def _ops():
     try:
@@ -478,7 +481,7 @@ def cmd_service_connect_info(args):
 # Dialogue commands
 # ---------------------------------------------------------------------------
 
-_DIALOGUE_TOOLS = ["claude", "codex", "gemini", "antigravity"]
+_DIALOGUE_TOOLS = agentclis.names()
 
 
 def _dialogue_ops():
@@ -643,7 +646,7 @@ def main():
         ),
     )
     p_start.add_argument("session_name", type=_session_name_type, help="Session name (max 31 chars)")
-    p_start.add_argument("--tool", required=True, choices=["claude", "codex", "gemini", "antigravity"])
+    p_start.add_argument("--tool", required=True, choices=agentclis.names())
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
 
     # history
@@ -651,13 +654,13 @@ def main():
         "history",
         help="Show saved/historical sessions",
         description=(
-            "List saved sessions from Claude, Codex, Gemini, and Antigravity.\n"
+            "List saved sessions from Claude, Codex, and Antigravity.\n"
             "Currently active sessions are excluded.\n"
             "Use --json for full machine-readable output."
         ),
     )
     p_history.add_argument("--json", action="store_true", help="Output as JSON array")
-    p_history.add_argument("--tool", choices=["claude", "codex", "gemini", "antigravity"], help="Filter by tool")
+    p_history.add_argument("--tool", choices=agentclis.names(), help="Filter by tool")
     p_history.add_argument("--limit", type=int, default=50, help="Maximum number of results (default: 50)")
 
     # stop
@@ -685,7 +688,7 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p_recall.add_argument("query", nargs="*", help="Words to search for")
-    p_recall.add_argument("--tool", choices=["claude", "codex", "antigravity"], help="Only this tool's sessions")
+    p_recall.add_argument("--tool", choices=agentclis.names(), help="Only this tool's sessions")
     p_recall.add_argument("--project", help="Only sessions in this working directory")
     p_recall.add_argument("--since", help="Only messages since 30d, 2w, 12h, or a date")
     p_recall.add_argument("--limit", type=int, default=10, help="Most results to show (default 10)")
@@ -738,14 +741,14 @@ def main():
     p_dstart.add_argument(
         "--agent-a",
         dest="agent_a",
-        default="claude",
+        default=agentclis.DEFAULT,
         choices=_DIALOGUE_TOOLS,
         help="Agent for session A (default: claude)",
     )
     p_dstart.add_argument(
         "--agent-b",
         dest="agent_b",
-        default="claude",
+        default=agentclis.DEFAULT,
         choices=_DIALOGUE_TOOLS,
         help="Agent for session B (default: claude)",
     )

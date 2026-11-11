@@ -15,6 +15,7 @@ from typing import Literal
 from fastapi import HTTPException
 
 from agentop import conversation
+from agentop.agentclis import get_agent
 from agentop.service import files, transcripts
 
 MAX_BYTES = 2 * 1024 * 1024
@@ -54,7 +55,8 @@ def register(api):
         return target
 
     def readable(row: dict, source: str, target: Path) -> bool:
-        return source == "transcript" and conversation.reader_for(row.get("tool"), target) is not None
+        agent = get_agent(row.get("tool") or "")
+        return source == "transcript" and agent is not None and agent.conversation_reader(target) is not None
 
     async def located(row: dict, source: str, path: str, read):
         try:
@@ -85,7 +87,7 @@ def register(api):
     async def read_conversation(session: str, path: str):
         """A transcript's prompts and replies, oldest first."""
         row = session_row(session)
-        target, messages = await located(row, "transcript", path, lambda t: conversation.read(row.get("tool"), t))
+        target, messages = await located(row, "transcript", path, lambda t: conversation.read(get_agent(row.get("tool") or ""), t))
         if messages is None:
             raise HTTPException(404, "This file isn't a conversation the viewer can read")
         return {

@@ -7,8 +7,8 @@ import time
 
 import psutil
 
-from agentop.actors import get_actor
-from agentop.agentcli import AgentCli
+from agentop.actor import Actor
+from agentop.agentclis.base import AgentCli
 from agentop.tmux import Session
 
 # Ctrl-C clears what's typed in the agent's input (and interrupts a running
@@ -23,10 +23,11 @@ class AgentInstance:
     def __init__(self, agent: AgentCli, session: str, name: str = ""):
         self.agent = agent
         self.session = session
-        self.actor = get_actor(agent.name)(
+        self.actor = Actor(
             session=session,
             name=name,
             idle_seconds=agent.idle_seconds,
+            send_text=agent.send_text,
         )
 
     def send_command(self, text: str) -> None:

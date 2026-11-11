@@ -3,16 +3,74 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
 import psutil
 
-from agentop.agentcli import AgentCli
+from agentop.agentclis.base import AgentCli, files_under
+from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, texts
+from agentop.tmux import Session
+
+_HOME = Path("~/.codex")
+
+# tmux paste-buffer returning only confirms the paste was queued, not that
+# codex's CLI has finished ingesting it from the pty. Sending Enter immediately
+# races that ingestion for large prompts (e.g. the turn-1 role+brief message)
+# and can submit before the paste lands, silently dropping it. A short settle
+# delay scaled to payload size avoids that race.
+_BASE_SETTLE_SECONDS = 0.5
+_SETTLE_SECONDS_PER_KB = 0.05
+
+# ---------------------------------------------------------------- transcripts as conversations
+
+_NOISE = ("# AGENTS.md instructions",)
+_TAGGED = re.compile(r"<([A-Za-z_][\w-]*)>.*</\1>", re.DOTALL)
+
+
+def _injected(text: str) -> bool:
+    """Text Codex adds to a user message: instructions, context, app events, each one whole tagged block."""
+    return text.startswith(_NOISE) or _TAGGED.fullmatch(text) is not None
+
+
+def messages(record: dict, context: dict) -> Iterator[Message]:
+    """The prompt or reply in one record of a Codex rollout."""
+    kind = record.get("type")
+    payload = record.get("payload") or {}
+    if kind == "session_meta":
+        context["session"] = payload.get("id") or payload.get("session_id")
+        context["project"] = payload.get("cwd")
+        return
+    if kind == "turn_context":
+        context["turn"] = payload.get("turn_id")
+        context["project"] = payload.get("cwd") or context.get("project")
+        return
+    if kind != "response_item" or payload.get("type") != "message":
+        return
+    role = payload.get("role")
+    if role not in ("user", "assistant") or not payload.get("id"):
+        return
+    kinds = ("input_text",) if role == "user" else ("output_text",)
+    parts = [t.strip() for t in texts(payload.get("content"), kinds)]
+    text = "\n\n".join(t for t in parts if t and not (role == "user" and _injected(t)))
+    if text:
+        yield Message(
+            record=payload["id"],
+            role=role,
+            text=text,
+            at=epoch(record.get("timestamp")),
+            session=context.get("session"),
+            project=context.get("project"),
+            turn=context.get("turn"),
+        )
 
 
 class CodexAgentCli(AgentCli):
     name = "codex"
+    # Codex boots its MCP servers first; a prompt sent sooner is dropped.
+    boot_seconds = 20.0
 
     # Tolerance for matching process start time to thread created_at_ms (30 seconds)
     _START_TOLERANCE_MS = 30_000
@@ -34,6 +92,12 @@ class CodexAgentCli(AgentCli):
     def launch_cmd(self) -> str:
         return "codex --dangerously-bypass-hook-trust"
 
+    def send_text(self, session: str, text: str) -> None:
+        """Bracketed paste, since codex submits on a bare newline, then a pause for it to take the paste in."""
+        Session.paste_text_bracketed(session, text)
+        time.sleep(_BASE_SETTLE_SECONDS + _SETTLE_SECONDS_PER_KB * (len(text) / 1024))
+        Session.send_keys(session, "Enter")
+
     def start_session(self, cwd: str, short_name: str = "", params: dict | None = None, **kwargs) -> dict:
         """Pre-trust cwd before launching, otherwise codex's first-run 'Do you
         trust the contents of this directory?' prompt eats whatever gets typed
@@ -44,7 +108,7 @@ class CodexAgentCli(AgentCli):
 
     @staticmethod
     def _pretrust_dir(cwd: str) -> None:
-        config_path = Path("~/.codex/config.toml").expanduser()
+        config_path = (_HOME / "config.toml").expanduser()
         if not config_path.exists():
             return
         marker = f'[projects."{cwd}"]'
@@ -61,7 +125,7 @@ class CodexAgentCli(AgentCli):
         so this follows /new and resumes. Lines from before the process started
         belong to an earlier process that had the same pid.
         """
-        db_path = Path("~/.codex/logs_2.sqlite").expanduser()
+        db_path = (_HOME / "logs_2.sqlite").expanduser()
         if not db_path.exists():
             return None
         prefix = f"pid:{pid}:"
@@ -98,7 +162,7 @@ class CodexAgentCli(AgentCli):
         return found
 
     def _thread_by_id(self, thread_id: str) -> Optional[dict]:
-        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        db_path = (_HOME / "state_5.sqlite").expanduser()
         if not db_path.exists():
             return None
         try:
@@ -127,7 +191,7 @@ class CodexAgentCli(AgentCli):
         Returns a dict with title, first_user_message, tokens_used, rollout_path,
         or None if no close match is found.
         """
-        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        db_path = (_HOME / "state_5.sqlite").expanduser()
         if not db_path.exists():
             return None
         try:
@@ -192,7 +256,7 @@ class CodexAgentCli(AgentCli):
         return f"codex resume {session_id}"
 
     def delete_session(self, session_id: str) -> None:
-        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        db_path = (_HOME / "state_5.sqlite").expanduser()
         if not db_path.exists():
             raise FileNotFoundError("Codex database not found")
         with sqlite3.connect(str(db_path), timeout=5) as conn:
@@ -201,13 +265,28 @@ class CodexAgentCli(AgentCli):
                 raise FileNotFoundError(f"Session {session_id} not found in Codex database")
             conn.commit()
 
+    # ------------------------------------------------------------------ transcripts
+
+    def transcripts_root(self) -> Path:
+        return _HOME.expanduser()
+
+    def archive_files(self, root: Path) -> Iterator[Path]:
+        """The rollouts, live and archived. Not codex's databases, logs, or config."""
+        yield from files_under(root / "sessions")
+        yield from files_under(root / "archived_sessions")
+
+    def conversation_reader(self, path: Path) -> tuple[Reader, dict] | None:
+        if not TRANSCRIPT.search(path.name) or not path.name.startswith("rollout-"):
+            return None
+        return messages, {}
+
     def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """The thread's rollout log.
 
         Codex records where it is, but later compresses it (`.jsonl.zst`) or
         moves it to archived_sessions, so the rollout is also looked for by name.
         """
-        home = Path("~/.codex").expanduser()
+        home = self.transcripts_root()
         base = root or home
         thread = self._thread_by_id(session_id)
         if thread and thread.get("rollout_path"):
@@ -228,7 +307,7 @@ class CodexAgentCli(AgentCli):
         return (found[0].parent if len(found) == 1 else base), found
 
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
-        db_path = Path("~/.codex/state_5.sqlite").expanduser()
+        db_path = (_HOME / "state_5.sqlite").expanduser()
         if not db_path.exists():
             return []
         try:

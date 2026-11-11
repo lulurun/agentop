@@ -156,6 +156,6 @@ agentop dialogue start \
 
 ## 7 Bracketed paste
 
-Codex and Antigravity submit on bare newlines, so their actors (`actors/codex.py`, `actors/antigravity.py`) wrap all sent text in bracketed paste sequences (ESC[200~…ESC[201~). Claude Code buffers multi-line input natively and uses plain paste.
+Codex and Antigravity submit on bare newlines, so their `send_text` (in `agentclis/codex.py`, `agentclis/antigravity.py`) wraps all sent text in bracketed paste sequences (ESC[200~…ESC[201~). Claude Code buffers multi-line input natively and uses plain paste.
 
-This is handled transparently — `get_actor(agent.name)` returns the right `Actor` subclass.
+This is handled transparently: the `Actor` types with its tool's `AgentCli.send_text`.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from collections.abc import Callable
 
 from agentop.tmux import CapturePane, Session
 
@@ -15,10 +16,18 @@ _TIMEOUT = 1800.0
 
 
 class Actor:
-    def __init__(self, session: str, name: str, idle_seconds: float = 5.0):
+    def __init__(
+        self,
+        session: str,
+        name: str,
+        idle_seconds: float = 5.0,
+        send_text: Callable[[str, str], None] | None = None,
+    ):
+        """`send_text(session, text)` types into the tool: its AgentCli.send_text, since each tool takes a paste its own way."""
         self.session = session
         self.name = name
         self.idle_seconds = idle_seconds
+        self._send_text = send_text
         self._stop: threading.Event | None = None
 
     def attach(self, stop_event: threading.Event) -> Actor:
@@ -26,6 +35,9 @@ class Actor:
         return self
 
     def send(self, text: str) -> None:
+        if self._send_text:
+            self._send_text(self.session, text)
+            return
         Session.paste_text(self.session, text)
         Session.send_keys(self.session, "Enter")
 

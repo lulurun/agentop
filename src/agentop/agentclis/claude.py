@@ -1,14 +1,75 @@
 from __future__ import annotations
 
 import json
+import re
 import socket
 import time
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-from agentop.agentcli import AgentCli
+from agentop.agentclis.base import AgentCli, files_under
+from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, texts
 
 _PROJECTS_DIR = Path("~/.claude/projects")
+
+# ---------------------------------------------------------------- transcripts as conversations
+
+_REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.DOTALL)
+_COMMAND = re.compile(r"<command-name>(.*?)</command-name>", re.DOTALL)
+_ARGS = re.compile(r"<command-args>(.*?)</command-args>", re.DOTALL)
+_NOISE = (
+    "<local-command-",
+    "<command-message>",
+    "[Request interrupted",
+    "<task-notification>",
+    "Caveat:",
+)
+
+
+def _prompt(content) -> str:
+    if isinstance(content, list) and any(isinstance(b, dict) and b.get("type") == "tool_result" for b in content):
+        return ""
+    text = _REMINDER.sub("", "\n".join(texts(content, ("text",)))).strip()
+    command = _COMMAND.search(text)
+    if command and text.startswith("<command-"):
+        # A slash command: what was typed, not the expansion.
+        args = _ARGS.search(text)
+        return f"{command.group(1).strip()} {args.group(1).strip() if args else ''}".strip()
+    if text.startswith(_NOISE):
+        return ""
+    return text
+
+
+def messages(record: dict, context: dict) -> Iterator[Message]:
+    """The prompt or reply in one record of a Claude Code session log."""
+    kind = record.get("type")
+    if kind not in ("user", "assistant") or record.get("isMeta"):
+        return
+    if record.get("isSidechain") and not context.get("sidechain"):
+        return
+    if record.get("isCompactSummary") or record.get("isApiErrorMessage"):
+        return
+    uuid = record.get("uuid")
+    message = record.get("message") or {}
+    if not uuid or not isinstance(message, dict):
+        return
+    if kind == "user":
+        text = _prompt(message.get("content"))
+        if text:
+            context["turn"] = uuid
+    else:
+        text = "\n\n".join(texts(message.get("content"), ("text",))).strip()
+    if text:
+        yield Message(
+            record=uuid,
+            role=kind,
+            text=text,
+            at=epoch(record.get("timestamp")),
+            session=record.get("sessionId"),
+            project=record.get("cwd"),
+            turn=context.get("turn"),
+        )
 
 
 class ClaudeAgentCli(AgentCli):
@@ -24,8 +85,31 @@ class ClaudeAgentCli(AgentCli):
     def get_resume_cmd(self, session_id: str) -> str:
         return f"claude --resume {session_id} --dangerously-skip-permissions --remote-control"
 
+    # ------------------------------------------------------------------ transcripts
+
+    def transcripts_root(self) -> Path:
+        return _PROJECTS_DIR.expanduser()
+
+    def archive_files(self, root: Path) -> Iterator[Path]:
+        """Every session log and the folders beside them. Not Claude Code's own memory notes."""
+        for path in files_under(root):
+            parts = path.relative_to(root).parts
+            if len(parts) > 2 and parts[1] == "memory":
+                continue
+            yield path
+
+    def conversation_reader(self, path: Path) -> tuple[Reader, dict] | None:
+        if not TRANSCRIPT.search(path.name):
+            return None
+        # A subagent's log is a conversation too, one the main log leaves out.
+        return messages, {"sidechain": "subagents" in path.parts}
+
+    def searchable(self, relative: Path) -> bool:
+        """Only the main conversations, `<project>/<session>.jsonl`: not subagents or tool output."""
+        return len(relative.parts) == 2
+
     def delete_session(self, session_id: str) -> None:
-        projects_dir = _PROJECTS_DIR.expanduser()
+        projects_dir = self.transcripts_root()
         for f in projects_dir.glob(f"*/{session_id}.jsonl"):
             f.unlink()
             return
@@ -33,7 +117,7 @@ class ClaudeAgentCli(AgentCli):
 
     def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """The conversation log, and the folder of the same name beside it (subagents, tool results)."""
-        projects_dir = root or _PROJECTS_DIR.expanduser()
+        projects_dir = root or self.transcripts_root()
         for log in projects_dir.glob(f"*/{session_id}.jsonl"):
             folder = log.with_suffix("")
             extra = sorted(p for p in folder.rglob("*") if p.is_file()) if folder.is_dir() else []
@@ -41,7 +125,7 @@ class ClaudeAgentCli(AgentCli):
         return None, []
 
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
-        projects_dir = _PROJECTS_DIR.expanduser()
+        projects_dir = self.transcripts_root()
         if not projects_dir.exists():
             return []
         sessions = []
@@ -111,7 +195,7 @@ class ClaudeAgentCli(AgentCli):
             if not session_id:
                 return None
             slug = cwd.replace("/", "-")
-            jsonl_path = Path(f"~/.claude/projects/{slug}/{session_id}.jsonl").expanduser()
+            jsonl_path = self.transcripts_root() / slug / f"{session_id}.jsonl"
             return jsonl_path if jsonl_path.exists() else None
         except (OSError, json.JSONDecodeError):
             return None
