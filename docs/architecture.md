@@ -112,6 +112,10 @@ New kinds of files go in one of these folders, not at the top.
 
 The folder was `~/.agent-dashboard` with every file at the top until 2026-11-11. `agentop serve` moves it at start (`paths.migrate()`), once the old service has stopped, and leaves nothing at the old name. Until the service has moved it, every command keeps using the old folder as it was. A desktop app built before the move looks in the old folder, so it needs rebuilding.
 
+### 4.1b Transcripts as conversations (`conversation.py`, `service/transcripts.py`)
+
+`service/transcripts.py` lists a session's transcript files, the ones its tool reports (`AgentCli.transcript_files`). When the tool has deleted them it looks in the Memory archive, which keeps each tool's layout, so the same lookup works with the archive as its root. `conversation.py` reads one of those files as prompts and replies, per tool; the File viewer shows it and the Memory plugin's messages table is built from it.
+
 ### 4.2 Registry (`registry.py`)
 
 JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions.

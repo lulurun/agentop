@@ -100,9 +100,9 @@ class AntigravityAgentCli(AgentCli):
                     continue
         return {c: proj_to_cwd[p] for c, p in conv_to_proj.items() if p in proj_to_cwd}
 
-    def transcript_files(self, session_id: str) -> tuple[Optional[Path], list[Path]]:
+    def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """Everything in the conversation's brain folder: the transcript and the artifacts beside it."""
-        folder = Path("~/.gemini/antigravity-cli/brain").expanduser() / session_id
+        folder = (root or Path("~/.gemini/antigravity-cli/brain").expanduser()) / session_id
         if not folder.is_dir() or folder.name != session_id:
             return None, []
         return folder, sorted(p for p in folder.rglob("*") if p.is_file())

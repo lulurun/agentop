@@ -2,7 +2,8 @@
 
 Two sources, both confined: `workdir` is the session's working directory (the
 same rule as the Files list), and `transcript` is one of the files the agent
-tool reports for the session.
+tool reports for the session. A transcript can also be read as a conversation:
+the prompts and replies in it, without tool calls and output.
 """
 
 from __future__ import annotations
@@ -13,10 +14,13 @@ from typing import Literal
 
 from fastapi import HTTPException
 
+from agentop import conversation
 from agentop.service import files, transcripts
 
 MAX_BYTES = 2 * 1024 * 1024
 SNIFF_BYTES = 8192
+# A conversation longer than this shows its latest messages.
+MAX_MESSAGES = 5000
 
 
 def read_text(path: Path, max_bytes: int = MAX_BYTES) -> dict:
@@ -49,18 +53,44 @@ def register(api):
         _, target = files.resolve_inside(row["cwd"], path)
         return target
 
-    @api.router.get("/file")
-    async def read_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
-        row = session_row(session)
+    def readable(row: dict, source: str, target: Path) -> bool:
+        return source == "transcript" and conversation.reader_for(row.get("tool"), target) is not None
+
+    async def located(row: dict, source: str, path: str, read):
         try:
             target = await asyncio.to_thread(locate, row, source, path)
             if not target.is_file():
                 raise FileNotFoundError(path)
-            result = await asyncio.to_thread(read_text, target)
+            return target, await asyncio.to_thread(read, target)
         except files.OutsideRoot:
             raise HTTPException(403, "That path is outside the session's directory") from None
         except FileNotFoundError:
             raise HTTPException(404, "No such file") from None
         except PermissionError:
             raise HTTPException(403, "Permission denied") from None
-        return {"path": path, "source": source, "absolute": str(target), **result}
+
+    @api.router.get("/file")
+    async def read_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
+        row = session_row(session)
+        target, result = await located(row, source, path, read_text)
+        return {
+            "path": path,
+            "source": source,
+            "absolute": str(target),
+            "conversation": readable(row, source, target),
+            **result,
+        }
+
+    @api.router.get("/conversation")
+    async def read_conversation(session: str, path: str):
+        """A transcript's prompts and replies, oldest first."""
+        row = session_row(session)
+        target, messages = await located(row, "transcript", path, lambda t: conversation.read(row.get("tool"), t))
+        if messages is None:
+            raise HTTPException(404, "This file isn't a conversation the viewer can read")
+        return {
+            "path": path,
+            "absolute": str(target),
+            "total": len(messages),
+            "messages": [{"role": m.role, "text": m.text, "at": m.at} for m in messages[-MAX_MESSAGES:]],
+        }

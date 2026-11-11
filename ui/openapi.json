@@ -1100,6 +1100,11 @@
       },
       "TranscriptListing": {
         "properties": {
+          "archived": {
+            "default": false,
+            "title": "Archived",
+            "type": "boolean"
+          },
           "files": {
             "items": {
               "$ref": "#/components/schemas/TranscriptFile"

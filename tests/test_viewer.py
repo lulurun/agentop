@@ -1,5 +1,6 @@
 """Transcript listing and the File viewer plugin: only the session's own files can be read."""
 
+import json
 import shutil
 from pathlib import Path
 
@@ -22,13 +23,22 @@ class FakeAgent(AgentCli):
     def __init__(self, base: Path):
         self.base = base
 
-    def transcript_files(self, session_id):
-        log = self.base / f"{session_id}.jsonl"
+    def transcript_files(self, session_id, root=None):
+        base = root or self.base
+        log = base / f"{session_id}.jsonl"
         if not log.exists():
             return None, []
-        extra = sorted((self.base / session_id).rglob("*")) if (self.base / session_id).is_dir() else []
+        extra = (
+            sorted((base / session_id).rglob("*"))
+            if (base / session_id).is_dir()
+            else []
+        )
         # A file outside the base is never listed, whatever the tool says.
-        return self.base, [log, *[p for p in extra if p.is_file()], self.base.parent / "secret.txt"]
+        return base, [
+            log,
+            *[p for p in extra if p.is_file()],
+            base.parent / "secret.txt",
+        ]
 
 
 @pytest.fixture
@@ -49,16 +59,65 @@ def test_lists_the_log_and_the_files_beside_it(agent):
     assert [f["path"] for f in listing["files"]] == ["s1.jsonl", "s1/subagents/a.jsonl"]
 
 
-@pytest.mark.parametrize("tool, session_id", [(None, "s1"), ("fake", None), ("nope", "s1"), ("fake", "../s1"), ("fake", "*")])
+@pytest.mark.parametrize(
+    "tool, session_id",
+    [(None, "s1"), ("fake", None), ("nope", "s1"), ("fake", "../s1"), ("fake", "*")],
+)
 def test_nothing_without_a_known_tool_and_a_plain_session_id(agent, tool, session_id):
-    assert transcripts.list_transcripts(tool, session_id) == {"root": None, "files": [], "truncated": False}
+    assert transcripts.list_transcripts(tool, session_id) == {
+        "root": None,
+        "files": [],
+        "truncated": False,
+        "archived": False,
+    }
 
 
 def test_only_listed_files_resolve(agent):
-    assert transcripts.resolve_transcript("fake", "s1", "s1/subagents/a.jsonl").name == "a.jsonl"
+    assert (
+        transcripts.resolve_transcript("fake", "s1", "s1/subagents/a.jsonl").name
+        == "a.jsonl"
+    )
     for path in ("../secret.txt", "s1", "other.jsonl"):
         with pytest.raises(FileNotFoundError):
             transcripts.resolve_transcript("fake", "s1", path)
+
+
+def test_a_transcript_the_tool_deleted_comes_from_the_archive(
+    agent, tmp_path, monkeypatch
+):
+    archive = tmp_path / "archive"
+    archive.mkdir()
+    (archive / "gone.jsonl").write_text("{}\n")
+    (archive / "s1.jsonl").write_text("the archive's copy\n")
+    monkeypatch.setattr(transcripts, "archive_root", lambda tool: archive)
+    listing = transcripts.list_transcripts("fake", "gone")
+    assert (listing["root"], listing["archived"]) == (str(archive), True)
+    assert [f["path"] for f in listing["files"]] == ["gone.jsonl"]
+    assert (
+        transcripts.resolve_transcript("fake", "gone", "gone.jsonl")
+        == archive / "gone.jsonl"
+    )
+    # While the tool still has its own, that is the one listed.
+    assert transcripts.list_transcripts("fake", "s1")["archived"] is False
+
+
+def test_a_codex_rollout_is_found_by_name_once_compressed_or_moved(
+    tmp_path, monkeypatch
+):
+    from agentop.agentclis.codex import CodexAgentCli
+
+    codex = CodexAgentCli()
+    monkeypatch.setattr(
+        codex,
+        "_thread_by_id",
+        lambda _id: {"rollout_path": str(Path.home() / ".codex/sessions/r-t1.jsonl")},
+    )
+    folder = tmp_path / "archived_sessions" / "2026"
+    folder.mkdir(parents=True)
+    (folder / "rollout-2026-t1.jsonl.zst").write_bytes(b"z")
+    base, found = codex.transcript_files("t1", root=tmp_path)
+    assert (base, found) == (folder, [folder / "rollout-2026-t1.jsonl.zst"])
+    assert codex.transcript_files("t2", root=tmp_path) == (None, [])
 
 
 def test_changes_report_where_the_directory_sits_in_the_repository(tmp_path):
@@ -83,18 +142,33 @@ def client(tmp_path, agent):
     host = PluginHost(store, root=root, data_dir=tmp_path / "home")
     app = create_app(Settings(), Identity(TOKEN, "iid", "test"), store, host)
     with TestClient(app) as test_client:
-        store.set_rows({"one": {"id": "one", "tool": "fake", "session_id": "s1", "cwd": str(work), "status": "running"}})
+        store.set_rows(
+            {
+                "one": {
+                    "id": "one",
+                    "tool": "fake",
+                    "session_id": "s1",
+                    "cwd": str(work),
+                    "status": "running",
+                }
+            }
+        )
         yield test_client
 
 
 def read(client, **params):
-    return client.get("/api/v2/plugins/viewer/file", params={"session": "one", **params}, headers=AUTH)
+    return client.get(
+        "/api/v2/plugins/viewer/file", params={"session": "one", **params}, headers=AUTH
+    )
 
 
 def test_core_lists_a_sessions_transcripts(client):
     response = client.get("/api/v2/sessions/one/transcripts", headers=AUTH)
     assert response.status_code == 200
-    assert [f["path"] for f in response.json()["files"]] == ["s1.jsonl", "s1/subagents/a.jsonl"]
+    assert [f["path"] for f in response.json()["files"]] == [
+        "s1.jsonl",
+        "s1/subagents/a.jsonl",
+    ]
 
 
 def test_reads_a_file_in_the_working_directory(client):
@@ -104,7 +178,10 @@ def test_reads_a_file_in_the_working_directory(client):
 
 
 def test_reads_a_transcript(client):
-    assert read(client, path="s1.jsonl", source="transcript").json()["text"] == '{"type": "user"}\n'
+    assert (
+        read(client, path="s1.jsonl", source="transcript").json()["text"]
+        == '{"type": "user"}\n'
+    )
 
 
 def test_binary_files_have_no_text(client):
@@ -135,3 +212,97 @@ def test_long_files_end_on_a_whole_line(tmp_path):
     result = read_text(path, max_bytes=100)
     assert result["truncated"] is True
     assert result["text"].endswith("\n") and len(result["text"]) <= 100
+
+
+@pytest.fixture
+def claude_client(tmp_path, monkeypatch):
+    from agentop.agentclis import claude as claude_mod
+
+    projects = tmp_path / "projects"
+    (projects / "-work").mkdir(parents=True)
+    log = projects / "-work" / "c1.jsonl"
+    record = {"sessionId": "c1", "cwd": "/work", "timestamp": "2026-11-01T10:00:00Z"}
+    log.write_text(
+        "\n".join(
+            json.dumps(r)
+            for r in [
+                {
+                    **record,
+                    "type": "user",
+                    "uuid": "u1",
+                    "message": {"role": "user", "content": "who sent the link?"},
+                },
+                {
+                    **record,
+                    "type": "assistant",
+                    "uuid": "a1",
+                    "message": {
+                        "content": [
+                            {"type": "tool_use", "id": "t", "name": "Bash", "input": {}}
+                        ]
+                    },
+                },
+                {
+                    **record,
+                    "type": "assistant",
+                    "uuid": "a2",
+                    "message": {
+                        "content": [
+                            {"type": "text", "text": "Yamada, https://example.com"}
+                        ]
+                    },
+                },
+            ]
+        )
+        + "\n"
+    )
+    (projects / "-work" / "notes.txt").write_text("not a transcript")
+    monkeypatch.setattr(claude_mod, "_PROJECTS_DIR", projects)
+    root = tmp_path / "plugins"
+    shutil.copytree(DEFAULT_ROOT / "viewer", root / "viewer")
+    store = QuietStore()
+    host = PluginHost(store, root=root, data_dir=tmp_path / "home")
+    app = create_app(Settings(), Identity(TOKEN, "iid", "test"), store, host)
+    with TestClient(app) as test_client:
+        store.set_rows(
+            {
+                "one": {
+                    "id": "one",
+                    "tool": "claude",
+                    "session_id": "c1",
+                    "cwd": str(tmp_path),
+                    "status": "running",
+                }
+            }
+        )
+        yield test_client
+
+
+def test_a_transcript_reads_as_a_conversation(claude_client):
+    file = claude_client.get(
+        "/api/v2/plugins/viewer/file",
+        params={"session": "one", "path": "c1.jsonl", "source": "transcript"},
+        headers=AUTH,
+    )
+    assert file.json()["conversation"] is True
+    response = claude_client.get(
+        "/api/v2/plugins/viewer/conversation",
+        params={"session": "one", "path": "c1.jsonl"},
+        headers=AUTH,
+    )
+    body = response.json()
+    assert body["total"] == 2
+    assert [(m["role"], m["text"]) for m in body["messages"]] == [
+        ("user", "who sent the link?"),
+        ("assistant", "Yamada, https://example.com"),
+    ]
+
+
+def test_only_a_listed_transcript_reads_as_a_conversation(claude_client):
+    for path in ("notes.txt", "../c1.jsonl", "other.jsonl"):
+        response = claude_client.get(
+            "/api/v2/plugins/viewer/conversation",
+            params={"session": "one", "path": path},
+            headers=AUTH,
+        )
+        assert response.status_code == 404

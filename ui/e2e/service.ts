@@ -3,7 +3,9 @@ import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, wr
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+// Like Claude Code, it records its session ID by PID, so its transcript can be found.
 const AGENT = `#!/bin/sh
+mkdir -p "$HOME/.claude/sessions" && echo "{\\"sessionId\\": \\"fake-$$\\"}" > "$HOME/.claude/sessions/$$.json"
 echo "fake agent ready"
 echo "shift+tab to cycle"
 while read line; do echo "got: $line"; done
@@ -62,6 +64,8 @@ export class Service {
       PATH: `${bin}:/usr/local/bin:/usr/bin:/bin`,
       HOME: this.root,
       SHELL: "/bin/sh",
+      // The sessions' shells save no history as the server goes down.
+      HISTFILE: "/dev/null",
       AGENTOP_HOME: join(this.root, "state"),
       AGENTOP_TMUX_SOCKET: this.socket,
       // Never the real updater, which would act on this checkout.
@@ -90,7 +94,9 @@ export class Service {
   }
 
   tmux(...args: string[]): string {
-    return execFileSync("tmux", ["-L", this.socket, ...args], { encoding: "utf8", env: { ...process.env, TMUX: "" } });
+    // This starts the private server, and its sessions take its environment:
+    // the test's own home, never the real one.
+    return execFileSync("tmux", ["-L", this.socket, ...args], { encoding: "utf8", env: { ...this.env(), TMUX: "" } });
   }
 
   async start() {
@@ -137,6 +143,6 @@ export class Service {
     } catch {
       // Already gone.
     }
-    rmSync(this.root, { recursive: true, force: true });
+    rmSync(this.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }

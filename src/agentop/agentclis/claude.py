@@ -31,9 +31,9 @@ class ClaudeAgentCli(AgentCli):
             return
         raise FileNotFoundError(f"Session {session_id} not found in ~/.claude/projects")
 
-    def transcript_files(self, session_id: str) -> tuple[Optional[Path], list[Path]]:
+    def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """The conversation log, and the folder of the same name beside it (subagents, tool results)."""
-        projects_dir = _PROJECTS_DIR.expanduser()
+        projects_dir = root or _PROJECTS_DIR.expanduser()
         for log in projects_dir.glob(f"*/{session_id}.jsonl"):
             folder = log.with_suffix("")
             extra = sorted(p for p in folder.rglob("*") if p.is_file()) if folder.is_dir() else []

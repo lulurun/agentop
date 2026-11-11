@@ -201,13 +201,31 @@ class CodexAgentCli(AgentCli):
                 raise FileNotFoundError(f"Session {session_id} not found in Codex database")
             conn.commit()
 
-    def transcript_files(self, session_id: str) -> tuple[Optional[Path], list[Path]]:
-        """The thread's rollout log."""
+    def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
+        """The thread's rollout log.
+
+        Codex records where it is, but later compresses it (`.jsonl.zst`) or
+        moves it to archived_sessions, so the rollout is also looked for by name.
+        """
+        home = Path("~/.codex").expanduser()
+        base = root or home
         thread = self._thread_by_id(session_id)
-        rollout = Path(thread["rollout_path"]) if thread and thread.get("rollout_path") else None
-        if rollout is None or not rollout.is_file():
+        if thread and thread.get("rollout_path"):
+            recorded = Path(thread["rollout_path"])
+            if recorded.is_relative_to(home):
+                recorded = base / recorded.relative_to(home)
+            if recorded.is_file():
+                return recorded.parent, [recorded]
+        found = sorted(
+            path
+            for folder in ("sessions", "archived_sessions")
+            if (base / folder).is_dir()
+            for path in (base / folder).rglob(f"rollout-*{session_id}.jsonl*")
+            if path.is_file()
+        )
+        if not found:
             return None, []
-        return rollout.parent, [rollout]
+        return (found[0].parent if len(found) == 1 else base), found
 
     def get_saved_sessions(self, limit: int = 20) -> list[dict]:
         db_path = Path("~/.codex/state_5.sqlite").expanduser()

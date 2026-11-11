@@ -219,6 +219,7 @@ export function TranscriptsSection({ sessionId }: { sessionId: string }) {
         <p className="file-note">The agent hasn't reported a transcript for this session.</p>
       ) : (
         <>
+          {listing.archived && <p className="file-note">The agent deleted these files. This is agentop's archived copy.</p>}
           <ul className="file-list">
             {listing.files.map((file) => (
               <li key={file.path}>

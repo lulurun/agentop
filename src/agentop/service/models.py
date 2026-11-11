@@ -150,6 +150,8 @@ class TranscriptListing(BaseModel):
     root: str | None
     files: list[TranscriptFile]
     truncated: bool
+    # The tool deleted its own files; these are the Memory archive's copy.
+    archived: bool = False
 
 
 class TmuxInfo(BaseModel):

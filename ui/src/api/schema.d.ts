@@ -738,6 +738,11 @@ export interface components {
         };
         /** TranscriptListing */
         TranscriptListing: {
+            /**
+             * Archived
+             * @default false
+             */
+            archived: boolean;
             /** Files */
             files: components["schemas"]["TranscriptFile"][];
             /** Root */

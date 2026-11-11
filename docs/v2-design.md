@@ -878,7 +878,7 @@ The same mechanism also covers:
 
 ### 12.11 Memory: agentop's own record of conversations
 
-Status: phases 1 (archive) and 2 (messages table) built. Plugin id `memory`.
+Status: phases 1 to 3 (archive, messages table, conversation view) built. Plugin id `memory`.
 
 **The problem.** Conversations with agents carry exact details that matter later: a person's name, a place, a link someone sent. At the time they are on hand, so nobody notes them, and days or months later the keyword itself is forgotten. The agent tools' own memory features don't help: Claude Code writes memory only when it judges a fact worth keeping, per project folder, and Codex's is off by default. Neither records what was said.
 
@@ -929,6 +929,8 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
    "Final text" turned out to be the wrong cut: the text an assistant writes between tool calls ("Yamada's link is …, checking it") often holds the details worth finding, so all of the assistant's text is kept, and only its tool calls and thinking are left out.
 
 3. **Conversation view.** The File viewer shows a transcript as a conversation, from the same extraction. The Transcripts list falls back to the archived copy when the tool has deleted the original.
+
+   Built. The extraction moved to the core, `agentop/conversation.py`, so the viewer reads a live transcript without the Memory plugin, and the messages table uses the same rules. The viewer's `/file` says whether a file reads as a conversation, and `GET /api/v2/plugins/viewer/conversation?session=&path=` returns its messages (the latest 5000). The tab opens on Conversation, with Raw beside it; links are clickable, and it opens at the latest message. `AgentCli.transcript_files` takes the archive as its root, and the listing says `archived: true` when that is where the files came from. Codex's own record of a rollout's path goes stale once it compresses or archives the file, so a rollout is also found by name.
 4. **Recall.** Full-text search (SQLite FTS5) over the messages, a route and an `agentop recall` command, and a skill so a session can ask "what was the link Xxx sent about …". Embeddings only if keyword search misses too often.
 
 ## 13 Migration

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -89,4 +89,41 @@ test("a file from the right panel opens in a tab", async ({ page }) => {
   await expect(page.getByTestId("terminal")).toBeVisible();
   await expect(page.getByRole("region", { name: "Right group" })).toHaveAttribute("data-focused", "true");
   await expect(page.getByRole("region", { name: "Right group" }).getByLabel("Contents of src/hello.py")).toBeVisible();
+});
+
+test("a transcript opens as a conversation, with its links", async ({ page }) => {
+  const s = await service("alpha");
+  const project = join(s.root, "project");
+  await page.goto(s.signedInUrl);
+  await startSession(page, "demo", project);
+
+  // The fake agent recorded its session ID; put a transcript where Claude Code would.
+  const sessions = join(s.root, ".claude", "sessions");
+  const sessionId = JSON.parse(readFileSync(join(sessions, readdirSync(sessions)[0]), "utf8")).sessionId;
+  const folder = join(s.root, ".claude", "projects", project.replaceAll("/", "-"));
+  mkdirSync(folder, { recursive: true });
+  const at = "2026-11-01T10:00:00Z";
+  const records = [
+    { type: "user", uuid: "u1", sessionId, timestamp: at, message: { role: "user", content: "who sent the atama link?" } },
+    { type: "assistant", uuid: "a1", sessionId, timestamp: at, message: { content: [{ type: "tool_use", id: "t", name: "Bash", input: {} }] } },
+    { type: "assistant", uuid: "a2", sessionId, timestamp: at, message: { content: [{ type: "text", text: "Yamada sent https://example.com/atama." }] } },
+  ];
+  writeFileSync(join(folder, `${sessionId}.jsonl`), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
+
+  const details = page.locator(".details");
+  const entry = details.getByRole("button", { name: `${sessionId}.jsonl` });
+  await expect(async () => {
+    await page.reload();
+    await expect(entry).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
+  await entry.click();
+
+  const conversation = page.locator(".main").getByLabel(`Conversation in ${sessionId}.jsonl`);
+  await expect(conversation.locator(".message")).toHaveCount(2);
+  await expect(conversation.locator(".message").first()).toContainText("who sent the atama link?");
+  await expect(conversation.getByRole("link", { name: "https://example.com/atama" })).toHaveAttribute("href", "https://example.com/atama");
+  await expect(page.locator(".main").getByText("2 messages")).toBeVisible();
+
+  await page.locator(".main").getByRole("button", { name: "Raw" }).click();
+  await expect(page.locator(".main").getByLabel(`Contents of ${sessionId}.jsonl`)).toContainText('"tool_use"');
 });

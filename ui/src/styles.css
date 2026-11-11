@@ -642,6 +642,21 @@ input::placeholder { color: var(--quiet); }
 }
 .viewer-text { flex: 1; padding-left: 12px !important; padding-right: 16px !important; white-space: pre; outline: none; }
 .viewer-scroll[data-wrap] .viewer-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.viewer-modes { display: inline-flex; flex: none; }
+.viewer-modes button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.viewer-modes button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
+
+/* A transcript read as a conversation */
+.conversation { flex: 1; min-height: 0; overflow: auto; outline: none; }
+.conversation ol { list-style: none; margin: 0 auto; padding: 14px 16px 28px; max-width: 860px; display: grid; gap: 10px; }
+.message { padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.message[data-role="user"] { background: var(--raised); border-color: transparent; }
+.message-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 4px; font-size: 12px; }
+.message-head strong { font-weight: 600; }
+.message[data-role="assistant"] .message-head strong { color: var(--action); }
+.message-head time { color: var(--quiet); }
+.message-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; font-size: 13.5px; }
+.message-text a { color: var(--action); }
 
 .scrim { display: none; }
 
