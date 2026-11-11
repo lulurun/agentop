@@ -12,10 +12,11 @@ from agentop.agent_instance import AgentInstance
 from agentop.agentclis import get_agent
 from agentop.dialogue.scenarios.reader import load as load_scenario
 from agentop.dialogue.status import DialogueStatus
+from agentop.paths import dialogues_dir
 
 LOG = logging.getLogger(__name__)
 
-DIALOGUES_DIR = Path("~/.agent-dashboard/dialogues").expanduser()
+DIALOGUES_DIR = dialogues_dir()
 
 
 @dataclass

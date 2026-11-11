@@ -86,7 +86,7 @@ app shows a red dot and says so.
 
 `update` needs a clean checkout on `main` that can reach its git remote, not
 systemd. It writes
-progress to `update-status.json` and detail to `update.log`, in `~/.agent-dashboard`.
+progress to `~/.agentop/state/update-status.json` and detail to `~/.agentop/logs/update.log`.
 If the new version fails to install or start, it resets to the previous commit and
 says so, and the failed commit stays on the remote until it is fixed. If a service
 started by hand died starting the new version, the update starts it again in the

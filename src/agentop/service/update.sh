@@ -4,14 +4,14 @@
 # Started by agentop.service.update, apart from the service, because it restarts
 # the service: in a transient unit under systemd, otherwise as a detached
 # process. The service passes the command that restarts it. Progress goes to
-# update-status.json, and detail to update.log, both in the agentop data directory.
+# state/update-status.json, and detail to logs/update.log, in the agentop folder.
 #
 # Everything is inside main, because git pull can replace this file while it runs
 # and bash reads a script as it goes. A function is parsed whole before it starts.
 set -uo pipefail
 
 REPO=${AGENTOP_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}
-DATA=${AGENTOP_HOME:-$HOME/.agent-dashboard}
+DATA=${AGENTOP_HOME:-$HOME/.agentop}
 UNIT=${AGENTOP_UNIT:-agentop-api.service}
 BRANCH=${AGENTOP_BRANCH:-main}
 PYTHON=${AGENTOP_PYTHON:-python3}
@@ -21,7 +21,7 @@ INSTALL_CMD=${AGENTOP_INSTALL_CMD:-"$PYTHON" -m pip install --quiet -e .}
 BUILD_CMD=${AGENTOP_BUILD_CMD:-cd ui && npm ci --silent && npm run -s build}
 RESTART_CMD=${AGENTOP_RESTART_CMD:-systemctl --user daemon-reload && systemctl --user restart "$UNIT"}
 
-STATUS="$DATA/update-status.json"
+STATUS="$DATA/state/update-status.json"
 OLD=""
 NEW=""
 
@@ -31,6 +31,7 @@ import json, os, sys, time
 path, state, step, message, old, new = sys.argv[1:]
 body = {"state": state, "step": step or None, "message": message or None,
         "from_commit": old[:7] or None, "to_commit": new[:7] or None, "updated_at": int(time.time())}
+os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path + ".tmp", "w") as f:
     json.dump(body, f)
 os.replace(path + ".tmp", path)
@@ -80,7 +81,8 @@ find_node() {
 
 main() {
     mkdir -p "$DATA"
-    exec >>"$DATA/update.log" 2>&1
+    mkdir -p "$DATA/logs"
+    exec >>"$DATA/logs/update.log" 2>&1
     echo "=== update $(date -u +%Y-%m-%dT%H:%M:%SZ)"
     cd "$REPO" || refuse "The install is missing: $REPO"
     export GIT_SSH_COMMAND="ssh -o BatchMode=yes" GIT_TERMINAL_PROMPT=0

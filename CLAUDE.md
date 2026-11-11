@@ -14,7 +14,7 @@
 
 - `agentop serve` runs the service at `http://127.0.0.1:9775`. agentop ships no systemd unit or proxy config: on the devhost, Eiger owns the `agentop-api` unit (`potential-panda/Eiger/deploy/agentop-api.service`) and the nginx setup
 - Supported agent tools: `claude`, `codex`, `antigravity`
-- Dialogues are stored in `~/.agent-dashboard/dialogues/<scenario>_<brief>_<id>/`
+- Dialogues are stored in `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`
 - Only sessions started by agentop (managed) can be stopped or sent prompts
 
 ## Running the service

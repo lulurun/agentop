@@ -4,7 +4,7 @@
 
 The dialogue system orchestrates two agent CLI processes collaborating on a shared task. The orchestrator relays messages between them, enforcing a structured protocol so it can extract and forward only the agent's intended output.
 
-Dialogue data is persisted to `~/.agent-dashboard/dialogues/<scenario>_<brief>_<id>/`.
+Dialogue data is persisted to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`.
 
 ## 2 How it works
 
@@ -110,7 +110,7 @@ Begin now.
 | `{name_a}` | Role name for agent A |
 | `{name_b}` | Role name for agent B |
 | `{brief}` | Contents of the `--brief` file |
-| `{progress_file}` | Path to `~/.agent-dashboard/dialogues/<scenario>_<brief>_<id>/progress.md` |
+| `{progress_file}` | Path to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/progress.md` |
 | `{topic}` | Alias for `{brief}` (legacy compat) |
 
 ### 4.3 Built-in scenarios
@@ -132,7 +132,7 @@ Begin now.
 
 ## 5 Persisted files
 
-Each dialogue gets a directory at `~/.agent-dashboard/dialogues/<scenario>_<brief>_<id>/` (the folder is named from the scenario name and brief filename; `<id>` is an 8-char unique token):
+Each dialogue gets a directory at `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/` (the folder is named from the scenario name and brief filename; `<id>` is an 8-char unique token):
 
 | File | Contents |
 |------|----------|

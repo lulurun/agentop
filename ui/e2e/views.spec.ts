@@ -24,7 +24,7 @@ async function open(page: Page, name = "box") {
 }
 
 function seedDialogue(s: Service, name: string, session = "diaabcdea-1", status = "completed") {
-  const directory = join(s.root, ".agent-dashboard/dialogues", name);
+  const directory = join(s.root, "state/plugins/dialogue/dialogues", name);
   mkdirSync(directory, { recursive: true });
   writeFileSync(
     join(directory, "meta.json"),

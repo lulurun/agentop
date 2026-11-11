@@ -1,4 +1,4 @@
-"""Managed-session registry backed by ~/.agent-dashboard/sessions.json.
+"""Managed-session registry backed by ~/.agentop/state/sessions.json.
 
 Both the CLI and the service write this file, so every read-modify-write holds
 a lock on a separate file. Locking the JSON file itself would not work: writes
@@ -16,7 +16,7 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from agentop.paths import data_dir
+from agentop.paths import state_dir
 
 ENDED_RETENTION_SECONDS = 30 * 24 * 3600
 
@@ -24,7 +24,7 @@ _lock = threading.Lock()
 
 
 def registry_path() -> Path:
-    return data_dir() / "sessions.json"
+    return state_dir() / "sessions.json"
 
 
 def _ensure_dir():

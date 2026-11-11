@@ -145,7 +145,7 @@ def test_the_plugin_sweeps_at_start_and_on_request(client, tmp_path, home):
             break
         time.sleep(0.05)
     assert status["files"] == 3
-    assert status["folder"] == str(tmp_path / "state" / "memory" / "archive")
+    assert status["folder"] == str(tmp_path / "flags" / "plugins" / "memory" / "archive")
 
     (home / ".codex" / "sessions" / "2026" / "rollout-2.jsonl").write_text("{}\n")
     status = client.post("/api/v2/plugins/memory/sweep", headers=AUTH).json()

@@ -85,7 +85,7 @@ export class Service {
 
   /** What update.sh would write. Passing nothing means the update has ended. */
   reportUpdate(state: string, fields: Record<string, string | null> = {}) {
-    writeFileSync(join(this.root, "state/update-status.json"), JSON.stringify({ state, ...fields }));
+    writeFileSync(join(this.root, "state/state/update-status.json"), JSON.stringify({ state, ...fields }));
     if (state !== "running") rmSync(join(this.root, "updating"), { force: true });
   }
 

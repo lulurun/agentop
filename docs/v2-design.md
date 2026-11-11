@@ -263,7 +263,7 @@ A background tick (2s, since a scan costs about 0.12s) reconciles the sources an
 
 ### 5.4 Registry
 
-The file stays at `~/.agent-dashboard/sessions.json`, with additive fields: `display_name`, `status`, `step`, `error`, `created_at`, `ended_at`. Records for ended sessions are pruned after 30 days. The old `flock` was held on the temp file, so it protected nothing. Writes now hold a separate lock file, because the CLI and service both write here.
+The file stays at `~/.agentop/state/sessions.json`, with additive fields: `display_name`, `status`, `step`, `error`, `created_at`, `ended_at`. Records for ended sessions are pruned after 30 days. The old `flock` was held on the temp file, so it protected nothing. Writes now hold a separate lock file, because the CLI and service both write here.
 
 ## 6 Terminal
 
@@ -323,9 +323,9 @@ The terminal socket is remote code execution as the user, with agents running in
 
 ### 7.1 Rules
 
-1. **Bind to loopback by default.** Exposing a service is an explicit choice: `agentop serve --host`, or `host` in `~/.agent-dashboard/config.toml`.
+1. **Bind to loopback by default.** Exposing a service is an explicit choice: `agentop serve --host`, or `host` in `~/.agentop/config.toml`.
 2. **Require a bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only status, version, `api_version`, `instance_id`, and `name`.
-   - A random 256-bit token lives in `~/.agent-dashboard/service.json`, mode `0600`, and is rotated with `agentop service token --rotate`.
+   - A random 256-bit token lives in `~/.agentop/service.json`, mode `0600`, and is rotated with `agentop service token --rotate`.
    - Rotating invalidates every saved connection; clients then show "Token rejected".
 3. **No ambient credentials.** There are no cookies. A token is only ever sent when the app attaches it deliberately, so a malicious page has nothing to ride on. This closes P1 and removes CSRF as a class of problem.
 4. **WebSockets use single-use tickets.** Browsers cannot set headers on WebSocket requests, and a token in a URL ends up in logs. `POST /api/v2/tickets` returns a ticket valid for 30s, bound to one purpose (events, or terminal for one session).
@@ -408,7 +408,7 @@ The current install is an editable git checkout, so v2 implements that install k
 
 Update needs a git checkout, not systemd. It must outlive the service it restarts, so it runs apart from it: in a transient unit under systemd (`systemd-run --user --unit=agentop-update --collect`), since stopping a unit can take its children with it, and otherwise as a detached process whose PID is kept in `update.pid`. The service passes it the command that restarts it: `systemctl --user restart` for a unit, or a signal for a service started by hand. That command waits until the old process stops answering, and if the process is gone because the new version failed to start, starts it again in the background with the same command line, logging to `serve.log`.
 
-`src/agentop/service/update.sh` writes progress to `~/.agent-dashboard/update-status.json`:
+`src/agentop/service/update.sh` writes progress to `~/.agentop/state/update-status.json`:
 
 1. Refuse if the tree is dirty or not on `main`.
 2. Record the current commit, then `git pull --ff-only`.
@@ -642,7 +642,7 @@ default_enabled = true
 ui = ["session-badge", "settings-section"]   # UI slots it fills (12.5)
 ```
 
-Only folders inside the agentop install are scanned. Loading code from a user directory such as `~/.agent-dashboard/plugins/` would let anything that can write there run inside the service, so it is left for the security review.
+Only folders inside the agentop install are scanned. Loading code from a user directory such as `~/.agentop/plugins/` would let anything that can write there run inside the service, so it is left for the security review.
 
 ### 12.3 Loader
 
@@ -666,7 +666,8 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 | `api.task(fn)` | A supervised background task. `fn` is an async function, not a coroutine, so the task can be started again when the plugin is enabled again. If it raises, the plugin goes to `failed` and the task is not restarted |
 | `api.sessions()` | A read-only snapshot of the session list |
 | `api.agents` | For plugins that drive agents: start a managed session, send text, read its output, stop it. It goes through the same core code as the UI (`ops.start`, `Actor`, `AgentInstance.stop`), and each session it starts is tagged with the plugin's id. The sessions are ordinary core sessions: they show in the list and can be attached, stopped, and closed whether or not the plugin is still running |
-| `api.store` | A JSON file at `~/.agent-dashboard/plugins/{id}.json` for the plugin's own data |
+| `api.store` | A JSON file at `~/.agentop/plugins/{id}/store.json` for the plugin's own data |
+| `api.data_dir` | The plugin's own folder, `~/.agentop/plugins/{id}/`, for files that don't fit in one JSON file. It is made when first written to |
 | `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
 | `api.log` | A logger named `agentop.plugins.{id}` |
 
@@ -685,7 +686,7 @@ Python cannot reliably unload a module, so disabling is a gate rather than an un
 - **Enable** of a plugin that was never imported (disabled at start) is imported then. If that fails, the state is `failed` and nothing else changes.
 - **Retry** of a `failed` plugin needs a service restart; the UI says so. This holds for a plugin that failed while running too (a crashed task, repeated handler errors): enabling it again leaves it `failed`, with the restart note in its error. This keeps half-initialised plugin state out of the running service.
 
-Flags live in `~/.agent-dashboard/plugins.json`: `{"attention": {"enabled": false}}`. They belong to the service, not the client, because a plugin is a service feature: disabling it affects every client of that service.
+Flags live in `~/.agentop/state/plugins.json`: `{"attention": {"enabled": false}}`. They belong to the service, not the client, because a plugin is a service feature: disabling it affects every client of that service.
 
 ### 12.5 API
 
@@ -748,7 +749,7 @@ Dialogues are built already, so moving them is also the test of the plugin syste
 
 **What stays in the core:** nothing dialogue-specific. The core keeps the generic pieces dialogues needed: starting a session under a given short name, `Actor` send and receive, and stop. A dialogue's agents (`dia{id}a`, `dia{id}b`) remain ordinary managed sessions.
 
-**Data.** Saved dialogues stay where they are, in `~/.agent-dashboard/dialogues/`, in the same format. Removing or disabling the plugin never deletes them, and enabling it again shows them all.
+**Data.** Saved dialogues are in `~/.agentop/plugins/dialogue/dialogues/` (moved there from `~/.agent-dashboard/dialogues/` on 2026-11-11, ahead of the code), in the same format. Removing or disabling the plugin never deletes them, and enabling it again shows them all.
 
 **When the plugin is disabled, removed, or fails:**
 
@@ -877,7 +878,7 @@ The same mechanism also covers:
 
 ### 12.11 Memory: agentop's own record of conversations
 
-Status: phase 1 (archive) built. Plugin id `memory`.
+Status: phases 1 (archive) and 2 (messages table) built. Plugin id `memory`.
 
 **The problem.** Conversations with agents carry exact details that matter later: a person's name, a place, a link someone sent. At the time they are on hand, so nobody notes them, and days or months later the keyword itself is forgotten. The agent tools' own memory features don't help: Claude Code writes memory only when it judges a fact worth keeping, per project folder, and Codex's is off by default. Neither records what was said.
 
@@ -895,7 +896,7 @@ Status: phase 1 (archive) built. Plugin id `memory`.
 
 #### 12.11.2 The archive
 
-`~/.agent-dashboard/memory/archive/{tool}/…`, mirroring each tool's own layout under its root:
+`~/.agentop/plugins/memory/archive/{tool}/…`, mirroring each tool's own layout under its root:
 
 | Tool | Source root | What is copied |
 |------|-------------|----------------|
@@ -910,12 +911,23 @@ A **sweep** walks the source roots and brings the archive up to date. It runs at
 - **Rewritten or shrunk file**: the old copy is kept as `{name}.{timestamp}` and the file is copied afresh.
 - **Removed from the source**: kept. This is the point of the archive.
 
-Per-file state (size, modification time) is kept in `~/.agent-dashboard/memory/state.json`, so an unchanged file costs one `stat`. The first sweep imports everything on disk.
+Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/state.json`, so an unchanged file costs one `stat`. The first sweep imports everything on disk.
 
 #### 12.11.3 Phases
 
 1. **Archive.** The sweep above, a status route (files, bytes, last sweep, errors), and a Settings section showing it with a "Sweep now" button.
-2. **Messages.** A SQLite table built from the archive: tool, project folder, session, turn, time, role, text, and the record's own ID so nothing is stored twice. Only the user's prompts and the assistant's final text; no tool calls, tool output, or thinking.
+2. **Messages.** A SQLite table built from the archive: tool, project folder, session, turn, time, role, text, and the record's own ID so nothing is stored twice. Only the user's prompts and the assistant's text; no tool calls, tool output, or thinking.
+
+   Built as `plugins/memory/messages.sqlite`. After each sweep it reads each archived transcript from where it last stopped (a whole line at a time, so a line still being written waits), and stores each record once by its own ID (`UNIQUE (tool, record)`), so a rewritten file's old copy or a resumed session adds nothing. `turn` is the ID of the prompt that started it, so a prompt and the replies to it group together. Deleting the file rebuilds it. On the devhost the first build reads 307 files into 13,108 messages from 186 sessions in 1.5s.
+
+   | Tool | Prompts | Replies | Left out |
+   |------|---------|---------|----------|
+   | `claude` | `user` records with text, not tool results; a slash command as typed (`/handoff deploy eiger`) | `assistant` text blocks | `isMeta`, `isSidechain`, compaction summaries, API errors, `<system-reminder>` blocks, local command output, interrupts, subagent and tool-result files |
+   | `codex` | `response_item` messages from `user` | `output_text` from `assistant`, both commentary and final answer | AGENTS.md and other whole tagged blocks Codex injects (`<environment_context>`, app events), `developer` messages, reasoning, tool calls. Older rollouts are `.jsonl.zst` and are read whole |
+   | `antigravity` | `USER_INPUT`, the text inside `<USER_REQUEST>` | `PLANNER_RESPONSE` content | Tool steps (`RUN_COMMAND`, `VIEW_FILE`, …), thinking. No project folder is recorded |
+
+   "Final text" turned out to be the wrong cut: the text an assistant writes between tool calls ("Yamada's link is …, checking it") often holds the details worth finding, so all of the assistant's text is kept, and only its tool calls and thinking are left out.
+
 3. **Conversation view.** The File viewer shows a transcript as a conversation, from the same extraction. The Transcripts list falls back to the archived copy when the tool has deleted the original.
 4. **Recall.** Full-text search (SQLite FTS5) over the messages, a route and an `agentop recall` command, and a skill so a session can ask "what was the link Xxx sent about …". Embeddings only if keyword search misses too often.
 

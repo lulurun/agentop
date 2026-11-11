@@ -98,7 +98,7 @@ agentop dialogue start \
 | `--max-turns` | from scenario | Maximum relay turns |
 
 Both agents always run with cwd set to the dialogue's own directory at
-`~/.agent-dashboard/dialogues/<id>/` — there is no way to override this. Any
+`~/.agentop/plugins/dialogue/dialogues/<id>/` — there is no way to override this. Any
 `deliverables/` folder a scenario asks the agents to create ends up there,
 alongside `brief.md`, `scenario.toml`, and `dialogue.log`. Agents can still
 read or write files elsewhere by using absolute paths.

@@ -246,6 +246,11 @@ def cmd_stop(args):
 
 
 def cmd_serve(args):
+    from agentop import paths
+
+    # Only the service moves an older folder: it starts after the old service has
+    # stopped. Before the imports, since some modules work out their paths as they load.
+    paths.migrate()
     from agentop.service import app, config
 
     app.serve(

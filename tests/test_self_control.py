@@ -213,4 +213,4 @@ def test_if_the_new_version_died_the_updater_starts_it_again(by_hand, tmp_path):
     assert pid != s.process.pid
     os.kill(pid, signal.SIGTERM)
     s.wait_down()
-    assert (s.home / "serve.log").exists()
+    assert (s.home / "logs" / "serve.log").exists()

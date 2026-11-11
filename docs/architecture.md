@@ -96,9 +96,25 @@ Stateless — reads live process state and tmux pane list on every call.
 - `map_process_to_tmux()` — matches a PID to its tmux session via ancestry
 - `build_sessions()` — combines process + tmux + agent metadata into session dicts
 
+### 4.1a Where agentop keeps its files (`paths.py`)
+
+Everything agentop writes is under `~/.agentop` (`AGENTOP_HOME` moves it):
+
+| Path | What |
+|------|------|
+| `config.toml` | Settings you edit |
+| `service.json` | The service's name and token, mode `0600` |
+| `state/` | What agentop rewrites as it runs: `sessions.json` and its lock, `plugins.json`, `update-status.json`, `update.pid` |
+| `logs/` | `serve.log` (a service started by hand), `update.log` |
+| `plugins/{id}/` | Each plugin's own files: `store.json` from `api.store`, and anything else under `api.data_dir`. The Memory archive is `plugins/memory/`, and saved dialogues are in `plugins/dialogue/dialogues/` |
+
+New kinds of files go in one of these folders, not at the top.
+
+The folder was `~/.agent-dashboard` with every file at the top until 2026-11-11. `agentop serve` moves it at start (`paths.migrate()`), once the old service has stopped, and leaves nothing at the old name. Until the service has moved it, every command keeps using the old folder as it was. A desktop app built before the move looks in the old folder, so it needs rebuilding.
+
 ### 4.2 Registry (`registry.py`)
 
-JSON file at `~/.agent-dashboard/registry.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions.
+JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions.
 
 ### 4.3 Ops (`ops.py`)
 
@@ -121,7 +137,7 @@ Key modules:
 
 | Module | Role |
 |--------|------|
-| `dialogue/model.py` | `Dialogue` and `DialogueMeta` (persisted to `~/.agent-dashboard/dialogues/`) |
+| `dialogue/model.py` | `Dialogue` and `DialogueMeta` (persisted to `~/.agentop/plugins/dialogue/dialogues/`) |
 | `dialogue/orchestrator.py` | `DialogueOrchestrator` thread — relay loop |
 | `dialogue/parser.py` | `ResponseParser` — extracts BEGIN/END blocks from scrollback |
 | `dialogue/status.py` | `DialogueStatus` and `ReceiveStatus` enums |

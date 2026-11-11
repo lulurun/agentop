@@ -16,7 +16,7 @@ import sys
 import time
 from pathlib import Path
 
-from agentop.paths import data_dir
+from agentop.paths import data_dir, state_dir
 
 from .manager import ServiceManager
 
@@ -33,7 +33,7 @@ class UpdateError(RuntimeError):
 
 
 def status_path() -> Path:
-    return data_dir() / "update-status.json"
+    return state_dir() / "update-status.json"
 
 
 def read_status() -> dict | None:
@@ -44,7 +44,7 @@ def read_status() -> dict | None:
 
 
 def pid_path() -> Path:
-    return data_dir() / "update.pid"
+    return state_dir() / "update.pid"
 
 
 def _unit_running() -> bool:

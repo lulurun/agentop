@@ -194,11 +194,11 @@ def test_plugin_routes_are_not_in_the_api_schema(env):
         assert not any("/plugins/good" in p for p in v2.openapi()["paths"])
 
 
-def test_store_is_a_json_file_per_plugin(env):
+def test_store_is_a_json_file_in_the_plugins_folder(env):
     write_plugin(env.root, "good", GOOD)
     with env.client() as client:
         assert client.post("/api/v2/plugins/good/save", headers=AUTH).json() == {"saved": True}
-    assert json.loads((env.data / "plugins" / "good.json").read_text()) == {"saved": True}
+    assert json.loads((env.data / "plugins" / "good" / "store.json").read_text()) == {"saved": True}
 
 
 def test_sessions_is_a_snapshot(env):
@@ -227,7 +227,7 @@ def test_disable_hides_routes_stops_tasks_and_saves_the_flag(env):
         assert response.json()["state"] == "disabled"
         assert client.get("/api/v2/plugins/good/hello", headers=AUTH).status_code == 404
         assert stopped.exists()
-    assert json.loads((env.data / "plugins.json").read_text()) == {"good": {"enabled": False}}
+    assert json.loads((env.data / "state" / "plugins.json").read_text()) == {"good": {"enabled": False}}
 
 
 def test_enable_brings_routes_and_tasks_back(env):

@@ -78,12 +78,13 @@ class SelfManager:
         because a new version failed to start, it starts it again in the
         background, with the same command line, logging to serve.log.
         """
-        from agentop.paths import data_dir
+        from agentop.paths import logs_dir
 
         pid = os.getpid()
         name = RESTART_SIGNAL.name.removeprefix("SIG")
         again = shlex.join([sys.executable, *sys.orig_argv[1:]])
-        log = shlex.quote(str(data_dir() / "serve.log"))
+        logs_dir().mkdir(parents=True, exist_ok=True)
+        log = shlex.quote(str(logs_dir() / "serve.log"))
         return (
             f"if ps -o args= -p {pid} | grep -q serve && kill -{name} {pid}; then "
             'for _ in $(seq 100); do curl -fsSk -m 1 "$HEALTH_URL" >/dev/null 2>&1 || break; sleep 0.1; done; '

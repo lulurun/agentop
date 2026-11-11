@@ -35,12 +35,12 @@ The v2 security model is deliberately simple. Review it before recommending that
 Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 
 - [x] Plugin loader in the core: scan `src/agentop/plugins/*/plugin.toml`, load each in isolation, keep the plugin list with states.
-- [x] `GET /api/v2/plugins` and `PATCH /api/v2/plugins/{id}`, saved flags in `~/.agent-dashboard/plugins.json`, `plugins` events.
+- [x] `GET /api/v2/plugins` and `PATCH /api/v2/plugins/{id}`, saved flags in `~/.agentop/state/plugins.json`, `plugins` events.
 - [x] The `register(api)` surface: scoped router, isolated event handlers, supervised tasks, read-only sessions, per-plugin store.
 - [x] UI: per-connection plugin list, slots with error boundaries, Settings → Plugins with switches and errors.
 - [ ] Broken test plugins, and the core suites passing with them installed and with none. The broken plugins and the loader's own tests are in `tests/test_plugins.py`; the core suites already run with no plugins. Still to do: run the core pytest and Playwright suites with the broken plugins installed.
 - [ ] `api.agents` for plugins that drive agents, and `register_cli` for plugin CLI commands.
-- [ ] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9): package, routes under `/api/v2/plugins/dialogue/`, `agentop dialogue` through `register_cli`, the Dialogues view and the session-row label through UI slots. Saved dialogues stay in place.
+- [ ] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9): package, routes under `/api/v2/plugins/dialogue/`, `agentop dialogue` through `register_cli`, the Dialogues view and the session-row label through UI slots. Saved dialogues already moved to `~/.agentop/plugins/dialogue/dialogues/`.
 - [ ] Prove it: the core suites pass with the dialogue folder deleted; disabling the plugin stops running dialogues, hides every dialogue UI, and leaves other sessions untouched.
 - [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.
 
@@ -62,12 +62,16 @@ Design: [v2-design.md section 12.10](docs/v2-design.md#1210-handoff-pass-a-side-
 - [ ] Skill files for claude, codex, and agy, from the phase 0 skills.
 - [ ] Phase 2: handoff across hosts (D9), after the security review.
 
+## State folder
+
+- [ ] Remove the migration from `~/.agent-dashboard` in `paths.py` once every install has moved to `~/.agentop`.
+
 ## Memory plugin
 
 Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-record-of-conversations). One host only for now.
 
-- [x] Phase 1: archive. Sweep claude, codex, and antigravity transcripts into `~/.agent-dashboard/memory/archive/`, appending only new bytes, never deleting; status route and Settings section.
-- [ ] Phase 2: messages table in SQLite, prompts and final replies only, rebuilt from the archive.
+- [x] Phase 1: archive. Sweep claude, codex, and antigravity transcripts into `~/.agentop/plugins/memory/archive/`, appending only new bytes, never deleting; status route and Settings section.
+- [x] Phase 2: messages table in SQLite (`plugins/memory/messages.sqlite`), prompts and the assistant's text only, rebuilt from the archive. Reads Codex's compressed `.jsonl.zst` transcripts.
 - [ ] Phase 3: conversation view for transcripts in the File viewer; Transcripts list falls back to the archive.
 - [ ] Phase 4: recall: FTS5 search, a route, `agentop recall`, and a skill.
 - [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.

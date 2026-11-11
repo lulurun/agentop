@@ -93,7 +93,7 @@ Goal: a complete v2 API, usable with curl and a test client, running alongside t
 
 - [x] Move `src/api.py` to `src/agentop/service/app.py` as an app factory. Add `agentop serve`.
 - [x] Change the unit to `ExecStart=agentop serve`, and add `Environment=TERM=xterm-256color`.
-- [x] Add `~/.agent-dashboard/config.toml`: `host`, `port`, `name`, `tls_cert`, `tls_key`, with matching `agentop serve` flags. Loopback stays the default.
+- [x] Add `~/.agentop/config.toml`: `host`, `port`, `name`, `tls_cert`, `tls_key`, with matching `agentop serve` flags. Loopback stays the default.
 - [x] Route every tmux call through one wrapper in `tmux.py`, including those in `scanner.py` and `agentcli.py`. It adds a socket option and exact targets: `=id` for sessions, `=id:` for panes.
 - [x] Add `pytest` as a dev dependency, a `tests/` directory, and a fixture that provides a private tmux server.
 

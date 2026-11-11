@@ -7,6 +7,12 @@ interface Status {
   bytes: number;
   tools: Record<string, { files: number; bytes: number }>;
   last_sweep: { at: number; seconds: number; copied: number; appended: number; replaced: number; errors: string[] } | null;
+  messages: {
+    messages: number;
+    sessions: number;
+    tools: Record<string, { messages: number; sessions: number }>;
+    last_index: { errors: string[] } | null;
+  };
 }
 
 function formatSize(bytes: number): string {
@@ -48,6 +54,7 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
   if (error) return <p className="memory-note">{error}</p>;
   if (!status) return null;
   const last = status.last_sweep;
+  const errors = [...(last?.errors ?? []), ...(status.messages.last_index?.errors ?? [])];
   return (
     <div className="memory-status">
       <p className="memory-note">
@@ -63,9 +70,17 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
           ? `Last sweep ${new Date(last.at * 1000).toLocaleString()}: ${last.copied} new, ${last.appended} grown, ${last.replaced} replaced, in ${last.seconds}s.`
           : "Not swept yet."}
       </p>
-      {last && last.errors.length > 0 && (
+      <p className="memory-note">
+        {status.messages.messages} prompts and replies from {status.messages.sessions} sessions
+        {Object.keys(status.messages.tools).length > 0 &&
+          ` (${Object.entries(status.messages.tools)
+            .map(([tool, t]) => `${tool} ${t.messages}`)
+            .join(", ")})`}
+        .
+      </p>
+      {errors.length > 0 && (
         <ul className="memory-errors">
-          {last.errors.map((line) => (
+          {errors.map((line) => (
             <li key={line}>{line}</li>
           ))}
         </ul>

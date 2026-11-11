@@ -9,6 +9,8 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.104.0",
     "uvicorn[standard]>=0.24.0",
+    # Codex compresses older transcripts; the Memory plugin reads them.
+    "zstandard>=0.22",
     "psutil>=5.9.0",
 ]
 

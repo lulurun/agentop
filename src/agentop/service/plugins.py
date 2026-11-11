@@ -117,7 +117,7 @@ def read_manifest(folder: Path) -> Manifest:
 
 
 class PluginStore:
-    """A plugin's own data: one JSON file, `~/.agent-dashboard/plugins/{id}.json`."""
+    """A plugin's own data: one JSON file, `~/.agentop/plugins/{id}/store.json`."""
 
     def __init__(self, path: Path):
         self.path = path
@@ -145,7 +145,9 @@ class PluginAPI:
         self.id = plugin.id
         self.router = APIRouter()
         self.log = logging.getLogger(f"{MODULE_PREFIX}.{plugin.id}")
-        self.store = PluginStore(host.data_dir / f"{plugin.id}.json")
+        # The plugin's own folder, for files of its own. Made when first written to.
+        self.data_dir = host.data_dir / plugin.id
+        self.store = PluginStore(self.data_dir / "store.json")
         self._handlers: list[tuple[str, Callable]] = []
         self._tasks: list[Callable] = []
 
@@ -215,7 +217,7 @@ class PluginHost:
         self.root = root or DEFAULT_ROOT
         base = data_dir or paths.data_dir()
         self.data_dir = base / "plugins"
-        self.flags_path = base / "plugins.json"
+        self.flags_path = base / "state" / "plugins.json"
         self.plugins: dict[str, Plugin] = {}
         self._app: FastAPI | None = None
         self._auth: list = []

@@ -85,7 +85,7 @@ class Install:
 
     @property
     def status(self):
-        return json.loads((self.data / "update-status.json").read_text())
+        return json.loads((self.data / "state" / "update-status.json").read_text())
 
     @property
     def head(self):

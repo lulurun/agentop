@@ -37,7 +37,7 @@ fn data_dir() -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("AGENTOP_HOME") {
         return Some(PathBuf::from(path));
     }
-    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".agent-dashboard"))
+    std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".agentop"))
 }
 
 /// The service installed on this machine, if there is one.

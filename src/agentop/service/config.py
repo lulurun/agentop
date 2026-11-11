@@ -1,4 +1,4 @@
-"""Service settings, from ~/.agent-dashboard/config.toml and command-line overrides."""
+"""Service settings, from ~/.agentop/config.toml and command-line overrides."""
 
 from __future__ import annotations
 
