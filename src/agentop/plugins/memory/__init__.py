@@ -29,15 +29,27 @@ def register(api):
             indexed = messages.index(stop=stopping.is_set)
             last_index.clear()
             last_index.update(indexed)
-        if result["copied"] or result["appended"] or result["replaced"] or result["errors"]:
+        if (
+            result["copied"]
+            or result["appended"]
+            or result["replaced"]
+            or result["errors"]
+        ):
             api.log.info(
                 "Swept %d new, %d grown, %d replaced, %d errors in %.1fs",
-                result["copied"], result["appended"], result["replaced"], len(result["errors"]), result["seconds"],
+                result["copied"],
+                result["appended"],
+                result["replaced"],
+                len(result["errors"]),
+                result["seconds"],
             )
         if indexed["added"] or indexed["errors"]:
             api.log.info(
                 "Indexed %d messages from %d files, %d errors in %.1fs",
-                indexed["added"], indexed["files"], len(indexed["errors"]), indexed["seconds"],
+                indexed["added"],
+                indexed["files"],
+                len(indexed["errors"]),
+                indexed["seconds"],
             )
         api.emit({"type": "status"})
         return result
@@ -65,7 +77,10 @@ def register(api):
     api.on("session.exited", lambda _row: wanted.set())
 
     def status() -> dict:
-        return {**archive.status(), "messages": {**messages.status(), "last_index": last_index or None}}
+        return {
+            **archive.status(),
+            "messages": {**messages.status(), "last_index": last_index or None},
+        }
 
     @api.router.get("/status")
     async def get_status():
@@ -75,3 +90,15 @@ def register(api):
     async def sweep_now():
         await asyncio.to_thread(sweep)
         return await asyncio.to_thread(status)
+
+    @api.router.get("/search")
+    async def search(
+        q: str, limit: int = 20, tool: str | None = None, project: str | None = None, since: float | None = None
+    ):
+        """Messages holding every word of `q`, best match first. `since` is seconds since the epoch."""
+        return await asyncio.to_thread(messages.search, q, max(1, min(limit, 200)), tool, project, since)
+
+    @api.router.get("/conversation")
+    async def conversation(session: str, tool: str | None = None, around: int | None = None, radius: int = 6):
+        """A session's messages, oldest first; with `around`, the ones near that message."""
+        return await asyncio.to_thread(messages.conversation, tool, session, around, max(0, min(radius, 200)))

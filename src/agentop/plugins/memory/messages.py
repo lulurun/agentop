@@ -12,6 +12,7 @@ session resumed into a new file adds nothing.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import time
 from collections.abc import Callable, Iterator
@@ -37,6 +38,14 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_session ON messages (session, at);
 CREATE INDEX IF NOT EXISTS messages_at ON messages (at);
+-- Full-text search over the text. Trigrams match any part of a word, so a
+-- partial name, a URL, or Japanese text (no spaces between words) all match.
+CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+    text, content='messages', content_rowid='id', tokenize='trigram'
+);
+CREATE TRIGGER IF NOT EXISTS messages_fts_insert AFTER INSERT ON messages BEGIN
+    INSERT INTO messages_fts (rowid, text) VALUES (new.id, new.text);
+END;
 CREATE TABLE IF NOT EXISTS files (
     path TEXT PRIMARY KEY,     -- relative to the archive
     offset INTEGER NOT NULL,   -- bytes read, up to the last whole line
@@ -74,7 +83,14 @@ class Messages:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(self.path, timeout=30)
         db.execute("PRAGMA journal_mode=WAL")
+        had_index = db.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'messages_fts'"
+        ).fetchone()
         db.executescript(SCHEMA)
+        if not had_index:
+            # A table built before the index: index what is already there.
+            with db:
+                db.execute("INSERT INTO messages_fts (messages_fts) VALUES ('rebuild')")
         return db
 
     def index(self, stop: Callable[[], bool] = lambda: False) -> dict:
@@ -174,13 +190,12 @@ class Messages:
                     )
                 )
         with db:
-            before = db.total_changes
-            db.executemany(
+            # The statement's own count: the index trigger's writes aren't in it.
+            added = db.executemany(
                 "INSERT OR IGNORE INTO messages (tool, record, session, project, turn, at, role, text, file)"
                 " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 rows,
-            )
-            added = db.total_changes - before
+            ).rowcount
             db.execute(
                 "INSERT OR REPLACE INTO files (path, offset, context) VALUES (?, ?, ?)",
                 (key, offset, json.dumps(context)),
@@ -205,3 +220,132 @@ class Messages:
             "sessions": sum(t["sessions"] for t in tools.values()),
             "tools": tools,
         }
+
+    # ------------------------------------------------------------ recall
+
+    def search(
+        self,
+        query: str,
+        limit: int = 20,
+        tool: str | None = None,
+        project: str | None = None,
+        since: float | None = None,
+    ) -> list[dict]:
+        """Messages holding every term in the query, best match first.
+
+        A term is a word, or "a phrase in quotes". Terms of three characters or
+        more use the index; shorter ones are matched as plain text.
+        """
+        terms = split_terms(query)
+        if not terms or not self.path.exists():
+            return []
+        long_terms = [t for t in terms if len(t) >= 3]
+        where, params = [], []
+        for term in terms:
+            if len(term) < 3:
+                where.append("m.text LIKE ? ESCAPE '\\'")
+                params.append(
+                    "%"
+                    + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+                    + "%"
+                )
+        for column, value in (("m.tool", tool), ("m.project", project)):
+            if value:
+                where.append(f"{column} = ?")
+                params.append(value)
+        if since is not None:
+            where.append("m.at >= ?")
+            params.append(since)
+        columns = "m.id, m.tool, m.session, m.project, m.turn, m.at, m.role, m.text"
+        if long_terms:
+            match = " AND ".join('"' + t.replace('"', '""') + '"' for t in long_terms)
+            sql = f"SELECT {columns} FROM messages_fts f JOIN messages m ON m.id = f.rowid WHERE messages_fts MATCH ?"
+            sql += (
+                "".join(f" AND {w}" for w in where)
+                + " ORDER BY f.rank, m.at DESC LIMIT ?"
+            )
+            params = [match, *params, limit]
+        else:
+            sql = f"SELECT {columns} FROM messages m" + (
+                " WHERE " + " AND ".join(where) if where else ""
+            )
+            sql += " ORDER BY m.at DESC LIMIT ?"
+            params = [*params, limit]
+        db = self._connect()
+        try:
+            rows = db.execute(sql, params).fetchall()
+            hits = []
+            for id_, tool_, session, project_, turn, at, role, text in rows:
+                prompt = None
+                if role == "assistant" and turn:
+                    found = (
+                        db.execute(
+                            "SELECT text FROM messages WHERE tool = ? AND record = ? AND role = 'user'",
+                            (tool_, turn),
+                        ).fetchone()
+                        or db.execute(
+                            "SELECT text FROM messages WHERE tool = ? AND session = ? AND turn = ? AND role = 'user'"
+                            " ORDER BY at, id LIMIT 1",
+                            (tool_, session, turn),
+                        ).fetchone()
+                    )
+                    prompt = found[0] if found else None
+                hits.append(
+                    {
+                        "id": id_,
+                        "tool": tool_,
+                        "session": session,
+                        "project": project_,
+                        "at": at,
+                        "role": role,
+                        "snippet": snippet(text, terms),
+                        "prompt": snippet(prompt, terms, 200) if prompt else None,
+                    }
+                )
+            return hits
+        finally:
+            db.close()
+
+    def conversation(self, tool: str | None, session: str, around: int | None = None, radius: int = 6) -> list[dict]:
+        """A session's messages, oldest first. With `around` (a message id), only those near it."""
+        if not self.path.exists():
+            return []
+        db = self._connect()
+        try:
+            rows = db.execute(
+                "SELECT id, role, at, text FROM messages WHERE session = ? AND (? IS NULL OR tool = ?) ORDER BY at, id",
+                (session, tool, tool),
+            ).fetchall()
+        finally:
+            db.close()
+        if around is not None:
+            index = next((i for i, row in enumerate(rows) if row[0] == around), None)
+            if index is not None:
+                rows = rows[max(0, index - radius) : index + radius + 1]
+        return [
+            {"id": id_, "role": role, "at": at, "text": text}
+            for id_, role, at, text in rows
+        ]
+
+
+def split_terms(query: str) -> list[str]:
+    """Words, and "phrases in quotes", from a search query."""
+    terms = []
+    for quoted, word in re.findall(r'"([^"]*)"|(\S+)', query):
+        term = (quoted or word).strip()
+        if term:
+            terms.append(term)
+    return terms
+
+
+def snippet(text: str, terms: list[str], width: int = 300) -> str:
+    """The part of the text around the first term found, on one line."""
+    flat = " ".join(text.split())
+    lower = flat.lower()
+    found = [lower.find(t.lower()) for t in terms]
+    starts = [i for i in found if i >= 0]
+    start = max(0, min(starts) - width // 3) if starts else 0
+    piece = flat[start : start + width]
+    return (
+        ("…" if start > 0 else "") + piece + ("…" if start + width < len(flat) else "")
+    )

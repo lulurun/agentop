@@ -878,7 +878,7 @@ The same mechanism also covers:
 
 ### 12.11 Memory: agentop's own record of conversations
 
-Status: phases 1 to 3 (archive, messages table, conversation view) built. Plugin id `memory`.
+Status: phases 1 to 4 (archive, messages table, conversation view, recall) built. Plugin id `memory`.
 
 **The problem.** Conversations with agents carry exact details that matter later: a person's name, a place, a link someone sent. At the time they are on hand, so nobody notes them, and days or months later the keyword itself is forgotten. The agent tools' own memory features don't help: Claude Code writes memory only when it judges a fact worth keeping, per project folder, and Codex's is off by default. Neither records what was said.
 
@@ -932,6 +932,12 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
 
    Built. The extraction moved to the core, `agentop/conversation.py`, so the viewer reads a live transcript without the Memory plugin, and the messages table uses the same rules. The viewer's `/file` says whether a file reads as a conversation, and `GET /api/v2/plugins/viewer/conversation?session=&path=` returns its messages (the latest 5000). The tab opens on Conversation, with Raw beside it; links are clickable, and it opens at the latest message. `AgentCli.transcript_files` takes the archive as its root, and the listing says `archived: true` when that is where the files came from. Codex's own record of a rollout's path goes stale once it compresses or archives the file, so a rollout is also found by name.
 4. **Recall.** Full-text search (SQLite FTS5) over the messages, a route and an `agentop recall` command, and a skill so a session can ask "what was the link Xxx sent about …". Embeddings only if keyword search misses too often.
+
+   Built. `messages_fts` is an FTS5 index over the text with the `trigram` tokenizer, kept up to date by a trigger, and built from the table when it is first added. Trigrams match any part of a word, ignoring case, so a partial name, a domain, or Japanese text (which has no spaces) is found without word splitting; a word under three characters is matched with `LIKE`. Every word must match; quotes keep a phrase. Results are best match first (bm25), each with its message ID, date, tool, project, session, a snippet, and, for a reply, the prompt it answered. On the devhost a search over 13,000 messages takes about a millisecond.
+
+   - Routes: `GET /api/v2/plugins/memory/search?q=&tool=&project=&since=&limit=` and `GET /api/v2/plugins/memory/conversation?session=&tool=&around=&radius=`.
+   - `agentop recall <words>` and `agentop recall --session <id> --around <#id>` ([cli.md 1.5](cli.md#15-recall)). It reads the database directly, so it works with the service down. It is a core command for now; it moves to the plugin when plugins can add CLI commands (`register_cli`).
+   - The `recall` skill (`skills/recall/`) tells a Claude session how to search: distinctive words rather than "link" or "name", variants when nothing matches, read around a hit before answering, quote the detail exactly, and never guess.
 
 ## 13 Migration
 

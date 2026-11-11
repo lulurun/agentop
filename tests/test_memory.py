@@ -1,5 +1,6 @@
 """The Memory plugin's archive: a copy of every transcript, kept up to date and never deleted."""
 
+import json
 import os
 import shutil
 import time
@@ -151,3 +152,14 @@ def test_the_plugin_sweeps_at_start_and_on_request(client, tmp_path, home):
     status = client.post("/api/v2/plugins/memory/sweep", headers=AUTH).json()
     assert status["files"] == 4
     assert status["last_sweep"]["copied"] == 1
+
+
+def test_the_plugin_searches_what_it_has_recorded(client, home):
+    log = home / ".claude" / "projects" / "-proj" / "s1.jsonl"
+    record = {"type": "user", "uuid": "u9", "sessionId": "s1", "message": {"role": "user", "content": "the atama link"}}
+    log.write_text(json.dumps(record) + "\n")
+    client.post("/api/v2/plugins/memory/sweep", headers=AUTH)
+    hits = client.get("/api/v2/plugins/memory/search", params={"q": "atama"}, headers=AUTH).json()
+    assert [h["snippet"] for h in hits] == ["the atama link"]
+    messages = client.get("/api/v2/plugins/memory/conversation", params={"session": "s1"}, headers=AUTH).json()
+    assert [m["text"] for m in messages] == ["the atama link"]

@@ -72,6 +72,20 @@ agentop history --json
 
 Active sessions are excluded. Columns: TOOL, TITLE, LAST ACTIVE, CWD.
 
+### 1.5 recall
+
+Search every past conversation on this machine: the prompts and replies the Memory plugin keeps ([design 12.11](v2-design.md#1211-memory-agentops-own-record-of-conversations)). It reads `~/.agentop/plugins/memory/messages.sqlite` directly, so the service needn't be running.
+
+```bash
+agentop recall atama link                      # messages holding every word
+agentop recall "atama plus" --since 6w         # a phrase; since 12h, 30d, 6w, or a date
+agentop recall stores.jp --tool codex --project ~/workspace/Hotaka
+agentop recall --session <session> --around <#id> [--radius 6]   # read around a hit
+agentop recall <words> --json
+```
+
+Words match anywhere in a message, ignoring case (an FTS5 trigram index), so part of a name, a domain, or Japanese text works. Words under three characters are matched as plain text. Results are best match first, each with its `#id`, date, tool, project, session, and, for a reply, the prompt it answered. The `recall` skill (`skills/recall/`) teaches a Claude session to use it.
+
 ## 2 Dialogue commands
 
 All dialogue subcommands are under `agentop dialogue`.

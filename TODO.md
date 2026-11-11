@@ -73,6 +73,9 @@ Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-
 - [x] Phase 1: archive. Sweep claude, codex, and antigravity transcripts into `~/.agentop/plugins/memory/archive/`, appending only new bytes, never deleting; status route and Settings section.
 - [x] Phase 2: messages table in SQLite (`plugins/memory/messages.sqlite`), prompts and the assistant's text only, rebuilt from the archive. Reads Codex's compressed `.jsonl.zst` transcripts.
 - [x] Phase 3: conversation view for transcripts in the File viewer (`agentop/conversation.py`, shared with the messages table); Transcripts list falls back to the archive.
-- [ ] Phase 4: recall: FTS5 search, a route, `agentop recall`, and a skill.
+- [x] Phase 4: recall: FTS5 trigram search, `/search` and `/conversation` routes, `agentop recall`, and the `recall` skill (`skills/recall/`).
+- [ ] Search in the app: a Memory view that searches and opens the conversation around a hit.
+- [ ] Move `agentop recall` into the plugin once plugins can add CLI commands (`register_cli`).
+- [ ] A recall skill for Codex sessions too.
 - [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.
 - [ ] Later: archives from other hosts, aggregated in one place.

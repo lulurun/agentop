@@ -166,3 +166,73 @@ def test_status_counts_messages_and_sessions(table):
     table.index()
     assert table.status()["tools"]["claude"] == {"messages": 3, "sessions": 1}
     assert table.status()["messages"] == 7
+
+
+# ---------------------------------------------------------------- recall
+
+
+def test_search_finds_every_word_anywhere_in_a_message(table):
+    table.index()
+    hits = table.search("yamada ATAMA")
+    assert [(h["tool"], h["role"]) for h in hits] == [("claude", "assistant")]
+    assert hits[0]["snippet"] == "Yamada sent https://example.com/atama"
+    # A reply carries the prompt it answered.
+    assert hits[0]["prompt"] == "Who sent me the atama link?"
+    # Part of a word, and a URL fragment.
+    assert {h["role"] for h in table.search("amad")} == {"assistant"}
+    assert len(table.search("example.com/atama")) == 1
+    assert table.search("yamada nowhere") == []
+
+
+def test_search_takes_phrases_short_words_and_filters(table):
+    table.index()
+    assert [h["snippet"] for h in table.search('"restart influxdb"')] == ["please restart influxdb"]
+    assert table.search('"influxdb restart"') == []
+    # Under three characters there are no trigrams; it is matched as plain text.
+    assert {h["tool"] for h in table.search("ss")} == {"antigravity"}
+    assert table.search("restart", tool="claude") == []
+    assert len(table.search("restart", project="/work/hotaka")) == 2
+    assert table.search("restart", since=2_000_000_000) == []
+
+
+def test_search_works_on_a_table_built_before_the_index(table):
+    table.index()
+    with sqlite3.connect(table.path) as db:
+        db.executescript("DROP TRIGGER messages_fts_insert; DROP TABLE messages_fts;")
+    assert len(table.search("influxdb")) == 1
+
+
+def test_a_conversation_reads_in_order_and_around_a_message(table):
+    table.index()
+    whole = table.conversation("claude", "s1")
+    assert [m["text"] for m in whole] == [
+        "Who sent me the atama link?",
+        "Yamada sent https://example.com/atama",
+        "/handoff deploy eiger",
+    ]
+    middle = whole[1]["id"]
+    assert [m["id"] for m in table.conversation(None, "s1", around=middle, radius=0)] == [middle]
+
+
+def test_agentop_recall_searches_and_reads(table, tmp_path, monkeypatch, capsys):
+    import sys
+
+    from agentop import cli
+
+    folder = tmp_path / "home" / "plugins" / "memory"
+    folder.mkdir(parents=True)
+    table.index()
+    table.path.rename(folder / "messages.sqlite")
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path / "home"))
+
+    monkeypatch.setattr(sys, "argv", ["agentop", "recall", "yamada", "--tool", "claude"])
+    cli.main()
+    out = capsys.readouterr().out
+    assert "Yamada sent https://example.com/atama" in out
+    assert "You asked: Who sent me the atama link?" in out
+    hit = out.split()[0].lstrip("#")
+
+    monkeypatch.setattr(sys, "argv", ["agentop", "recall", "--session", "s1", "--around", hit, "--radius", "1"])
+    cli.main()
+    out = capsys.readouterr().out
+    assert out.count("--- #") == 3 and "<<" in out
