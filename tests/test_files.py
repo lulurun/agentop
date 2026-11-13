@@ -115,3 +115,56 @@ def test_looking_at_a_repository_runs_nothing_from_it(repo, tmp_path):
     git(repo, "config", "core.fsmonitor", f"touch {marker}; false")
     files.git_changes(str(repo))
     assert not marker.exists()
+
+
+def test_a_modified_file_diffs_against_head(repo):
+    (repo / "kept.txt").write_text("v2\n")
+    diff = files.git_diff(str(repo), "kept.txt")
+    assert "-v1\n+v2\n" in diff["text"]
+    assert not diff["binary"] and not diff["truncated"]
+
+
+def test_a_staged_change_is_in_the_diff_too(repo):
+    (repo / "kept.txt").write_text("v2\n")
+    git(repo, "add", "kept.txt")
+    assert "+v2" in files.git_diff(str(repo), "kept.txt")["text"]
+
+
+def test_a_deleted_file_diffs_as_removed(repo):
+    (repo / "gone.txt").unlink()
+    assert "deleted file mode" in files.git_diff(str(repo), "gone.txt")["text"]
+
+
+def test_an_untracked_file_diffs_as_added(repo):
+    (repo / "sub" / "new.txt").write_text("hello\n")
+    diff = files.git_diff(str(repo / "sub"), "new.txt")
+    assert "new file mode" in diff["text"] and "+hello" in diff["text"]
+
+
+def test_a_binary_change_is_marked(repo):
+    (repo / "kept.txt").write_bytes(b"\0\1\2")
+    assert files.git_diff(str(repo), "kept.txt")["binary"]
+
+
+@pytest.mark.parametrize("path", ["kept.txt", "ignored.txt", "missing.txt"])
+def test_no_change_has_no_diff(repo, path):
+    (repo / "ignored.txt").write_text("x")
+    with pytest.raises(FileNotFoundError):
+        files.git_diff(str(repo), path)
+
+
+def test_a_diff_cannot_leave_the_root(repo):
+    with pytest.raises(files.OutsideRoot):
+        files.git_diff(str(repo / "sub"), "../kept.txt")
+
+
+def test_outside_a_repository_there_is_no_diff(tmp_path):
+    (tmp_path / "a.txt").write_text("x")
+    with pytest.raises(FileNotFoundError):
+        files.git_diff(str(tmp_path), "a.txt")
+
+
+def test_a_long_diff_ends_on_a_whole_line(repo):
+    (repo / "kept.txt").write_text("line\n" * 1000)
+    diff = files.git_diff(str(repo), "kept.txt", max_bytes=500)
+    assert diff["truncated"] and diff["text"].endswith("\n") and len(diff["text"]) <= 500

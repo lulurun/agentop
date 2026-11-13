@@ -5,6 +5,8 @@ same rule as the Files list), and `transcript` is one of the files the agent
 tool reports for the session. A transcript can also be read as a conversation:
 the prompts and replies in it, without tool calls and output.
 
+A file from the Changed list opens as its diff against HEAD, through `/diff`.
+
 A Markdown file is drawn in the browser. The images it names come through
 `/image`, as data the page puts in the <img>, since the page's requests carry
 their token in a header an <img> can't send.
@@ -120,6 +122,23 @@ def register(api):
         row = session_row(session)
         _, result = await located(row, source, path, read_image)
         return {"path": path, **result}
+
+    @api.router.get("/diff")
+    async def read_diff(session: str, path: str):
+        """A changed file's diff against HEAD, for a file from the Changed list. The file may be deleted."""
+        row = session_row(session)
+        if not row.get("cwd"):
+            raise HTTPException(404, "No such file")
+        try:
+            result = await asyncio.to_thread(files.git_diff, row["cwd"], path)
+        except files.OutsideRoot:
+            raise HTTPException(403, "That path is outside the session's directory") from None
+        except FileNotFoundError:
+            raise HTTPException(404, "This file has no changes") from None
+        except PermissionError:
+            raise HTTPException(403, "Permission denied") from None
+        _, target = files.resolve_inside(row["cwd"], path)
+        return {"path": path, "absolute": str(target), **result}
 
     @api.router.get("/conversation")
     async def read_conversation(session: str, path: str):

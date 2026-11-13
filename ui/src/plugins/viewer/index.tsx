@@ -3,6 +3,7 @@ import { platform } from "../../platform";
 import { useApp } from "../../store";
 import type { FileRef } from "../../tabs";
 import type { PluginContext, UiPlugin } from "../types";
+import { parseDiff, type DiffRow } from "./diff";
 import { isMarkdown } from "./paths";
 
 // Its libraries load the first time a Markdown file is opened.
@@ -108,6 +109,134 @@ function ConversationView({ conversation, label }: { conversation: Conversation;
   );
 }
 
+interface FileDiff {
+  path: string;
+  absolute: string;
+  binary: boolean;
+  truncated: boolean;
+  text: string;
+}
+
+function DiffLine({ row }: { row: DiffRow }) {
+  if (row.kind === "hunk" || row.kind === "note") {
+    return (
+      <div className="diff-row" data-kind={row.kind}>
+        <span className="diff-num" />
+        <span className="diff-num" />
+        <span className="diff-text">{row.text}</span>
+      </div>
+    );
+  }
+  return (
+    <div className="diff-row" data-kind={row.kind}>
+      <span className="diff-num">{row.old ?? ""}</span>
+      <span className="diff-num">{row.new ?? ""}</span>
+      <span className="diff-text">
+        <span className="diff-sign" aria-hidden="true">{row.kind === "add" ? "+" : row.kind === "del" ? "-" : " "}</span>
+        {row.text}
+      </span>
+    </div>
+  );
+}
+
+/** A changed file's diff against HEAD, staged and unstaged together, with old and new line numbers. */
+function DiffViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) {
+  const [result, setResult] = useState<FileDiff | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [wrap, setWrap] = useState(false);
+  const openTab = useApp((s) => s.openTab);
+
+  const load = useCallback(() => {
+    const query = new URLSearchParams({ session: file.sessionId, path: file.path });
+    plugin.client.get<FileDiff>(`/diff?${query}`).then(
+      (value) => {
+        setResult(value);
+        setError(null);
+      },
+      (failure: unknown) => setError(message(failure)),
+    );
+  }, [file.sessionId, file.path, plugin.client]);
+  useEffect(load, [load]);
+
+  const diff = useMemo(() => (result ? parseDiff(result.text) : null), [result]);
+  const deleted = diff?.notes.some((n) => n.startsWith("deleted file mode")) ?? false;
+
+  let body: ReactNode = null;
+  if (error) {
+    body = (
+      <div className="placard">
+        <h2>No diff for {file.path.split("/").pop()}</h2>
+        <p>{error}</p>
+      </div>
+    );
+  } else if (diff && result) {
+    body = (
+      <>
+        {diff.notes.length > 0 && <p className="viewer-note diff-notes">{diff.notes.join(". ")}</p>}
+        {result.truncated && (
+          <p className="viewer-note" role="status">
+            Showing the first {formatSize(result.text.length)} of the diff.
+          </p>
+        )}
+        {diff.rows.length === 0 ? (
+          <div className="placard">
+            <h2>{result.binary ? "This is a binary file" : "No line changes"}</h2>
+            <p>{result.binary ? "Only text changes can be shown." : "Only the file's mode or name changed."}</p>
+          </div>
+        ) : (
+          <div className="diff" data-wrap={wrap || undefined} tabIndex={0} aria-label={`Changes to ${file.path}`}>
+            {diff.rows.map((row, index) => (
+              <DiffLine key={index} row={row} />
+            ))}
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <div className="viewer">
+      <div className="viewer-bar">
+        <span className="viewer-path" title={result?.absolute ?? file.path}>
+          <span className="viewer-source">Diff</span>
+          {file.path}
+        </span>
+        {diff && (diff.added > 0 || diff.removed > 0) && (
+          <span className="viewer-meta">
+            <span className="diff-added">+{diff.added}</span> <span className="diff-removed">−{diff.removed}</span>
+          </span>
+        )}
+        <button type="button" aria-pressed={wrap} onClick={() => setWrap(!wrap)}>
+          Wrap
+        </button>
+        {!deleted && (
+          <button
+            type="button"
+            title="Open the file as it is now"
+            onClick={(event) => openTab({ kind: "file", file: { ...file, view: undefined } }, event.ctrlKey || event.metaKey ? "side" : "tab")}
+          >
+            Open file
+          </button>
+        )}
+        <button type="button" onClick={load}>
+          Reload
+        </button>
+        {result && (
+          <button type="button" onClick={() => void platform.copyText(result.absolute)}>
+            Copy path
+          </button>
+        )}
+      </div>
+      {body}
+    </div>
+  );
+}
+
+/** A file in a tab: its diff when opened from the Changed list, otherwise its text. */
+function FileViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) {
+  return file.view === "diff" ? <DiffViewer file={file} plugin={plugin} /> : <TextViewer file={file} plugin={plugin} />;
+}
+
 /** A file's text with line numbers, or drawn: a transcript as its conversation, Markdown as a page. */
 function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) {
   const [result, setResult] = useState<FileText | null>(null);
@@ -142,7 +271,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   }, [result, file.path]);
   const showing: Mode = mode && modes.includes(mode) ? mode : modes[0];
   const openBeside = useCallback(
-    (path: string, side: boolean) => openTab({ kind: "file", file: { ...file, path } }, side ? "side" : "tab"),
+    (path: string, side: boolean) => openTab({ kind: "file", file: { sessionId: file.sessionId, source: file.source, path } }, side ? "side" : "tab"),
     [file, openTab],
   );
   const lines = useMemo(() => {
@@ -248,5 +377,5 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
 }
 
 export const plugin: UiPlugin = {
-  fileViewer: TextViewer,
+  fileViewer: FileViewer,
 };

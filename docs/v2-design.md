@@ -603,7 +603,7 @@ Agentop grows from here through plugins. The features that exist today are the *
 - Sessions: scan, start, stop, close, resume, rename and describe, managed and external sessions.
 - The terminal bridge and tmux integration.
 - The main area's tabs: one or two groups side by side, each tab holding a session's terminal or a file (drawn by a `file-viewer` plugin).
-- The right panel: details, token usage, changed and all files, and the session's transcripts.
+- The right panel: details, token usage, and changed and all files. A changed file opens as its diff.
 - History.
 - Service status, stop, restart, update, and token handling.
 - Connections and service switching, settings, and the plugin loader itself (12.3).
@@ -738,7 +738,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 |---------|---------|
 | Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
-| File preview and diff view | Yes: the File viewer plugin (`viewer`) serves file text and fills the `file-viewer` slot. It draws JSONL transcripts as conversations and Markdown as a page (built 2026-11-13). Syntax highlighting and diffs come next, in the same plugin |
+| File preview and diff view | Yes: the File viewer plugin (`viewer`) serves file text and fills the `file-viewer` slot. It draws JSONL transcripts as conversations and Markdown as a page (built 2026-11-13). A file from the Changed list opens as its diff against HEAD (built 2026-11-14). Syntax highlighting comes next, in the same plugin |
 | Handoff: pass a side task, such as a deploy, to another session | No: `agentop send` and the `handoff` skill are enough (12.10) |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |

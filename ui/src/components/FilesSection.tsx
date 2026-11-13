@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import type { FileEntry, FileListing, GitChanges, TranscriptListing } from "../api/client";
+import type { FileEntry, FileListing, GitChanges } from "../api/client";
 import { platform } from "../platform";
 import { useFileViewer } from "../plugins/Slot";
 import { activeClient, useApp } from "../store";
@@ -95,9 +95,10 @@ function Changed({ sessionId }: { sessionId: string }) {
             <FileRow
               absolute={file.path}
               // Changed paths are from the top of the repository. Only those inside the session's directory can be opened.
+              // They open as their diff, so a deleted file opens too.
               file={
-                file.status !== "D" && file.path.startsWith(changes.prefix)
-                  ? { sessionId, source: "workdir", path: file.path.slice(changes.prefix.length) }
+                file.path.startsWith(changes.prefix)
+                  ? { sessionId, source: "workdir", path: file.path.slice(changes.prefix.length), view: "diff" }
                   : null
               }
             >
@@ -171,69 +172,6 @@ export function FilesSection({ sessionId }: { sessionId: string }) {
         <button type="button" role="tab" aria-selected={tab === "all"} onClick={() => setTab("all")}>All</button>
       </div>
       {tab === "changed" ? <Changed sessionId={sessionId} /> : <Directory sessionId={sessionId} path="" />}
-    </section>
-  );
-}
-
-function formatSize(bytes: number): string {
-  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
-}
-
-/** The agent tool's own log files for this session: the conversation, and whatever it keeps beside it. */
-export function TranscriptsSection({ sessionId }: { sessionId: string }) {
-  const client = useClient();
-  const [listing, setListing] = useState<TranscriptListing | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    setListing(null);
-    const load = () => {
-      if (document.visibilityState === "hidden") return;
-      client.transcripts(sessionId).then(
-        (result) => {
-          if (!cancelled) {
-            setListing(result);
-            setFailed(false);
-          }
-        },
-        () => !cancelled && setFailed(true),
-      );
-    };
-    load();
-    const timer = setInterval(load, REFRESH_MS);
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [client, sessionId]);
-
-  return (
-    <section>
-      <h3>Transcripts</h3>
-      {failed ? (
-        <p className="file-note">Could not list the transcripts.</p>
-      ) : !listing ? null : listing.files.length === 0 ? (
-        <p className="file-note">The agent hasn't reported a transcript for this session.</p>
-      ) : (
-        <>
-          {listing.archived && <p className="file-note">The agent deleted these files. This is agentop's archived copy.</p>}
-          <ul className="file-list">
-            {listing.files.map((file) => (
-              <li key={file.path}>
-                <FileRow absolute={`${listing.root}/${file.path}`} file={{ sessionId, source: "transcript", path: file.path }}>
-                  <span className="file-glyph" aria-hidden="true" />
-                  <span>{file.path}</span>
-                  <span className="file-size">{formatSize(file.size)}</span>
-                </FileRow>
-              </li>
-            ))}
-          </ul>
-          {listing.truncated && <p className="file-note">Showing the first {listing.files.length} files.</p>}
-        </>
-      )}
     </section>
   );
 }

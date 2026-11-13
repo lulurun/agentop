@@ -36,7 +36,7 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 - [x] `register_cli` for plugin CLI commands (`plugin_cli.py`); `agentop recall` moved into the Memory plugin with it.
 - [x] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9), 2026-11-14. `api.agents` was dropped instead of built: the orchestrator is its own process (design 12.3).
 - [x] Prove it: the core suites pass with both dialogue folders deleted; disabling the plugin stops running dialogues (`api.on_disable`, after a warning in Settings), hides every dialogue UI, and leaves other sessions untouched.
-- [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.
+- [ ] Then, one at a time: attention indicator, file preview and diff (built in the File viewer), grouping by project.
 
 ## Memory plugin
 

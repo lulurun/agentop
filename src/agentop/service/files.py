@@ -117,3 +117,43 @@ def git_changes(root: str) -> dict:
         "truncated": len(files) > MAX_CHANGES,
         "prefix": prefix.stdout.strip() if prefix and prefix.returncode == 0 else "",
     }
+
+
+MAX_DIFF_BYTES = 2 * 1024 * 1024
+# No external diff tool or text conversion: both run commands the repository's config names.
+_DIFF = ("diff", "--no-ext-diff", "--no-textconv", "--no-color", "-M")
+
+
+def git_diff(root: str, relative: str, max_bytes: int = MAX_DIFF_BYTES) -> dict:
+    """A changed file's diff against HEAD, staged and unstaged together, as unified diff text.
+
+    A file git doesn't track yet shows as wholly added. Raises FileNotFoundError
+    when the directory isn't a repository or the path has no change.
+    """
+    real_root, target = resolve_inside(root, relative)
+    path = str(target.relative_to(real_root))
+    inside = _git(real_root, "rev-parse", "--is-inside-work-tree")
+    if inside is None or inside.returncode != 0:
+        raise FileNotFoundError(relative)
+    has_head = (head := _git(real_root, "rev-parse", "--verify", "-q", "HEAD")) is not None and head.returncode == 0
+    result = _git(real_root, *_DIFF, "HEAD" if has_head else "--cached", "--", path)
+    if result is None or result.returncode != 0:
+        raise FileNotFoundError(relative)
+    text = result.stdout
+    if not text:
+        untracked = _git(real_root, "ls-files", "--others", "--exclude-standard", "--", path)
+        if untracked and untracked.stdout.strip() and target.is_file():
+            # --no-index exits 1 when the files differ, which they always do here.
+            added = _git(real_root, *_DIFF, "--no-index", "--", "/dev/null", path)
+            text = added.stdout if added else ""
+    if not text:
+        raise FileNotFoundError(relative)
+    data = text.encode("utf-8", errors="replace")
+    truncated = len(data) > max_bytes
+    if truncated:
+        data = data[: data.rfind(b"\n", 0, max_bytes) + 1]
+    return {
+        "binary": "\nBinary files " in "\n" + data.decode("utf-8", errors="replace")[:4096],
+        "truncated": truncated,
+        "text": data.decode("utf-8", errors="replace"),
+    }

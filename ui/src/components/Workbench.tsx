@@ -17,7 +17,8 @@ function useTabLabel(tab: Tab): { label: string; title: string; status?: string 
   }
   const { file } = tab.content;
   const where = file.source === "transcript" ? "transcript" : (session?.cwd ?? "");
-  return { label: baseName(file.path), title: `${file.path} (${where})` };
+  const diff = file.view === "diff";
+  return { label: diff ? `${baseName(file.path)} (diff)` : baseName(file.path), title: `${diff ? "Changes to " : ""}${file.path} (${where})` };
 }
 
 /** Right-click menu for a tab. */

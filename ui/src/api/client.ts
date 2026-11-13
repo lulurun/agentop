@@ -11,7 +11,6 @@ export type DirListing = components["schemas"]["DirListing"];
 export type FileListing = components["schemas"]["FileListing"];
 export type FileEntry = components["schemas"]["FileEntry"];
 export type GitChanges = components["schemas"]["GitChanges"];
-export type TranscriptListing = components["schemas"]["TranscriptListing"];
 export type CreateSession = components["schemas"]["CreateSession"];
 export type PatchSession = components["schemas"]["PatchSession"];
 export type PluginInfo = components["schemas"]["PluginInfo"];
@@ -86,7 +85,6 @@ export class ServiceClient {
   files = (id: string, path = "") =>
     this.get<FileListing>(`/sessions/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
   changes = (id: string) => this.get<GitChanges>(`/sessions/${encodeURIComponent(id)}/changes`);
-  transcripts = (id: string) => this.get<TranscriptListing>(`/sessions/${encodeURIComponent(id)}/transcripts`);
   savedSessions = (limit = 100) => this.get<SavedSession[]>(`/saved-sessions?limit=${limit}`);
   deleteSavedSession = (tool: string, id: string) =>
     this.request("DELETE", `/saved-sessions/${encodeURIComponent(tool)}/${encodeURIComponent(id)}`);

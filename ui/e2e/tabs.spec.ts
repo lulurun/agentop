@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -154,39 +155,37 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
   await expect(main.getByLabel("Preview of docs/other.md").getByRole("heading", { name: "Other page" })).toBeVisible();
 });
 
-test("a transcript opens as a conversation, with its links", async ({ page }) => {
+test("a file in the Changed list opens as its diff, and Open file shows its text", async ({ page }) => {
   const s = await service("alpha");
   const project = join(s.root, "project");
+  mkdirSync(project, { recursive: true });
+  const git = (...args: string[]) =>
+    execFileSync("git", ["-C", project, "-c", "user.name=t", "-c", "user.email=t@example.com", ...args]);
+  writeFileSync(join(project, "app.py"), "one\ntwo\nthree\n");
+  writeFileSync(join(project, "gone.txt"), "bye\n");
+  git("init", "-q");
+  git("add", ".");
+  git("commit", "-q", "-m", "first");
+  writeFileSync(join(project, "app.py"), "one\ndeux\nthree\n");
+  rmSync(join(project, "gone.txt"));
   await page.goto(s.signedInUrl);
   await startSession(page, "demo", project);
 
-  // The fake agent recorded its session ID; put a transcript where Claude Code would.
-  const sessions = join(s.root, ".claude", "sessions");
-  const sessionId = JSON.parse(readFileSync(join(sessions, readdirSync(sessions)[0]), "utf8")).sessionId;
-  const folder = join(s.root, ".claude", "projects", project.replaceAll("/", "-"));
-  mkdirSync(folder, { recursive: true });
-  const at = "2026-11-01T10:00:00Z";
-  const records = [
-    { type: "user", uuid: "u1", sessionId, timestamp: at, message: { role: "user", content: "who sent the atama link?" } },
-    { type: "assistant", uuid: "a1", sessionId, timestamp: at, message: { content: [{ type: "tool_use", id: "t", name: "Bash", input: {} }] } },
-    { type: "assistant", uuid: "a2", sessionId, timestamp: at, message: { content: [{ type: "text", text: "Yamada sent https://example.com/atama." }] } },
-  ];
-  writeFileSync(join(folder, `${sessionId}.jsonl`), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
-
   const details = page.locator(".details");
-  const entry = details.getByRole("button", { name: `${sessionId}.jsonl` });
-  await expect(async () => {
-    await page.reload();
-    await expect(entry).toBeVisible({ timeout: 2_000 });
-  }).toPass({ timeout: 30_000 });
-  await entry.click();
+  await details.getByRole("button", { name: "app.py" }).click();
+  const main = page.locator(".main");
+  await expect(main.getByRole("tab")).toHaveText(["demo", "app.py (diff)"]);
+  const diff = main.getByLabel("Changes to app.py");
+  await expect(diff.locator('.diff-row[data-kind="del"]')).toHaveText(["2-two"]);
+  await expect(diff.locator('.diff-row[data-kind="add"]')).toHaveText(["2+deux"]);
+  await expect(main.locator(".viewer-meta")).toHaveText("+1 −1");
 
-  const conversation = page.locator(".main").getByLabel(`Conversation in ${sessionId}.jsonl`);
-  await expect(conversation.locator(".message")).toHaveCount(2);
-  await expect(conversation.locator(".message").first()).toContainText("who sent the atama link?");
-  await expect(conversation.getByRole("link", { name: "https://example.com/atama" })).toHaveAttribute("href", "https://example.com/atama");
-  await expect(page.locator(".main").getByText("2 messages")).toBeVisible();
+  await main.getByRole("button", { name: "Open file" }).click();
+  await expect(main.getByRole("tab")).toHaveText(["demo", "app.py (diff)", "app.py"]);
+  await expect(main.getByLabel("Contents of app.py")).toHaveText("one\ndeux\nthree\n");
 
-  await page.locator(".main").getByRole("button", { name: "Raw" }).click();
-  await expect(page.locator(".main").getByLabel(`Contents of ${sessionId}.jsonl`)).toContainText('"tool_use"');
+  // A deleted file opens too, as its removed lines, with nothing to open.
+  await details.getByRole("button", { name: "gone.txt" }).click();
+  await expect(main.getByLabel("Changes to gone.txt").locator('.diff-row[data-kind="del"]')).toHaveText(["1-bye"]);
+  await expect(main.getByRole("button", { name: "Open file" })).toHaveCount(0);
 });

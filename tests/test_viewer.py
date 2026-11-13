@@ -2,6 +2,7 @@
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -202,6 +203,19 @@ def test_binary_files_have_no_text(client):
 )
 def test_refuses_what_is_not_the_sessions(client, params, status):
     assert read(client, **params).status_code == status
+
+
+def test_a_changed_file_reads_as_a_diff(client):
+    work = Path(read(client, path="src/a.py").json()["absolute"]).parent.parent
+    for args in (["init"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@x", "commit", "-m", "x"]):
+        subprocess.run(["git", "-C", str(work), *args], check=True, capture_output=True)
+    (work / "src" / "a.py").write_text("print(2)\n")
+    diff = lambda path: client.get("/api/v2/plugins/viewer/diff", params={"session": "one", "path": path}, headers=AUTH)
+    body = diff("src/a.py").json()
+    assert "-print(1)\n+print(2)\n" in body["text"]
+    assert body["absolute"] == str(work / "src" / "a.py")
+    assert diff("blob.bin").status_code == 404
+    assert diff("../outside.txt").status_code == 403
 
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16

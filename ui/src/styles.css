@@ -643,6 +643,25 @@ input::placeholder { color: var(--quiet); }
 .viewer-text { flex: 1; padding-left: 12px !important; padding-right: 16px !important; white-space: pre; outline: none; }
 .viewer-scroll[data-wrap] .viewer-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .viewer-modes { display: inline-flex; flex: none; }
+
+/* A changed file's diff: old and new line numbers, then the line */
+.diff { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 8px; color: var(--term-fg); font-family: var(--code); font-size: 12.5px; line-height: 1.55; tab-size: 4; outline: none; }
+.diff-row { display: flex; min-width: max-content; }
+.diff[data-wrap] .diff-row { min-width: 0; }
+.diff-num { flex: none; width: 5ch; padding-right: 8px; text-align: right; color: var(--quiet); user-select: none; }
+.diff-text { flex: 1; padding: 0 16px 0 8px; white-space: pre; }
+.diff[data-wrap] .diff-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.diff-sign { display: inline-block; width: 2ch; color: var(--quiet); user-select: none; }
+.diff-row[data-kind="add"] { background: color-mix(in srgb, var(--running) 16%, transparent); }
+.diff-row[data-kind="add"] .diff-sign { color: var(--running); }
+.diff-row[data-kind="del"] { background: color-mix(in srgb, var(--failed) 16%, transparent); }
+.diff-row[data-kind="del"] .diff-sign { color: var(--failed); }
+.diff-row[data-kind="hunk"] { margin-top: 6px; background: var(--raised); color: var(--quiet); }
+.diff-row[data-kind="hunk"]:first-child { margin-top: 0; }
+.diff-row[data-kind="note"] { color: var(--quiet); font-style: italic; }
+.diff-notes { color: var(--quiet); }
+.diff-added { color: var(--running); }
+.diff-removed { color: var(--failed); }
 .viewer-modes button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .viewer-modes button:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; }
 

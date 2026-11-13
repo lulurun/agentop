@@ -17,6 +17,8 @@ export interface FileRef {
   source: FileSource;
   /** Relative to the working directory, or to the transcript folder. */
   path: string;
+  /** `diff` shows the file's changes against HEAD instead of its text, as a file from the Changed list does. */
+  view?: "diff";
 }
 
 export type TabContent = { kind: "session"; sessionId: string } | { kind: "file"; file: FileRef };
@@ -59,7 +61,12 @@ export function emptyLayout(): Layout {
 export function sameContent(a: TabContent, b: TabContent): boolean {
   if (a.kind === "session" && b.kind === "session") return a.sessionId === b.sessionId;
   if (a.kind === "file" && b.kind === "file") {
-    return a.file.sessionId === b.file.sessionId && a.file.source === b.file.source && a.file.path === b.file.path;
+    return (
+      a.file.sessionId === b.file.sessionId &&
+      a.file.source === b.file.source &&
+      a.file.path === b.file.path &&
+      (a.file.view ?? null) === (b.file.view ?? null)
+    );
   }
   return false;
 }
