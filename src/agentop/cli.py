@@ -24,6 +24,11 @@ COMMANDS
     Supported tools: claude, codex, gemini, antigravity
     After starting, attach with:  tmux attach-session -t <session>
 
+  send <target> [prompt]
+    Type a prompt into another managed session and submit it.
+    The target matches a session name ignoring case and the -<suffix>.
+    The prompt is read from stdin when omitted.
+
   stop <session>
     Gracefully stop a managed session: sends /exit to the agent,
     waits up to 3 s for it to exit, then kills the tmux session.
@@ -241,6 +246,23 @@ def cmd_stop(args):
     elif result.get("tmux_killed"):
         print("  Tmux session killed.")
     print("Done.")
+
+
+def cmd_send(args):
+    text = sys.stdin.read() if args.prompt in (None, "-") else args.prompt
+    from agentop.tmux import Session
+
+    sender = Session.current()
+    if sender and not args.no_header:
+        text = f"[agentop send from {sender}]\n{text.strip()}"
+    result = _ops().send(args.target, text)
+    if not result.get("ok"):
+        print(f"Error: {result['error']}", file=sys.stderr)
+        if not result.get("matches"):
+            print("Run 'agentop list' to see the active sessions.", file=sys.stderr)
+        sys.exit(1)
+    print(f"Sent to {result['name']}.")
+    print(f"  Watch:  tmux attach-session -t {result['tmux']}")
 
 
 # ---------------------------------------------------------------------------
@@ -606,6 +628,21 @@ def main():
     )
     p_stop.add_argument("name", help="Session name (from 'agentop list')")
 
+    # send
+    p_send = sub.add_parser(
+        "send",
+        help="Type a prompt into another session and submit it",
+        description=(
+            "Type a prompt into a live managed session, as if the user typed it, and submit it.\n"
+            "The target is a session name from 'agentop list', ignoring case and the -<suffix>:\n"
+            "'eiger' finds Eiger-2953204. Nothing comes back: switch to that session to follow it.\n"
+            "Run from inside tmux, the prompt starts with a line naming the sending session."
+        ),
+    )
+    p_send.add_argument("target", help="Session name, e.g. eiger or Eiger-2953204")
+    p_send.add_argument("prompt", nargs="?", help="The prompt; '-' or none reads it from stdin")
+    p_send.add_argument("--no-header", action="store_true", help="Don't add the [agentop send from …] line")
+
     # serve
     p_serve = sub.add_parser("serve", help="Run the service in the foreground")
     p_serve.add_argument("--host", help="Address to listen on (default: 127.0.0.1)")
@@ -733,6 +770,7 @@ def main():
         "history": cmd_history,
         "start": cmd_start,
         "stop": cmd_stop,
+        "send": cmd_send,
         "serve": cmd_serve,
         "open": cmd_open,
     }[

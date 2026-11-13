@@ -738,7 +738,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 | Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
 | File preview and diff view | Yes: the File viewer plugin (`viewer`) serves file text and fills the `file-viewer` slot. It draws JSONL transcripts as conversations and Markdown as a page (built 2026-11-13). Syntax highlighting and diffs come next, in the same plugin |
-| Handoff: pass a side task, such as a deploy, to another session and get back only the result | Yes: `agentop handoff`, a queue per target, a Handoffs view (12.10) |
+| Handoff: pass a side task, such as a deploy, to another session | No: `agentop send` and the `handoff` skill are enough (12.10) |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |
 | Offline app shell for the web app | No: client-only |
@@ -771,42 +771,30 @@ Dialogues are built already, so moving them is also the test of the plugin syste
 
 ### 12.10 Handoff: pass a side task to another session
 
-Status: designed, not started. Plugin id `handoff`.
+Status: built 2026-11-13 as `agentop send` and the `handoff` skill. Not a plugin: the handoff plugin designed earlier was dropped (12.10.3).
 
-**The problem.** A development session builds up expensive context: the change, why it was made, what is left to do. Part way through, the work reaches a milestone and needs a side task that belongs elsewhere, typically a deploy to a non-production environment to see results. Today there are two ways to do it, and both are poor:
+**The problem.** A development session builds up expensive context: the change, why it was made, what is left to do. Part way through, the work needs a side task that belongs elsewhere, typically a deploy to a non-production environment. Doing it in the development session, with the deploy project's skills, piles the deploy's logs and retries into the development context. Opening a session in the deploy project keeps the contexts apart, but the user has to explain the change there by hand.
 
-1. Do the side task in the development session, using the deploy project's skills. When the deploy goes wrong, the investigation (logs, retries, host details) piles into the development context. That wastes the context window and taints it with material that has nothing to do with the change.
-2. Open a session in the deploy project, explain the change there by hand, drive the deploy to the end, then go back to the development session. This keeps the contexts apart, but the user does the explaining and the switching.
-
-Loading the deploy project's skills into the development session is therefore not the answer, however well they are written: the problem is not missing knowledge, it is where the side task's work accumulates.
-
-**The workflow.** Handoff automates option 2. In the development session (A) the user writes:
+**The workflow.** In the development session the user asks for it in plain words, from Claude Code or Codex:
 
 ```
-@agentop handoff #eiger: deploy k2 to env QIN_TENGFEI
+please tell the akimoto change and ask Eiger to deploy akimoto and watch for next fulfillment run
 ```
 
-1. A writes a **handoff brief** (12.10.3): what changed, the branch and commit, the target environment, what counts as done, and when to stop and ask the user. A has the full context of the change, so this is the one thing it is best placed to do.
-2. Agentop delivers the brief to the target session (B): a live eiger session if there is one, otherwise a new session started in the eiger project.
-3. B does the work in its own tmux session. The user can watch it, attach, and step in. If B hits something that needs a human decision, it stops and asks the user in B, and the handoff shows as **needs you**.
-4. B ends the handoff with a short report: done, blocked, or failed, and the few facts A needs (the deployed commit, the URL, the error).
-5. Only that report goes back to A. All of B's back-and-forth stays in B. The user returns to A and carries on with the change.
+1. The `handoff` skill writes a prompt that stands on its own: the task, what changed and why, the repo and commit, what counts as done, and what to ask the user before doing.
+2. It runs `agentop send eiger`, which types the prompt into the live session called Eiger and submits it ([cli.md 1.4](cli.md#14-send)). The prompt starts with `[agentop send from <sender>]`.
+3. That is all. Nothing comes back to the sender, which carries on with the change. The user switches to Eiger, in the agentop app or with tmux, to watch it and answer it there.
 
-This is not a dialogue (12.9). A dialogue is a loop the orchestrator runs between two new sessions, following a scenario. A handoff is one side task, started from a working session, often given to a session that already exists, with the user watching and answering in the target. The two share only the core pieces: starting a session, `Actor` send and receive.
+The target must be a live managed session. With no match, `agentop send` says `I don't see an active session called 'Eiger'`; it never starts one. A match ignores case and the `-<suffix>` agentop adds, so `eiger` finds `Eiger-2953204`.
 
 #### 12.10.1 Existing tools
 
-Before building this, check what the agent CLIs already do.
-
-- **Claude Code's `SendMessage`.** A Claude Code session can list the other Claude sessions on the same machine (`ListAgents`, which also shows each one's tmux pane) and send one a message. For Claude to Claude on one machine, that is already the transport: A can send a brief to a live eiger session, which works on it in its own tmux pane. It does not start a target session when none exists, does not cover codex or agy, has no status view, and has no allowlist or approval. (Checked 2026-11-09.)
-- **Subagents.** A Claude subagent keeps its work out of the caller's context and returns only a summary. But it does not run in a tmux session the user can attach to, and it cannot stop and ask the user part way through. Both are requirements here.
-- **`/rewind`** in Claude Code removes a detour from a conversation after the fact. It is a cheap fix when a deploy has already tainted the context, not a way to avoid it.
-
-So agentop adds: starting the target when none exists, codex and agy as senders and targets, the handoff status (working, needs you, done) in the UI, and the safety rules in 12.10.6. Phase 0 (12.10.8) tries the workflow on `SendMessage` first, with no agentop code.
+- **Claude Code's `SendMessage`.** Claude sessions on one machine can list each other (`ListAgents`) and send messages. The first version of the skill (2026-11-09) used it, with a target skill that reported back. It worked between Claude sessions, but Codex has no `SendMessage`, so a Codex session could neither send nor get the report. `agentop send` works for every tool.
+- **Subagents.** A Claude subagent keeps its work out of the caller's context, but it does not run in a session the user can attach to, and cannot stop and ask the user part way through.
 
 #### 12.10.2 Transport: tmux only
 
-Briefs and reports are typed into the agents' terminals through tmux, like every other message agentop sends. Agentop does not call any LLM API, and does not run agents headless (`claude -p`, `codex exec`).
+The prompt is typed into the target's terminal through tmux, the way each tool takes a paste (`AgentCli.send_text`), like every other message agentop sends. Agentop does not call any LLM API, and does not run agents headless (`claude -p`, `codex exec`).
 
 Why:
 
@@ -815,75 +803,15 @@ Why:
 - Billing, login, and permissions stay exactly as they are for interactive use. Interactive sessions are covered by the user's subscription plan. Calling the LLM API directly would need a separate pay-as-you-go API key, and headless runs follow their own rules: on Claude plans, `claude -p` usage moved to a separate monthly Agent SDK credit in June 2026. (See section 16.)
 - A new agent CLI works with no new integration, because it is just another terminal program.
 
-tmux is weak at two things, and the design deals with both: knowing when an agent is idle and can be typed to, and getting its result back reliably.
+#### 12.10.3 Dropped: the handoff plugin (2026-11-13)
 
-#### 12.10.3 The brief and the skill
+The earlier design was a plugin: `agentop handoff send/ask/report/show/list`, a queue per target, delivery only when the target is idle, a report typed back into the sender, a `needs_you` status, timeouts, an allowlist, per-target approval, a hop limit, an audit log, a Handoffs view, and handoff across hosts (D9). All of it assumed nobody watches the target, so agentop would have to track and report for the user. The user does watch it: the session list shows every session, and switching to the target is one click. So the concerns it answered are resolved without it:
 
-The quality of the brief decides whether the handoff works, so it has a fixed shape:
-
-```
-[agentop handoff h-7f3a from qate-dev-91c2e0]
-Task: deploy k2 to env QIN_TENGFEI.
-Change: <what changed and why, in a few lines>
-Code: branch fix-k2-timeout, commit 3e1c9a0, pushed
-Done when: <what to check to call it deployed>
-Stop and ask the user if: <e.g. a migration is needed, prod config would change>
-When finished, run: agentop handoff report h-7f3a --status done|blocked|failed "<short result>"
-```
-
-A short skill file is installed for each tool. On the sender's side it teaches: when the user writes `@agentop handoff #X: …`, write a brief in this shape and send it with `agentop handoff send`; keep the brief to what the target needs, not the whole history. On the target's side it teaches: when a handoff arrives, do the task; when a decision belongs to the user, mark it with `agentop handoff ask` and ask in the session; finish with `agentop handoff report`, keeping the report short, because it goes into the sender's context.
-
-#### 12.10.4 Commands
-
-Agents use these through their shell. Every supported tool can run shell commands, so one CLI serves all of them, and no MCP setup is needed for each tool.
-
-| Command | Does |
-|---------|------|
-| `agentop handoff send <target> "<brief>"` | Queues a handoff and prints its id (`h-7f3a`) at once. `--wait` blocks until the report and prints it; `--new` always starts a new target session |
-| `agentop handoff ask <id> "<question>"` | Run by the target: marks the handoff as needing the user |
-| `agentop handoff report <id> --status … "<result>"` | Run by the target: ends the handoff with its result |
-| `agentop handoff show <id>` | Status, open question, and report of one handoff |
-| `agentop handoff list` | Recent handoffs on this service |
-
-The sender knows its own session from the environment agentop sets when it starts a managed session. Only managed sessions can send or receive handoffs.
-
-**Targets.** `#eiger-a1b2c3` names a live session. `#eiger` is a display name or a project name: if exactly one live session matches, the handoff goes there; if none does, agentop starts a new session in that project's directory, which keeps the repo's CLAUDE.md and skills; if several match, it is an error that lists them. A session started for a handoff stays open after the report, so the user can look at it, and is closed by the user like any other. Cross-host targets (`service/session`) come in phase 2.
-
-#### 12.10.5 Delivery and status
-
-- **Deliver only when idle.** A brief is typed only when the target agent is idle at its input prompt and no client has typed in the session in the last few seconds. Typing while an agent is in the middle of a turn, or while the user is typing, would mangle both. Handoffs queue per target and go in order. A new session is typed to once its ready marker appears (5.2).
-- **One idle check, in the core.** The same check is needed by the start flow (the ready marker in 5.2) and by the attention plugin (12.8). It belongs in the core and is offered to plugins through `api.sessions()`, so it is written once.
-- **The report goes back once, and short.** The report is stored and shown in the UI. It reaches A in one of two ways: with `--wait`, A's shell command prints it as ordinary command output, which suits short tasks (agent shells time out, Claude Code's after at most 10 minutes); otherwise it is typed into A, marked `[agentop handoff h-7f3a report from eiger-a1b2c3]`, when A is next idle. A can also read it any time with `handoff show`.
-- **Explicit reports.** The result comes from `agentop handoff report`, not from reading the screen. Reading B's scrollback with the dialogue delimiter parser (nonce and all) is only a fallback for when B finishes without reporting.
-- **Status.** `queued` → `working` ⇄ `needs_you` → `done`, `blocked`, or `failed`; or `timed_out`, `cancelled`, `rejected`. `needs_you` is set by `handoff ask`, and also by the attention plugin when B is waiting at a question without having called it. The timeout (default 60 minutes, settable per handoff) does not run while the handoff needs the user. A timeout is reported to A like a report, so A is never left waiting.
-- **Stored.** Handoffs, questions, and reports are kept in `api.store` and shown in a Handoffs view: status per handoff, a link to the target session, and cancel and approve buttons. `needs_you` also marks the target session in the session list, so the user sees where to go.
-
-#### 12.10.6 Safety
-
-Without handoff, making a session do something takes the token or the keyboard. With it, one agent can make another act, and some agents run with skip-permissions flags and can reach production. A prompt injection into one session (for example from a web page it read) could then make another session deploy. So:
-
-- **Allowlist.** Which sessions or projects may hand off to which targets. Default: same service only, and every target must be allowed explicitly.
-- **Approval.** A target can be marked "approve each handoff". Its handoffs wait in the UI until the user clicks Approve. Suggested for anything that touches production.
-- **Hop limit.** A handoff carries its chain of senders. A handoff made while working on another may go one hop further (default limit 2). A loop such as A → B → A is refused.
-- **Audit log.** Every handoff, delivery, question, report, and refusal, with times and sessions, is kept in the plugin store.
-
-These go into the security review (TODO.md) together with D6 and D7.
-
-#### 12.10.7 Other uses
-
-The same mechanism also covers:
-
-- **Investigations that would flood the context.** "#infra, find out why QIN_TENGFEI's k2 pod restarts", returning only the cause.
-- **Questions.** "#infra, what is QIN_TENGFEI and where are its logs?" A handoff that only answers questions has much lower risk, so it is a good first use.
-- **Changes across repos.** The backend session changes an API, then hands the client update to the frontend or SDK session.
-- **Second opinion from another model.** A claude session hands its diff to a codex session for review. That is cheaper than starting a full dialogue.
-- **Work tied to a machine.** Benchmarks or slow test suites in a session on a GPU or build host (phase 2).
-
-#### 12.10.8 Phases
-
-0. **Try it with no agentop code.** Write the sender and target skills, and send briefs through Claude Code's `SendMessage` (12.10.1) between a development session and a live eiger session. Use it for real deploys. This settles the brief's shape and whether the report gets back reliably before anything is built.
-1. **Same service.** The plugin: commands, skills for claude, codex, and agy, idle delivery, live-or-new targets, `needs_you`, reports, timeouts, allowlist, approval, hop limit, audit log, the Handoffs view.
-2. **Across hosts.** Today connections belong only to clients (4.5), and services never talk to each other. Handoff across hosts needs links from one service to another, each with its own token, held by the service. That is a core change, and it waits for the security review (per-client tokens, D7) and D9.
+| Concern | Resolution |
+|---------|------------|
+| Safety: one agent can make another act, and a prompt injection could make a session deploy | Accepted for now. agentop is a development tool, and the skill only does what the user would type in the target themselves. Only managed sessions take prompts |
+| Typing into a busy session, or over a draft | The tool queues a prompt sent while it works. The user sees the target in the session list and can switch to it to check and take control |
+| Getting a report back to the sender | Not needed: the user watches the target and acts on the result there. If a report is ever wanted, the target can `agentop send` one back |
 
 ### 12.11 Memory: agentop's own record of conversations
 
@@ -949,7 +877,7 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
    Built. `messages_fts` is an FTS5 index over the text with the `trigram` tokenizer, kept up to date by a trigger, and built from the table when it is first added. Trigrams match any part of a word, ignoring case, so a partial name, a domain, or Japanese text (which has no spaces) is found without word splitting; a word under three characters is matched with `LIKE`. Every word must match; quotes keep a phrase. Results are best match first (bm25), each with its message ID, date, tool, project, session, a snippet, and, for a reply, the prompt it answered. On the devhost a search over 13,000 messages takes about a millisecond.
 
    - Routes: `GET /api/v2/plugins/memory/search?q=&tool=&project=&since=&limit=` and `GET /api/v2/plugins/memory/conversation?session=&tool=&around=&radius=`.
-   - `agentop recall <words>` and `agentop recall --session <id> --around <#id>` ([cli.md 1.5](cli.md#15-recall)). It reads the database directly, so it works with the service down. It is the plugin's command, in `plugins/memory/cli.py` (12.3, CLI).
+   - `agentop recall <words>` and `agentop recall --session <id> --around <#id>` ([cli.md 1.6](cli.md#16-recall)). It reads the database directly, so it works with the service down. It is the plugin's command, in `plugins/memory/cli.py` (12.3, CLI).
    - The `recall` skill (`src/agentop/skills/recall/`) tells a Claude session how to search: distinctive words rather than "link" or "name", variants when nothing matches, read around a hit before answering, quote the detail exactly, and never guess.
 5. **Session summaries.** A title, a few sentences, and keywords for each session, written by a model and searched beside the messages, so a session is found by what it was about even when no message has the words (12.11.4, shortfall 1).
    Built, in `summaries.py`. The `summaries` table is in `messages.sqlite`, with its own FTS5 trigram index over title, summary, and keywords; like the messages it is derived, and deleting it makes it again.
@@ -1042,7 +970,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
-| D9 | Handoff across hosts (12.10.8) | Not in phase 1. Later, through links from one service to another, each with its own token, after the security review | Let the sending service use a client connection's token. Simpler, but any service then holds full control of its peers |
+| D9 | Handoff across hosts (12.10) | Dropped with the handoff plugin (12.10.3). `agentop send` reaches only sessions on its own host | Links from one service to another, each with its own token, after the security review |
 
 ## 16 Sources
 

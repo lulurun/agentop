@@ -59,7 +59,23 @@ agentop stop <session>
 
 Sends `/exit` to the agent, waits 3 seconds, then kills the tmux session. Only managed sessions (started by agentop) can be stopped.
 
-### 1.4 history
+### 1.4 send
+
+Type a prompt into another live session and submit it, as if the user had typed it there.
+
+```bash
+agentop send <target> "<prompt>"
+agentop send <target> < prompt.txt     # no prompt: read it from stdin
+```
+
+- `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `eiger` finds `Eiger-2953204`. With no match it says `I don't see an active session called 'eiger'`, and with several it lists them. It never starts a session
+- Run from inside tmux, the prompt gets a first line `[agentop send from <this session>]`; `--no-header` leaves it off
+- Only managed sessions (started by agentop) take prompts
+- Nothing comes back: switch to the target to follow it and answer it
+
+The `handoff` skill uses it to pass a side task, such as a deploy, from one session to another.
+
+### 1.5 history
 
 Show saved/historical sessions that can be resumed.
 
@@ -72,7 +88,7 @@ agentop history --json
 
 Active sessions are excluded. Columns: TOOL, TITLE, LAST ACTIVE, CWD.
 
-### 1.5 recall
+### 1.6 recall
 
 Search every past conversation on this machine: the prompts and replies the Memory plugin keeps ([design 12.11](v2-design.md#1211-memory-agentops-own-record-of-conversations)). It reads `~/.agentop/plugins/memory/messages.sqlite` directly, so the service needn't be running. The command is the Memory plugin's: with the plugin disabled, it says so and does nothing.
 

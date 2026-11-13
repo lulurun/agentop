@@ -45,24 +45,6 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 - [ ] Prove it: the core suites pass with the dialogue folder deleted; disabling the plugin stops running dialogues, hides every dialogue UI, and leaves other sessions untouched.
 - [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.
 
-## Handoff plugin
-
-Design: [v2-design.md section 12.10](docs/v2-design.md#1210-handoff-pass-a-side-task-to-another-session). Phase 1 needs the plugin system first.
-
-- Phase 0: sender and target skills over Claude Code's `SendMessage`, with no agentop code.
-  - [x] Skills `handoff` and `handoff-receive` in [src/agentop/skills/](src/agentop/skills/README.md), installed into `~/.claude/skills/` by `agentop serve`.
-  - [x] First test, 2026-11-09: `#Eiger: scan the fleet` from agentop to a live Eiger session. Target matching, delivery, the target loading its skill, stopping to ask on an unclear task, replacing a stale handoff, the short report, and idle notices all worked.
-  - [ ] A real non-prod deploy of a change made in the sending session, so the brief carries context the target lacks.
-  - [ ] No live target: the skill starts one with `agentop start` and waits for it in `ListAgents`.
-  - [ ] Sessions in different permission modes, where the message waits for approval.
-- [ ] Idle check in the core (agent idle at its prompt, no recent typing), shared with the start flow's ready marker and the attention plugin.
-- [ ] Sender identity: an environment variable set in every managed session.
-- [ ] Phase 1: `agentop handoff send`, `ask`, `report`, `show`, `list`; live-or-new targets; a queue for each target; delivery only when idle; `--wait`; report typed back into the sender when idle; `needs_you`; timeouts; the scrollback parser as a fallback.
-- [ ] Phase 1 safety: allowlist, per-target approval, hop limit, audit log.
-- [ ] Phase 1 UI: Handoffs view with status, cancel, and approve; `needs_you` marked on the target session.
-- [ ] Skill files for claude, codex, and agy, from the phase 0 skills.
-- [ ] Phase 2: handoff across hosts (D9), after the security review.
-
 ## State folder
 
 - [ ] Remove the migration from `~/.agent-dashboard` in `paths.py` once every install has moved to `~/.agentop`.

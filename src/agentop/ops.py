@@ -171,23 +171,49 @@ def set_description(name: str, description: str) -> dict:
     return {"ok": True}
 
 
-def send(name: str, text: str, sessions: list[dict] | None = None) -> dict:
-    """Send a prompt to a managed session via tmux.
+def _bare(name: str) -> str:
+    """A session name without its trailing -<suffix>: Eiger-2953204 is Eiger."""
+    head, sep, _ = name.rpartition("-")
+    return head if sep and head else name
 
-    Returns {"ok": True} or {"ok": False, "error": …}.
+
+def find_session(target: str, sessions: list[dict] | None = None) -> dict:
+    """The one live session called target, ignoring case and the -<suffix> agentop adds.
+
+    Returns {"ok": True, "session": …} or {"ok": False, "error": …, "matches": [names]}.
     """
     if sessions is None:
-        sessions = get_sessions()
-    s = next((s for s in sessions if s["name"] == name), None)
-    if s is None:
-        return {"ok": False, "error": "Session not found"}
+        sessions = get_sessions(with_meta=False)
+    wanted = target.strip().lstrip("#").lower()
+    exact = [s for s in sessions if s["name"].lower() == wanted]
+    found = exact or [s for s in sessions if _bare(s["name"]).lower() == wanted]
+    if len(found) == 1:
+        return {"ok": True, "session": found[0]}
+    if not found:
+        return {"ok": False, "error": f"I don't see an active session called '{target}'", "matches": []}
+    names = [s["name"] for s in found]
+    return {"ok": False, "error": f"Several active sessions are called '{target}': {', '.join(names)}", "matches": names}
+
+
+def send(target: str, text: str, sessions: list[dict] | None = None) -> dict:
+    """Type a prompt into a live managed session and submit it, the way its tool takes a paste.
+
+    target is matched by find_session. Returns {"ok": True, "name": …, "tmux": …}
+    or {"ok": False, "error": …}.
+    """
+    found = find_session(target, sessions)
+    if not found["ok"]:
+        return found
+    s = found["session"]
     if not s.get("managed"):
-        return {"ok": False, "error": "Not a managed session"}
+        return {"ok": False, "error": f"{s['name']} was not started by agentop, so it can't be sent prompts"}
     agent = get_agent(s["tool"])
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {s['tool']}"}
     tmux_name = (s.get("tmux") or {}).get("session")
     if not tmux_name:
-        return {"ok": False, "error": "No tmux session found"}
-    AgentInstance(agent, tmux_name).send_command(text)
-    return {"ok": True}
+        return {"ok": False, "error": f"{s['name']} has no tmux session"}
+    if not text.strip():
+        return {"ok": False, "error": "The prompt is empty"}
+    agent.send_text(tmux_name, text)
+    return {"ok": True, "name": s["name"], "tmux": tmux_name}

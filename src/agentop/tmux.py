@@ -108,6 +108,20 @@ class Session:
             return []
 
     @staticmethod
+    def current() -> str | None:
+        """The session this process runs in, from $TMUX_PANE, or None outside tmux."""
+        pane = os.environ.get("TMUX_PANE")
+        if not pane:
+            return None
+        try:
+            r = run("display-message", "-p", "-t", pane, "#S", timeout=3, text=True)
+        except _ERRORS:
+            return None
+        if r.returncode != 0:
+            return None
+        return r.stdout.strip() or None
+
+    @staticmethod
     def send_keys(name: str, *keys: str) -> None:
         """Send one or more key strings to the session (each as a separate send-keys call)."""
         for key in keys:

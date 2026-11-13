@@ -92,6 +92,9 @@ class CodexAgentCli(AgentCli):
     def launch_cmd(self) -> str:
         return "codex --dangerously-bypass-hook-trust"
 
+    def skills_dir(self) -> Path:
+        return _HOME.expanduser() / "skills"
+
     def send_text(self, session: str, text: str) -> None:
         """Bracketed paste, since codex submits on a bare newline, then a pause for it to take the paste in."""
         Session.paste_text_bracketed(session, text)
