@@ -675,7 +675,16 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 
 Repeated handler errors (for example 5 in a minute) move the plugin to `failed` automatically, so a broken plugin stops being called.
 
-**CLI.** A plugin may add an `agentop` subcommand by defining `register_cli(subparsers)`, declared with `cli = true` in its manifest. The CLI reads manifests and saved flags without starting the service. A missing plugin's command does not exist. A disabled or failed plugin's command is still listed, and running it says so and how to enable it. The core commands never depend on a plugin.
+**CLI.** A plugin may add `agentop` commands. Its manifest names them, `cli = ["recall"]`, and a `cli.py` beside its `__init__.py` defines `register_cli(cli)`. The CLI reads manifests and saved flags without starting the service. A missing plugin's command does not exist. A disabled, failed, or incompatible plugin's command is still listed, and running it says so and how to enable it. The core commands never depend on a plugin.
+
+Built (2026-11-13) in `agentop/plugin_cli.py`, with manifest reading and flags in `agentop/plugin_manifest.py`, which the service's loader uses too:
+
+- **Names in the manifest, not `cli = true`.** A disabled or failed plugin's commands can only be listed if their names are known without running its code.
+- **`cli.py`, not `__init__.py`.** The CLI imports only `cli.py`, under a bare `agentop.plugins.{id}` package, so its relative imports work while `__init__.py`, the service's side, never runs. Importing FastAPI alone takes 0.14s against 0.03s for the whole CLI, so a plugin command starts as fast as a core one: `agentop recall` runs in 0.08s.
+- **`cli.command(name, handler, **options)`** adds a command the manifest names and returns its parser, for arguments; `handler(args)` runs it. `options` are ArgumentParser's (`help`, `description`, `formatter_class`). `cli.data_dir` is the plugin's folder, as the service gives it. A command the manifest doesn't name is refused.
+- **All or nothing.** The parsers stay detached until `register_cli` returns, so a plugin that fails part way adds none of its commands. An exception in `cli.py` or `register_cli` turns each of its commands into one that says it failed and why. Other plugins and the core are untouched.
+- **Names.** Plugin commands are added after the core's, so a core command keeps its name, and of two plugins naming one command, the first in folder order keeps it.
+- The Memory plugin's `agentop recall` is the first: it moved from the core into `plugins/memory/cli.py`.
 
 ### 12.4 Enable and disable
 
@@ -940,7 +949,7 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
    Built. `messages_fts` is an FTS5 index over the text with the `trigram` tokenizer, kept up to date by a trigger, and built from the table when it is first added. Trigrams match any part of a word, ignoring case, so a partial name, a domain, or Japanese text (which has no spaces) is found without word splitting; a word under three characters is matched with `LIKE`. Every word must match; quotes keep a phrase. Results are best match first (bm25), each with its message ID, date, tool, project, session, a snippet, and, for a reply, the prompt it answered. On the devhost a search over 13,000 messages takes about a millisecond.
 
    - Routes: `GET /api/v2/plugins/memory/search?q=&tool=&project=&since=&limit=` and `GET /api/v2/plugins/memory/conversation?session=&tool=&around=&radius=`.
-   - `agentop recall <words>` and `agentop recall --session <id> --around <#id>` ([cli.md 1.5](cli.md#15-recall)). It reads the database directly, so it works with the service down. It is a core command for now; it moves to the plugin when plugins can add CLI commands (`register_cli`).
+   - `agentop recall <words>` and `agentop recall --session <id> --around <#id>` ([cli.md 1.5](cli.md#15-recall)). It reads the database directly, so it works with the service down. It is the plugin's command, in `plugins/memory/cli.py` (12.3, CLI).
    - The `recall` skill (`src/agentop/skills/recall/`) tells a Claude session how to search: distinctive words rather than "link" or "name", variants when nothing matches, read around a hit before answering, quote the detail exactly, and never guess.
 5. **Session summaries.** A title, a few sentences, and keywords for each session, written by a model and searched beside the messages, so a session is found by what it was about even when no message has the words (12.11.4, shortfall 1).
    Built, in `summaries.py`. The `summaries` table is in `messages.sqlite`, with its own FTS5 trigram index over title, summary, and keywords; like the messages it is derived, and deleting it makes it again.

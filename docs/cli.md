@@ -74,7 +74,7 @@ Active sessions are excluded. Columns: TOOL, TITLE, LAST ACTIVE, CWD.
 
 ### 1.5 recall
 
-Search every past conversation on this machine: the prompts and replies the Memory plugin keeps ([design 12.11](v2-design.md#1211-memory-agentops-own-record-of-conversations)). It reads `~/.agentop/plugins/memory/messages.sqlite` directly, so the service needn't be running.
+Search every past conversation on this machine: the prompts and replies the Memory plugin keeps ([design 12.11](v2-design.md#1211-memory-agentops-own-record-of-conversations)). It reads `~/.agentop/plugins/memory/messages.sqlite` directly, so the service needn't be running. The command is the Memory plugin's: with the plugin disabled, it says so and does nothing.
 
 ```bash
 agentop recall atama link                      # messages holding every word

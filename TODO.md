@@ -22,7 +22,7 @@ The v2 security model is deliberately simple. Review it before recommending that
 - [ ] Plain HTTP on non-loopback addresses (design D6): keep allowing it, or require TLS or a tunnel.
 - [ ] One shared token per service (design D7): move to per-client tokens that can be revoked one at a time.
 - [ ] Token expiry: tokens never expire today; only `agentop service token --rotate` replaces one.
-- [ ] Rotate the PC service's token, which was pasted into a chat.
+- [ ] Rotate the PC service's token, which was pasted into a chat. Accepted for now (2026-11-13): the service is only used by its owner, to try agentop out. Rotate before it is used for anything that matters.
 - [ ] Open CORS on `/api/v2`.
 - [ ] Token storage in the web app's `localStorage`.
 - [ ] What `/api/v2/health` exposes without a token (name, version, instance ID).
@@ -39,7 +39,8 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 - [x] The `register(api)` surface: scoped router, isolated event handlers, supervised tasks, read-only sessions, per-plugin store.
 - [x] UI: per-connection plugin list, slots with error boundaries, Settings → Plugins with switches and errors.
 - [ ] Broken test plugins, and the core suites passing with them installed and with none. The broken plugins and the loader's own tests are in `tests/test_plugins.py`; the core suites already run with no plugins. Still to do: run the core pytest and Playwright suites with the broken plugins installed.
-- [ ] `api.agents` for plugins that drive agents, and `register_cli` for plugin CLI commands.
+- [x] `register_cli` for plugin CLI commands (`plugin_cli.py`); `agentop recall` moved into the Memory plugin with it.
+- [ ] `api.agents` for plugins that drive agents.
 - [ ] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9): package, routes under `/api/v2/plugins/dialogue/`, `agentop dialogue` through `register_cli`, the Dialogues view and the session-row label through UI slots. Saved dialogues already moved to `~/.agentop/plugins/dialogue/dialogues/`.
 - [ ] Prove it: the core suites pass with the dialogue folder deleted; disabling the plugin stops running dialogues, hides every dialogue UI, and leaves other sessions untouched.
 - [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.
@@ -78,7 +79,6 @@ Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-
 - [ ] Search in the app: a Memory view that searches and opens the conversation around a hit, with the matching sessions' summaries.
 - [ ] Record recall misses (nothing found, or the wrong thing), to decide on hybrid search with embeddings ([design 12.11.4](docs/v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
 - [ ] Session summaries from Codex too (`codex exec`), for a host without Claude Code.
-- [ ] Move `agentop recall` into the plugin once plugins can add CLI commands (`register_cli`).
 - [ ] A recall skill for Codex sessions too.
 - [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.
 - [ ] Later: archives from other hosts, aggregated in one place.

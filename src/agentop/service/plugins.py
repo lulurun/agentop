@@ -23,10 +23,8 @@ import inspect
 import json
 import logging
 import os
-import re
 import sys
 import time
-import tomllib
 from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -36,15 +34,22 @@ from typing import Any
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from agentop import paths
+from agentop.plugin_manifest import (  # noqa: F401 - DEFAULT_ROOT and the rest are imported from here too
+    DEFAULT_ROOT,
+    MODULE_PREFIX,
+    PLUGIN_API,
+    SUPPORTED_PLUGIN_APIS,
+    UI_SLOTS,
+    Manifest,
+    ManifestError,
+    incompatible_reason,
+    is_enabled,
+    plugin_folders,
+    read_flags,
+    read_manifest,
+)
 
 LOG = logging.getLogger(__name__)
-
-# The plugin API this core offers. A plugin declares the version it was written for.
-PLUGIN_API = 1
-SUPPORTED_PLUGIN_APIS = range(1, PLUGIN_API + 1)
-
-DEFAULT_ROOT = Path(__file__).resolve().parents[1] / "plugins"
-MODULE_PREFIX = "agentop.plugins"
 
 REGISTER_TIMEOUT_SECONDS = 5.0
 HANDLER_TIMEOUT_SECONDS = 10.0
@@ -53,67 +58,9 @@ MAX_HANDLER_ERRORS = 5
 HANDLER_ERROR_WINDOW_SECONDS = 60.0
 
 EVENTS = frozenset({"session.started", "session.exited", "session.closed", "scan"})
-UI_SLOTS = frozenset({"session-badge", "left-view", "right-panel", "settings-section", "file-viewer"})
-
-_ID = re.compile(r"[a-z0-9-]+")
 
 ENABLED, DISABLED, FAILED, INCOMPATIBLE = "enabled", "disabled", "failed", "incompatible"
 RESTART_TO_RETRY = "Restart the service to try loading it again."
-
-
-class ManifestError(Exception):
-    pass
-
-
-@dataclass(frozen=True)
-class Manifest:
-    id: str
-    name: str
-    version: str
-    description: str
-    plugin_api: int
-    default_enabled: bool
-    ui: tuple[str, ...]
-    cli: bool
-
-
-def read_manifest(folder: Path) -> Manifest:
-    """Read and check a plugin.toml without running any of the plugin's code."""
-    try:
-        data = tomllib.loads((folder / "plugin.toml").read_text())
-    except FileNotFoundError:
-        raise ManifestError("No plugin.toml") from None
-    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
-        raise ManifestError(f"plugin.toml can't be read: {exc}") from None
-
-    def need(key: str, kind: type, default: Any = None):
-        value = data.get(key, default)
-        # bool is an int in Python, so check it first.
-        if value is None or (kind is int and isinstance(value, bool)) or not isinstance(value, kind):
-            raise ManifestError(f"plugin.toml: '{key}' must be a {kind.__name__}")
-        return value
-
-    plugin_id = need("id", str)
-    if not _ID.fullmatch(plugin_id):
-        raise ManifestError("plugin.toml: 'id' may only contain a-z, 0-9 and '-'")
-    if plugin_id != folder.name:
-        raise ManifestError(f"plugin.toml: 'id' is '{plugin_id}' but the folder is '{folder.name}'")
-    ui = need("ui", list, [])
-    if not all(isinstance(slot, str) for slot in ui):
-        raise ManifestError("plugin.toml: 'ui' must be a list of slot names")
-    unknown = sorted(set(ui) - UI_SLOTS)
-    if unknown:
-        raise ManifestError(f"plugin.toml: unknown UI slot {', '.join(unknown)}")
-    return Manifest(
-        id=plugin_id,
-        name=need("name", str),
-        version=need("version", str),
-        description=need("description", str, ""),
-        plugin_api=need("plugin_api", int),
-        default_enabled=need("default_enabled", bool, True),
-        ui=tuple(ui),
-        cli=need("cli", bool, False),
-    )
 
 
 class PluginStore:
@@ -242,12 +189,12 @@ class PluginHost:
             except ManifestError as exc:
                 self._fail(plugin, str(exc), publish=False)
                 continue
-            if plugin.manifest.plugin_api not in SUPPORTED_PLUGIN_APIS:
+            reason = incompatible_reason(plugin.manifest.plugin_api)
+            if reason:
                 plugin.state = INCOMPATIBLE
-                plugin.error = self._incompatible_reason(plugin.manifest.plugin_api)
+                plugin.error = reason
                 continue
-            enabled = flags.get(plugin.id, {}).get("enabled", plugin.manifest.default_enabled)
-            if enabled:
+            if is_enabled(plugin.manifest, flags):
                 await self._load(plugin)
                 if plugin.loaded:
                     self._open(plugin)
@@ -314,17 +261,7 @@ class PluginHost:
     # ------------------------------------------------------------------ internals
 
     def _folders(self) -> list[Path]:
-        try:
-            entries = sorted(self.root.iterdir())
-        except (FileNotFoundError, NotADirectoryError):
-            return []
-        # __pycache__, hidden folders, and stray files are not plugins.
-        return [e for e in entries if e.is_dir() and not e.name.startswith(("_", "."))]
-
-    @staticmethod
-    def _incompatible_reason(version: int) -> str:
-        side = "the plugin" if version < SUPPORTED_PLUGIN_APIS.start else "this service"
-        return f"Written for plugin API {version}; this service supports {PLUGIN_API}. Update {side}."
+        return plugin_folders(self.root)
 
     async def _load(self, plugin: Plugin) -> None:
         """Import the plugin and call register(api), with a time limit."""
@@ -463,14 +400,11 @@ class PluginHost:
     # ------------------------------------------------------------------ flags
 
     def _read_flags(self) -> dict:
-        try:
-            data = json.loads(self.flags_path.read_text())
-        except FileNotFoundError:
-            return {}
-        except (OSError, ValueError):
+        flags = read_flags(self.flags_path)
+        if flags is None:
             LOG.warning("%s can't be read; using each plugin's default", self.flags_path)
             return {}
-        return data if isinstance(data, dict) else {}
+        return flags
 
     def _write_flag(self, plugin_id: str, enabled: bool) -> None:
         flags = self._read_flags()

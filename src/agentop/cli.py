@@ -399,97 +399,6 @@ def cmd_service_update(args):
         sys.exit(1)
 
 
-def _since(value: str) -> float:
-    """`30d`, `2w`, `12h`, or a date (`2026-10-01`), as seconds since the epoch."""
-    import re
-    import time
-    from datetime import datetime
-
-    found = re.fullmatch(r"(\d+)([hdw])", value.strip())
-    if found:
-        hours = {"h": 1, "d": 24, "w": 24 * 7}[found.group(2)] * int(found.group(1))
-        return time.time() - hours * 3600
-    try:
-        return datetime.fromisoformat(value).timestamp()
-    except ValueError:
-        raise SystemExit(f"Error: --since takes 30d, 2w, 12h, or a date like 2026-10-01, not {value!r}") from None
-
-
-def cmd_recall(args):
-    """Search the Memory plugin's record of past conversations. Reads its database directly, no service needed."""
-    from datetime import datetime
-
-    from agentop import paths
-    from agentop.plugins.memory.messages import Messages
-    from agentop.plugins.memory.summaries import Summaries
-
-    folder = paths.plugins_dir() / "memory"
-    table = Messages(folder / "messages.sqlite", folder / "archive")
-    summaries = Summaries(table)
-    if not table.path.exists():
-        print("Nothing recorded yet. The Memory plugin builds its record once the service has run with it enabled.")
-        return
-
-    def when(at):
-        return datetime.fromtimestamp(at).strftime("%Y-%m-%d %H:%M") if at else "—"
-
-    if args.session:
-        rows = table.conversation(args.tool or None, args.session, args.around, args.radius)
-        summary = summaries.get(args.tool or None, args.session)
-        if args.json:
-            print(json.dumps({"summary": summary, "messages": rows}, indent=2, ensure_ascii=False))
-            return
-        if not rows:
-            print(f"No messages recorded for session {args.session}.")
-            return
-        if summary and args.around is None:
-            print(f"=== {summary['title']}")
-            print(summary["summary"])
-            print()
-        for row in rows:
-            who = "You" if row["role"] == "user" else "Agent"
-            mark = "  <<" if row["id"] == args.around else ""
-            print(f"--- #{row['id']}  {when(row['at'])}  {who}{mark}")
-            print(row["text"])
-            print()
-        return
-
-    query = " ".join(args.query)
-    if not query.strip():
-        raise SystemExit("Error: give words to search for, or --session <id> to read a conversation")
-    since = _since(args.since) if args.since else None
-    hits = table.search(query, args.limit, args.tool or None, args.project or None, since)
-    sessions = summaries.search(query, 5, args.tool or None, args.project or None, since)
-    if args.json:
-        print(json.dumps({"sessions": sessions, "messages": hits}, indent=2, ensure_ascii=False))
-        return
-    if sessions:
-        print("Sessions about this, from their summaries:")
-        print()
-        for s in sessions:
-            print(f"{when(s['last_at'])}  {s['tool']}  {_shorten(s['project'] or '')}  session {s['session']}")
-            print(f"  {s['title']}")
-            print(f"  {s['snippet']}")
-            if s["matched"]:
-                print(f"  Keywords: {', '.join(s['matched'])}")
-            print()
-        print("Read one: agentop recall --session <session>")
-        print()
-    if not hits:
-        print(f"No messages with all of: {query}")
-        return
-    if sessions:
-        print("Messages:")
-        print()
-    for hit in hits:
-        print(f"#{hit['id']}  {when(hit['at'])}  {hit['tool']}  {_shorten(hit['project'] or '')}  session {hit['session']}")
-        if hit["prompt"]:
-            print(f"  You asked: {hit['prompt']}")
-        print(f"  {'You' if hit['role'] == 'user' else 'Agent'}: {hit['snippet']}")
-        print()
-    print("Read around one: agentop recall --session <session> --around <#id>")
-
-
 def cmd_service_connect_info(args):
     from agentop.service import config, identity
 
@@ -698,28 +607,6 @@ def main():
     p_stop.add_argument("name", help="Session name (from 'agentop list')")
 
     # serve
-    p_recall = sub.add_parser(
-        "recall",
-        help="Search past conversations (prompts and replies) on this machine",
-        description=(
-            "Search the Memory plugin's record of every conversation with claude, codex and\n"
-            "antigravity on this machine. A message matches when it holds every word; put a\n"
-            "phrase in quotes. Words match anywhere, so part of a name or a URL works.\n\n"
-            "  agentop recall atama link\n"
-            "  agentop recall --session <session> --around <#id>"
-        ),
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    p_recall.add_argument("query", nargs="*", help="Words to search for")
-    p_recall.add_argument("--tool", choices=agentclis.names(), help="Only this tool's sessions")
-    p_recall.add_argument("--project", help="Only sessions in this working directory")
-    p_recall.add_argument("--since", help="Only messages since 30d, 2w, 12h, or a date")
-    p_recall.add_argument("--limit", type=int, default=10, help="Most results to show (default 10)")
-    p_recall.add_argument("--session", help="Read this session's conversation instead of searching")
-    p_recall.add_argument("--around", type=int, help="With --session: only the messages near this #id")
-    p_recall.add_argument("--radius", type=int, default=6, help="With --around: messages on each side (default 6)")
-    p_recall.add_argument("--json", action="store_true", help="Print JSON")
-
     p_serve = sub.add_parser("serve", help="Run the service in the foreground")
     p_serve.add_argument("--host", help="Address to listen on (default: 127.0.0.1)")
     p_serve.add_argument("--port", type=int, help="Port to listen on (default: 9775)")
@@ -801,10 +688,19 @@ def main():
     )
     p_dremove.add_argument("--yes", action="store_true", help="Skip confirmation prompt (for scripting)")
 
+    # Last, so a plugin can't take a core command's name.
+    from agentop import plugin_cli
+
+    plugin_commands = plugin_cli.add_commands(sub, reserved=set(sub.choices))
+
     args = parser.parse_args()
     if not args.command:
         parser.print_help()
         sys.exit(0)
+
+    if args.command in plugin_commands:
+        plugin_commands[args.command](args)
+        return
 
     if args.command == "dialogue":
         if not args.dialogue_command:
@@ -835,7 +731,6 @@ def main():
     {
         "list": cmd_list,
         "history": cmd_history,
-        "recall": cmd_recall,
         "start": cmd_start,
         "stop": cmd_stop,
         "serve": cmd_serve,

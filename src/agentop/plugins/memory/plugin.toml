@@ -5,3 +5,4 @@ description = "Keeps agentop's own copy of every agent transcript on this host, 
 plugin_api = 1
 default_enabled = true
 ui = ["settings-section"]
+cli = ["recall"]

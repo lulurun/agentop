@@ -24,7 +24,7 @@ src/
 
 ### Core and plugins
 
-Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. The design is in [v2-design.md section 12](v2-design.md#12-plugins). Dialogues (section 5 below) are planned as the first plugin and will move to `src/agentop/plugins/dialogue/`.
+Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. The design is in [v2-design.md section 12](v2-design.md#12-plugins). Dialogues (section 5 below) are planned as the first plugin and will move to `src/agentop/plugins/dialogue/`.
 
 ## 2 Agent layer
 

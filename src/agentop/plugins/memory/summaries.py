@@ -163,7 +163,12 @@ class Summaries:
         project = f" in {due.project}" if due.project else ""
         prompt = f"A {due.tool} session{project}.\n\n<conversation>\n{text}\n</conversation>"
         try:
-            parsed = parse(ask(prompt, SYSTEM))
+            answer = ask(prompt, SYSTEM)
+            try:
+                parsed = parse(answer)
+            except RuntimeError:
+                # Now and then the model writes broken JSON; the same prompt usually works next time.
+                parsed = parse(ask(prompt, SYSTEM))
         except RuntimeError as e:
             self._failed(due, str(e))
             raise

@@ -158,6 +158,14 @@ def test_a_new_summary_replaces_the_old_one_in_search(table):
     assert summaries.status()["summaries"] == 1
 
 
+def test_an_unparsable_answer_is_asked_for_once_more(table):
+    summaries = sm.Summaries(table)
+    say(table, "s", "a", "b")
+    answers = iter(['{"title": "T", "summary": "cut off', answer()])
+    summaries.summarize(summaries.due(NOW)[0], lambda p, s: next(answers), "test")
+    assert summaries.get(None, "s")["title"] == "Lunch plans"
+
+
 @pytest.mark.parametrize(
     "text",
     [

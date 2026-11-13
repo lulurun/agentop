@@ -338,7 +338,7 @@ def test_a_plugin_for_another_api_version_is_incompatible(env):
     with env.client() as client:
         info = by_id(client)["future"]
         assert info["state"] == "incompatible"
-        assert "Update this service" in info["error"]
+        assert "Update agentop" in info["error"]
         assert client.patch("/api/v2/plugins/future", json={"enabled": True}, headers=AUTH).json()["state"] == "incompatible"
 
 
