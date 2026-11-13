@@ -121,7 +121,6 @@ src/agentop/
     files.py        safe directory listing and git status
     models.py       Pydantic request/response models
     routes.py       the /api/v2 application
-    legacy.py       the old dashboard's routes, until cutover
     webdist/        built web app (gitignored, shipped as package data)
   tmux.py           all tmux calls go through one wrapper
   ...               existing modules unchanged
@@ -364,8 +363,8 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
-- A loopback bind does not prove a route is private. The old `/api` routes have no token, so until they are removed their only protection on that path is whatever the proxy on `pisces-01` enforces.
-- The proxy has no authentication and no host name, so it stays out of `AGENTOP_ALLOWED_ORIGINS`: the guard refuses any request with forwarding headers on the old routes, and only `/api/v2` and `/app` work through the proxy.
+- A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health` and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
+- The proxy has no authentication of its own, so the token is the only thing in front of the agents (security review, in [TODO.md](../TODO.md)).
 
 ## 8 Service lifecycle
 
@@ -665,7 +664,7 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 | `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. The handler is a plain function, called with the session row (or, for `scan`, the session list). Each handler runs isolated: an exception is logged and counted, and never reaches the core. Handlers run in a thread off the event loop, with a time limit (10s), and the core never waits for their result |
 | `api.task(fn)` | A supervised background task. `fn` is an async function, not a coroutine, so the task can be started again when the plugin is enabled again. If it raises, the plugin goes to `failed` and the task is not restarted |
 | `api.sessions()` | A read-only snapshot of the session list |
-| `api.agents` | For plugins that drive agents: start a managed session, send text, read its output, stop it. It goes through the same core code as the UI (`ops.start`, `Actor`, `AgentInstance.stop`), and each session it starts is tagged with the plugin's id. The sessions are ordinary core sessions: they show in the list and can be attached, stopped, and closed whether or not the plugin is still running |
+| `api.on_disable(fn)` | Called, in a thread, when the user turns the plugin off, to wind down work it started: the Dialogues plugin stops running dialogues. Not called when the service stops, so work that outlives the service (a process the plugin started) keeps running then. A failure is logged; the plugin is off either way |
 | `api.store` | A JSON file at `~/.agentop/plugins/{id}/store.json` for the plugin's own data |
 | `api.data_dir` | The plugin's own folder, `~/.agentop/plugins/{id}/`, for files that don't fit in one JSON file. It is made when first written to |
 | `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
@@ -674,6 +673,8 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 `register(api)` only declares routes, handlers, and tasks. The loader switches them on after `register` returns in time (5s), so a plugin that fails part way through leaves nothing behind. A plugin's own modules import as `agentop.plugins.{id}.…`, so relative imports work.
 
 Repeated handler errors (for example 5 in a minute) move the plugin to `failed` automatically, so a broken plugin stops being called.
+
+**No `api.agents`.** It was planned so that plugins would drive agents through the service rather than the core modules. Dropped (2026-11-14) when dialogues, its only user, moved: their orchestrator is a process of its own, started by `agentop dialogue start` with or without a service, so a service-side API can't reach it. A plugin that drives agents uses the core's own functions (`ops.start`, `AgentInstance`, `Actor`), and the sessions it starts are ordinary managed sessions.
 
 **CLI.** A plugin may add `agentop` commands. Its manifest names them, `cli = ["recall"]`, and a `cli.py` beside its `__init__.py` defines `register_cli(cli)`. The CLI reads manifests and saved flags without starting the service. A missing plugin's command does not exist. A disabled, failed, or incompatible plugin's command is still listed, and running it says so and how to enable it. The core commands never depend on a plugin.
 
@@ -690,7 +691,7 @@ Built (2026-11-13) in `agentop/plugin_cli.py`, with manifest reading and flags i
 
 Python cannot reliably unload a module, so disabling is a gate rather than an unload:
 
-- **Disable**: requests to its routes return 404, its event handlers stop being called, its tasks are cancelled, and its UI disappears. The flag is saved.
+- **Disable**: requests to its routes return 404, its event handlers stop being called, its tasks are cancelled, and its UI disappears. Its `on_disable` handlers are called, so it can wind down work it started. The flag is saved. Before turning a plugin off, Settings asks its UI (`beforeDisable`), which may answer with a warning for the user to confirm, such as "A dialogue is running".
 - **Enable** of a plugin that was loaded: the gate opens again, and its tasks are started again.
 - **Enable** of a plugin that was never imported (disabled at start) is imported then. If that fails, the state is `failed` and nothing else changes.
 - **Retry** of a `failed` plugin needs a service restart; the UI says so. This holds for a plugin that failed while running too (a crashed task, repeated handler errors): enabling it again leaves it `failed`, with the restart note in its error. This keeps half-initialised plugin state out of the running service.
@@ -750,9 +751,11 @@ The security review and retiring the old dashboard (both in [TODO.md](../TODO.md
 
 ### 12.9 Dialogues as a plugin
 
+Status: built 2026-11-14. Done when (below) holds: the core suites pass with both dialogue folders deleted.
+
 Dialogues are built already, so moving them is also the test of the plugin system: if the loader and its API can carry dialogues, they can carry the features after it.
 
-**What moves into `src/agentop/plugins/dialogue/`:** today's `src/agentop/dialogue/` package (model, orchestrator, parser, status, scenarios), the `/api/v2/dialogues…` routes, which become `/api/v2/plugins/dialogue/…`, and the `agentop dialogue` CLI commands, through `register_cli`. The orchestrator drives its two agents through `api.agents` instead of calling `ops` and `AgentInstance` directly.
+**What moves into `src/agentop/plugins/dialogue/`:** today's `src/agentop/dialogue/` package (model, orchestrator, parser, status, scenarios), the `/api/v2/dialogues…` routes, which become `/api/v2/plugins/dialogue/…`, and the `agentop dialogue` CLI commands, through `register_cli`. The orchestrator keeps driving its two agents through the core's `ops` and `AgentInstance` (no `api.agents`, 12.3).
 
 **What moves into `ui/src/plugins/dialogue/`:** the Dialogues view, filling the left-column view slot, and the "dialogue" label on session rows, filling the session-badge slot. Core files stop naming dialogues: the session list, the store, and the API client.
 
@@ -924,11 +927,11 @@ Sources: [mem0 on Hermes Agent's memory](https://mem0.ai/blog/how-memory-works-i
 
 - Existing tmux sessions are not touched. They appear as `running` with their current names and are attachable at once.
 - `sessions.json` is extended, not replaced.
-- `/api` and `html/` remain until the new UI reaches parity, then are removed.
+- `/api` and `html/` remained until the new UI reached parity. Removed 2026-11-14, with the app moved from `/app/` to `/` (`/app/…` redirects there).
 - `agentop start` keeps working with no service running. New session names become `{name}-{rand6}`, so `docs/cli.md` needs updating.
 - Dialogue short names (`dia{id}a`, `dia{id}b`) continue to go through `ops.start`.
 
-Parity list for the old dashboard, so nothing is lost by accident:
+Parity list for the old dashboard, so nothing was lost by accident:
 
 | Old feature | v2 location |
 |-------------|-------------|

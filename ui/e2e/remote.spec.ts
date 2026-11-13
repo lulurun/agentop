@@ -97,7 +97,7 @@ test("a rejected token can be seen and replaced, even after a reload", async ({ 
   const devhost = await service("devhost");
   const proxy = await proxied(devhost);
   const box = page.getByLabel("Token");
-  await page.goto(`http://127.0.0.1:${proxy.port}/agentop/app/`);
+  await page.goto(`http://127.0.0.1:${proxy.port}/agentop/`);
 
   await expect(box).toHaveAttribute("type", "text");
   await box.fill("not-the-token");
@@ -111,23 +111,23 @@ test("a rejected token can be seen and replaced, even after a reload", async ({ 
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
 });
 
-test("the old routes cannot be reached through the proxy", async ({ request }) => {
+test("the old dashboard's routes are gone, through the proxy and directly", async ({ request }) => {
   const devhost = await service("devhost");
   const proxy = await proxied(devhost);
   const base = `http://127.0.0.1:${proxy.port}/agentop`;
-  expect((await request.get(`${base}/api/sessions`)).status()).toBe(403);
-  expect((await request.post(`${base}/api/sessions/start`, { data: {} })).status()).toBe(403);
+  for (const root of [base, devhost.url]) {
+    expect((await request.get(`${root}/api/sessions`)).status()).toBe(404);
+    expect((await request.get(`${root}/api/health`)).status()).toBe(404);
+  }
   expect((await request.get(`${base}/api/v2/sessions`)).status()).toBe(401);
   expect((await request.get(`${base}/api/v2/health`)).status()).toBe(200);
-  // Directly, on the machine itself, they still work.
-  expect((await request.get(`${devhost.url}/api/sessions`)).status()).toBe(200);
 });
 
-test("the old address through the proxy leads to the app", async ({ page }) => {
+test("the app's old address through the proxy leads to the app", async ({ page }) => {
   const devhost = await service("devhost");
   const proxy = await proxied(devhost);
-  await page.goto(`http://127.0.0.1:${proxy.port}/agentop/`);
-  await expect(page).toHaveURL(/\/agentop\/app\/$/);
+  await page.goto(`http://127.0.0.1:${proxy.port}/agentop/app/`);
+  await expect(page).toHaveURL(new RegExp(`:${proxy.port}/agentop/$`));
   await expect(page.getByRole("heading", { name: "Enter the token for devhost" })).toBeVisible();
 });
 
@@ -138,7 +138,7 @@ test("the app loaded through the proxy over plain HTTP works, including Add serv
   const proxy = await proxied(devhost);
   const otherProxy = await proxied(other);
 
-  await page.goto(`http://${lanAddress}:${proxy.port}/agentop/app/#token=${devhost.token}`);
+  await page.goto(`http://${lanAddress}:${proxy.port}/agentop/#token=${devhost.token}`);
   expect(await page.evaluate(() => isSecureContext)).toBe(false);
   await startSession(page, devhost, "plain-http");
   await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });

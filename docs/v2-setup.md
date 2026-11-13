@@ -2,7 +2,7 @@
 
 v2 is a service plus an app. Each machine that runs agents runs the service, and
 the app connects to any service it can reach. The app is served by the service
-at `/app/`.
+at `/` (it was at `/app/` until 2026-11-14, which now redirects there).
 
 ## On a machine of your own
 
@@ -19,7 +19,7 @@ agentop open                         # opens the app, signed in
 As it starts, `agentop serve` checks the host:
 
 - It looks for each agent tool's program (`claude`, `codex`, `agy`) on the PATH of the user's login shell, where sessions run, and on its own. It refuses to start when it finds none. The New session dialog offers only the tools it found; restart the service after installing another.
-- It installs or updates agentop's skills ([src/agentop/skills/](../src/agentop/skills/README.md)) for each tool found that takes them: for now Claude Code, in `~/.claude/skills/`.
+- It installs or updates agentop's skills ([src/agentop/skills/](../src/agentop/skills/README.md)) for each tool found that takes them: Claude Code in `~/.claude/skills/`, and Codex in `~/.codex/skills/`.
 
 ## The devhost, behind pisces-01
 
@@ -45,9 +45,9 @@ To deploy, use Update in the app's service status, or from the main checkout:
 systemctl --user restart agentop-api
 ```
 
-Restarting leaves tmux sessions running. The old dashboard then stops working
-through the proxy, and `/agentop/` leads to the app. On the devhost itself it still
-works at `http://127.0.0.1:9775/`.
+Restarting leaves tmux sessions running.
+
+Eiger's monitors check the service at `GET /api/v2/health`, which needs no token.
 
 Print the address to paste into Connect to a service:
 
@@ -67,7 +67,7 @@ other apps on 7700 are plain HTTP.
 
 ## Connecting from the app
 
-Load the app from your own machine's service, `http://127.0.0.1:9775/app/`, then use
+Load the app from your own machine's service, `http://127.0.0.1:9775/`, then use
 Connect to a service in the service menu. A browser allows a loopback page to reach other
 addresses. A page loaded from the proxy can use only the proxy: it can't reach your
 machine's loopback.
@@ -116,10 +116,26 @@ apply.
 If this computer's service is stopped, the app says so and how to start it, as the web
 app does. It can't start it either.
 
-## Old routes and proxies
+## Exposing a service
 
-The old routes have no token, so requests with forwarding headers
-(`X-Forwarded-For`, `X-Real-IP`, `Forwarded`) are refused on them, whatever their
-Host. Adding a name to `AGENTOP_ALLOWED_ORIGINS` lifts that for the name, which
-makes the old terminal public on an open proxy, so don't list pisces. `/api/v2` and
-`/app/` are unaffected, because `/api/v2` requires the token.
+`agentop serve` binds `127.0.0.1` unless told otherwise, and that is the safe
+default. Everything under `/api/v2` except `/health` needs the token, but the
+token is all there is: whoever holds it can type into every agent on the machine,
+including agents started with skip-permissions flags. So, to reach a service from
+another machine, in order of preference:
+
+1. **An SSH tunnel.** `ssh -L 9775:127.0.0.1:9775 host`, then use
+   `http://127.0.0.1:9775` locally. Nothing new is exposed, and the browser treats
+   the tunnel as a loopback address.
+2. **An HTTPS proxy** in front of the loopback service, as on the devhost
+   (`https://agentop.wolfdrawer.net`). The proxy must forward WebSockets (the
+   `Upgrade` and `Connection` headers). The app works under a path prefix too
+   (`/agentop/`), since it uses relative addresses. Consider an IP allow-list or a
+   second factor at the proxy: the token is the only thing in front of the agents.
+3. **TLS in the service itself**: set `host`, `tls_cert` and `tls_key` in
+   `~/.agentop/config.toml` (or `--host`, `--tls-cert`, `--tls-key`).
+
+Binding a non-loopback address without TLS works, with a warning in the log and a
+"Not encrypted" label in the app, but then anyone on the network path can read the
+token as it is sent, and every keystroke and screen of every terminal. Use it only
+on a network you trust completely.

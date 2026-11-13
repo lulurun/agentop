@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 
-from agentop.dialogue.status import ReceiveStatus
+from .status import ReceiveStatus
 
 LOG = logging.getLogger(__name__)
 

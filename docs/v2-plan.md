@@ -281,13 +281,13 @@ The remaining cutover steps are tracked in [TODO.md](../TODO.md#retire-the-old-d
 - [x] History view: list, filter, resume through the normal start flow, delete.
 - [x] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
 - [x] Settings: theme, renderer, font size.
-- [ ] Walk the parity table in design section 13, item by item.
-- [ ] Move the web app to `/`. Delete `html/index.html` and the old `/api` routes and `/ws/sessions` endpoint.
-- [ ] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/dashboard.md`, and `docs/cli.md`, including the stale unit name and registry path.
-- [ ] Document exposing a service safely: tunnel, proxy, or TLS, and what plain HTTP gives away.
+- [ ] Walk the parity table in design section 13, item by item. Not done: the old dashboard was retired on the owner's decision (2026-11-14) without the walk; manual tests J1 and J2 stay open as checks of v2 itself.
+- [x] Move the web app to `/`. Delete `html/index.html` and the old `/api` routes and `/ws/sessions` endpoint (2026-11-14). `/app/…` redirects to `/`.
+- [x] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, and `docs/cli.md`; `docs/dashboard.md`, which described only the old dashboard, is removed.
+- [x] Document exposing a service safely: tunnel, proxy, or TLS, and what plain HTTP gives away ([v2-setup.md](v2-setup.md#exposing-a-service)).
 - [ ] Add a tag and release notes for `v2.0.0`.
 
-**Done when:** every row of the parity table works in both clients, and a full day of normal use needs no fallback to the old dashboard. Removal happens only after that.
+**Done when:** every row of the parity table works in both clients, and a full day of normal use needs no fallback to the old dashboard. Removal was planned only after that, and was brought forward by the owner on 2026-11-14.
 
 ## 9 After v2.0
 

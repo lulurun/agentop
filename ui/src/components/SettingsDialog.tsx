@@ -1,6 +1,7 @@
+import { useState } from "react";
 import type { PluginInfo } from "../api/client";
-import { missingFromApp, pluginsFor } from "../plugins/registry";
-import { PluginSlot } from "../plugins/Slot";
+import { missingFromApp, pluginsFor, UI_PLUGINS } from "../plugins/registry";
+import { PluginSlot, usePluginContext } from "../plugins/Slot";
 import { FONT_SIZES, type Settings } from "../settings";
 import { useApp } from "../store";
 import { Dialog } from "./Dialog";
@@ -14,8 +15,25 @@ const STATE_TEXT: Record<PluginInfo["state"], string> = {
 
 function PluginEntry({ info }: { info: PluginInfo }) {
   const setEnabled = useApp((s) => s.setPluginEnabled);
+  const plugin = usePluginContext(info);
+  // What the plugin says turning it off would do, waiting for the user to confirm.
+  const [warning, setWarning] = useState<string | null>(null);
   const hasSettings = pluginsFor("settings-section", [info]).length > 0;
   const switchable = info.state === "enabled" || info.state === "disabled";
+
+  async function switchTo(enabled: boolean) {
+    const ask = UI_PLUGINS[info.id]?.beforeDisable;
+    if (!enabled && info.state === "enabled" && ask) {
+      const message = await ask(plugin).catch(() => null);
+      if (message) {
+        setWarning(message);
+        return;
+      }
+    }
+    setWarning(null);
+    await setEnabled(info.id, enabled);
+  }
+
   return (
     <li className="plugin-entry" data-state={info.state}>
       <div className="plugin-head">
@@ -26,7 +44,7 @@ function PluginEntry({ info }: { info: PluginInfo }) {
             checked={info.state === "enabled"}
             disabled={!switchable}
             aria-label={`${info.name} on`}
-            onChange={(event) => void setEnabled(info.id, event.target.checked)}
+            onChange={(event) => void switchTo(event.target.checked)}
           />
           <strong>{info.name}</strong>
         </label>
@@ -36,6 +54,24 @@ function PluginEntry({ info }: { info: PluginInfo }) {
         </span>
       </div>
       {info.description && <p className="plugin-description">{info.description}</p>}
+      {warning && (
+        <div className="plugin-warning" role="alert">
+          <p>{warning}</p>
+          <div className="plugin-warning-actions">
+            <button type="button" onClick={() => setWarning(null)}>Keep it on</button>
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                setWarning(null);
+                void setEnabled(info.id, false);
+              }}
+            >
+              Turn it off
+            </button>
+          </div>
+        </div>
+      )}
       {info.error && <p className="form-error">{info.error}</p>}
       {info.state === "failed" && (
         <p className="plugin-note">

@@ -93,7 +93,6 @@ import json
 import os
 import sys
 
-# No paths at import, so this is safe before `serve` moves the folder.
 from agentop import agentclis
 
 
@@ -271,11 +270,6 @@ def cmd_send(args):
 
 
 def cmd_serve(args):
-    from agentop import paths
-
-    # Only the service moves an older folder: it starts after the old service has
-    # stopped. Before the imports, since some modules work out their paths as they load.
-    paths.migrate()
     from agentop.service import app, config
 
     app.serve(
@@ -305,7 +299,7 @@ def cmd_open(args):
     settings = config.load()
     scheme = "https" if settings.tls else "http"
     host = "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
-    url = f"{scheme}://{host}:{settings.port}/app/#token={identity.load_or_create().token}"
+    url = f"{scheme}://{host}:{settings.port}/#token={identity.load_or_create().token}"
     if not webbrowser.open(url):
         print(url)
 
@@ -432,131 +426,6 @@ def cmd_service_connect_info(args):
 
 
 # ---------------------------------------------------------------------------
-# Dialogue commands
-# ---------------------------------------------------------------------------
-
-_DIALOGUE_TOOLS = agentclis.names()
-
-
-def _dialogue_ops():
-    try:
-        from agentop.dialogue import ops
-
-        return ops
-    except ImportError as exc:
-        print(f"Error: cannot import agentop.dialogue: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-
-def cmd_dialogue_start(args):
-    brief_path = os.path.abspath(os.path.expanduser(args.brief))
-    if not os.path.isfile(brief_path):
-        print(f"Error: brief file not found: {brief_path!r}", file=sys.stderr)
-        sys.exit(1)
-    scenario_file = ""
-    if args.scenario:
-        scenario_path = os.path.abspath(os.path.expanduser(args.scenario))
-        if not os.path.isfile(scenario_path):
-            print(f"Error: scenario file not found: {scenario_path!r}", file=sys.stderr)
-            sys.exit(1)
-        scenario_file = scenario_path
-
-    print("Starting dialogue:")
-    print(f"  Agent A: {args.agent_a}")
-    print(f"  Agent B: {args.agent_b}")
-    print(f"  Max turns: {args.max_turns}")
-
-    result = _dialogue_ops().start_dialogue(
-        agent_a=args.agent_a,
-        agent_b=args.agent_b,
-        max_turns=args.max_turns,
-        brief_file=brief_path,
-        scenario_file=scenario_file,
-    )
-    if not result.get("ok"):
-        print(f"Error: {result['error']}", file=sys.stderr)
-        sys.exit(1)
-    did = result["id"]
-    sa, sb = result["session_a"], result["session_b"]
-    watch_cmd = (
-        f"tmux new-window -n 'dia-{did}' "
-        f"\"watch -n1 -t 'tmux capture-pane -t {sa} -p -S -40'\" \\; "
-        f"split-window -h "
-        f"\"watch -n1 -t 'tmux capture-pane -t {sb} -p -S -40'\""
-    )
-    log_path = result["log_path"]
-    print(f"\nDialogue started: {did}")
-    print(f"  Working dir: {result['cwd']}")
-    print(f"  Session A: {sa}")
-    print(f"  Session B: {sb}")
-    print("\n  Watch side-by-side:")
-    print(f"    {watch_cmd}")
-    print(f"\n  Tail log:  tail -f {log_path}")
-    print(f"\n  Stop:  agentop dialogue stop {did}")
-
-
-def cmd_dialogue_list(args):
-    dialogues = _dialogue_ops().list_dialogues()
-    if not dialogues:
-        print("No dialogues found.")
-        return
-    id_w, status_w, agent_w, sess_w = 40, 10, 10, 24
-    print(
-        f"{'ID':<{id_w}}  {'STATUS':<{status_w}}  {'AGENT A':<{agent_w}}  {'AGENT B':<{agent_w}}  "
-        f"{'SESSION A':<{sess_w}}  {'SESSION B':<{sess_w}}"
-    )
-    print("-" * 100)
-    for d in dialogues:
-        sa = d["session_a"] + (" [open]" if d["session_a_alive"] else "")
-        sb = d["session_b"] + (" [open]" if d["session_b_alive"] else "")
-        print(
-            f"{d['id']:<{id_w}}  {d['status']:<{status_w}}  "
-            f"{d['agent_a']:<{agent_w}}  {d['agent_b']:<{agent_w}}  {sa:<{sess_w}}  {sb:<{sess_w}}"
-        )
-
-
-def cmd_dialogue_stop(args):
-    result = _dialogue_ops().stop_dialogue(args.id)
-    if not result.get("ok"):
-        print(f"Error: {result['error']}", file=sys.stderr)
-        sys.exit(1)
-    print(f"Dialogue {args.id} stopped. Sessions closed.")
-
-
-def cmd_dialogue_remove(args):
-    ops = _dialogue_ops()
-    if args.id:
-        result = ops.remove_dialogue(args.id)
-        if not result.get("ok"):
-            print(f"Error: {result['error']}", file=sys.stderr)
-            sys.exit(1)
-        print(f"Removed {args.id}.")
-    else:
-        status = args.status
-        candidates = ops.list_dialogues_by_status(status)
-        if not candidates:
-            print(f"No dialogues with status '{status}'.")
-            return
-        from agentop.tmux import Session
-        print(f"Will remove ({status}):")
-        for meta in candidates:
-            open_note = " [sessions open]" if Session.has(meta.session_a) or Session.has(meta.session_b) else ""
-            print(f"  {meta._dir().name}  {meta.agent_a} vs {meta.agent_b}{open_note}")
-        if not getattr(args, "yes", False):
-            try:
-                answer = input(f"\nRemove {len(candidates)} dialogue(s)? [y/N] ").strip().lower()
-            except (EOFError, KeyboardInterrupt):
-                print("\nAborted.")
-                return
-            if answer != "y":
-                print("Aborted.")
-                return
-        result = ops.remove_dialogues_by_status(status)
-        for did in result["removed"]:
-            print(f"Removed {did}")
-
-
-# ---------------------------------------------------------------------------
 # Argument parsing
 # ---------------------------------------------------------------------------
 
@@ -667,64 +536,6 @@ def main():
     p_connect.add_argument("--host", help="Address other machines use to reach this service")
     p_connect.add_argument("--url", help="Full address when behind a proxy, e.g. http://203.0.113.9:7700/agentop")
 
-    # dialogue
-    p_dialogue = sub.add_parser(
-        "dialogue",
-        help="Run a structured two-agent dialogue",
-        description=(
-            "Start a dialogue between two AI agents on a shared topic.\n"
-            "The orchestrator relays messages between them until they reach a conclusion."
-        ),
-    )
-    dsub = p_dialogue.add_subparsers(dest="dialogue_command", metavar="<subcommand>")
-
-    p_dstart = dsub.add_parser("start", help="Start a new dialogue between two agents")
-    p_dstart.add_argument(
-        "--brief",
-        required=True,
-        metavar="FILE",
-        help="Path to a Markdown file describing the topic/goal for the dialogue",
-    )
-    p_dstart.add_argument(
-        "--agent-a",
-        dest="agent_a",
-        default=agentclis.DEFAULT,
-        choices=_DIALOGUE_TOOLS,
-        help="Agent for session A (default: claude)",
-    )
-    p_dstart.add_argument(
-        "--agent-b",
-        dest="agent_b",
-        default=agentclis.DEFAULT,
-        choices=_DIALOGUE_TOOLS,
-        help="Agent for session B (default: claude)",
-    )
-    p_dstart.add_argument(
-        "--max-turns",
-        dest="max_turns",
-        type=int,
-        default=0,
-        help="Maximum relay turns (default: use scenario setting, fallback 20)",
-    )
-    p_dstart.add_argument(
-        "--scenario", default="", metavar="FILE", help="Path to a scenario TOML file (default: built-in pm-sde)"
-    )
-
-    dsub.add_parser("list", help="List all dialogues and their status")
-
-    p_dstop = dsub.add_parser("stop", help="Stop a running dialogue orchestrator and close both agent sessions")
-    p_dstop.add_argument("id", help="Dialogue ID")
-
-    p_dremove = dsub.add_parser("remove", help="Remove dialogue(s)")
-    p_dremove.add_argument("--id", metavar="ID", default="", help="Remove a specific dialogue by ID (any status)")
-    p_dremove.add_argument(
-        "--status",
-        choices=["stopped", "completed"],
-        default="stopped",
-        help="Remove all dialogues with this status (default: stopped)",
-    )
-    p_dremove.add_argument("--yes", action="store_true", help="Skip confirmation prompt (for scripting)")
-
     # Last, so a plugin can't take a core command's name.
     from agentop import plugin_cli
 
@@ -737,18 +548,6 @@ def main():
 
     if args.command in plugin_commands:
         plugin_commands[args.command](args)
-        return
-
-    if args.command == "dialogue":
-        if not args.dialogue_command:
-            p_dialogue.print_help()
-            sys.exit(0)
-        {
-            "list": cmd_dialogue_list,
-            "start": cmd_dialogue_start,
-            "stop": cmd_dialogue_stop,
-            "remove": cmd_dialogue_remove,
-        }[args.dialogue_command](args)
         return
 
     if args.command == "service":

@@ -14,15 +14,13 @@ export type LinkState =
 
 type Dialog = "new-session" | "add-service" | "service" | "settings" | null;
 /** A plugin's left-column view is `plugin:{id}`. */
-export type View = "sessions" | "history" | "dialogues" | `plugin:${string}`;
+export type View = "sessions" | "history" | `plugin:${string}`;
 
 interface AppState {
   connections: Connection[];
   activeId: string;
   view: View;
   settings: Settings;
-  /** Sessions that belong to a dialogue, so the list can label them. */
-  dialogueSessions: Set<string>;
   link: LinkState;
   sessions: Record<string, Session>;
   /** The connected service's plugins. Plugins differ by service, so this is reset on every switch. */
@@ -46,7 +44,6 @@ interface AppState {
   setView(view: View): void;
   setPluginEnabled(id: string, enabled: boolean): Promise<void>;
   updateSettings(changes: Partial<Settings>): void;
-  setDialogueSessions(sessions: Set<string>): void;
   /** The service was stopped on purpose, so don't keep trying to reach it. */
   markStopped(): void;
   addConnection(connection: Connection): void;
@@ -322,7 +319,6 @@ export const useApp = create<AppState>((set, get) => {
     connections: [],
     view: "sessions",
     settings: loadSettings(),
-    dialogueSessions: new Set(),
     activeId: "",
     link: { state: "connecting" },
     sessions: {},
@@ -382,9 +378,6 @@ export const useApp = create<AppState>((set, get) => {
       set({ settings });
     },
 
-    setDialogueSessions(dialogueSessions) {
-      set({ dialogueSessions });
-    },
 
     markStopped() {
       closeLink();

@@ -77,27 +77,6 @@ class SavedSession(BaseModel):
     last_active: float | None = None
 
 
-class DialogueSummary(BaseModel):
-    id: str
-    status: str
-    agent_a: str | None = None
-    agent_b: str | None = None
-    session_a: str | None = None
-    session_b: str | None = None
-    session_a_alive: bool = False
-    session_b_alive: bool = False
-    start_time: str | None = None
-    max_turns: int | None = None
-    error: str | None = None
-
-
-class DialogueDetail(DialogueSummary):
-    cwd: str
-    brief: str
-    progress: str
-    log_tail: str
-
-
 class ToolInfo(BaseModel):
     name: str
     installed: bool

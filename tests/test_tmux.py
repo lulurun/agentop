@@ -51,10 +51,12 @@ def test_set_option_stays_on_one_session(tmux_server):
 READ_RAW = """import os, sys, termios, tty
 sys.stdout.write("\\x1b[?2004h"); sys.stdout.flush()
 tty.setraw(0)
+open(sys.argv[1] + ".ready", "w").close()
 data = b""
 while b"done" not in data:
     data += os.read(0, 1024)
-open(sys.argv[1], "wb").write(data)
+open(sys.argv[1] + ".tmp", "wb").write(data)
+os.rename(sys.argv[1] + ".tmp", sys.argv[1])
 """
 
 
@@ -63,11 +65,16 @@ def test_a_bracketed_paste_arrives_as_real_escape_codes(tmux_server, tmp_path):
     script.write_text(READ_RAW)
     _new("raw")
     Session.send_keys("raw", f"python3 {script} {out}", "Enter")
-    for _ in range(100):
-        if "python" in tmux.run("display", "-p", "-t", "=raw:", "#{pane_current_command}", text=True).stdout:
+    ready = tmp_path / "raw.out.ready"
+    for _ in range(200):
+        if ready.exists():
             break
         tmux.subprocess.run(["sleep", "0.05"])
-    tmux.subprocess.run(["sleep", "0.3"])  # let it turn bracketed paste on
+    # tmux has to have seen the pane turn bracketed paste on.
+    for _ in range(100):
+        if tmux.run("display", "-p", "-t", "=raw:", "#{bracket_paste_flag}", text=True).stdout.strip() == "1":
+            break
+        tmux.subprocess.run(["sleep", "0.02"])
 
     Session.paste_text_bracketed("raw", "one\ntwo")
     Session.send_keys("raw", "done")

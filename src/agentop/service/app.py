@@ -10,15 +10,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
-
-from agentop.guard import HostOriginGuard
 
 from . import config, host, identity, manager
 from .config import Settings
 from .identity import Identity
-from .legacy import create_legacy_router
 from .plugins import PluginHost
 from .routes import Context, create_v2_app
 from .store import SessionStore
@@ -26,7 +23,6 @@ from .store import SessionStore
 LOG = logging.getLogger(__name__)
 GRACEFUL_SHUTDOWN_SECONDS = 5
 
-_OLD_UI_DIR = Path(__file__).resolve().parents[3] / "html"
 _WEB_DIR = Path(__file__).resolve().parent / "webdist"
 
 
@@ -70,20 +66,16 @@ def create_app(
 
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file, plugins=plugins, available=available)))
+
+    # The app was at /app/ until 2026-11-14. Relative, so it also works behind a proxy's path prefix.
+    @app.get("/app", include_in_schema=False)
+    @app.get("/app/{rest:path}", include_in_schema=False)
+    async def moved(rest: str | None = None):
+        up = "./" if rest is None else "../" * (rest.count("/") + 1)
+        return RedirectResponse(up + (rest or ""), status_code=308)
+
     if _WEB_DIR.is_dir():
-        app.mount("/app", AppFiles(directory=str(_WEB_DIR), html=True), name="web")
-
-    # The old dashboard has no token, so it must never be listening on a network.
-    if settings.is_loopback:
-        app.add_middleware(HostOriginGuard, exempt_prefixes=("/api/v2", "/app"))
-        app.include_router(create_legacy_router(store))
-        if _OLD_UI_DIR.is_dir():
-
-            @app.get("/")
-            async def root():
-                return FileResponse(_OLD_UI_DIR / "index.html")
-
-            app.mount("/", AppFiles(directory=str(_OLD_UI_DIR), html=True), name="static")
+        app.mount("/", AppFiles(directory=str(_WEB_DIR), html=True), name="web")
 
     return app
 

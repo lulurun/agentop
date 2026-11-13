@@ -13,10 +13,11 @@ from pathlib import Path
 
 from agentop import ops as agent_ops
 from agentop.agentclis import get_agent
-from agentop.dialogue import scenarios
-from agentop.dialogue.model import DIALOGUES_DIR, DialogueMeta
-from agentop.dialogue.scenarios.reader import load as load_scenario
 from agentop.tmux import Session
+
+from . import scenarios
+from .model import DialogueMeta, dialogues_dir
+from .scenarios.reader import load as load_scenario
 
 
 def start_dialogue(
@@ -31,7 +32,7 @@ def start_dialogue(
     scenario = load_scenario(resolved_scenario)
     scenario_name = scenario.name
     brief_name = Path(brief_file).stem
-    dialogue_dir = DIALOGUES_DIR / f"{scenario_name}_{brief_name}_{dialogue_id}"
+    dialogue_dir = dialogues_dir() / f"{scenario_name}_{brief_name}_{dialogue_id}"
     dialogue_dir.mkdir(parents=True, exist_ok=True)
     cwd = str(dialogue_dir)
 
@@ -66,10 +67,9 @@ def start_dialogue(
         brief_name=brief_name,
     )
 
-    runner = Path(__file__).parent / "runner.py"
     with open(meta.log_path().parent / "runner.log", "w") as log_f:
         proc = subprocess.Popen(
-            [sys.executable, str(runner), meta.id],
+            [sys.executable, "-m", f"{__package__}.runner", meta.id],
             stdout=log_f,
             stderr=log_f,
             close_fds=True,
@@ -89,10 +89,10 @@ def start_dialogue(
 
 
 def list_dialogues() -> list[dict]:
-    if not DIALOGUES_DIR.exists():
+    if not dialogues_dir().exists():
         return []
     result = []
-    for meta_file in sorted(DIALOGUES_DIR.glob("*/meta.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+    for meta_file in sorted(dialogues_dir().glob("*/meta.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         meta = DialogueMeta.load(meta_file.parent.name)
         if meta:
             result.append(
@@ -165,10 +165,10 @@ def get_dialogue(dialogue_id: str) -> dict | None:
 
 
 def list_dialogues_by_status(status: str) -> list[DialogueMeta]:
-    if not DIALOGUES_DIR.exists():
+    if not dialogues_dir().exists():
         return []
     result = []
-    for meta_file in DIALOGUES_DIR.glob("*/meta.json"):
+    for meta_file in dialogues_dir().glob("*/meta.json"):
         meta = DialogueMeta.load(meta_file.parent.name)
         if meta and meta.status == status:
             result.append(meta)
@@ -197,6 +197,19 @@ def remove_dialogues_by_status(status: str) -> dict:
         shutil.rmtree(meta._dir())
         removed.append(meta.id)
     return {"ok": True, "removed": removed}
+
+
+RUNNING = ("starting", "running")
+
+
+def stop_running() -> list[str]:
+    """Stop every dialogue that is still running, as its Stop button would. Returns their IDs."""
+    stopped = []
+    for d in list_dialogues():
+        if d["status"] in RUNNING:
+            stop_dialogue(d["id"])
+            stopped.append(d["id"])
+    return stopped
 
 
 def stop_dialogue(dialogue_id: str) -> dict:

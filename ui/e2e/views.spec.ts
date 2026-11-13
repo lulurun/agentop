@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -112,6 +112,27 @@ test("a session in a dialogue is labelled in the list", async ({ page }) => {
   seedDialogue(s, "debate_topic_abcde123", session);
   await page.reload();
   await expect(row).toContainText("Dialogue");
+});
+
+test("turning Dialogues off while one runs asks first, then stops it", async ({ page }) => {
+  const s = await open(page);
+  seedDialogue(s, "debate_topic_running1", "diaabcdea-1", "running");
+  const meta = join(s.root, "state/plugins/dialogue/dialogues/debate_topic_running1/meta.json");
+  const views = page.locator(".sidebar-views");
+  await expect(views.getByRole("button", { name: "Dialogues" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  const entry = page.getByRole("region", { name: "Plugins" }).getByRole("listitem").filter({ hasText: "Dialogues" });
+  await entry.getByRole("switch").click();
+  await expect(entry.getByRole("alert")).toContainText("A dialogue is running");
+  await entry.getByRole("button", { name: "Keep it on" }).click();
+  await expect(entry.getByRole("switch")).toBeChecked();
+
+  await entry.getByRole("switch").click();
+  await entry.getByRole("button", { name: "Turn it off" }).click();
+  await expect(entry.getByRole("switch")).not.toBeChecked();
+  await expect(views.getByRole("button", { name: "Dialogues" })).toHaveCount(0);
+  await expect.poll(() => JSON.parse(readFileSync(meta, "utf8")).status).toBe("stopped");
 });
 
 test("settings change the theme and terminal font, and persist", async ({ page }) => {

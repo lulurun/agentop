@@ -133,7 +133,7 @@ export class Service {
   }
 
   get signedInUrl() {
-    return `${this.url}/app/#token=${this.token}`;
+    return `${this.url}/#token=${this.token}`;
   }
 
   async dispose() {

@@ -262,6 +262,39 @@ def test_a_plugin_disabled_at_start_is_not_imported_until_enabled(env):
         assert client.get("/api/v2/plugins/lazy/x", headers=AUTH).json() == 1
 
 
+WINDS_DOWN = """
+import os
+from pathlib import Path
+
+OUT = Path(os.environ["PLUGIN_TEST_OUT"])
+
+def register(api):
+    api.router.get("/x")(lambda: 1)
+    api.on_disable(lambda: OUT.write_text("wound down"))
+"""
+
+
+def test_turning_a_plugin_off_calls_its_on_disable(env):
+    write_plugin(env.root, "winder", WINDS_DOWN)
+    with env.client() as client:
+        client.patch("/api/v2/plugins/winder", json={"enabled": False}, headers=AUTH)
+        wait_until(env.out.exists)
+    assert env.out.read_text() == "wound down"
+
+
+def test_stopping_the_service_does_not_call_on_disable(env):
+    write_plugin(env.root, "winder", WINDS_DOWN)
+    with env.client() as client:
+        assert client.get("/api/v2/plugins/winder/x", headers=AUTH).json() == 1
+    assert not env.out.exists()
+
+
+def test_a_failing_on_disable_still_turns_the_plugin_off(env):
+    write_plugin(env.root, "winder", "def register(api):\n    api.on_disable(lambda: 1 / 0)\n")
+    with env.client() as client:
+        assert client.patch("/api/v2/plugins/winder", json={"enabled": False}, headers=AUTH).json()["state"] == "disabled"
+
+
 def test_unknown_plugin_is_404(env):
     with env.client() as client:
         assert client.patch("/api/v2/plugins/nope", json={"enabled": True}, headers=AUTH).status_code == 404

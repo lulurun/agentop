@@ -181,8 +181,8 @@ def test_pages_are_revalidated_and_hashed_assets_are_kept(tmp_path):
     (tmp_path / "index.html").write_text("<!doctype html>")
     (tmp_path / "assets" / "index-abc123.js").write_text("")
     web = FastAPI()
-    web.mount("/app", AppFiles(directory=str(tmp_path), html=True))
+    web.mount("/", AppFiles(directory=str(tmp_path), html=True))
     client = TestClient(web)
 
-    assert client.get("/app/").headers["cache-control"] == "no-cache"
-    assert "immutable" in client.get("/app/assets/index-abc123.js").headers["cache-control"]
+    assert client.get("/").headers["cache-control"] == "no-cache"
+    assert "immutable" in client.get("/assets/index-abc123.js").headers["cache-control"]

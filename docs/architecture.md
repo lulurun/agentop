@@ -2,29 +2,34 @@
 
 ## 1 Overview
 
-agentop has three concerns: detecting and managing agent processes, orchestrating multi-agent dialogues, and serving a web dashboard.
+agentop has two parts: the core, which detects and manages agent sessions and serves the app and its API, and plugins, which add features on top (dialogues, the File viewer, Memory).
 
 ```
-src/
-  api.py                   FastAPI web server
-  agentop/
-    cli.py                 CLI entry point (the `agentop` command)
-    agentclis/             One module per agent tool: everything that differs between tools
-    conversation.py        What every transcript reader shares (Message, JSONL, .zst)
-    actor.py               Sends/receives over tmux
-    agent_instance.py      Wires AgentCli + Actor into one runtime object
-    scanner.py             Process detection and session building
-    ops.py                 Business logic used by both API and CLI
-    registry.py            Persistent managed-session registry
-    tmux.py                tmux subprocess wrappers
-    skills/                Skills `agentop serve` installs for the agent tools
-    service/host.py        What `agentop serve` checks and installs as it starts
-    dialogue/              Two-agent dialogue system
+src/agentop/
+  cli.py                 CLI entry point (the `agentop` command)
+  agentclis/             One module per agent tool: everything that differs between tools
+  conversation.py        What every transcript reader shares (Message, JSONL, .zst)
+  actor.py               Sends/receives over tmux
+  agent_instance.py      Wires AgentCli + Actor into one runtime object
+  scanner.py             Process detection and session building
+  ops.py                 Business logic used by both the service and the CLI
+  registry.py            Persistent managed-session registry
+  tmux.py                tmux subprocess wrappers
+  paths.py               Where agentop keeps its files (~/.agentop)
+  skills/                Skills `agentop serve` installs for the agent tools
+  plugin_manifest.py     What the core reads from a plugin.toml, without running the plugin
+  plugin_cli.py          Plugin commands for the CLI
+  service/               The service: app.py (assembly), routes.py (/api/v2), store.py (sessions),
+                         plugins.py (the plugin loader), terminal.py, host.py, update.py, ...
+  service/webdist/       The built web app (ui/), served at / (not committed)
+  plugins/               dialogue/, memory/, viewer/: one folder per plugin
+ui/                      The app: React and TypeScript, built by Vite; ui/src/plugins/ holds plugin UIs
+desktop/                 The Tauri desktop app, which bundles the same UI
 ```
 
 ### Core and plugins
 
-Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. The design is in [v2-design.md section 12](v2-design.md#12-plugins). Dialogues (section 5 below) are planned as the first plugin and will move to `src/agentop/plugins/dialogue/`.
+Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. The design is in [v2-design.md section 12](v2-design.md#12-plugins). Dialogues (section 5 below) are a plugin, in `src/agentop/plugins/dialogue/`.
 
 ## 2 Agent layer
 
@@ -57,7 +62,7 @@ The interface, with the default for each thing that differs:
 
 ### 2.3 Getting the host ready (`service/host.py`, `skills/`)
 
-`agentop serve` calls `host.prepare()` before it listens. It finds the installed tools, and stops with an error when there are none. For each one with a `skills_dir()` (only Claude Code for now) it installs or updates the skills that ship in `src/agentop/skills/`: each is copied with a `.agentop` marker file, and a copy with the marker is replaced when the skill changes. A folder or link of the user's own with the same name is left alone and logged; a broken link, such as one to where the repo used to keep the skills, is replaced. The installed tools' names go to `GET /api/v2/tools` (`installed`), and the New session dialog offers only those.
+`agentop serve` calls `host.prepare()` before it listens. It finds the installed tools, and stops with an error when there are none. For each one with a `skills_dir()` (Claude Code and Codex) it installs or updates the skills that ship in `src/agentop/skills/`: each is copied with a `.agentop` marker file, and a copy with the marker is replaced when the skill changes. A folder or link of the user's own with the same name is left alone and logged; a broken link, such as one to where the repo used to keep the skills, is replaced. The installed tools' names go to `GET /api/v2/tools` (`installed`), and the New session dialog offers only those.
 
 ## 3 Actor layer
 
@@ -107,7 +112,7 @@ Everything agentop writes is under `~/.agentop` (`AGENTOP_HOME` moves it):
 
 New kinds of files go in one of these folders, not at the top.
 
-The folder was `~/.agent-dashboard` with every file at the top until 2026-11-11. `agentop serve` moves it at start (`paths.migrate()`), once the old service has stopped, and leaves nothing at the old name. Until the service has moved it, every command keeps using the old folder as it was. A desktop app built before the move looks in the old folder, so it needs rebuilding.
+The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was removed on 2026-11-14, so an install still on the old folder starts afresh: move it by hand first (see `paths.py` in git history before that date for where each file went).
 
 ### 4.1b Transcripts as conversations (`conversation.py`, `service/transcripts.py`)
 
@@ -119,34 +124,39 @@ JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were starte
 
 ### 4.3 Ops (`ops.py`)
 
-Business logic layer called by both `api.py` and `agentop/cli.py`:
+Business logic layer called by both the service and `agentop/cli.py`:
 
 | Function | What it does |
 |----------|-------------|
 | `get_sessions()` | Merge scanner output with registry |
 | `start()` | Launch agent via `AgentCli.start_session()`, register |
 | `stop()` | Create `AgentInstance`, call `.stop()` |
-| `send()` | Create `AgentInstance`, call `.send_command()` |
+| `find_session()` | The one live session a name means, ignoring case and the `-<suffix>` (`eiger` is `Eiger-2953204`) |
+| `send()` | Type a prompt into a managed session with its tool's `send_text` (`agentop send`) |
 | `get_saved_sessions()` | Aggregate history from all agents |
 | `resume_session()` | Resume via `AgentCli.resume_session()` |
 
-## 5 Dialogue system
+## 5 Dialogues (a plugin)
 
-See [dialogue.md](dialogue.md) for full detail.
-
-Key modules:
+See [dialogue.md](dialogue.md) for full detail. The plugin is `src/agentop/plugins/dialogue/`, and its UI is `ui/src/plugins/dialogue/`. With both folders deleted the core and its tests run as before.
 
 | Module | Role |
 |--------|------|
-| `dialogue/model.py` | `Dialogue` and `DialogueMeta` (persisted to `~/.agentop/plugins/dialogue/dialogues/`) |
-| `dialogue/orchestrator.py` | `DialogueOrchestrator` thread — relay loop |
-| `dialogue/parser.py` | `ResponseParser` — extracts BEGIN/END blocks from scrollback |
-| `dialogue/status.py` | `DialogueStatus` and `ReceiveStatus` enums |
-| `dialogue/scenarios/` | TOML scenario files and reader |
-| `dialogue/ops.py` | `start_dialogue()`, `list_dialogues()`, `stop_dialogue()`, `remove_dialogue()` |
-| `dialogue/runner.py` | Subprocess entry point launched by `ops.start_dialogue()` |
+| `__init__.py` | `register(api)`: the routes under `/api/v2/plugins/dialogue/`, and stopping running dialogues when the plugin is turned off (`api.on_disable`) |
+| `cli.py` | `agentop dialogue start / list / stop / remove`, loaded by the CLI through `register_cli` |
+| `model.py` | `Dialogue` and `DialogueMeta` (persisted to `~/.agentop/plugins/dialogue/dialogues/`) |
+| `orchestrator.py` | `DialogueOrchestrator` thread: the relay loop |
+| `parser.py` | `ResponseParser`: extracts BEGIN/END blocks from scrollback |
+| `status.py` | `DialogueStatus` and `ReceiveStatus` enums |
+| `scenarios/` | TOML scenario files and reader |
+| `ops.py` | `start_dialogue()`, `list_dialogues()`, `stop_dialogue()`, `stop_running()`, `remove_dialogue()` |
+| `runner.py` | The orchestrator process, `python -m agentop.plugins.dialogue.runner <id>`, started by `ops.start_dialogue()` |
+
+The orchestrator is its own process, not part of the service, so a dialogue keeps running when the service restarts, and `agentop dialogue start` works with no service. Its agents are ordinary managed sessions started through `ops.start`, and it drives them with the core's `AgentInstance` and `Actor`.
 
 ## 6 Web layer
+
+`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs the service token. `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`).
 
 ### Main-area tabs (v2 app)
 
@@ -154,6 +164,3 @@ The main area holds tabs in one or two groups side by side (`ui/src/tabs.ts`, pu
 
 The right panel lists the working directory (Files) and the agent tool's own log files for the session (Transcripts, `GET /api/v2/sessions/{id}/transcripts`, from `AgentCli.transcript_files()`). Only files listed there can be read, through the File viewer plugin's route. The viewer draws a Markdown file in the browser (`ui/src/plugins/viewer/Markdown.tsx`, react-markdown with GitHub's extensions, its HTML cleaned by rehype-sanitize's GitHub list), loaded only when one is opened. The images it names come from the plugin's `/image` route as data, since an `<img>` can't carry the token, and a link to a file beside it opens that file in a tab (`viewer/paths.ts`).
 
-`api.py` is a FastAPI app. A background task refreshes `_cache["sessions"]` every 5 seconds by calling `ops.get_sessions()`. All session-list reads are served from cache; mutations (start, stop, send) go directly to `ops`.
-
-The frontend (`html/`) is vanilla JS + xterm.js. The in-browser terminal proxies a `tmux attach-session` over a WebSocket PTY bridge in `api.py`.

@@ -2,9 +2,11 @@
 
 ## 1 Overview
 
-The dialogue system orchestrates two agent CLI processes collaborating on a shared task. The orchestrator relays messages between them, enforcing a structured protocol so it can extract and forward only the agent's intended output.
+The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dialogue/`) orchestrates two agent CLI processes collaborating on a shared task. The orchestrator relays messages between them, enforcing a structured protocol so it can extract and forward only the agent's intended output.
 
 Dialogue data is persisted to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`.
+
+The app shows them in the Dialogues view and labels their sessions in the list. Turning the plugin off in Settings → Plugins stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
 
 ## 2 How it works
 
@@ -48,7 +50,7 @@ If no valid delimiter block is found, the orchestrator sends a recovery prompt (
 
 ## 4 Scenarios
 
-A scenario TOML file defines the role prompts for both agents. Built-in scenarios are in `src/agentop/dialogue/scenarios/`.
+A scenario TOML file defines the role prompts for both agents. Built-in scenarios are in `src/agentop/plugins/dialogue/scenarios/`.
 
 ### 4.0 Scenario vs Brief Policy
 

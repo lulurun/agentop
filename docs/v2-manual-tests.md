@@ -19,7 +19,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| A1 | On the PC, run `agentop service connect-info`, open `http://127.0.0.1:9775/`, paste the token if asked | Redirects to `/app/`, shows this service's sessions | Seen working |
+| A1 | On the PC, run `agentop service connect-info`, open `http://127.0.0.1:9775/`, paste the token if asked | Shows the app and this service's sessions (`/app/` redirects to `/` since 2026-11-14) | Seen working (at `/app/`) |
 | A2 | Run `agentop open` on the PC | Browser opens the app signed in; the token is gone from the address bar | Not run |
 | A3 | Reload the page after a service update | The new version loads without a hard reload (no stale cache) | Not run |
 | A4 | Collapse and reopen the left and right columns, with buttons and with Ctrl+Shift+[ and Ctrl+Shift+] | Columns toggle; the terminal refits | Not run |
@@ -39,7 +39,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | B5 | Add a plain `http://` address on another machine, from the PC page in Chrome | Works, with a "Not encrypted" warning | Not run |
 | B6 | Same as B5 with Chrome's or Firefox's HTTPS-Only Mode on | The browser upgrades or blocks the request; the error says why | Seen working (blocked, as expected) |
 | B7 | Open the app from a plain `http://` non-loopback page, and add `http://localhost:9775` | Blocked by the browser; the form warns before trying | Seen working (blocked, as expected) |
-| B8 | Open the app at `https://agentop.wolfdrawer.net/app/`, and add a plain `http://` service | Blocked as mixed content; the form warns before trying | Not run |
+| B8 | Open the app at `https://agentop.wolfdrawer.net/`, and add a plain `http://` service | Blocked as mixed content; the form warns before trying | Not run |
 | B9 | Same page as B8, add `http://127.0.0.1:9775` | Chrome asks for Local Network Access permission; after allowing, it connects | Not run |
 | B10 | Open the app through `ssh -L 9776:127.0.0.1:9775 devhost`, at `http://127.0.0.1:9776`, then add a second tunnel on another port | Both connect | Not run |
 | B11 | Repeat B1, B5, B8, and B10 in Firefox | Same results as Chrome, or differences noted | Not run |
@@ -98,6 +98,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 |----|-------|----------|--------|
 | F1 | History: filter by tool and text, resume a past session, delete one | Resume goes through the normal start; delete removes only that entry | Not run |
 | F2 | Dialogues: open one, read it, stop a running one, remove one after confirming | All work; dialogue agents are labelled in the session list | Not run |
+| F2a | With a dialogue running, turn the Dialogues plugin off in Settings → Plugins, then on again | A warning first; once confirmed the dialogue stops, the view and labels go, its agents stay as plain sessions; turned on again, every saved dialogue is back | Not run |
 
 ## G. Service control
 
@@ -128,7 +129,7 @@ The desktop window has never been opened; every case here is Not run.
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| I1 | Open `https://agentop.wolfdrawer.net/app/` on a phone, sign in, send a prompt to a session | The prompt arrives and the reply shows | Seen working |
+| I1 | Open `https://agentop.wolfdrawer.net/` on a phone, sign in, send a prompt to a session | The prompt arrives and the reply shows | Seen working |
 | I2 | Open and close the side panels on a phone | Panels appear as overlays; no sideways scroll | Not run |
 | I3 | Type with the phone's on-screen keyboard, including Enter, Backspace, and Japanese input | Keys arrive correctly | Not run |
 
@@ -136,5 +137,5 @@ The desktop window has never been opened; every case here is Not run.
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| J1 | Walk the parity table in [v2-design.md section 13](v2-design.md#13-migration) in both the web app and the desktop app | Every old feature has a working v2 home | Not run |
-| J2 | Use v2 alone for a full day of normal work | No need to fall back to the old dashboard | Not run |
+| J1 | Walk the parity table in [v2-design.md section 13](v2-design.md#13-migration) in both the web app and the desktop app | Every old feature has a working v2 home | Not run. The old dashboard was removed on 2026-11-14 before this ran |
+| J2 | Use v2 alone for a full day of normal work | Nothing missing that the old dashboard had | Not run |

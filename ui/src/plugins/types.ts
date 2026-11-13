@@ -37,6 +37,11 @@ export interface UiPlugin {
    * files listed in the right panel open in a tab when clicked.
    */
   fileViewer?: ComponentType<{ file: FileRef; plugin: PluginContext }>;
+  /**
+   * Asked before Settings turns the plugin off. A message warns the user, who
+   * then confirms; null turns it off at once. A failure counts as null.
+   */
+  beforeDisable?(plugin: PluginContext): Promise<string | null>;
 }
 
 export const SLOT_KEYS: Record<Slot, keyof UiPlugin> = {

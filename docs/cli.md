@@ -21,7 +21,7 @@ Columns: SESSION, TOOL, STATUS, PID, RUNTIME, MEM, TOKENS, CWD
 |-------|-------------|
 | `name` | Unique session identifier (also the tmux session name) |
 | `tool` | `claude` \| `codex` \| `antigravity` |
-| `managed` | `true` if started by agentop; only managed sessions can be stopped |
+| `managed` | `true` if started by agentop; only managed sessions can be stopped or sent prompts |
 | `pid` | Agent process PID |
 | `runtime_seconds` | Seconds since process started |
 | `memory_mb` | Resident memory in MB |
@@ -107,7 +107,7 @@ Above the messages, **Sessions about this** lists up to five sessions whose summ
 
 ## 2 Dialogue commands
 
-All dialogue subcommands are under `agentop dialogue`.
+All dialogue subcommands are under `agentop dialogue`. The command comes from the Dialogues plugin: while the plugin is off, `agentop dialogue` says so and does nothing.
 
 ### 2.1 dialogue start
 
@@ -143,7 +143,7 @@ agentop dialogue start \
   --agent-a codex \
   --agent-b codex \
   --brief briefs/investment-plan.md \
-  --scenario src/agentop/dialogue/scenarios/strategist-challenger.toml
+  --scenario src/agentop/plugins/dialogue/scenarios/strategist-challenger.toml
 ```
 
 ### 2.2 dialogue list
@@ -190,3 +190,17 @@ agentop dialogue remove --status stopped --yes
 `--status` bulk removal only accepts `stopped` or `completed`. Any other status requires `--id`.
 
 If the dialogue has open tmux sessions (e.g. status is `running`), they are stopped and closed automatically before the directory is deleted.
+
+## 3 Service commands
+
+```bash
+agentop serve [--host H] [--port P] [--name N] [--tls-cert F --tls-key F]   # foreground, http://127.0.0.1:9775
+agentop open                          # open the app in a browser, signed in
+agentop service status                # whether the service runs, and how
+agentop service restart               # or stop; sessions keep running
+agentop service update                # pull, install, build, restart; goes back if that fails
+agentop service token [--rotate]      # print, or replace, the access token
+agentop service connect-info [--host H | --url URL]   # what to paste into Connect to a service
+```
+
+The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. Running it as a system service or behind a proxy is in [v2-setup.md](v2-setup.md).

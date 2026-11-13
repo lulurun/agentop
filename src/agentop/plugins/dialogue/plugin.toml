@@ -1,0 +1,8 @@
+id = "dialogue"
+name = "Dialogues"
+version = "0.1.0"
+description = "Two agents work together on one task: an orchestrator passes messages between them, following a scenario. Turning it off stops any running dialogue; saved dialogues are kept."
+plugin_api = 1
+default_enabled = true
+ui = ["left-view", "session-badge"]
+cli = ["dialogue"]

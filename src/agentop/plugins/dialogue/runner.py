@@ -22,8 +22,8 @@ def main() -> None:
         print("Usage: runner.py <dialogue_id>", file=sys.stderr)
         sys.exit(1)
 
-    from agentop.dialogue.model import Dialogue, DialogueMeta
-    from agentop.dialogue.orchestrator import DialogueOrchestrator
+    from .model import Dialogue, DialogueMeta
+    from .orchestrator import DialogueOrchestrator
 
     meta = DialogueMeta.load(sys.argv[1])
     if not meta:

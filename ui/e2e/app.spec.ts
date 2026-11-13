@@ -37,7 +37,7 @@ const row = (page: Page, name: string) => page.getByRole("navigation", { name: "
 
 test("first visit without a token explains what to do", async ({ page }) => {
   const s = await service("alpha");
-  await page.goto(`${s.url}/app/`);
+  await page.goto(`${s.url}/`);
   await expect(page.getByRole("heading", { name: "Enter the token for alpha" })).toBeVisible();
   await page.getByLabel("Token").fill("wrong");
   await page.getByRole("button", { name: "Connect" }).click();

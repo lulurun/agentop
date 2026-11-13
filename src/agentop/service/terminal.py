@@ -109,12 +109,8 @@ async def _end_process(proc: asyncio.subprocess.Process) -> None:
         await proc.wait()
 
 
-async def bridge(ws: WebSocket, tmux_session: str, cols: int, rows: int, send_closed: bool = True) -> None:
-    """Attach to a tmux session over an accepted WebSocket, until either side ends.
-
-    send_closed=False leaves out the control frame, for the old dashboard,
-    which would print it into the terminal.
-    """
+async def bridge(ws: WebSocket, tmux_session: str, cols: int, rows: int) -> None:
+    """Attach to a tmux session over an accepted WebSocket, until either side ends."""
     master, slave = pty.openpty()
     try:
         _set_size(master, *clamp_size(cols, rows))
@@ -152,9 +148,8 @@ async def bridge(ws: WebSocket, tmux_session: str, cols: int, rows: int, send_cl
     if client_left:
         return
     try:
-        if send_closed:
-            ended = not await asyncio.to_thread(Session.has, tmux_session)
-            await ws.send_text(json.dumps({"type": "closed", "reason": "session_ended" if ended else "detached"}))
+        ended = not await asyncio.to_thread(Session.has, tmux_session)
+        await ws.send_text(json.dumps({"type": "closed", "reason": "session_ended" if ended else "detached"}))
         await ws.close()
     except (WebSocketDisconnect, RuntimeError):
         pass

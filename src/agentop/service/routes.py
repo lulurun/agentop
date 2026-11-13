@@ -11,7 +11,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -32,8 +31,6 @@ from fastapi.responses import JSONResponse
 
 from agentop import agentclis, ops
 from agentop.agentclis import AGENTS
-from agentop.dialogue import model as dialogue_model
-from agentop.dialogue import ops as dialogue_ops
 from agentop.tmux import Session
 
 from . import API_VERSION, auth, files, manager, terminal, transcripts, update
@@ -42,8 +39,6 @@ from .identity import Identity
 from .models import (
     Accepted,
     CreateSession,
-    DialogueDetail,
-    DialogueSummary,
     DirListing,
     FileListing,
     GitChanges,
@@ -69,20 +64,6 @@ WS_NO_SESSION = 4404
 LIFECYCLE_DELAY_SECONDS = 0.3
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-
-
-def _dialogue_dir_name(dialogue_id: str) -> str:
-    """A dialogue ID names a directory that remove deletes, so it must be exactly that name.
-
-    DialogueMeta.load also accepts a fragment of an ID, which is handy on the
-    command line but not behind a delete route.
-    """
-    known = re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]*", dialogue_id) and (
-        dialogue_model.DIALOGUES_DIR / dialogue_id / "meta.json"
-    ).exists()
-    if not known:
-        raise HTTPException(404, "No such dialogue")
-    return dialogue_id
 
 
 def _install_kind() -> str:
@@ -373,31 +354,6 @@ def create_v2_app(ctx: Context) -> FastAPI:
         result = await asyncio.to_thread(ops.delete_saved_session, tool, session_id)
         if not result["ok"]:
             raise HTTPException(400, result["error"])
-        return result
-
-    @v2.get("/dialogues", response_model=list[DialogueSummary], dependencies=authed)
-    async def list_dialogues():
-        return await asyncio.to_thread(dialogue_ops.list_dialogues)
-
-    @v2.get("/dialogues/{dialogue_id}", response_model=DialogueDetail, dependencies=authed)
-    async def get_dialogue(dialogue_id: str):
-        detail = await asyncio.to_thread(dialogue_ops.get_dialogue, _dialogue_dir_name(dialogue_id))
-        if detail is None:
-            raise HTTPException(404, "No such dialogue")
-        return detail
-
-    @v2.post("/dialogues/{dialogue_id}/stop", dependencies=authed)
-    async def stop_dialogue(dialogue_id: str):
-        result = await asyncio.to_thread(dialogue_ops.stop_dialogue, _dialogue_dir_name(dialogue_id))
-        if not result["ok"]:
-            raise HTTPException(404, result["error"])
-        return result
-
-    @v2.delete("/dialogues/{dialogue_id}", dependencies=authed)
-    async def remove_dialogue(dialogue_id: str):
-        result = await asyncio.to_thread(dialogue_ops.remove_dialogue, _dialogue_dir_name(dialogue_id))
-        if not result["ok"]:
-            raise HTTPException(404, result["error"])
         return result
 
     async def _reject(ws: WebSocket, code: int) -> None:

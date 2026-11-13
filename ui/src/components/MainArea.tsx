@@ -6,7 +6,6 @@ import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
 import { activeClient, activeConnection, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
-import { DialoguesView } from "./DialoguesView";
 import { HistoryView } from "./HistoryView";
 import { Workbench, type SessionPaneProps } from "./Workbench";
 
@@ -266,8 +265,6 @@ export function MainArea() {
         </div>
       ) : linked && view === "history" ? (
         <HistoryView client={client} />
-      ) : linked && view === "dialogues" ? (
-        <DialoguesView client={client} />
       ) : linked && pluginView ? (
         <div className="plugin-view">
           <PluginSlot slot="left-view" only={pluginView} />

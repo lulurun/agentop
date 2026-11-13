@@ -7,9 +7,10 @@ import os
 import threading
 
 from agentop.actor import Actor
-from agentop.dialogue.model import Dialogue
-from agentop.dialogue.parser import ResponseParser
-from agentop.dialogue.status import DialogueStatus, ReceiveStatus
+
+from .model import Dialogue
+from .parser import ResponseParser
+from .status import DialogueStatus, ReceiveStatus
 
 _PARSER = ResponseParser()
 

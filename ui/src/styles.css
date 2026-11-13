@@ -879,6 +879,10 @@ input::placeholder { color: var(--quiet); }
 .plugin-description, .plugin-note { margin: 4px 0 0; color: var(--quiet); font-size: 13px; }
 .plugin-entry .form-error { margin: 4px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 .plugin-settings { margin-top: 8px; }
+.plugin-warning { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); font-size: 13px; }
+.plugin-warning p { margin: 0 0 8px; }
+.plugin-warning-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.plugin-warning-actions button { padding: 2px 10px; font-size: 13px; }
 .plugin-view { flex: 1; min-height: 0; overflow: auto; }
 
 /* The Memory plugin's Settings section */

@@ -2,17 +2,11 @@
 
 Work agreed but not started. Details of the v2 work are in [docs/v2-plan.md](docs/v2-plan.md); the tests that need a real user and PC are in [docs/v2-manual-tests.md](docs/v2-manual-tests.md).
 
-## Retire the old dashboard
+## v2.0.0 release
 
-Do this only after the parity walk passes and a full day of normal use needs no fallback to the old dashboard (manual tests J1 and J2).
+The old dashboard was removed on 2026-11-14, without the parity walk and the day of v2-only use (manual tests J1 and J2), which stay open as checks of v2.
 
-- [ ] Walk the parity table in [v2-design.md section 13](docs/v2-design.md#13-migration), item by item, in both the web app and the desktop app.
-- [ ] Use v2 alone for a full day of normal work.
-- [ ] Serve the web app at `/` instead of `/app/`.
-- [ ] Delete `html/index.html`, the old `/api` routes, the `/ws/sessions` endpoint, and `HostOriginGuard`'s special handling for them.
-- [ ] Retire `run_app.sh`. The devhost's `agentop-api` unit, which runs `agentop serve`, is in Eiger.
-- [ ] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, `docs/dashboard.md`, and `docs/cli.md`, including the stale unit name and registry path.
-- [ ] Document exposing a service safely: SSH tunnel, HTTPS proxy, or TLS, and what plain HTTP gives away.
+- [ ] Walk the parity table in [v2-design.md section 13](docs/v2-design.md#13-migration) in the web app and the desktop app (J1), and use v2 alone for a day (J2).
 - [ ] Tag `v2.0.0` with release notes.
 
 ## Security review
@@ -40,14 +34,9 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 - [x] UI: per-connection plugin list, slots with error boundaries, Settings → Plugins with switches and errors.
 - [ ] Broken test plugins, and the core suites passing with them installed and with none. The broken plugins and the loader's own tests are in `tests/test_plugins.py`; the core suites already run with no plugins. Still to do: run the core pytest and Playwright suites with the broken plugins installed.
 - [x] `register_cli` for plugin CLI commands (`plugin_cli.py`); `agentop recall` moved into the Memory plugin with it.
-- [ ] `api.agents` for plugins that drive agents.
-- [ ] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9): package, routes under `/api/v2/plugins/dialogue/`, `agentop dialogue` through `register_cli`, the Dialogues view and the session-row label through UI slots. Saved dialogues already moved to `~/.agentop/plugins/dialogue/dialogues/`.
-- [ ] Prove it: the core suites pass with the dialogue folder deleted; disabling the plugin stops running dialogues, hides every dialogue UI, and leaves other sessions untouched.
+- [x] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9), 2026-11-14. `api.agents` was dropped instead of built: the orchestrator is its own process (design 12.3).
+- [x] Prove it: the core suites pass with both dialogue folders deleted; disabling the plugin stops running dialogues (`api.on_disable`, after a warning in Settings), hides every dialogue UI, and leaves other sessions untouched.
 - [ ] Then, one at a time: attention indicator, file preview and diff, grouping by project.
-
-## State folder
-
-- [ ] Remove the migration from `~/.agent-dashboard` in `paths.py` once every install has moved to `~/.agentop`.
 
 ## Memory plugin
 

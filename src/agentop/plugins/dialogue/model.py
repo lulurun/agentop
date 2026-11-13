@@ -8,15 +8,18 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from agentop import paths
 from agentop.agent_instance import AgentInstance
 from agentop.agentclis import get_agent
-from agentop.dialogue.scenarios.reader import load as load_scenario
-from agentop.dialogue.status import DialogueStatus
-from agentop.paths import dialogues_dir
+
+from .scenarios.reader import load as load_scenario
+from .status import DialogueStatus
 
 LOG = logging.getLogger(__name__)
 
-DIALOGUES_DIR = dialogues_dir()
+def dialogues_dir() -> Path:
+    """Where saved dialogues are: the plugin's own folder, ~/.agentop/plugins/dialogue/dialogues/."""
+    return paths.plugins_dir() / "dialogue" / "dialogues"
 
 
 @dataclass
@@ -36,8 +39,8 @@ class DialogueMeta:
 
     def _dir(self) -> Path:
         if self.scenario_name and self.brief_name:
-            return DIALOGUES_DIR / f"{self.scenario_name}_{self.brief_name}_{self.id}"
-        return DIALOGUES_DIR / self.id
+            return dialogues_dir() / f"{self.scenario_name}_{self.brief_name}_{self.id}"
+        return dialogues_dir() / self.id
 
     def _meta_path(self) -> Path:
         return self._dir() / "meta.json"
@@ -106,10 +109,10 @@ class DialogueMeta:
     @classmethod
     def load(cls, dialogue_id: str) -> DialogueMeta | None:
         # Try exact match first (full folder name or legacy ID-only folder)
-        p = DIALOGUES_DIR / dialogue_id / "meta.json"
+        p = dialogues_dir() / dialogue_id / "meta.json"
         if not p.exists():
             # Fall back to searching for any folder ending with the ID
-            matches = list(DIALOGUES_DIR.glob(f"*{dialogue_id}/meta.json"))
+            matches = list(dialogues_dir().glob(f"*{dialogue_id}/meta.json"))
             if not matches:
                 return None
             p = matches[0]

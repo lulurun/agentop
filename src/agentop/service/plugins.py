@@ -97,6 +97,7 @@ class PluginAPI:
         self.store = PluginStore(self.data_dir / "store.json")
         self._handlers: list[tuple[str, Callable]] = []
         self._tasks: list[Callable] = []
+        self._on_disable: list[Callable] = []
 
     def on(self, event: str, handler: Callable) -> None:
         """Call `handler(payload)` on a core event. It runs off the event loop, in isolation."""
@@ -115,6 +116,17 @@ class PluginAPI:
         if not inspect.iscoroutinefunction(factory):
             raise TypeError("api.task takes an async function, not a coroutine")
         self._tasks.append(factory)
+
+    def on_disable(self, handler: Callable) -> None:
+        """Call `handler()` when the user turns the plugin off, to wind down work it started.
+
+        Not called when the service stops: work that outlives the service, such
+        as a process the plugin started, keeps running then. It runs off the
+        event loop, after the plugin is already off, and is not waited for.
+        """
+        if inspect.iscoroutinefunction(handler):
+            raise TypeError("on_disable handlers must be plain functions; they run in a thread")
+        self._on_disable.append(handler)
 
     def sessions(self) -> list[dict]:
         """A snapshot of the session list. Changing it changes nothing."""
@@ -241,6 +253,7 @@ class PluginHost:
         if not enabled:
             if plugin.state == ENABLED:
                 await self._cancel_tasks(plugin)
+                self._run_disable_handlers(plugin)
             plugin.state = DISABLED
             plugin.error = None
             plugin.errors.clear()
@@ -323,6 +336,21 @@ class PluginHost:
         for factory in plugin.api._tasks:
             task = asyncio.get_running_loop().create_task(self._supervise(plugin, factory))
             plugin.tasks.append(task)
+
+    def _run_disable_handlers(self, plugin: Plugin) -> None:
+        for handler in plugin.api._on_disable:
+            task = asyncio.get_running_loop().create_task(self._run_disable_handler(plugin, handler))
+            self._running.add(task)
+            task.add_done_callback(self._running.discard)
+
+    async def _run_disable_handler(self, plugin: Plugin, handler: Callable) -> None:
+        try:
+            await asyncio.to_thread(handler)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # The plugin is off already; there is nothing more to fail.
+            plugin.api.log.exception("on_disable handler failed")
 
     async def _supervise(self, plugin: Plugin, factory: Callable) -> None:
         try:

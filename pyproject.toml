@@ -32,7 +32,7 @@ where = ["src"]
 include = ["agentop*"]
 
 [tool.setuptools.package-data]
-"agentop.dialogue.scenarios" = ["*.toml"]
+"agentop.plugins.dialogue.scenarios" = ["*.toml", "shelf/*.toml", "README.md"]
 "agentop.service" = ["webdist/**/*", "update.sh"]
 # The skills `agentop serve` installs for the agent tools.
 "agentop.skills" = ["*/**/*", "README.md"]

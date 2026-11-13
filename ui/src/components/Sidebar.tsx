@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import type { Session } from "../api/client";
 import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
-import { activeClient, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
+import { sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { StatusMark } from "./icons";
 import { Menu } from "./Workbench";
 
@@ -29,7 +29,6 @@ function ToolBadge({ tool }: { tool: string }) {
 
 function SessionRow({ session, selected }: { session: Session; selected: boolean }) {
   const select = useApp((s) => s.select);
-  const inDialogue = useApp((s) => s.dialogueSessions.has(session.id));
   const summary = sessionSummary(session) ?? basename(session.cwd);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   return (
@@ -55,7 +54,6 @@ function SessionRow({ session, selected }: { session: Session; selected: boolean
       <span className="session-meta">
         {session.tool && <ToolBadge tool={session.tool} />}
         {STATUS_TEXT[session.status] && <span>{STATUS_TEXT[session.status]}</span>}
-        {inDialogue && <span className="session-tag">Dialogue</span>}
         <PluginSlot slot="session-badge" session={session} />
         <span className="session-summary">{summary}</span>
       </span>
@@ -83,29 +81,8 @@ export function Sidebar() {
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
-  const setDialogueSessions = useApp((s) => s.setDialogueSessions);
-  const connections = useApp((s) => s.connections);
-  const activeId = useApp((s) => s.activeId);
   const [filter, setFilter] = useState("");
   const pluginViews = pluginsFor("left-view", useApp((s) => s.plugins));
-
-  // Refreshed when the set of sessions changes, which is when a dialogue can start or end.
-  const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
-  const sessionIds = Object.keys(sessions).sort().join("\n");
-  useEffect(() => {
-    if (!linked) return;
-    let cancelled = false;
-    client
-      .dialogues()
-      .then((list) => {
-        if (cancelled) return;
-        setDialogueSessions(new Set(list.flatMap((d) => [d.session_a, d.session_b]).filter((s) => s != null)));
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [client, linked, sessionIds, setDialogueSessions]);
 
   const needle = filter.trim().toLowerCase();
   const rows = sortedSessions(sessions).filter(
@@ -160,9 +137,6 @@ export function Sidebar() {
           <>
             <button type="button" aria-current={view === "history" ? "page" : undefined} onClick={() => setView(view === "history" ? "sessions" : "history")}>
               History
-            </button>
-            <button type="button" aria-current={view === "dialogues" ? "page" : undefined} onClick={() => setView(view === "dialogues" ? "sessions" : "dialogues")}>
-              Dialogues
             </button>
             {pluginViews.map(({ info, ui }) => {
               const id = `plugin:${info.id}` as const;

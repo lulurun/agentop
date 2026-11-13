@@ -22,9 +22,9 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from agentop.dialogue.status import ReceiveStatus
-from agentop.dialogue.orchestrator import _format_rule, _new_nonce
-from agentop.dialogue.parser import ResponseParser
+from agentop.plugins.dialogue.status import ReceiveStatus
+from agentop.plugins.dialogue.orchestrator import _format_rule, _new_nonce
+from agentop.plugins.dialogue.parser import ResponseParser
 
 _NAME = "Tester"
 
