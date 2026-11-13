@@ -91,6 +91,69 @@ test("a file from the right panel opens in a tab", async ({ page }) => {
   await expect(page.getByRole("region", { name: "Right group" }).getByLabel("Contents of src/hello.py")).toBeVisible();
 });
 
+test("a Markdown file opens drawn, with its links and images", async ({ page }) => {
+  const s = await service("alpha");
+  const project = join(s.root, "project");
+  mkdirSync(join(project, "docs", "img"), { recursive: true });
+  // A 1x1 PNG.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64");
+  writeFileSync(join(project, "docs", "img", "dot.png"), png);
+  writeFileSync(join(project, "docs", "other.md"), "# Other page\n");
+  writeFileSync(
+    join(project, "docs", "guide.md"),
+    [
+      "# Guide",
+      "",
+      "Read **this** and [the other page](other.md), or [jump](#later).",
+      "",
+      "| Tool | Kind |",
+      "| --- | --- |",
+      "| claude | agent |",
+      "",
+      "- [x] done",
+      "",
+      "![a dot](img/dot.png)",
+      "",
+      "<script>window.ran = true</script>",
+      '<details><summary>More</summary><img src="x" onerror="window.ran = true"> hidden</details>',
+      "",
+      "## Later",
+      "",
+      "See https://example.com/docs.",
+    ].join("\n"),
+  );
+  await page.goto(s.signedInUrl);
+  await startSession(page, "demo", project);
+
+  const details = page.locator(".details");
+  await details.getByRole("tab", { name: "All" }).click();
+  await details.getByRole("button", { name: "docs" }).click();
+  await details.getByRole("button", { name: "guide.md" }).click();
+
+  const main = page.locator(".main");
+  const preview = main.getByLabel("Preview of docs/guide.md");
+  await expect(preview.getByRole("heading", { level: 1, name: "Guide" })).toBeVisible();
+  await expect(preview.locator("strong")).toHaveText("this");
+  await expect(preview.getByRole("cell", { name: "claude" })).toBeVisible();
+  await expect(preview.getByRole("checkbox")).toBeChecked();
+  await expect(preview.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank");
+  await expect(preview.getByRole("img", { name: "a dot" })).toHaveAttribute("src", /^data:image\/png;base64,/);
+  // HTML is drawn, but nothing in it runs.
+  await expect(preview.locator("details summary")).toHaveText("More");
+  await expect(preview).not.toContainText("window.ran");
+  expect(await page.evaluate(() => (window as { ran?: boolean }).ran)).toBeUndefined();
+
+  // Raw shows the text, and Preview comes back.
+  await main.getByRole("button", { name: "Raw" }).click();
+  await expect(main.getByLabel("Contents of docs/guide.md")).toContainText("# Guide");
+  await main.getByRole("button", { name: "Preview" }).click();
+
+  // A link to a file beside it opens that file in a tab.
+  await preview.getByRole("link", { name: "the other page" }).click();
+  await expect(main.getByRole("tab")).toHaveText(["demo", "guide.md", "other.md"]);
+  await expect(main.getByLabel("Preview of docs/other.md").getByRole("heading", { name: "Other page" })).toBeVisible();
+});
+
 test("a transcript opens as a conversation, with its links", async ({ page }) => {
   const s = await service("alpha");
   const project = join(s.root, "project");

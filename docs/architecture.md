@@ -152,7 +152,7 @@ Key modules:
 
 The main area holds tabs in one or two groups side by side (`ui/src/tabs.ts`, pure functions over a `Layout`, kept per connection in `store.ts` and saved in `localStorage`). A tab is a container: it shows a session's terminal, or a file through the enabled `file-viewer` plugin. Clicking a session shows it in the focused group, replacing the session tab shown there; Ctrl or Cmd, the middle button, or the row's menu opens it in a new tab or to the side. The focused group's active tab decides the session in the header and right panel. Closing a session closes its tabs.
 
-The right panel lists the working directory (Files) and the agent tool's own log files for the session (Transcripts, `GET /api/v2/sessions/{id}/transcripts`, from `AgentCli.transcript_files()`). Only files listed there can be read, through the File viewer plugin's route.
+The right panel lists the working directory (Files) and the agent tool's own log files for the session (Transcripts, `GET /api/v2/sessions/{id}/transcripts`, from `AgentCli.transcript_files()`). Only files listed there can be read, through the File viewer plugin's route. The viewer draws a Markdown file in the browser (`ui/src/plugins/viewer/Markdown.tsx`, react-markdown with GitHub's extensions, its HTML cleaned by rehype-sanitize's GitHub list), loaded only when one is opened. The images it names come from the plugin's `/image` route as data, since an `<img>` can't carry the token, and a link to a file beside it opens that file in a tab (`viewer/paths.ts`).
 
 `api.py` is a FastAPI app. A background task refreshes `_cache["sessions"]` every 5 seconds by calling `ops.get_sessions()`. All session-list reads are served from cache; mutations (start, stop, send) go directly to `ops`.
 

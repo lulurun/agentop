@@ -204,6 +204,46 @@ def test_refuses_what_is_not_the_sessions(client, params, status):
     assert read(client, **params).status_code == status
 
 
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 16
+
+
+def image(client, **params):
+    return client.get("/api/v2/plugins/viewer/image", params={"session": "one", **params}, headers=AUTH)
+
+
+def test_an_image_comes_as_data_for_a_markdown_file(client):
+    work = Path(read(client, path="src/a.py").json()["absolute"]).parent.parent
+    (work / "docs").mkdir()
+    (work / "docs" / "shot.PNG").write_bytes(PNG)
+    body = image(client, path="docs/shot.PNG").json()
+    assert body["type"] == "image/png" and body["size"] == len(PNG)
+    import base64
+
+    assert base64.b64decode(body["data"]) == PNG
+
+
+@pytest.mark.parametrize(
+    "params, status",
+    [
+        ({"path": "src/a.py"}, 415),
+        ({"path": "../outside.png"}, 403),
+        ({"path": "missing.png"}, 404),
+        ({"path": "x.png", "session": "nobody"}, 404),
+    ],
+)
+def test_only_the_sessions_images_are_served(client, params, status):
+    assert image(client, **params).status_code == status
+
+
+def test_a_large_image_is_refused(tmp_path):
+    from agentop.plugins.viewer import read_image
+
+    path = tmp_path / "big.png"
+    path.write_bytes(PNG * 10)
+    with pytest.raises(ValueError, match="larger than"):
+        read_image(path, max_bytes=100)
+
+
 def test_long_files_end_on_a_whole_line(tmp_path):
     from agentop.plugins.viewer import read_text
 

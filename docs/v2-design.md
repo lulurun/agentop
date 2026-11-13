@@ -737,7 +737,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 |---------|---------|
 | Dialogues | Yes: the first plugin, moved out of the core (12.9) |
 | Attention indicator for agents waiting on input | Yes: watches screens on `scan`, emits per-session state, fills the session-badge slot |
-| File preview and diff view | Yes: the File viewer plugin (`viewer`) serves file text and fills the `file-viewer` slot. Syntax highlighting, Markdown, JSONL conversations, and diffs come next, in the same plugin |
+| File preview and diff view | Yes: the File viewer plugin (`viewer`) serves file text and fills the `file-viewer` slot. It draws JSONL transcripts as conversations and Markdown as a page (built 2026-11-13). Syntax highlighting and diffs come next, in the same plugin |
 | Handoff: pass a side task, such as a deploy, to another session and get back only the result | Yes: `agentop handoff`, a queue per target, a Handoffs view (12.10) |
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |

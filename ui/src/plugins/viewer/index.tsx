@@ -1,7 +1,12 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { platform } from "../../platform";
+import { useApp } from "../../store";
 import type { FileRef } from "../../tabs";
 import type { PluginContext, UiPlugin } from "../types";
+import { isMarkdown } from "./paths";
+
+// Its libraries load the first time a Markdown file is opened.
+const Markdown = lazy(() => import("./Markdown"));
 
 interface FileText {
   path: string;
@@ -26,7 +31,10 @@ interface Conversation {
   messages: Message[];
 }
 
-type Mode = "conversation" | "raw";
+/** How the file is drawn. `raw` is the text with line numbers, which every text file has. */
+type Mode = "conversation" | "preview" | "raw";
+
+const MODE_LABELS: Record<Mode, string> = { conversation: "Conversation", preview: "Preview", raw: "Raw" };
 
 function formatSize(bytes: number): string {
   if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -100,13 +108,15 @@ function ConversationView({ conversation, label }: { conversation: Conversation;
   );
 }
 
-/** A file's text with line numbers, or, for a transcript, its conversation. */
+/** A file's text with line numbers, or drawn: a transcript as its conversation, Markdown as a page. */
 function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) {
   const [result, setResult] = useState<FileText | null>(null);
   const [chat, setChat] = useState<Conversation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [wrap, setWrap] = useState(false);
-  const [mode, setMode] = useState<Mode>("conversation");
+  // null until a mode is picked: the first of the file's modes.
+  const [mode, setMode] = useState<Mode | null>(null);
+  const openTab = useApp((s) => s.openTab);
 
   const load = useCallback(() => {
     const query = new URLSearchParams({ session: file.sessionId, source: file.source, path: file.path });
@@ -124,7 +134,17 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   }, [file.sessionId, file.source, file.path, plugin.client]);
   useEffect(load, [load]);
 
-  const showing: Mode = result?.conversation ? mode : "raw";
+  const modes = useMemo((): Mode[] => {
+    if (!result || result.binary) return ["raw"];
+    if (result.conversation) return ["conversation", "raw"];
+    if (isMarkdown(file.path)) return ["preview", "raw"];
+    return ["raw"];
+  }, [result, file.path]);
+  const showing: Mode = mode && modes.includes(mode) ? mode : modes[0];
+  const openBeside = useCallback(
+    (path: string, side: boolean) => openTab({ kind: "file", file: { ...file, path } }, side ? "side" : "tab"),
+    [file, openTab],
+  );
   const lines = useMemo(() => {
     if (!result || result.binary) return 0;
     const count = result.text.split("\n").length;
@@ -144,6 +164,19 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
     body = null;
   } else if (showing === "conversation") {
     body = chat && <ConversationView conversation={chat} label={`Conversation in ${file.path}`} />;
+  } else if (showing === "preview") {
+    body = (
+      <>
+        {result.truncated && (
+          <p className="viewer-note" role="status">
+            Showing the first {formatSize(result.text.length)} of {formatSize(result.size)}.
+          </p>
+        )}
+        <Suspense fallback={null}>
+          <Markdown text={result.text} file={file} plugin={plugin} label={`Preview of ${file.path}`} onOpen={openBeside} />
+        </Suspense>
+      </>
+    );
   } else if (result.binary) {
     body = (
       <div className="placard">
@@ -186,14 +219,13 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
             {showing === "conversation" ? chat && `, ${chat.total} messages` : !result.binary && `, ${lines} lines`}
           </span>
         )}
-        {result?.conversation && (
+        {modes.length > 1 && (
           <span className="viewer-modes" role="group" aria-label="Show as">
-            <button type="button" aria-pressed={showing === "conversation"} onClick={() => setMode("conversation")}>
-              Conversation
-            </button>
-            <button type="button" aria-pressed={showing === "raw"} onClick={() => setMode("raw")}>
-              Raw
-            </button>
+            {modes.map((m) => (
+              <button key={m} type="button" aria-pressed={showing === m} onClick={() => setMode(m)}>
+                {MODE_LABELS[m]}
+              </button>
+            ))}
           </span>
         )}
         {showing === "raw" && (

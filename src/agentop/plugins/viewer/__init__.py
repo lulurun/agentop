@@ -4,11 +4,16 @@ Two sources, both confined: `workdir` is the session's working directory (the
 same rule as the Files list), and `transcript` is one of the files the agent
 tool reports for the session. A transcript can also be read as a conversation:
 the prompts and replies in it, without tool calls and output.
+
+A Markdown file is drawn in the browser. The images it names come through
+`/image`, as data the page puts in the <img>, since the page's requests carry
+their token in a header an <img> can't send.
 """
 
 from __future__ import annotations
 
 import asyncio
+import base64
 from pathlib import Path
 from typing import Literal
 
@@ -22,6 +27,19 @@ MAX_BYTES = 2 * 1024 * 1024
 SNIFF_BYTES = 8192
 # A conversation longer than this shows its latest messages.
 MAX_MESSAGES = 5000
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+# An SVG in an <img> runs no scripts, so it is as safe as the others.
+IMAGE_TYPES = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
+    ".ico": "image/x-icon",
+    ".svg": "image/svg+xml",
+}
 
 
 def read_text(path: Path, max_bytes: int = MAX_BYTES) -> dict:
@@ -37,6 +55,17 @@ def read_text(path: Path, max_bytes: int = MAX_BYTES) -> dict:
         cut = data.rfind(b"\n")
         data = data[: cut + 1] if cut > 0 else data
     return {"size": size, "binary": False, "truncated": truncated, "text": data.decode("utf-8", errors="replace")}
+
+
+def read_image(path: Path, max_bytes: int = MAX_IMAGE_BYTES) -> dict:
+    """An image file as base64, for a data: URL. Raises ValueError for anything else."""
+    kind = IMAGE_TYPES.get(path.suffix.lower())
+    if kind is None:
+        raise ValueError("Not an image the viewer shows")
+    size = path.stat().st_size
+    if size > max_bytes:
+        raise ValueError(f"The image is larger than {max_bytes // (1024 * 1024)} MB")
+    return {"type": kind, "size": size, "data": base64.b64encode(path.read_bytes()).decode("ascii")}
 
 
 def register(api):
@@ -70,6 +99,8 @@ def register(api):
             raise HTTPException(404, "No such file") from None
         except PermissionError:
             raise HTTPException(403, "Permission denied") from None
+        except ValueError as exc:
+            raise HTTPException(415, str(exc)) from None
 
     @api.router.get("/file")
     async def read_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
@@ -82,6 +113,13 @@ def register(api):
             "conversation": readable(row, source, target),
             **result,
         }
+
+    @api.router.get("/image")
+    async def read_image_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
+        """An image a Markdown file shows, from the same places /file reads."""
+        row = session_row(session)
+        _, result = await located(row, source, path, read_image)
+        return {"path": path, **result}
 
     @api.router.get("/conversation")
     async def read_conversation(session: str, path: str):
