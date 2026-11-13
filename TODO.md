@@ -61,6 +61,6 @@ Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-
 - [ ] Search in the app: a Memory view that searches and opens the conversation around a hit, with the matching sessions' summaries.
 - [ ] Record recall misses (nothing found, or the wrong thing), to decide on hybrid search with embeddings ([design 12.11.4](docs/v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
 - [ ] Session summaries from Codex too (`codex exec`), for a host without Claude Code.
-- [ ] A recall skill for Codex sessions too.
+- [x] A recall skill for Codex sessions too: agentop serve installs the skills into `~/.codex/skills/` (2026-11-13).
 - [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.
 - [ ] Later: archives from other hosts, aggregated in one place.
