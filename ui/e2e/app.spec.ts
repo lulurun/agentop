@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -120,6 +120,26 @@ test("collapsing a column refits the terminal", async ({ page }) => {
   await expect.poll(width).toBeGreaterThan(before + 50);
   await page.keyboard.press("Control+Shift+BracketRight");
   await expect.poll(width).toBeLessThan(before + 50);
+});
+
+test("only the agent tools installed on the service can be picked", async ({ page }) => {
+  const created = new Service("alpha");
+  services.push(created);
+  rmSync(join(created.root, "bin", "codex"));
+  const s = await created.start();
+  await page.goto(s.signedInUrl);
+  await page.getByRole("button", { name: "New session" }).first().click();
+  const agents = page.getByRole("dialog").getByRole("group", { name: "Agent" });
+  await expect(agents.getByRole("radio")).toHaveCount(2);
+  await expect(agents.getByText("claude", { exact: true })).toBeVisible();
+  await expect(agents.getByText("antigravity", { exact: true })).toBeVisible();
+  await expect(agents.getByText("codex", { exact: true })).toHaveCount(0);
+});
+
+test("the service installs its skills for claude as it starts", async () => {
+  const s = await service("alpha");
+  const skill = readFileSync(join(s.root, ".claude/skills/recall/SKILL.md"), "utf8");
+  expect(skill).toContain("recall");
 });
 
 test("a failed start shows why, and what can be done", async ({ page }) => {

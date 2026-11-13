@@ -16,6 +16,11 @@ agentop serve                        # http://127.0.0.1:9775
 agentop open                         # opens the app, signed in
 ```
 
+As it starts, `agentop serve` checks the host:
+
+- It looks for each agent tool's program (`claude`, `codex`, `agy`) on the PATH of the user's login shell, where sessions run, and on its own. It refuses to start when it finds none. The New session dialog offers only the tools it found; restart the service after installing another.
+- It installs or updates agentop's skills ([src/agentop/skills/](../src/agentop/skills/README.md)) for each tool found that takes them: for now Claude Code, in `~/.claude/skills/`.
+
 ## The devhost, behind pisces-01
 
 The service binds `127.0.0.1:9775`. `eiger-tunnel` forwards it to `pisces-01:7775`,

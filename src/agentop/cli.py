@@ -421,9 +421,11 @@ def cmd_recall(args):
 
     from agentop import paths
     from agentop.plugins.memory.messages import Messages
+    from agentop.plugins.memory.summaries import Summaries
 
     folder = paths.plugins_dir() / "memory"
     table = Messages(folder / "messages.sqlite", folder / "archive")
+    summaries = Summaries(table)
     if not table.path.exists():
         print("Nothing recorded yet. The Memory plugin builds its record once the service has run with it enabled.")
         return
@@ -433,12 +435,17 @@ def cmd_recall(args):
 
     if args.session:
         rows = table.conversation(args.tool or None, args.session, args.around, args.radius)
+        summary = summaries.get(args.tool or None, args.session)
         if args.json:
-            print(json.dumps(rows, indent=2, ensure_ascii=False))
+            print(json.dumps({"summary": summary, "messages": rows}, indent=2, ensure_ascii=False))
             return
         if not rows:
             print(f"No messages recorded for session {args.session}.")
             return
+        if summary and args.around is None:
+            print(f"=== {summary['title']}")
+            print(summary["summary"])
+            print()
         for row in rows:
             who = "You" if row["role"] == "user" else "Agent"
             mark = "  <<" if row["id"] == args.around else ""
@@ -452,12 +459,28 @@ def cmd_recall(args):
         raise SystemExit("Error: give words to search for, or --session <id> to read a conversation")
     since = _since(args.since) if args.since else None
     hits = table.search(query, args.limit, args.tool or None, args.project or None, since)
+    sessions = summaries.search(query, 5, args.tool or None, args.project or None, since)
     if args.json:
-        print(json.dumps(hits, indent=2, ensure_ascii=False))
+        print(json.dumps({"sessions": sessions, "messages": hits}, indent=2, ensure_ascii=False))
         return
+    if sessions:
+        print("Sessions about this, from their summaries:")
+        print()
+        for s in sessions:
+            print(f"{when(s['last_at'])}  {s['tool']}  {_shorten(s['project'] or '')}  session {s['session']}")
+            print(f"  {s['title']}")
+            print(f"  {s['snippet']}")
+            if s["matched"]:
+                print(f"  Keywords: {', '.join(s['matched'])}")
+            print()
+        print("Read one: agentop recall --session <session>")
+        print()
     if not hits:
         print(f"No messages with all of: {query}")
         return
+    if sessions:
+        print("Messages:")
+        print()
     for hit in hits:
         print(f"#{hit['id']}  {when(hit['at'])}  {hit['tool']}  {_shorten(hit['project'] or '')}  session {hit['session']}")
         if hit["prompt"]:

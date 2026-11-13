@@ -13,6 +13,15 @@ interface Status {
     tools: Record<string, { messages: number; sessions: number }>;
     last_index: { errors: string[] } | null;
   };
+  summaries: {
+    summaries: number;
+    due: number;
+    failed: number;
+    enabled: boolean;
+    /** The tool and model that writes them, or null when no installed tool can. */
+    by: string | null;
+    last_run: { errors: string[] } | null;
+  };
 }
 
 function formatSize(bytes: number): string {
@@ -27,6 +36,7 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sweeping, setSweeping] = useState(false);
+  const [switching, setSwitching] = useState(false);
 
   const load = useCallback(() => {
     plugin.client.get<Status>("/status").then(
@@ -51,10 +61,26 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
     }
   }
 
+  async function setSummaries(enabled: boolean) {
+    setSwitching(true);
+    try {
+      setStatus(await plugin.client.patch<Status>("/summaries", { enabled }));
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : String(failure));
+    } finally {
+      setSwitching(false);
+    }
+  }
+
   if (error) return <p className="memory-note">{error}</p>;
   if (!status) return null;
   const last = status.last_sweep;
-  const errors = [...(last?.errors ?? []), ...(status.messages.last_index?.errors ?? [])];
+  const summaries = status.summaries;
+  const errors = [
+    ...(last?.errors ?? []),
+    ...(status.messages.last_index?.errors ?? []),
+    ...(summaries.last_run?.errors ?? []),
+  ];
   return (
     <div className="memory-status">
       <p className="memory-note">
@@ -77,6 +103,22 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
             .map(([tool, t]) => `${tool} ${t.messages}`)
             .join(", ")})`}
         .
+      </p>
+      <label className="memory-switch">
+        <input
+          type="checkbox"
+          checked={summaries.enabled}
+          disabled={switching || !summaries.by}
+          onChange={(event) => void setSummaries(event.target.checked)}
+        />
+        Summarize sessions for search
+      </label>
+      <p className="memory-note">
+        {!summaries.by
+          ? "No installed agent tool can write summaries. Claude Code can."
+          : `${summaries.summaries} sessions summarized${summaries.due ? `, ${summaries.due} waiting` : ""}${
+              summaries.failed ? `, ${summaries.failed} failed` : ""
+            }. Each session is sent to ${summaries.by} once it has been quiet for 30 minutes, whichever tool it was with.`}
       </p>
       {errors.length > 0 && (
         <ul className="memory-errors">

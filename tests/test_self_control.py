@@ -31,8 +31,11 @@ class ByHand:
     def __init__(self, tmp_path: Path, **env: str):
         self.port = free_port()
         self.home = tmp_path / "state"
+        # Its own home too: serve installs skills under ~/.claude as it starts.
+        (tmp_path / "home").mkdir(exist_ok=True)
         self.env = {
             **os.environ,
+            "HOME": str(tmp_path / "home"),
             "AGENTOP_HOME": str(self.home),
             "AGENTOP_TMUX_SOCKET": f"agentop-self-{os.getpid()}-{self.port}",
             "PYTHONPATH": str(ROOT / "src"),

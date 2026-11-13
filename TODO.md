@@ -49,7 +49,7 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 Design: [v2-design.md section 12.10](docs/v2-design.md#1210-handoff-pass-a-side-task-to-another-session). Phase 1 needs the plugin system first.
 
 - Phase 0: sender and target skills over Claude Code's `SendMessage`, with no agentop code.
-  - [x] Skills `handoff` and `handoff-receive` in [skills/](skills/README.md), linked into `~/.claude/skills/`.
+  - [x] Skills `handoff` and `handoff-receive` in [src/agentop/skills/](src/agentop/skills/README.md), installed into `~/.claude/skills/` by `agentop serve`.
   - [x] First test, 2026-11-09: `#Eiger: scan the fleet` from agentop to a live Eiger session. Target matching, delivery, the target loading its skill, stopping to ask on an unclear task, replacing a stale handoff, the short report, and idle notices all worked.
   - [ ] A real non-prod deploy of a change made in the sending session, so the brief carries context the target lacks.
   - [ ] No live target: the skill starts one with `agentop start` and waits for it in `ListAgents`.
@@ -73,8 +73,11 @@ Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-
 - [x] Phase 1: archive. Sweep claude, codex, and antigravity transcripts into `~/.agentop/plugins/memory/archive/`, appending only new bytes, never deleting; status route and Settings section.
 - [x] Phase 2: messages table in SQLite (`plugins/memory/messages.sqlite`), prompts and the assistant's text only, rebuilt from the archive. Reads Codex's compressed `.jsonl.zst` transcripts.
 - [x] Phase 3: conversation view for transcripts in the File viewer (`agentop/conversation.py`, shared with the messages table); Transcripts list falls back to the archive.
-- [x] Phase 4: recall: FTS5 trigram search, `/search` and `/conversation` routes, `agentop recall`, and the `recall` skill (`skills/recall/`).
-- [ ] Search in the app: a Memory view that searches and opens the conversation around a hit.
+- [x] Phase 4: recall: FTS5 trigram search, `/search` and `/conversation` routes, `agentop recall`, and the `recall` skill (`src/agentop/skills/recall/`).
+- [x] Phase 5: session summaries (title, summary, keywords) written by `claude --print` on Haiku, searched beside the messages; `recall` lists matching sessions first.
+- [ ] Search in the app: a Memory view that searches and opens the conversation around a hit, with the matching sessions' summaries.
+- [ ] Record recall misses (nothing found, or the wrong thing), to decide on hybrid search with embeddings ([design 12.11.4](docs/v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
+- [ ] Session summaries from Codex too (`codex exec`), for a host without Claude Code.
 - [ ] Move `agentop recall` into the plugin once plugins can add CLI commands (`register_cli`).
 - [ ] A recall skill for Codex sessions too.
 - [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.

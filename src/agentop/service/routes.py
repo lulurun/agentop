@@ -12,7 +12,6 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -31,7 +30,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from agentop import ops
+from agentop import agentclis, ops
 from agentop.agentclis import AGENTS
 from agentop.dialogue import model as dialogue_model
 from agentop.dialogue import ops as dialogue_ops
@@ -103,6 +102,9 @@ class Context:
     identity_file: Path | None = None
     _identity_mtime: int | None = None
     plugins: PluginHost | None = None
+    # The tools found on this host when the service started (host.prepare). None
+    # until then, and in tests that build the app directly: found on first ask.
+    available: list[str] | None = None
 
     def current_identity(self) -> Identity:
         if self.identity_file is None:
@@ -271,10 +273,13 @@ def create_v2_app(ctx: Context) -> FastAPI:
 
     @v2.get("/tools", response_model=list[ToolInfo], dependencies=authed)
     async def tools():
+        if ctx.available is None:
+            found = await asyncio.to_thread(agentclis.installed, AGENTS)
+            ctx.available = [agent.name for agent in found]
         return [
             {
                 "name": agent.name,
-                "installed": shutil.which(agent.launch_cmd.split()[0]) is not None,
+                "installed": agent.name in ctx.available,
                 "supports_resume": agent.get_resume_cmd("x") is not None,
             }
             for agent in AGENTS

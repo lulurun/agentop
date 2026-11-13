@@ -878,7 +878,7 @@ The same mechanism also covers:
 
 ### 12.11 Memory: agentop's own record of conversations
 
-Status: phases 1 to 4 (archive, messages table, conversation view, recall) built. Plugin id `memory`.
+Status: phases 1 to 5 (archive, messages table, conversation view, recall, session summaries) built. Plugin id `memory`.
 
 **The problem.** Conversations with agents carry exact details that matter later: a person's name, a place, a link someone sent. At the time they are on hand, so nobody notes them, and days or months later the keyword itself is forgotten. The agent tools' own memory features don't help: Claude Code writes memory only when it judges a fact worth keeping, per project folder, and Codex's is off by default. Neither records what was said.
 
@@ -941,7 +941,47 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
 
    - Routes: `GET /api/v2/plugins/memory/search?q=&tool=&project=&since=&limit=` and `GET /api/v2/plugins/memory/conversation?session=&tool=&around=&radius=`.
    - `agentop recall <words>` and `agentop recall --session <id> --around <#id>` ([cli.md 1.5](cli.md#15-recall)). It reads the database directly, so it works with the service down. It is a core command for now; it moves to the plugin when plugins can add CLI commands (`register_cli`).
-   - The `recall` skill (`skills/recall/`) tells a Claude session how to search: distinctive words rather than "link" or "name", variants when nothing matches, read around a hit before answering, quote the detail exactly, and never guess.
+   - The `recall` skill (`src/agentop/skills/recall/`) tells a Claude session how to search: distinctive words rather than "link" or "name", variants when nothing matches, read around a hit before answering, quote the detail exactly, and never guess.
+5. **Session summaries.** A title, a few sentences, and keywords for each session, written by a model and searched beside the messages, so a session is found by what it was about even when no message has the words (12.11.4, shortfall 1).
+   Built, in `summaries.py`. The `summaries` table is in `messages.sqlite`, with its own FTS5 trigram index over title, summary, and keywords; like the messages it is derived, and deleting it makes it again.
+   - **When.** A session with at least two messages is due once nothing has been said in it for 30 minutes, and again once it has grown by half (at least 10 messages) since its summary. After each sweep up to 8 are made, newest first, so a backlog is worked off over hours. A session the model failed on waits 6 hours; two failures in a run end the run, since that is usually the model itself (signed out, over quota).
+   - **Who writes them.** The first installed tool with a one-shot prompt, `AgentCli.ask`: for now only Claude Code, `claude --print --model haiku --no-session-persistence --tools ""` with the conversation on stdin. No session file is written, so a summary never becomes a session to archive, and the scanner doesn't list print-mode processes. It runs in `plugins/memory/ask/`, an empty folder, so no project's CLAUDE.md is read. A restart stops a call in progress. agentop has no API key and needs none: the call uses the user's own Claude Code sign-in.
+   - **What the model reads.** Prompts and replies only, each cut to 1,500 characters, the whole to 40,000: the first third from the start and the rest from the end, where a long session's topic and its outcome are. The system prompt says the conversation is data, not instructions. The answer is JSON: a title under 80 characters, 2 to 5 sentences, and up to 25 keywords: every proper noun as written, then search words in English and in the conversation's language (romaji for Japanese names).
+   - **Privacy.** Every session goes to the summarizing tool's provider, whichever tool it was with: a Codex or Antigravity conversation is sent to Anthropic when Claude Code writes the summaries. Settings → Memory says so and turns summaries off (`PATCH /api/v2/plugins/memory/summaries`, kept in the plugin's store); off keeps the summaries already made.
+   - **Search.** `GET /api/v2/plugins/memory/search/sessions?q=&tool=&project=&since=&limit=` and `GET /api/v2/plugins/memory/summary?session=&tool=`. `agentop recall` lists matching sessions above the messages, and `--session` starts with the summary. The skill uses the sessions for vague memories and whole-session questions, then reads the messages for the exact detail: a summary is a paraphrase, never quoted.
+   - **First run on the devhost (2026-11-12).** 183 sessions were due. Haiku took about 4 seconds each, with titles, decisions, and open items right, and keywords that included commit hashes, file names, and host names.
+
+#### 12.11.4 How other agents remember, and whether keyword search is enough (2026-11-12)
+
+A survey of how agents keep memory, made before deciding what recall needs next. Most agents combine two or three of these:
+
+| Pattern | What it is | Who does it |
+|---|---|---|
+| **Curated notes** | The agent decides what is worth keeping and writes short facts to a file that goes into every prompt | Hermes Agent (`MEMORY.md`, `USER.md`), Claude Code (memory files, `CLAUDE.md`), ChatGPT's saved memories |
+| **Raw history search** | Keep every session, and search it when the agent thinks the past is relevant | Hermes Agent (`~/.hermes/state.db`, SQLite FTS5, a `session_search` tool, with an LLM summarizing what it finds), agentop's recall |
+| **Semantic retrieval** | Embed messages or facts and find them by meaning | mem0, Letta/MemGPT's archival memory, Zep (adds a knowledge graph of facts with time), Honcho's `honcho_search` |
+| **User model** | Build a profile of the person: preferences, style, goals | Honcho's peer cards, an optional layer for Hermes Agent |
+| **Procedural memory** | Remember how to do things, as reusable skills | Hermes Agent writes and refines its own skills; Claude Code skills |
+
+Hermes Agent (Nous Research), known for its memory and personalization, gets that mostly from curated notes, the Honcho user model, and skills it writes itself. Its recall of old conversations is keyword search over FTS5, like agentop's: by default it remembers only what it wrote down or can find again by keyword. The Hermes details come from third-party write-ups and Honcho's docs, not from Nous Research's own documentation.
+
+**Keyword search is the right base for this plugin.** The goal is an exact detail: a name, a link, a place. A URL or a rare surname embeds into nothing meaningful, while a trigram index finds part of it in a millisecond. And the agent does the searching: a miss is not the end, since the recall skill has it try other languages, romaji, fragments, and likely domains, then read around the hits. That loop covers much of what semantic search would add, the way Claude Code searches code with grep.
+
+**Where it falls short:**
+
+1. You remember the meaning but none of the words: "the restaurant my friend recommended", when the message says only "Sushi Dai, go before 6am".
+2. Questions across many conversations: "what did I decide about X?" is not one message, and needs a summary or a stored fact.
+3. Facts that change: search returns the old answer beside the new one, with nothing marking which is current. Zep's facts with dates are for this.
+4. Cost: each recall is several rounds of searching and reading, where a short profile in the prompt costs nothing.
+
+**What follows, in order:**
+
+1. Measure misses: note when a recall finds nothing, or the user says it found the wrong thing. Embeddings come in only if keyword search misses too often (phase 4), and today nothing records misses.
+2. Summarize each session: a title, a short summary, and keywords, indexed for search. Cheap, and it fixes much of shortfall 1, since a summary uses ordinary words ("restaurant recommendation") that the messages may lack. This is phase 5.
+3. Hybrid search, if misses show up: local embeddings in the same SQLite file (sqlite-vec, say), with their ranking merged with the keyword ranking. Keyword search still wins for exact strings; embeddings catch paraphrases.
+4. Leave curated profiles to the tools. Claude Code already keeps its own memory files; agentop's part is the complete record those notes lack. A profile shared across tools may come later, but it is the most work for the least sure gain.
+
+Sources: [mem0 on Hermes Agent's memory](https://mem0.ai/blog/how-memory-works-in-hermes-agent-(and-how-to-improve-it)), [Better Stack's Hermes Agent guide](https://betterstack.com/community/guides/ai/hermes-agent/), [Hermes memory: five layers, one learning loop](https://dev.to/crabtalk/hermes-memory-five-layers-one-learning-loop-39gd), [Honcho's Hermes integration](https://docs.honcho.dev/v3/guides/integrations/hermes).
 
 ## 13 Migration
 

@@ -80,11 +80,14 @@ Search every past conversation on this machine: the prompts and replies the Memo
 agentop recall atama link                      # messages holding every word
 agentop recall "atama plus" --since 6w         # a phrase; since 12h, 30d, 6w, or a date
 agentop recall stores.jp --tool codex --project ~/workspace/Hotaka
+agentop recall --session <session>             # its summary, then the whole session
 agentop recall --session <session> --around <#id> [--radius 6]   # read around a hit
-agentop recall <words> --json
+agentop recall <words> --json                  # {"sessions": [...], "messages": [...]}
 ```
 
-Words match anywhere in a message, ignoring case (an FTS5 trigram index), so part of a name, a domain, or Japanese text works. Words under three characters are matched as plain text. Results are best match first, each with its `#id`, date, tool, project, session, and, for a reply, the prompt it answered. The `recall` skill (`skills/recall/`) teaches a Claude session to use it.
+Words match anywhere in a message, ignoring case (an FTS5 trigram index), so part of a name, a domain, or Japanese text works. Words under three characters are matched as plain text. Results are best match first, each with its `#id`, date, tool, project, session, and, for a reply, the prompt it answered.
+
+Above the messages, **Sessions about this** lists up to five sessions whose summary matches: its title, a few sentences, and the keywords that matched. The summaries are the Memory plugin's (design 12.11.3, phase 5), so they find a session by what it was about even when no message has the words. A session gets one once it has been quiet for 30 minutes. The `recall` skill (`src/agentop/skills/recall/`) teaches a Claude session to use it.
 
 ## 2 Dialogue commands
 

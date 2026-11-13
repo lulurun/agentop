@@ -34,6 +34,8 @@ include = ["agentop*"]
 [tool.setuptools.package-data]
 "agentop.dialogue.scenarios" = ["*.toml"]
 "agentop.service" = ["webdist/**/*", "update.sh"]
+# The skills `agentop serve` installs for the agent tools.
+"agentop.skills" = ["*/**/*", "README.md"]
 # Each plugin folder is a package with its manifest beside it.
 "*" = ["plugin.toml"]
 

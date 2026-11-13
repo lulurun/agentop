@@ -17,6 +17,8 @@ src/
     ops.py                 Business logic used by both API and CLI
     registry.py            Persistent managed-session registry
     tmux.py                tmux subprocess wrappers
+    skills/                Skills `agentop serve` installs for the agent tools
+    service/host.py        What `agentop serve` checks and installs as it starts
     dialogue/              Two-agent dialogue system
 ```
 
@@ -35,10 +37,12 @@ The interface, with the default for each thing that differs:
 | What | Members |
 |------|---------|
 | Spotting its process | `matches(proc_name, cmdline)` |
+| Being installed | `binary` (the program `launch_cmd` runs), `skills_dir()` (where agentop installs its skills for it, or None) |
 | Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_session()`, `resume_session()`, `post_start_hook()` |
 | Typing into it | `send_text(session, text)` (plain paste, then Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |
 | What it's doing | `get_session_meta()`: session ID, AI title (`get_ai_title()`), token usage, bridge URL |
+| One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries. Only Claude has it (`claude --print`) |
 | Its transcripts | `transcripts_root()` (the tool's own folder), `archive_files(root)` (what the Memory archive copies), `transcript_files(session_id, root)` (one session's files), `conversation_reader(path)` (how to read one as prompts and replies), `searchable(relative)` (whether it goes in the Memory search table) |
 
 ### 2.2 The tools
@@ -49,7 +53,11 @@ The interface, with the default for each thing that differs:
 | `codex.py` | `CodexAgentCli` | Thread by PID from `~/.codex/logs_2.sqlite`, title from `state_5.sqlite`, tokens from the rollout; pre-trusts the folder. Bracketed paste and a settle delay; `boot_seconds = 20`. Archives `sessions/` and `archived_sessions/`, `.jsonl.zst` included |
 | `antigravity.py` | `AntigravityAgentCli` | Title from its CLI log; bracketed paste; `idle_seconds = 15`. Transcripts in `~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl`. Conversations from before the rename to Antigravity are only in its binary `conversations/` store, and are not read |
 
-`agentclis/__init__.py` exports `AGENTS`, `get_agent(name)`, `names()` (the CLI's `--tool` choices), and `DEFAULT`, the tool used when none is named.
+`agentclis/__init__.py` exports `AGENTS`, `get_agent(name)`, `names()` (the CLI's `--tool` choices), `DEFAULT`, the tool used when none is named, and `installed()`, the tools whose program is on the PATH of the user's login shell (where sessions are typed) or of the service.
+
+### 2.3 Getting the host ready (`service/host.py`, `skills/`)
+
+`agentop serve` calls `host.prepare()` before it listens. It finds the installed tools, and stops with an error when there are none. For each one with a `skills_dir()` (only Claude Code for now) it installs or updates the skills that ship in `src/agentop/skills/`: each is copied with a `.agentop` marker file, and a copy with the marker is replaced when the skill changes. A folder or link of the user's own with the same name is left alone and logged; a broken link, such as one to where the repo used to keep the skills, is replaced. The installed tools' names go to `GET /api/v2/tools` (`installed`), and the New session dialog offers only those.
 
 ## 3 Actor layer
 

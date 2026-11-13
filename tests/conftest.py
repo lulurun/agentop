@@ -48,6 +48,16 @@ class SlowAgent(FakeAgent):
         return "sleep 30"
 
 
+@pytest.fixture(autouse=True)
+def no_real_model(monkeypatch):
+    """No test sends a prompt to a real model: the Memory plugin summarizes with whatever tool is installed."""
+
+    def refuse(self, *args, **kwargs):
+        raise RuntimeError("tests never call a real model")
+
+    monkeypatch.setattr(AgentCli, "ask", refuse)
+
+
 @pytest.fixture
 def tmux_server(tmp_path, monkeypatch):
     """A private tmux server, with fakeagent on PATH, and agentop state in tmp_path."""

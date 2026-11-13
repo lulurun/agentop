@@ -11,7 +11,9 @@ names a tool itself.
 from __future__ import annotations
 
 import random
+import shutil
 import string
+import subprocess
 import time
 from collections.abc import Iterator
 from pathlib import Path
@@ -77,6 +79,77 @@ class AgentCli:
     def launch_cmd(self) -> str:
         """Shell command to launch the agent inside a tmux pane."""
         return self.name
+
+    @property
+    def binary(self) -> str:
+        """The program launch_cmd runs, which must be on the user's shell PATH."""
+        return self.launch_cmd.split()[0]
+
+    def skills_dir(self) -> Optional[Path]:
+        """Where the tool looks for the user's skills, or None when agentop installs none for it."""
+        return None
+
+    # Where the program was found (agentclis.installed), or None before that.
+    executable: Optional[str] = None
+
+    # ------------------------------------------------------------------ one-shot prompts
+    # For agentop's own use of a model, such as the Memory plugin's session
+    # summaries: one prompt in, one answer out, with no tools, no tmux, and
+    # nothing saved as a session of the tool's.
+
+    # The model ask_cmd uses, for the record of what wrote an answer.
+    ask_model: Optional[str] = None
+
+    def ask_cmd(self, system: str) -> Optional[list[str]]:
+        """The command that answers one prompt on stdin, or None if the tool can't."""
+        return None
+
+    def ask(
+        self,
+        prompt: str,
+        system: str,
+        cwd: Path,
+        timeout: float = 180,
+        stop: Callable[[], bool] = lambda: False,
+    ) -> str:
+        """Answer one prompt. Raises RuntimeError with the reason when it can't, or when stop() turns true."""
+        cmd = self.ask_cmd(system)
+        if cmd is None:
+            raise RuntimeError(f"{self.name} can't answer a one-shot prompt")
+        cmd[0] = self.executable or shutil.which(cmd[0]) or cmd[0]
+        cwd.mkdir(parents=True, exist_ok=True)
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+                cwd=cwd,
+            )
+        except OSError as e:
+            raise RuntimeError(f"{self.name} did not run: {e}") from None
+        deadline = time.monotonic() + timeout
+        given: Optional[str] = prompt  # stdin is written on the first call only
+        while True:
+            try:
+                stdout, stderr = proc.communicate(given, timeout=0.5)
+                break
+            except subprocess.TimeoutExpired:
+                given = None
+                if stop() or time.monotonic() > deadline:
+                    proc.kill()
+                    proc.communicate()
+                    raise RuntimeError(f"{self.name} {'was stopped' if stop() else f'took over {timeout:g}s'}") from None
+        if proc.returncode != 0:
+            detail = (stderr or stdout).strip().splitlines()
+            raise RuntimeError(f"{self.name} failed ({proc.returncode}): {detail[-1] if detail else 'no output'}")
+        return self.ask_answer(stdout)
+
+    def ask_answer(self, stdout: str) -> str:
+        """The answer, from what ask_cmd printed."""
+        return stdout.strip()
 
     def get_resume_cmd(self, session_id: str) -> Optional[str]:
         """Return the shell command to resume a saved session, or None if unsupported."""

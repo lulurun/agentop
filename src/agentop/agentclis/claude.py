@@ -82,6 +82,45 @@ class ClaudeAgentCli(AgentCli):
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions --remote-control"
 
+    def skills_dir(self) -> Path:
+        return Path.home() / ".claude" / "skills"
+
+    def matches(self, proc_name: str, cmdline: str) -> bool:
+        # Print mode answers one prompt and exits: a script's, or agentop's own
+        # (ask), never a session to list.
+        if {"-p", "--print"} & set(cmdline.split()[1:]):
+            return False
+        return super().matches(proc_name, cmdline)
+
+    # The cheapest model is plenty for summaries.
+    ask_model = "haiku"
+
+    def ask_cmd(self, system: str) -> list[str]:
+        return [
+            "claude",
+            "--print",
+            "--model",
+            self.ask_model,
+            "--no-session-persistence",
+            "--tools",
+            "",
+            "--system-prompt",
+            system,
+            "--output-format",
+            "json",
+        ]
+
+    def ask_answer(self, stdout: str) -> str:
+        # Hooks may print before the result: it is the last line.
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        try:
+            result = json.loads(lines[-1])
+        except (IndexError, ValueError):
+            raise RuntimeError(f"claude printed no result: {stdout.strip()[:200]!r}") from None
+        if result.get("is_error"):
+            raise RuntimeError(f"claude: {str(result.get('result') or result.get('subtype'))[:200]}")
+        return str(result.get("result") or "").strip()
+
     def get_resume_cmd(self, session_id: str) -> str:
         return f"claude --resume {session_id} --dangerously-skip-permissions --remote-control"
 

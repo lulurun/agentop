@@ -41,8 +41,10 @@ export function NewSessionDialog() {
 
   useEffect(() => {
     client.tools().then((list) => {
-      setTools(list);
-      setTool((current) => current || (list.find((t) => t.installed)?.name ?? ""));
+      // Only the tools the service found on its host can start a session.
+      const installed = list.filter((t) => t.installed);
+      setTools(installed);
+      setTool((current) => current || (installed[0]?.name ?? ""));
     }).catch((e) => setError(e.message));
     const request = ++latestRequest.current;
     // Only a default: by the time this arrives, the user may have typed a path.
@@ -85,8 +87,8 @@ export function NewSessionDialog() {
         <fieldset className="tool-choice">
           <legend>Agent</legend>
           {tools.map((t) => (
-            <label key={t.name} data-disabled={!t.installed} title={t.installed ? undefined : `${t.name} was not found on this service`}>
-              <input type="radio" name="tool" value={t.name} checked={tool === t.name} disabled={!t.installed} onChange={() => setTool(t.name)} />
+            <label key={t.name}>
+              <input type="radio" name="tool" value={t.name} checked={tool === t.name} onChange={() => setTool(t.name)} />
               {t.name}
             </label>
           ))}

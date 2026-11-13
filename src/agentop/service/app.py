@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from agentop.guard import HostOriginGuard
 
-from . import config, identity, manager
+from . import config, host, identity, manager
 from .config import Settings
 from .identity import Identity
 from .legacy import create_legacy_router
@@ -51,6 +51,7 @@ def create_app(
     ident: Identity | None = None,
     store: SessionStore | None = None,
     plugins: PluginHost | None = None,
+    available: list[str] | None = None,
 ) -> FastAPI:
     settings = settings or config.load()
     identity_file = None if ident else identity.identity_path()
@@ -68,7 +69,7 @@ def create_app(
         await store.shutdown()
 
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file, plugins=plugins)))
+    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file, plugins=plugins, available=available)))
     if _WEB_DIR.is_dir():
         app.mount("/app", AppFiles(directory=str(_WEB_DIR), html=True), name="web")
 
@@ -98,9 +99,14 @@ def serve(settings: Settings | None = None) -> None:
             "Prefer an SSH tunnel, or set tls_cert and tls_key.",
             settings.host,
         )
+    try:
+        tools = host.prepare()
+    except host.NoAgentTools as e:
+        LOG.error("%s", e)
+        raise SystemExit(1) from None
     server = uvicorn.Server(
         uvicorn.Config(
-            create_app(settings),
+            create_app(settings, available=[t.name for t in tools]),
             host=settings.host,
             port=settings.port,
             ssl_certfile=settings.tls_cert,
