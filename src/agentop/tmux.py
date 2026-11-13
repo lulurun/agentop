@@ -155,7 +155,7 @@ class Session:
             return False
 
     @staticmethod
-    def _load_and_paste(name: str, payload: bytes) -> bool:
+    def _load_and_paste(name: str, payload: bytes, bracketed: bool = False) -> bool:
         """Load payload into the tmux buffer and paste it into the session.
 
         paste-buffer writes the payload into the target pane's pty and can
@@ -169,7 +169,7 @@ class Session:
             if r1.returncode != 0:
                 LOG.warning("[%s] tmux load-buffer failed: %s", name, r1.stderr.decode(errors="replace"))
                 return False
-            r2 = run("paste-buffer", "-t", pane_target(name), timeout=30)
+            r2 = run("paste-buffer", *(["-p"] if bracketed else []), "-t", pane_target(name), timeout=30)
             if r2.returncode != 0:
                 LOG.warning("[%s] tmux paste-buffer failed: %s", name, r2.stderr.decode(errors="replace"))
                 return False
@@ -185,11 +185,11 @@ class Session:
 
     @staticmethod
     def paste_text_bracketed(name: str, text: str) -> None:
-        """Paste text wrapped in bracketed-paste escape sequences.
+        """Paste text as one bracketed paste, so embedded newlines are not Enter presses.
 
-        Bracketed paste (ESC[200~ ... ESC[201~) prevents the terminal from
-        interpreting embedded newlines as Enter key presses, so the entire
-        multi-line block is delivered as one atomic input.
+        tmux adds the ESC[200~ ... ESC[201~ markers itself (paste-buffer -p),
+        when the application has turned bracketed paste on. Markers written into
+        the buffer would not work: tmux 3.5+ shows control characters in a paste
+        as text, so the agent would get a literal "^[[200~".
         """
-        bracketed = "\x1b[200~" + text + "\x1b[201~"
-        Session._load_and_paste(name, bracketed.encode())
+        Session._load_and_paste(name, text.encode(), bracketed=True)

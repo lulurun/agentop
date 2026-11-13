@@ -45,3 +45,35 @@ def test_set_option_stays_on_one_session(tmux_server):
     assert b"on" in tmux.run("show-options", "-t", "=foo-1:", "mouse").stdout
     assert b"mouse" not in tmux.run("show-options", "-t", "=foo-2:", "mouse").stdout
     assert tmux.run("show-options", "-gv", "mouse").stdout.strip() == b"off"
+
+
+# Turns bracketed paste on, like Codex does, and saves the raw bytes it reads.
+READ_RAW = """import os, sys, termios, tty
+sys.stdout.write("\\x1b[?2004h"); sys.stdout.flush()
+tty.setraw(0)
+data = b""
+while b"done" not in data:
+    data += os.read(0, 1024)
+open(sys.argv[1], "wb").write(data)
+"""
+
+
+def test_a_bracketed_paste_arrives_as_real_escape_codes(tmux_server, tmp_path):
+    script, out = tmp_path / "raw.py", tmp_path / "raw.out"
+    script.write_text(READ_RAW)
+    _new("raw")
+    Session.send_keys("raw", f"python3 {script} {out}", "Enter")
+    for _ in range(100):
+        if "python" in tmux.run("display", "-p", "-t", "=raw:", "#{pane_current_command}", text=True).stdout:
+            break
+        tmux.subprocess.run(["sleep", "0.05"])
+    tmux.subprocess.run(["sleep", "0.3"])  # let it turn bracketed paste on
+
+    Session.paste_text_bracketed("raw", "one\ntwo")
+    Session.send_keys("raw", "done")
+
+    for _ in range(100):
+        if out.exists():
+            break
+        tmux.subprocess.run(["sleep", "0.05"])
+    assert out.read_bytes().startswith(b"\x1b[200~one\rtwo\x1b[201~")
