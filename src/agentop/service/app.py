@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import mimetypes
 import os
 import signal
 import sys
@@ -24,6 +25,8 @@ LOG = logging.getLogger(__name__)
 GRACEFUL_SHUTDOWN_SECONDS = 5
 
 _WEB_DIR = Path(__file__).resolve().parent / "webdist"
+# Python knows this type only from 3.13; browsers ignore a manifest served as text/plain.
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 class AppFiles(StaticFiles):

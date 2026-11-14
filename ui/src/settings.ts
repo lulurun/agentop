@@ -43,4 +43,17 @@ export function saveSettings(settings: Settings) {
 export function applyTheme(theme: Settings["theme"]) {
   if (theme === "system") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = theme;
+  syncThemeColor();
+}
+
+// The phone's status bar, when the app is installed, takes the page's own background.
+let followingSystem = false;
+function syncThemeColor() {
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+  if (!meta) return;
+  meta.content = getComputedStyle(document.documentElement).getPropertyValue("--ink").trim() || meta.content;
+  if (!followingSystem && window.matchMedia) {
+    followingSystem = true;
+    window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", syncThemeColor);
+  }
 }

@@ -65,6 +65,14 @@ Let's Encrypt certificate, and `certbot.timer` renews it. To remove the site, de
 It uses port 443, not 7700: nginx can't mix TLS and plain HTTP on one port, and the
 other apps on 7700 are plain HTTP.
 
+### On a phone
+
+The app is installable: open `https://agentop.wolfdrawer.net` and use Add to Home Screen
+(Safari's Share menu on iOS; the menu's Install app or Add to Home screen in Chrome on
+Android). It then opens full screen with its own icon. A phone installs only from an
+HTTPS address, so not from a plain `http://` one on the LAN. The manifest and icons
+are in `ui/public/`.
+
 ## Connecting from the app
 
 Load the app from your own machine's service, `http://127.0.0.1:9775/`, then use
