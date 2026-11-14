@@ -16,14 +16,24 @@ The v2 security model is deliberately simple. Review it before recommending that
 - [x] Plain HTTP on non-loopback addresses (design D6): refused, 2026-11-14. The service won't start without TLS, and the app won't add such an address; the README has an SSH tunnel guide.
 - [x] One shared token per service (design D7): per-client tokens, revoked one at a time from the Status dialog or `agentop service clients`, 2026-11-14. The service token only signs a client in.
 - [x] Token expiry: a client's token runs out after 12 hours unused (`client_ttl`) and 30 days at most (`client_max_age`); the app renews it hourly while on screen, 2026-11-14.
-- [ ] Single-use pairing codes (`agentop service pair`, valid for 10 minutes), so that on a hardened host the service token never leaves the machine, with a setting to refuse the static service token from anywhere but loopback. Discussed 2026-11-14, not built.
-- [ ] Rotate the PC service's token, which was pasted into a chat. Accepted for now (2026-11-13): the service is only used by its owner, to try agentop out. Rotate before it is used for anything that matters.
+- [x] Rotate the PC service's token, which was pasted into a chat: rotated 2026-11-15, after every client had signed in with its own token, so none was signed out.
 - [ ] Open CORS on `/api/v2`.
 - [x] Token storage in the web app's `localStorage`: only the client's own expiring token is stored, never the service token, 2026-11-14. XSS could still read it: the CSP stays the main defence.
 - [ ] What `/api/v2/health` exposes without a token (name, version, instance ID).
 - [ ] Agents started with skip-permissions flags, reachable by anyone who holds the token.
 - [ ] The HTTPS proxy on pisces-01: public on 443 with only the token in front. Consider an IP allow-list or a second factor at nginx.
 - [ ] Stop over the API: `Ctrl-C` then `/exit` is typed into the agent's terminal. Confirm no tool treats either differently in a way that matters.
+
+### Lower priority
+
+Per-client tokens (above) already limit what a leaked browser token can do. This one also makes signing in less convenient, which matters little on a hardened host and a lot for personal use, so it waits.
+
+- [ ] Single-use pairing codes, so the service token never has to leave the machine. Discussed 2026-11-14, not built.
+  - Today the service token never expires, and signing in a browser or phone means copying it off the machine (into a chat, a password manager, a phone). Each copy can leak, and whoever has it can sign in clients until it's rotated.
+  - `agentop service pair` on the machine prints a short code, such as `K7QF-2M9X`. It is typed into the app's sign-in form instead of the service token, works once, and expires after 10 minutes, so a code that leaks later is useless. Making one needs shell access to the machine (SSH, or sitting at it).
+  - A setting turns the service token off for `POST /api/v2/auth/clients` entirely, so pairing codes are the only way in. Without it the codes add little. It can't be "refuse it except from loopback": behind a proxy such as nginx on pisces-01, every request comes from `127.0.0.1`.
+  - The CLI and the desktop app then sign in by writing a pairing code into `~/.agentop/state/` and using it, instead of sending the service token. Only something that can write to the user's home can do that, the same trust the `service.json` file gives today.
+  - Downside: every new browser or phone, and every sign-in after 12 hours unused, needs a fresh code from a shell on the machine.
 
 ## Plugin system
 
