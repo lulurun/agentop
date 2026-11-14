@@ -59,7 +59,9 @@ export const webPlatform: Platform = {
   saveConnections: (connections) => write(localStorage, SAVED_KEY, connections),
   // A page can't start a service, however close the service is.
   async defaultConnection() {
-    return { id: HOME_ID, label: "This service", url: homeUrl(), token: "", serviceToken: consumeFragmentToken(), isHome: true };
+    // The service's name comes with /service, after signing in. Until then, its address.
+    const url = homeUrl();
+    return { id: HOME_ID, label: new URL(url).host, url, token: "", serviceToken: consumeFragmentToken(), isHome: true };
   },
   // Per tab first, so two tabs can show two services. A new tab starts on the last used.
   loadActiveId: () => read<string>(sessionStorage, ACTIVE_KEY) ?? read<string>(localStorage, ACTIVE_KEY),

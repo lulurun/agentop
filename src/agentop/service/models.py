@@ -8,14 +8,15 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Health(BaseModel):
+    """Only whether the service is up. It needs no token, so it says nothing else."""
+
     status: str
+
+
+class ServiceInfo(BaseModel):
     version: str
-    api_version: int
-    instance_id: str
+    api_version: int = Field(description="Revision of /api/v2. A client built for a lower one should be updated")
     name: str
-
-
-class ServiceInfo(Health):
     commit: str | None
     uptime_seconds: int
     # When this process started serving. A restart changes it, even one that keeps the PID.

@@ -13,7 +13,6 @@ const HOME_ID = "home";
 interface ServiceInfo {
   url: string;
   token: string;
-  instance_id: string;
   name: string;
 }
 
@@ -71,7 +70,6 @@ export const tauriPlatform: Platform = {
       token: "",
       // Read from this computer's service.json, so the desktop app can always sign in again.
       serviceToken: service.token,
-      instanceId: service.instance_id,
       isHome: true,
     };
   },

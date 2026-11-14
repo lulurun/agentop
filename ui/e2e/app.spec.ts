@@ -38,10 +38,12 @@ const row = (page: Page, name: string) => page.getByRole("navigation", { name: "
 test("first visit without a token explains what to do", async ({ page }) => {
   const s = await service("alpha");
   await page.goto(`${s.url}/`);
-  await expect(page.getByRole("heading", { name: "Enter the token for alpha" })).toBeVisible();
+  // Before signing in, the app knows only the address: /health doesn't say the name.
+  const host = new URL(s.url).host;
+  await expect(page.getByRole("heading", { name: `Enter the token for ${host}` })).toBeVisible();
   await page.getByLabel("Token").fill("wrong");
   await page.getByRole("button", { name: "Connect" }).click();
-  await expect(page.getByRole("heading", { name: "alpha rejected the token" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `${host} rejected the token` })).toBeVisible();
   await page.getByLabel("Token").fill(s.token);
   await page.getByRole("button", { name: "Connect" }).click();
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
@@ -346,7 +348,7 @@ test("stopping the selected service leaves the app able to switch", async ({ pag
   await expect(page.locator(".switcher-current")).toContainText("alpha");
 });
 
-test("a different service at a saved address never gets the token", async ({ page }) => {
+test("a different service at a saved address asks to sign in again", async ({ page }) => {
   const alpha = await service("alpha");
   const beta = await service("beta");
   await page.goto(alpha.signedInUrl);
@@ -358,16 +360,15 @@ test("a different service at a saved address never gets the token", async ({ pag
 
   const port = beta.port;
   await beta.stop();
-  await service("impostor", port);
-  const sent: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().includes(`:${port}`) && request.headers().authorization) sent.push(request.url());
-  });
+  const other = await service("other", port);
 
+  // A host runs one service, so whatever answers is the one wanted. It doesn't know beta's token.
   await page.locator(".switcher-current").click();
   await page.getByRole("menuitemradio", { name: /beta/ }).click();
-  await expect(page.getByRole("heading", { name: "A different service is now at this address" })).toBeVisible();
-  expect(sent).toEqual([]);
+  await expect(page.getByRole("heading", { name: "Signed out of beta" })).toBeVisible();
+  await page.getByLabel("Token").fill(other.token);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
 });
 
 test("a path typed before the default directory loads is kept", async ({ page }) => {
@@ -499,4 +500,22 @@ test("dragging over the terminal copies the text from tmux", async ({ page, cont
   await page.mouse.move(box.x + box.width - 2, y, { steps: 5 });
   await page.mouse.up();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("fake agent ready");
+});
+
+test("a service with a newer /api/v2 than the app offers a reload, and still connects", async ({ page }) => {
+  const s = await service("alpha");
+  await page.route("**/api/v2/service", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), api_version: 99 } });
+  });
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reload for the new version" })).toBeVisible();
+});
+
+test("a service of the app's own /api/v2 shows no reload", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reload for the new version" })).toHaveCount(0);
 });

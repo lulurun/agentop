@@ -5,7 +5,7 @@ import type { Connection } from "../connections";
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-const SERVICE = { url: "http://127.0.0.1:9775", token: "local", instance_id: "this-machine", name: "pc" };
+const SERVICE = { url: "http://127.0.0.1:9775", token: "local", name: "pc" };
 const respond = (service: unknown) =>
   invoke.mockImplementation(async (command: string) => (command === "read_service_info" ? service : null));
 const connection = (fields: Partial<Connection>): Connection => ({ id: "x", label: "x", url: "http://127.0.0.1:9775", token: "t", ...fields });
@@ -54,7 +54,7 @@ describe("connections", () => {
     respond(null);
     const home = await (await platform()).defaultConnection();
     expect(home?.isHome).toBe(true);
-    expect(home?.instanceId).toBeUndefined();
+    expect(home?.serviceToken).toBeUndefined();
   });
 });
 

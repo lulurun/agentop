@@ -345,20 +345,6 @@ def cmd_open(args):
         print(url)
 
 
-def _service_health(settings):
-    import json
-    import urllib.error
-    import urllib.request
-
-    scheme = "https" if settings.tls else "http"
-    host = "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
-    try:
-        with urllib.request.urlopen(f"{scheme}://{host}:{settings.port}/api/v2/health", timeout=3) as response:
-            return json.load(response)
-    except (OSError, ValueError):
-        return None
-
-
 # The CLI signs in for one command, so its client expires almost at once.
 CLI_CLIENT_TTL_SECONDS = 60
 

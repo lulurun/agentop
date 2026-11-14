@@ -204,7 +204,7 @@ Goal: the main workflow from the design, in a browser.
 - Adding a second service with a `connect-info` string and switching to it shows that service's sessions and terminal, with no reload.
 - Switching away and back returns to the same session, and agents on the first service kept running throughout.
 - Stopping the selected service leaves the app able to switch to another one.
-- A port reused by a different service triggers the warning before any token is sent to it.
+- ~~A port reused by a different service triggers the warning before any token is sent to it.~~ Dropped 2026-11-15: a host runs one service, so the app no longer pins an `instance_id`. A different service rejects the client token, and the app asks to sign in.
 
 ## 5 Phase 3: Right panel
 
@@ -299,7 +299,7 @@ The v2.0 security model is deliberately simple and is to be revisited. Do this b
 
 - [x] Plain HTTP on non-loopback addresses (design D6): refused, 2026-11-14.
 - [ ] Shared token per service (design D7): decide whether to move to per-client tokens with individual revoke.
-- [ ] Review the rest of design section 7: open CORS, token storage in `localStorage`, what `/health` exposes without auth, and agents running with skip-permissions.
+- [ ] Review the rest of design section 7: agents running with skip-permissions. Open CORS (kept), token storage in `localStorage`, and what `/health` exposes without auth (now only `{"status": "ok"}`) were reviewed in 2026-11.
 
 ### 9.2 Features
 

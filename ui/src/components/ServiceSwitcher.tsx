@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchHealth } from "../api/client";
-import { connectionName, isEncrypted, isLoopback } from "../connections";
+import { appIsOutdated, connectionName, isEncrypted, isLoopback } from "../connections";
+import { platform } from "../platform";
 import { activeConnection, useApp } from "../store";
 
 type Reach = "checking" | "reachable" | "unreachable";
@@ -109,5 +110,24 @@ export function ServiceSwitcher() {
         </>
       )}
     </div>
+  );
+}
+
+/** The service's /api/v2 is newer than this app. The web app reloads to get it; the desktop app needs updating. */
+export function AppOutdated() {
+  const link = useApp((s) => s.link);
+  if (link.state !== "connected" && link.state !== "reconnecting") return null;
+  if (!appIsOutdated(link.service)) return null;
+  if (platform.kind === "desktop") {
+    return (
+      <span className="app-outdated" title={`${link.service.name} runs ${link.service.version}, which this app predates. Some features may be missing.`}>
+        Update this app
+      </span>
+    );
+  }
+  return (
+    <button type="button" className="app-outdated" title={`${link.service.name} has a newer version of this app`} onClick={() => window.location.reload()}>
+      Reload for the new version
+    </button>
   );
 }

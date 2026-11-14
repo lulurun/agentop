@@ -3,7 +3,7 @@ import { isAppShortcut } from "../shortcuts";
 import { sessionTitle, useApp } from "../store";
 import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
-import { ServiceSwitcher } from "./ServiceSwitcher";
+import { AppOutdated, ServiceSwitcher } from "./ServiceSwitcher";
 import { MainArea, selectedSession } from "./MainArea";
 import { NewSessionDialog } from "./NewSessionDialog";
 import { ServicePanel } from "./ServicePanel";
@@ -63,6 +63,7 @@ export function App() {
         <div className="header-title">
           {session && <strong title={session.cwd}>{sessionTitle(session)}</strong>}
           <ServiceSwitcher />
+          <AppOutdated />
         </div>
         <button type="button" className="header-new" onClick={() => setDialog("new-session")} title="New session (Ctrl+Shift+N)">
           New session

@@ -106,11 +106,16 @@ def read_until(ws, text, timeout=5.0):
 # ---------------------------------------------------------------------- auth
 
 
-def test_health_is_open_and_says_what_it_is(service):
-    body = httpx.get(f"{service.base}/health").json()
-    assert body["status"] == "ok" and body["api_version"] == 1
-    assert body["instance_id"] == service.ident.instance_id
-    assert "token" not in json.dumps(body)
+def test_health_is_open_and_says_only_that_it_is_up(service):
+    assert httpx.get(f"{service.base}/health").json() == {"status": "ok"}
+    # The same with a token: what the service is, and which version, is in /service.
+    assert service.http.get("/health").json() == {"status": "ok"}
+
+
+def test_service_says_what_it_is_to_a_client(service):
+    body = service.http.get("/service").json()
+    assert body["api_version"] == 1 and body["name"] == service.ident.name and body["version"]
+    assert "instance_id" not in body and "token" not in json.dumps(body)
 
 
 @pytest.mark.parametrize("path", ["/service", "/sessions", "/tools", "/fs/dirs", "/saved-sessions"])
@@ -548,7 +553,6 @@ def test_session_files_refuse_escapes_and_need_the_token(service, tmp_path):
 
 def test_a_rotated_service_token_takes_effect_without_a_restart(service):
     old = service.service_auth["Authorization"]
-    instance = service.http.get("/health").json()["instance_id"]
     new = identity.rotate_token().token
     add = f"{service.base}/auth/clients"
 
@@ -556,7 +560,7 @@ def test_a_rotated_service_token_takes_effect_without_a_restart(service):
     assert httpx.post(add, json={}, headers={"Authorization": f"Bearer {new}"}).status_code == 201
     # Clients signed in before the rotation stay signed in.
     assert service.http.get("/sessions").status_code == 200
-    assert service.http.get("/health").json()["instance_id"] == instance
+    assert identity.load_or_create().instance_id == service.ident.instance_id
 
 
 def test_a_service_given_its_identity_ignores_the_file(fake_agents):

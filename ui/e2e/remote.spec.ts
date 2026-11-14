@@ -98,14 +98,15 @@ test("a rejected token can be seen and replaced, and isn't kept", async ({ page 
   const proxy = await proxied(devhost);
   const box = page.getByLabel("Token");
   await page.goto(`http://127.0.0.1:${proxy.port}/agentop/`);
+  const host = `127.0.0.1:${proxy.port}`;
 
   await expect(box).toHaveAttribute("type", "text");
   await box.fill("not-the-token");
   await page.getByRole("button", { name: "Connect" }).click();
-  await expect(page.getByRole("heading", { name: "devhost rejected the token" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `${host} rejected the token` })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByRole("heading", { name: "Enter the token for devhost" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Enter the token for ${host}` })).toBeVisible();
   await box.fill(devhost.token);
   await page.getByRole("button", { name: "Connect" }).click();
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
@@ -128,7 +129,7 @@ test("the app's old address through the proxy leads to the app", async ({ page }
   const proxy = await proxied(devhost);
   await page.goto(`http://127.0.0.1:${proxy.port}/agentop/app/`);
   await expect(page).toHaveURL(new RegExp(`:${proxy.port}/agentop/$`));
-  await expect(page.getByRole("heading", { name: "Enter the token for devhost" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: `Enter the token for 127.0.0.1:${proxy.port}` })).toBeVisible();
 });
 
 test("the app loaded through the proxy over plain HTTP works, and refuses to add a plain HTTP service", async ({ page }) => {

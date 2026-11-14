@@ -43,7 +43,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | B9 | Same page as B8, add `http://127.0.0.1:9775` | Chrome asks for Local Network Access permission; after allowing, it connects | Not run |
 | B10 | Open the app through `ssh -L 9776:127.0.0.1:9775 devhost`, at `http://127.0.0.1:9776`, then add a second tunnel on another port | Both connect | Not run |
 | B11 | Repeat B1, B5, B8, and B10 in Firefox | Same results as Chrome, or differences noted | Not run |
-| B12 | Point a saved address at a different service (e.g. reuse a tunnel port) and connect | "A different service is now at this address", asked before the token is sent | Not run |
+| B12 | Point a saved address at a different service (e.g. reuse a tunnel port) and connect | It rejects this app's token and asks to sign in; after signing in, the sessions are that service's | Not run |
 | B13 | A service's Status: rename it, then Forget another service | The name is kept after a reload; forgetting never affects the service or its sessions | Not run |
 | B14 | Open two tabs on two different services | Each tab stays on its own service | Not run |
 | B15 | Rotate the devhost token (`agentop service token --rotate`), then use a client with the old token | The old token is refused at once with no restart; the new one works | Seen working |

@@ -495,18 +495,13 @@ export interface components {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
         };
-        /** Health */
+        /**
+         * Health
+         * @description Only whether the service is up. It needs no token, so it says nothing else.
+         */
         Health: {
-            /** Api Version */
-            api_version: number;
-            /** Instance Id */
-            instance_id: string;
-            /** Name */
-            name: string;
             /** Status */
             status: string;
-            /** Version */
-            version: string;
         };
         /** PatchPlugin */
         PatchPlugin: {
@@ -565,7 +560,10 @@ export interface components {
         };
         /** ServiceInfo */
         ServiceInfo: {
-            /** Api Version */
+            /**
+             * Api Version
+             * @description Revision of /api/v2. A client built for a lower one should be updated
+             */
             api_version: number;
             /** Capabilities */
             capabilities: {
@@ -575,8 +573,6 @@ export interface components {
             commit: string | null;
             /** Install Kind */
             install_kind: string;
-            /** Instance Id */
-            instance_id: string;
             /** Manager */
             manager: string;
             /** Name */
@@ -590,8 +586,6 @@ export interface components {
             plugins: number;
             /** Started At */
             started_at?: number | null;
-            /** Status */
-            status: string;
             /** Tls */
             tls: boolean;
             /** Tmux Version */

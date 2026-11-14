@@ -192,6 +192,16 @@ input::placeholder { color: var(--quiet); }
   text-align: left;
 }
 .switcher-current:hover, .switcher-current[aria-expanded="true"] { color: var(--text); background: var(--line); }
+.app-outdated {
+  flex: none;
+  padding: 2px 8px;
+  border: 1px solid var(--starting);
+  border-radius: 999px;
+  background: none;
+  color: var(--starting);
+  font-size: 12px;
+}
+button.app-outdated:hover { background: var(--line); }
 .switcher-name {
   flex: 1;
   overflow: hidden;

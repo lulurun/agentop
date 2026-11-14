@@ -201,18 +201,10 @@ def create_v2_app(ctx: Context) -> FastAPI:
         # Plugin routes go under /plugins/{id}/, behind the same token.
         ctx.plugins.attach(v2, authed)
 
-    def health_body() -> dict:
-        return {
-            "status": "ok",
-            "version": _version(),
-            "api_version": API_VERSION,
-            "instance_id": ctx.identity.instance_id,
-            "name": ctx.identity.name,
-        }
-
+    # No token needed, so it answers whether the service is up and nothing else.
     @v2.get("/health", response_model=Health)
     async def health():
-        return health_body()
+        return {"status": "ok"}
 
     def capabilities() -> tuple[manager.ServiceManager, dict[str, bool]]:
         current = manager.for_process(os.getpid())
@@ -266,7 +258,9 @@ def create_v2_app(ctx: Context) -> FastAPI:
     async def service():
         current, allowed = await asyncio.to_thread(capabilities)
         return {
-            **health_body(),
+            "version": _version(),
+            "api_version": API_VERSION,
+            "name": ctx.identity.name,
             "commit": await asyncio.to_thread(_git_commit),
             "uptime_seconds": int(time.time() - ctx.started_at),
             "started_at": ctx.started_at,

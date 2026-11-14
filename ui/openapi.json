@@ -334,34 +334,15 @@
         "type": "object"
       },
       "Health": {
+        "description": "Only whether the service is up. It needs no token, so it says nothing else.",
         "properties": {
-          "api_version": {
-            "title": "Api Version",
-            "type": "integer"
-          },
-          "instance_id": {
-            "title": "Instance Id",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
           "status": {
             "title": "Status",
-            "type": "string"
-          },
-          "version": {
-            "title": "Version",
             "type": "string"
           }
         },
         "required": [
-          "status",
-          "version",
-          "api_version",
-          "instance_id",
-          "name"
+          "status"
         ],
         "title": "Health",
         "type": "object"
@@ -537,6 +518,7 @@
       "ServiceInfo": {
         "properties": {
           "api_version": {
+            "description": "Revision of /api/v2. A client built for a lower one should be updated",
             "title": "Api Version",
             "type": "integer"
           },
@@ -560,10 +542,6 @@
           },
           "install_kind": {
             "title": "Install Kind",
-            "type": "string"
-          },
-          "instance_id": {
-            "title": "Instance Id",
             "type": "string"
           },
           "manager": {
@@ -594,10 +572,6 @@
             ],
             "title": "Started At"
           },
-          "status": {
-            "title": "Status",
-            "type": "string"
-          },
           "tls": {
             "title": "Tls",
             "type": "boolean"
@@ -623,10 +597,8 @@
           }
         },
         "required": [
-          "status",
           "version",
           "api_version",
-          "instance_id",
           "name",
           "commit",
           "uptime_seconds",

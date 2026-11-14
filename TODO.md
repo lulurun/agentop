@@ -19,7 +19,7 @@ The v2 security model is deliberately simple. Review it before recommending that
 - [x] Rotate the PC service's token, which was pasted into a chat: rotated 2026-11-15, after every client had signed in with its own token, so none was signed out.
 - [x] Open CORS on `/api/v2`: kept open, reviewed 2026-11-15. The app must reach services on other origins, and there are no cookies or other ambient credentials, so the token decides access, not the origin. A foreign page gets 401 everywhere except `/health` and signing in with the service token.
 - [x] Token storage in the web app's `localStorage`: only the client's own expiring token is stored, never the service token, 2026-11-14. XSS could still read it: the CSP stays the main defence.
-- [ ] What `/api/v2/health` exposes without a token (name, version, instance ID).
+- [x] What `/api/v2/health` exposes without a token: only `{"status": "ok"}` since 2026-11-15. Name, version and `api_version` moved behind the token, in `/service`. The app no longer pins an `instance_id`, since a host runs one service, and no longer refuses a service over its `api_version`: `/api/v2` only grows, and a higher `api_version` shows that the app is out of date.
 - [ ] Agents started with skip-permissions flags, reachable by anyone who holds the token.
 - [ ] The HTTPS proxy on pisces-01: public on 443 with only the token in front. Consider an IP allow-list or a second factor at nginx.
 - [ ] Stop over the API: `Ctrl-C` then `/exit` is typed into the agent's terminal. Confirm no tool treats either differently in a way that matters.

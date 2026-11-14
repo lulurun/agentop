@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  API_VERSION,
+  appIsOutdated,
   checkConnection,
   isPlainRemote,
   needsRenewal,
@@ -12,8 +14,8 @@ import {
 } from "./connections";
 import { applyEvent, sortedSessions } from "./store";
 
-const HEALTH = { status: "ok", version: "1", api_version: 1, instance_id: "abc", name: "box" };
-const SERVICE = { ...HEALTH, commit: null };
+const HEALTH = { status: "ok" };
+const SERVICE = { version: "1", api_version: 1, name: "box", commit: null };
 const HOUR = 3_600_000;
 const conn: Connection = {
   id: "1",
@@ -106,6 +108,15 @@ describe("reachabilityNote", () => {
   });
 });
 
+describe("appIsOutdated", () => {
+  it("says so only for a newer revision of /api/v2", () => {
+    const at = (api_version: number) => ({ ...SERVICE, api_version }) as Parameters<typeof appIsOutdated>[0];
+    expect(appIsOutdated(at(API_VERSION + 1))).toBe(true);
+    expect(appIsOutdated(at(API_VERSION))).toBe(false);
+    expect(appIsOutdated(at(API_VERSION - 1))).toBe(false);
+  });
+});
+
 describe("checkConnection", () => {
   it("succeeds through every step", async () => {
     respond({ "/health": () => json(HEALTH), "/service": () => json(SERVICE) });
@@ -121,20 +132,16 @@ describe("checkConnection", () => {
     respond({ "/health": () => new Response("nope", { status: 404 }) });
     expect(await checkConnection(conn)).toEqual({ ok: false, kind: "not_agentop" });
   });
-  it("never sends the token to a different service", async () => {
+  it("asks /health without the token", async () => {
     const calls = respond({ "/health": () => json(HEALTH), "/service": () => json(SERVICE) });
-    const result = await checkConnection({ ...conn, instanceId: "other" });
-    expect(result).toMatchObject({ ok: false, kind: "identity_changed" });
-    expect(calls.every((c) => c.auth === null)).toBe(true);
-    expect(calls).toHaveLength(1);
+    await checkConnection(conn);
+    expect(calls[0].auth).toBeNull();
   });
-  it("continues once the user trusts the new service", async () => {
-    respond({ "/health": () => json(HEALTH), "/service": () => json(SERVICE) });
-    expect((await checkConnection({ ...conn, instanceId: "other" }, true)).ok).toBe(true);
-  });
-  it("refuses an unsupported API version", async () => {
-    respond({ "/health": () => json({ ...HEALTH, api_version: 99 }) });
-    expect(await checkConnection(conn)).toMatchObject({ ok: false, kind: "incompatible" });
+  it("connects to a service of any revision of /api/v2", async () => {
+    for (const api_version of [API_VERSION - 1, API_VERSION + 4]) {
+      respond({ "/health": () => json(HEALTH), "/service": () => json({ ...SERVICE, api_version }) });
+      expect((await checkConnection(conn)).ok).toBe(true);
+    }
   });
   it("asks for a missing token without calling /service", async () => {
     const calls = respond({ "/health": () => json(HEALTH) });

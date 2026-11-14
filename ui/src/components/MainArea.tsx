@@ -56,7 +56,8 @@ function ConnectionProblem() {
   if (link.state !== "failed") return null;
   // The app can't start a service: a stopped one has nothing to answer it. It says how instead.
   const down = link.failure.kind === "unreachable" || link.failure.kind === "stopped";
-  const noService = down && platform.kind === "desktop" && connection.isHome && !connection.instanceId;
+  // No service.json here to sign in with, and never signed in: nothing is installed.
+  const noService = down && platform.kind === "desktop" && connection.isHome && !connection.serviceToken && !connection.clientId;
   const { title, detail } = noService
     ? {
         title: "No service on this computer",
@@ -94,16 +95,10 @@ function ConnectionProblem() {
         </form>
       )}
       <div className="placard-actions">
-        {link.failure.kind === "identity_changed" ? (
-          <button type="button" onClick={() => retry(true)}>
-            Trust this service
+        {!needsToken && (
+          <button type="button" onClick={() => retry()}>
+            Try again
           </button>
-        ) : (
-          !needsToken && (
-            <button type="button" onClick={() => retry()}>
-              Try again
-            </button>
-          )
         )}
         <button type="button" onClick={() => setSwitcherOpen(true)}>
           Switch service

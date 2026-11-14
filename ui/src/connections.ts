@@ -1,6 +1,14 @@
-import { addClient, ApiError, fetchHealth, NetworkError, ServiceClient, type ClientToken, type Health, type ServiceInfo } from "./api/client";
+import { addClient, ApiError, fetchHealth, NetworkError, ServiceClient, type ClientToken, type ServiceInfo } from "./api/client";
 
-export const SUPPORTED_API_VERSIONS = { min: 1, max: 1 };
+/**
+ * The /api/v2 revision this app was built for. A service only ever adds to /api/v2, so the app
+ * works with any revision; a higher one means this app is out of date. See docs/v2-design.md, section 4.5.
+ */
+export const API_VERSION = 1;
+
+export function appIsOutdated(service: ServiceInfo): boolean {
+  return service.api_version > API_VERSION;
+}
 
 export interface Connection {
   id: string;
@@ -20,8 +28,6 @@ export interface Connection {
    * persist() drops it. The desktop app reads it from this computer's service.json.
    */
   serviceToken?: string;
-  /** Pinned on first success, to notice a different service at the same address. */
-  instanceId?: string;
   /** Lists the service that served this page, which cannot be removed. */
   isHome?: boolean;
   /** A name the user gave it in this app. Without one, the service's own name shows. */
@@ -77,15 +83,13 @@ export type ConnectFailure =
   | { kind: "unreachable" }
   | { kind: "stopped" }
   | { kind: "not_agentop" }
-  | { kind: "identity_changed"; health: Health }
-  | { kind: "incompatible"; health: Health }
-  | { kind: "no_token"; health: Health }
-  | { kind: "expired"; health: Health }
-  | { kind: "token_rejected"; health: Health }
-  | { kind: "rate_limited"; health: Health };
+  | { kind: "no_token" }
+  | { kind: "expired" }
+  | { kind: "token_rejected" }
+  | { kind: "rate_limited" };
 
 /** `update` holds changes to the connection's credentials, which the caller saves. */
-export type ConnectResult = ({ ok: true; health: Health; service: ServiceInfo } | ({ ok: false } & ConnectFailure)) & {
+export type ConnectResult = ({ ok: true; service: ServiceInfo } | ({ ok: false } & ConnectFailure)) & {
   update?: Partial<Connection>;
 };
 
@@ -159,23 +163,14 @@ export function reachabilityNote(pageUrl: string, target: string): ReachabilityN
   return null;
 }
 
-export async function checkConnection(connection: Connection, trustNewIdentity = false): Promise<ConnectResult> {
-  let health: Health;
+/** Whatever answers at the address is the service: a host runs one, so there is no identity to check. */
+export async function checkConnection(connection: Connection): Promise<ConnectResult> {
   try {
-    health = await fetchHealth(connection.url);
+    const health = await fetchHealth(connection.url);
+    if (health.status !== "ok") return { ok: false, kind: "not_agentop" };
   } catch (error) {
     if (error instanceof NetworkError) return { ok: false, kind: "unreachable" };
     return { ok: false, kind: "not_agentop" };
-  }
-  if (health.status !== "ok" || typeof health.api_version !== "number" || !health.instance_id) {
-    return { ok: false, kind: "not_agentop" };
-  }
-  // Before the token is sent: this is what keeps it from going to the wrong service.
-  if (connection.instanceId && connection.instanceId !== health.instance_id && !trustNewIdentity) {
-    return { ok: false, kind: "identity_changed", health };
-  }
-  if (health.api_version < SUPPORTED_API_VERSIONS.min || health.api_version > SUPPORTED_API_VERSIONS.max) {
-    return { ok: false, kind: "incompatible", health };
   }
   let update: Partial<Connection> | undefined;
   let token = connection.token;
@@ -184,22 +179,22 @@ export async function checkConnection(connection: Connection, trustNewIdentity =
     const serviceToken = connection.serviceToken || (!connection.clientId ? connection.token : "");
     if (!serviceToken) {
       const signedOut = connection.token ? EXPIRED : undefined;
-      return { ok: false, kind: connection.clientId ? "expired" : "no_token", health, update: signedOut };
+      return { ok: false, kind: connection.clientId ? "expired" : "no_token", update: signedOut };
     }
     try {
       update = credentialsFrom(await addClient(connection.url, serviceToken, clientName()));
       token = update.token!;
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "token_rejected", health, update: SIGNED_OUT };
-      if (error instanceof ApiError && error.status === 429) return { ok: false, kind: "rate_limited", health, update: SIGNED_OUT };
+      if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "token_rejected", update: SIGNED_OUT };
+      if (error instanceof ApiError && error.status === 429) return { ok: false, kind: "rate_limited", update: SIGNED_OUT };
       return { ok: false, kind: "unreachable" };
     }
   }
   try {
     const service = await new ServiceClient(connection.url, token).service();
-    return { ok: true, health, service, update };
+    return { ok: true, service, update };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "expired", health, update: EXPIRED };
+    if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "expired", update: EXPIRED };
     return { ok: false, kind: "unreachable", update };
   }
 }
@@ -219,34 +214,24 @@ export function failureMessage(failure: ConnectFailure, label: string): { title:
       };
     case "not_agentop":
       return { title: "This is not an agentop service", detail: "Check the address." };
-    case "identity_changed":
-      return {
-        title: "A different service is now at this address",
-        detail: `It calls itself ${failure.health.name}. A reused tunnel port can cause this. Your token has not been sent to it.`,
-      };
-    case "incompatible":
-      return {
-        title: `${label} runs an incompatible version`,
-        detail: `It runs ${failure.health.version}. Update the service or this app.`,
-      };
     case "no_token":
       return {
-        title: `Enter the token for ${failure.health.name}`,
+        title: `Enter the token for ${label}`,
         detail: "On that machine, run agentop service token.",
       };
     case "expired":
       return {
-        title: `Signed out of ${failure.health.name}`,
+        title: `Signed out of ${label}`,
         detail: "This app's access ran out after a while unused, or was revoked. Enter the service token to sign in again: on that machine, run agentop service token.",
       };
     case "token_rejected":
       return {
-        title: `${failure.health.name} rejected the token`,
-        detail: `Each service has its own token. Run agentop service token on ${failure.health.name} itself, not on this computer.`,
+        title: `${label} rejected the token`,
+        detail: `Each service has its own token. Run agentop service token on ${label} itself, not on this computer.`,
       };
     case "rate_limited":
       return {
-        title: `${failure.health.name} refused for now`,
+        title: `${label} refused for now`,
         detail: "Too many wrong tokens were tried. Wait a minute, then try again.",
       };
   }

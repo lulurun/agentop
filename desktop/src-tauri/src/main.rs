@@ -14,7 +14,6 @@ const KEYCHAIN_SERVICE: &str = "agentop";
 #[derive(Deserialize)]
 struct ServiceFile {
     token: String,
-    instance_id: String,
     name: String,
 }
 
@@ -29,7 +28,6 @@ struct ConfigFile {
 struct ServiceInfo {
     url: String,
     token: String,
-    instance_id: String,
     name: String,
 }
 
@@ -58,7 +56,6 @@ fn read_service_info() -> Option<ServiceInfo> {
     Some(ServiceInfo {
         url: format!("{scheme}://{host}:{}", config.port.unwrap_or(DEFAULT_PORT)),
         token: service.token,
-        instance_id: service.instance_id,
         name: service.name,
     })
 }
@@ -145,7 +142,6 @@ mod tests {
     fn defaults_to_the_loopback_port() {
         let info = with_home(Some(SERVICE), None).unwrap();
         assert_eq!(info.url, "http://127.0.0.1:9775");
-        assert_eq!(info.instance_id, "i");
     }
 
     #[test]

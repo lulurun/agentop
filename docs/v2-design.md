@@ -150,12 +150,11 @@ A **connection** is a record kept by the client, never by a service:
   "id": "local-uuid",
   "label": "build-box",
   "url": "http://build-box:9775",   // base URL, may include a path such as /agentop
-  "token": "…",                     // desktop: OS keychain; web: localStorage
-  "instance_id": "service-uuid"     // pinned on first successful connect
+  "token": "…"                      // desktop: OS keychain; web: localStorage
 }
 ```
 
-Every service has a stable `instance_id` and a `name` (default: hostname), set on first run and returned by `/health`.
+Every service has a `name` (default: hostname), set on first run and returned by `/service`. A host runs one service, so the address is the identity: whatever answers there is the service the user wants. The app pins no ID to it. If a different service now answers, for example after a reinstall or a reused tunnel port, it doesn't know this app's client token, so the app asks to sign in again. (Until 2026-11-15 the app pinned an `instance_id` from `/health`. It only guarded against mix-ups, since anyone could copy a public ID, and it put a fingerprint in an unauthenticated response.)
 
 **Defaults.** The web app always lists the service that served it, under that service's name. The desktop app lists the local service when `service.json` exists. Each client starts on its last-used connection, or on that default.
 
@@ -167,9 +166,10 @@ Connecting runs these checks in order, and each failure has its own message:
 |------|---------------------------|
 | 1. `GET /api/v2/health` | "Can't reach this service" with likely causes. A browser reports network, CORS, and mixed-content failures as the same error, so the app cannot tell them apart |
 | 2. Response is agentop | "This is not an agentop service" |
-| 3. `instance_id` matches the pin | "A different service is now at this address", with a confirm. This stops a token going to the wrong service when a tunnel port is reused. It is checked before the token is sent. It guards against accidents, not impersonation |
-| 4. `api_version` is supported | "Incompatible version", offering an update when the service is the older side |
-| 5. `GET /api/v2/service` with the token | "Token rejected" |
+| 3. Sign in with the service token, if the app has no live client token | "Enter the token", "Token rejected", or "Refused for now" |
+| 4. `GET /api/v2/service` with the token | "Signed out" |
+
+**Versions.** The path is the compatibility promise: `/api/v2` only ever gains routes and fields, and an incompatible change gets a new path, `/api/v3`. So a client never refuses a v2 service over its version. `/service` returns `api_version`, the revision of `/api/v2`, which grows with each addition. When it is higher than the revision the app was built for, the header shows that the app is out of date: the web app offers a reload, which loads the newer app from the service, and the desktop app says to update it. A client newer than its service must cope with routes the service doesn't have yet, as the `/admin` fallback in 8.3 does.
 
 **Switching.** The app closes the events and terminal sockets for the old connection, shows a loading state, then runs the same checks on the new one. This only detaches clients, so every agent on the old service keeps running. Each connection remembers its selected session. All client state is keyed by `(connection id, session id)`, because session IDs are unique only within one service. Two services may both have a `general-41185`.
 
@@ -323,7 +323,7 @@ The terminal socket is remote code execution as the user, with agents running in
 ### 7.1 Rules
 
 1. **Bind to loopback by default.** Exposing a service is an explicit choice: `agentop serve --host`, or `host` in `~/.agentop/config.toml`.
-2. **Require a client's bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only status, version, `api_version`, `instance_id`, and `name`, and `POST /api/v2/auth/clients` (below).
+2. **Require a client's bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only `{"status": "ok"}`, and `POST /api/v2/auth/clients` (below). The service's name and version are behind the token, in `/service`, so a stranger learns only that something answers.
    - The **service token**, random and 256-bit, lives in `~/.agentop/service.json`, mode `0600`. It does one thing: `POST /api/v2/auth/clients` signs in a new client with it. Every other route refuses it. Wrong service tokens are slowed down: after 10 in a minute, from anyone, adding a client answers 429 for the rest of that minute. Clients already signed in are not affected.
    - Each **client** (a browser, the desktop app, one CLI command) gets its own random token, which expires after `client_ttl` (default `12h`) unless renewed, and never outlives `client_max_age` (default `30d`) from sign-in. Only a SHA-256 hash of it is kept, in `~/.agentop/state/clients.json`, mode `0600`.
    - `POST /api/v2/auth/renew` returns a new token good for another `client_ttl`. The old one keeps working for 60 seconds, for requests already on their way.
@@ -335,7 +335,7 @@ The terminal socket is remote code execution as the user, with agents running in
 
 Because any origin must be able to connect, the origin no longer decides access; the token does. So:
 
-- **CORS is open.** `/api/v2` answers any origin, without credentials mode, and the CORS layer sits outside auth so preflights succeed. A foreign page can read `/health` and nothing else.
+- **CORS is open.** `/api/v2` answers any origin, without credentials mode, and the CORS layer sits outside auth so preflights succeed. A foreign page can read `/health`, which says only that the service is up, and nothing else.
 - **There is no `Origin` or `Host` allowlist in v2.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies were the thing those checks protected, and there are none. The old `/api` routes, which have no token, keep the Phase 0 checks until they are removed.
 - **The web app sets a strict CSP**: `script-src 'self'` with no inline script. It stores client tokens in `localStorage`, so this is the main defence for them. A stolen one is good for at most `client_ttl` unless the thief keeps renewing it, and can be revoked on its own; the service token is never stored. `connect-src` has to stay open to user-chosen hosts.
 
@@ -424,7 +424,7 @@ Update needs a git checkout, not systemd. It must outlive the service it restart
 
 `GET /api/v2/admin/update` reports commits available and the status of the last run. Terminals drop briefly and reconnect automatically (6.1); agents are not interrupted.
 
-Any client can now talk to a service of a different version, including the web app when it connects to another host. `/api/v2/health` returns an integer `api_version`, and clients declare the range they support. Outside that range, the connect check (4.5) stops with an explanation. `/health`, `/service`, and `/admin/update` must stay compatible across versions, so that an older service can always be updated from a newer client. A service from before `/admin` has these actions under `/service/`, and the client falls back to them on a 404.
+Any client can now talk to a service of a different version, including the web app when it connects to another host. Within `/api/v2` every change is an addition, and `api_version` in `/service` tells an older client to update (4.5). `/health` stays `{"status": "ok"}`, and `/service` and `/admin/update` must stay compatible across versions, so that an older service can always be updated from a newer client. A service from before `/admin` has these actions under `/service/`, and the client falls back to them on a 404.
 
 ## 9 API
 
@@ -432,8 +432,8 @@ All routes are under `/api/v2`. The existing `/api` routes stay until cutover, s
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/health` | Status, version, `api_version`, `instance_id`, `name` (no auth) |
-| `GET` | `/service` | Name, version, commit, uptime, PID, tmux version, manager, capabilities, `install_kind`, whether TLS is on |
+| `GET` | `/health` | `{"status": "ok"}` and nothing else (no auth) |
+| `GET` | `/service` | Name, version, `api_version`, commit, uptime, PID, tmux version, manager, capabilities, `install_kind`, whether TLS is on |
 | `POST` | `/admin/restart`, `/admin/stop` | Admin: restart or stop this service (8.3) |
 | `GET`, `POST` | `/admin/update` | Admin: check and status; start an update |
 | `POST` | `/tickets` | Issue a WebSocket ticket |
@@ -962,7 +962,7 @@ Parity list for the old dashboard, so nothing was lost by accident:
 | Browser rules block a web app connection | Medium | Spike S4; reachability guidance in the form; recommend the page from a local service or the desktop app |
 | Tokens or terminal traffic exposed on plain HTTP | Low | The service refuses a non-loopback bind without TLS, and the app refuses plain HTTP to another machine |
 | Token stolen from `localStorage` | Low | Strict `script-src`, no third-party scripts, rotation |
-| Acting on the wrong machine after a switch | Medium | Service name always visible; stop and update confirmations name the service; `instance_id` decides what is local |
+| Acting on the wrong machine after a switch | Medium | Service name always visible; stop and update confirmations name the service; the desktop app finds the local service from `service.json` |
 | Mouse mode makes copy awkward | Medium | Spike S3; `mouse` is a config option if it proves worse than the scroll benefit |
 | A bad update leaves the service down | Low | Pre-checks, health poll, automatic rollback; agents unaffected |
 | Ready-marker detection breaks when agents change their TUI | Medium | The timeout fallback means only slower starts, never failed ones |

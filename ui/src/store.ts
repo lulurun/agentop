@@ -48,7 +48,7 @@ interface AppState {
 
   init(): Promise<void>;
   switchTo(id: string): void;
-  retry(trustNewIdentity?: boolean): void;
+  retry(): void;
   /** Sign in with the service token. */
   setToken(token: string): void;
   /** Sign this app out of the active service, and revoke its client there. */
@@ -323,21 +323,19 @@ export const useApp = create<AppState>((set, get) => {
     }
   }
 
-  async function connect(connection: Connection, trustNewIdentity = false) {
+  async function connect(connection: Connection) {
     closeLink();
     const mine = attempt;
     set({ link: { state: "connecting" }, sessions: {}, plugins: [] });
-    const result = await checkConnection(connection, trustNewIdentity);
+    const result = await checkConnection(connection);
     if (mine !== attempt) return;
     if (result.update) get().updateConnection(connection.id, result.update);
     if (!result.ok) {
       set({ link: { state: "failed", failure: result } });
       return;
     }
-    const { instance_id: instanceId, name } = result.health;
-    if (connection.instanceId !== instanceId || (connection.isHome && connection.label !== name)) {
-      get().updateConnection(connection.id, { instanceId, ...(connection.isHome ? { label: name } : {}) });
-    }
+    const { name } = result.service;
+    if (connection.isHome && connection.label !== name) get().updateConnection(connection.id, { label: name });
     void openEvents(mine, activeConnection(get()), result.service);
   }
 
@@ -444,8 +442,8 @@ export const useApp = create<AppState>((set, get) => {
       void connect(activeConnection(get()));
     },
 
-    retry(trustNewIdentity = false) {
-      void connect(activeConnection(get()), trustNewIdentity);
+    retry() {
+      void connect(activeConnection(get()));
     },
 
     setToken(token) {

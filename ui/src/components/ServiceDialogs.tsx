@@ -42,8 +42,7 @@ export function AddServiceDialog() {
       alias: label.trim() || undefined,
       ...result.update,
       serviceToken: undefined,
-      label: result.health.name,
-      instanceId: result.health.instance_id,
+      label: result.service.name,
     });
   }
 
@@ -78,7 +77,7 @@ export function AddServiceDialog() {
           </p>
         )}
         {note && !unencrypted && <p className="form-warning">{note.message}</p>}
-        {result?.ok && <p className="form-success">Found {result.health.name}, version {result.health.version}.</p>}
+        {result?.ok && <p className="form-success">Found {result.service.name}, version {result.service.version}.</p>}
         {result && !result.ok && (
           <p className="form-error" role="alert">
             {failureMessage(result, parsed?.url ?? "this service").title}. {failureMessage(result, parsed?.url ?? "this service").detail}
