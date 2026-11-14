@@ -17,7 +17,7 @@ The v2 security model is deliberately simple. Review it before recommending that
 - [x] One shared token per service (design D7): per-client tokens, revoked one at a time from the Status dialog or `agentop service clients`, 2026-11-14. The service token only signs a client in.
 - [x] Token expiry: a client's token runs out after 12 hours unused (`client_ttl`) and 30 days at most (`client_max_age`); the app renews it hourly while on screen, 2026-11-14.
 - [x] Rotate the PC service's token, which was pasted into a chat: rotated 2026-11-15, after every client had signed in with its own token, so none was signed out.
-- [ ] Open CORS on `/api/v2`.
+- [x] Open CORS on `/api/v2`: kept open, reviewed 2026-11-15. The app must reach services on other origins, and there are no cookies or other ambient credentials, so the token decides access, not the origin. A foreign page gets 401 everywhere except `/health` and signing in with the service token.
 - [x] Token storage in the web app's `localStorage`: only the client's own expiring token is stored, never the service token, 2026-11-14. XSS could still read it: the CSP stays the main defence.
 - [ ] What `/api/v2/health` exposes without a token (name, version, instance ID).
 - [ ] Agents started with skip-permissions flags, reachable by anyone who holds the token.
