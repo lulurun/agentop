@@ -786,7 +786,8 @@ please tell the akimoto change and ask Eiger to deploy akimoto and watch for nex
 
 1. The `handoff` skill writes a prompt that stands on its own: the task, what changed and why, the repo and commit, what counts as done, and what to ask the user before doing.
 2. It runs `agentop send eiger`, which types the prompt into the live session called Eiger and submits it ([cli.md 1.4](cli.md#14-send)). The prompt starts with `[agentop send from <sender>]`.
-3. That is all. Nothing comes back to the sender, which carries on with the change. The user switches to Eiger, in the agentop app or with tmux, to watch it and answer it there.
+3. Usually that is all. Nothing comes back to the sender, which carries on with the change. The user switches to Eiger, in the agentop app or with tmux, to watch it and answer it there.
+4. When the sender needs a result to continue, such as a build version, and the user asked for it back, the prompt ends with a Reply line: send that result back with `agentop send <sender>`, in a line or two, and ask for nothing back. The reply arrives in the sender as a new prompt; the sender never waits for it or polls. Open-ended tasks, such as deploy and monitor, get no Reply line (2026-11-14).
 
 The target must be a live managed session. With no match, `agentop send` says `I don't see an active session called 'Eiger'`; it never starts one. A match ignores case and the `-<suffix>` agentop adds, so `eiger` finds `Eiger-2953204`.
 
@@ -814,7 +815,7 @@ The earlier design was a plugin: `agentop handoff send/ask/report/show/list`, a 
 |---------|------------|
 | Safety: one agent can make another act, and a prompt injection could make a session deploy | Accepted for now. agentop is a development tool, and the skill only does what the user would type in the target themselves. Only managed sessions take prompts |
 | Typing into a busy session, or over a draft | The tool queues a prompt sent while it works. The user sees the target in the session list and can switch to it to check and take control |
-| Getting a report back to the sender | Not needed: the user watches the target and acts on the result there. If a report is ever wanted, the target can `agentop send` one back |
+| Getting a report back to the sender | Only when the sender needs a result: the prompt asks the target to `agentop send` it back, and says the reply ends the exchange so the two don't loop. Otherwise the user watches the target and acts on the result there |
 
 ### 12.11 Memory: agentop's own record of conversations
 

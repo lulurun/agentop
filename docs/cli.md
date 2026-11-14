@@ -71,9 +71,9 @@ agentop send <target> < prompt.txt     # no prompt: read it from stdin
 - `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `eiger` finds `Eiger-2953204`. With no match it says `I don't see an active session called 'eiger'`, and with several it lists them. It never starts a session
 - Run from inside tmux, the prompt gets a first line `[agentop send from <this session>]`; `--no-header` leaves it off
 - Only managed sessions (started by agentop) take prompts
-- Nothing comes back: switch to the target to follow it and answer it
+- Nothing comes back by itself: switch to the target to follow it and answer it. A prompt can ask the target to reply with its own `agentop send`, which arrives as a new prompt in the sender
 
-The `handoff` skill uses it to pass a side task, such as a deploy, from one session to another.
+The `handoff` skill uses it to pass a side task, such as a deploy, from one session to another. When the sender needs a result, such as a build version, the prompt asks for a one-line reply.
 
 ### 1.5 history
 
