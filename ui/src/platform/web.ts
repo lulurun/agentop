@@ -29,7 +29,7 @@ function homeUrl(): string {
   return `${location.origin}${path}`;
 }
 
-/** Take a token from `#token=…`, and remove it from the address bar at once. */
+/** Take the service token from `#token=…`, and remove it from the address bar at once. It is used only to sign in. */
 function consumeFragmentToken(): string {
   const parsed = parseConnectInfo(`${location.href.split("#")[0]}${location.hash}`);
   if (parsed?.token) history.replaceState(null, "", location.pathname + location.search);
@@ -59,7 +59,7 @@ export const webPlatform: Platform = {
   saveConnections: (connections) => write(localStorage, SAVED_KEY, connections),
   // A page can't start a service, however close the service is.
   async defaultConnection() {
-    return { id: HOME_ID, label: "This service", url: homeUrl(), token: consumeFragmentToken(), isHome: true };
+    return { id: HOME_ID, label: "This service", url: homeUrl(), token: "", serviceToken: consumeFragmentToken(), isHome: true };
   },
   // Per tab first, so two tabs can show two services. A new tab starts on the last used.
   loadActiveId: () => read<string>(sessionStorage, ACTIVE_KEY) ?? read<string>(localStorage, ACTIVE_KEY),

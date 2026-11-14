@@ -14,6 +14,8 @@ export type GitChanges = components["schemas"]["GitChanges"];
 export type CreateSession = components["schemas"]["CreateSession"];
 export type PatchSession = components["schemas"]["PatchSession"];
 export type PluginInfo = components["schemas"]["PluginInfo"];
+export type ClientToken = components["schemas"]["ClientToken"];
+export type ClientInfo = components["schemas"]["ClientInfo"];
 
 export class ApiError extends Error {
   constructor(
@@ -31,6 +33,11 @@ export function fetchHealth(baseUrl: string): Promise<Health> {
   return new ServiceClient(baseUrl, "").get<Health>("/health");
 }
 
+/** Sign a new client in with the service token. The service token is good for nothing else. */
+export function addClient(baseUrl: string, serviceToken: string, name: string): Promise<ClientToken> {
+  return new ServiceClient(baseUrl, serviceToken).request<ClientToken>("POST", "/auth/clients", { name });
+}
+
 /** One service, addressed by base URL. Nothing here is global, so services stay separate. */
 export class ServiceClient {
   constructor(
@@ -38,7 +45,7 @@ export class ServiceClient {
     readonly token: string,
   ) {}
 
-  private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     let response: Response;
     try {
       response = await fetch(`${this.baseUrl}/api/v2${path}`, {
@@ -56,6 +63,7 @@ export class ServiceClient {
       const detail = await response.json().catch(() => null);
       throw new ApiError(response.status, typeof detail?.detail === "string" ? detail.detail : response.statusText);
     }
+    if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;
   }
 
@@ -74,6 +82,9 @@ export class ServiceClient {
   }
 
   service = () => this.get<ServiceInfo>("/service");
+  renew = () => this.request<ClientToken>("POST", "/auth/renew");
+  clients = () => this.get<ClientInfo[]>("/auth/clients");
+  revokeClient = (id: string) => this.request<void>("DELETE", `/auth/clients/${encodeURIComponent(id)}`);
   updateInfo = () => this.admin<UpdateInfo>("GET", "update");
   restartService = () => this.admin("POST", "restart");
   stopService = () => this.admin("POST", "stop");

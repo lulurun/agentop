@@ -117,7 +117,7 @@ those are `webkit2gtk-4.1`, `gtk3`, `libsoup3`, and `librsvg`.
 ```
 
 The app connects to this computer's service by itself, reading `service.json`, and
-keeps other services' tokens in the OS keychain, which needs a running secret service
+keeps its tokens for other services in the OS keychain, which needs a running secret service
 such as GNOME Keyring or KeePassXC. Unlike a browser, it has no rule against reaching
 either loopback or plain HTTP addresses, so HTTPS-Only Mode and similar limits don't
 apply.
@@ -128,9 +128,10 @@ app does. It can't start it either.
 ## Exposing a service
 
 `agentop serve` binds `127.0.0.1` unless told otherwise, and that is the safe
-default. Everything under `/api/v2` except `/health` needs the token, but the
-token is all there is: whoever holds it can type into every agent on the machine,
-including agents started with skip-permissions flags. So, to reach a service from
+default. Everything under `/api/v2` except `/health` needs a client's token, which
+the service token signs in. But tokens are all there is: whoever holds the service
+token, or a live client token, can type into every agent on the machine, including
+agents started with skip-permissions flags. See [Secure setup](../README.md#secure-setup). So, to reach a service from
 another machine, in order of preference:
 
 1. **An SSH tunnel.** `ssh -L 9775:127.0.0.1:9775 host`, then use

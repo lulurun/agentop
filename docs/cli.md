@@ -200,8 +200,11 @@ agentop open                          # open the app in a browser, signed in
 agentop service status                # whether the service runs, and how
 agentop service restart               # or stop; sessions keep running
 agentop service update                # pull, install, build, restart; goes back if that fails
-agentop service token [--rotate]      # print, or replace, the access token
+agentop service token [--rotate [--revoke-clients]]   # print, or replace, the service token
+agentop service clients [--revoke ID | --revoke-all]  # list the clients signed in, or sign them out
 agentop service connect-info [--host H | --url URL]   # what to paste into Connect to a service
 ```
 
-The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. Running it as a system service or behind a proxy is in [v2-setup.md](v2-setup.md).
+The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`.
+
+The service token only signs a client in: the app, or each CLI command, gets its own token with it, which expires (design D7). Rotating the service token leaves signed-in clients alone; add `--revoke-clients` to sign them out too. `service clients` works on `~/.agentop/state/clients.json` directly, so it works while the service is stopped, and a running service notices at once. Running it as a system service or behind a proxy is in [v2-setup.md](v2-setup.md).

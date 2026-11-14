@@ -81,22 +81,22 @@ def test_default_name(cwd, expected):
 
 def test_ticket_is_single_use():
     tickets = auth.TicketStore()
-    ticket = tickets.issue("events")
-    assert tickets.consume(ticket, "events")
-    assert not tickets.consume(ticket, "events")
+    ticket = tickets.issue("events", "c1")
+    assert tickets.consume(ticket, "events") == "c1"
+    assert tickets.consume(ticket, "events") is None
 
 
 def test_ticket_expires():
     now = [0.0]
     tickets = auth.TicketStore(clock=lambda: now[0])
-    ticket = tickets.issue("events")
+    ticket = tickets.issue("events", "c1")
     now[0] = auth.TICKET_TTL_SECONDS + 1
     assert not tickets.consume(ticket, "events")
 
 
 def test_ticket_for_the_wrong_scope_fails_and_is_spent():
     tickets = auth.TicketStore()
-    ticket = tickets.issue(auth.terminal_scope("a"))
+    ticket = tickets.issue(auth.terminal_scope("a"), "c1")
     assert not tickets.consume(ticket, auth.terminal_scope("b"))
     assert not tickets.consume(ticket, auth.terminal_scope("a"))
 
@@ -112,6 +112,94 @@ def test_unknown_ticket(ticket):
 )
 def test_bearer_matches(header, expected):
     assert auth.bearer_matches(header, "good") is expected
+
+
+class Clock:
+    def __init__(self):
+        self.now = 1_000_000.0
+
+    def __call__(self):
+        return self.now
+
+
+def test_a_client_token_expires_unless_renewed(tmp_path):
+    clock = Clock()
+    store = auth.ClientStore(tmp_path / "clients.json", clock=clock)
+    client, token = store.add("phone", ttl=3600, max_age=None)
+    assert store.authenticate(token).id == client.id
+    clock.now += 3000
+    renewed, new = store.renew(client.id, ttl=3600)
+    assert new != token and renewed.expires_at == clock.now + 3600
+    clock.now += 3000  # past the first token's own expiry
+    assert store.authenticate(new).id == client.id
+    clock.now += 601
+    assert store.authenticate(new) is None
+    assert store.list() == []
+
+
+def test_a_replaced_token_works_for_a_short_grace_only(tmp_path):
+    clock = Clock()
+    store = auth.ClientStore(tmp_path / "clients.json", clock=clock)
+    client, old = store.add("phone", ttl=3600, max_age=None)
+    store.renew(client.id, ttl=3600)
+    assert store.authenticate(old) is not None
+    clock.now += auth.RENEW_GRACE_SECONDS + 1
+    assert store.authenticate(old) is None
+
+
+def test_renewal_never_goes_past_the_maximum_age(tmp_path):
+    clock = Clock()
+    store = auth.ClientStore(tmp_path / "clients.json", clock=clock)
+    client, _ = store.add("phone", ttl=3600, max_age=5000)
+    clock.now += 3000
+    renewed, _ = store.renew(client.id, ttl=3600)
+    assert renewed.expires_at == client.created_at + 5000
+
+
+def test_clients_are_kept_hashed_privately_and_shared_with_the_cli(tmp_path):
+    path = tmp_path / "clients.json"
+    service = auth.ClientStore(path)
+    client, token = service.add("phone", ttl=3600, max_age=None)
+    text = path.read_text()
+    assert token not in text and client.id in text
+    assert stat.S_IMODE(os.stat(path).st_mode) == 0o600
+    # A restarted service still knows the client.
+    assert auth.ClientStore(path).authenticate(token).id == client.id
+    # The CLI revokes in the file, and the running service notices.
+    os.utime(path, ns=(0, 0))  # mtime changes even within the same tick
+    assert auth.ClientStore(path).revoke(client.id)
+    assert service.authenticate(token) is None and not service.is_active(client.id)
+
+
+def test_too_many_wrong_service_tokens_block_adding_for_a_while():
+    clock = Clock()
+    store = auth.ClientStore(clock=clock)
+    for _ in range(auth.ADD_FAILURES_ALLOWED):
+        assert not store.add_blocked()
+        store.add_failed()
+    assert store.add_blocked()
+    clock.now += auth.ADD_FAILURE_WINDOW_SECONDS + 1
+    assert not store.add_blocked()
+
+
+@pytest.mark.parametrize(
+    "value, seconds",
+    [("12h", 43200), ("30m", 1800), ("30d", 2592000), ("90", 90), (90, 90), ("1.5h", 5400), ("0", None), (0, None), ("none", None)],
+)
+def test_parse_duration(value, seconds):
+    assert config.parse_duration(value) == seconds
+
+
+@pytest.mark.parametrize("value", ["soon", "-5", "12x"])
+def test_parse_duration_refuses_nonsense(value):
+    with pytest.raises(ValueError):
+        config.parse_duration(value)
+
+
+def test_client_ttl_has_a_floor():
+    assert config.Settings().client_ttl_seconds == 12 * 3600
+    with pytest.raises(ValueError):
+        config.Settings(client_ttl="10s").client_ttl_seconds
 
 
 def test_identity_is_private_and_stable(tmp_path, monkeypatch):

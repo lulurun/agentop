@@ -3,6 +3,7 @@ import type { ServiceInfo, UpdateInfo } from "../api/client";
 import { ApiError, ServiceClient } from "../api/client";
 import { connectionName, isEncrypted, isLoopback } from "../connections";
 import { activeConnection, useApp } from "../store";
+import { ClientsSection } from "./ClientsSection";
 import { Dialog } from "./Dialog";
 import { formatDuration } from "./format";
 
@@ -205,6 +206,7 @@ export function ServicePanel() {
               agentop serve.
             </p>
           )}
+          {info && <ClientsSection client={client} connection={connection} />}
           <div className="dialog-actions">
             <button type="button" className="dialog-action-start" data-autofocus onClick={() => setDialog(null)}>
               Close

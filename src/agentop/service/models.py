@@ -193,3 +193,29 @@ class TicketRequest(BaseModel):
 class Ticket(BaseModel):
     ticket: str
     expires_in: int
+
+
+class AddClient(BaseModel):
+    name: str = Field(default="Client", min_length=1, max_length=80)
+    # Shorter than the service's own lifetime, for a client that needs only a moment (the CLI).
+    ttl_seconds: int | None = Field(default=None, ge=1)
+
+
+class ClientToken(BaseModel):
+    client_id: str
+    token: str
+    # Seconds until this token stops working, unless renewed.
+    expires_in: int
+    # The service's lifetime for a token. The app renews once a token is a twelfth of this old.
+    ttl: int
+
+
+class ClientInfo(BaseModel):
+    id: str
+    name: str
+    created_at: float
+    last_seen: float
+    expires_at: float
+    ends_at: float | None
+    # The client making this request.
+    current: bool

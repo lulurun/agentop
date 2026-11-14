@@ -18,6 +18,7 @@ from agentop.service.config import Settings
 from agentop.service.identity import Identity
 from agentop.service.plugins import PluginHost
 from agentop.service.store import SessionStore
+from tests.conftest import signed_in
 
 TOKEN = "test-token"
 AUTH = {"Authorization": f"Bearer {TOKEN}"}
@@ -126,7 +127,7 @@ def env(tmp_path, monkeypatch):
         def client(self):
             store = QuietStore()
             host = PluginHost(store, root=self.root, data_dir=self.data)
-            app = create_app(Settings(), Identity(TOKEN, "iid", "test"), store, host)
+            app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
             client = TestClient(app)
             client.store, client.host = store, host
             return client

@@ -14,11 +14,12 @@ The old dashboard was removed on 2026-11-14, without the parity walk and the day
 The v2 security model is deliberately simple. Review it before recommending that anyone expose a service beyond loopback.
 
 - [x] Plain HTTP on non-loopback addresses (design D6): refused, 2026-11-14. The service won't start without TLS, and the app won't add such an address; the README has an SSH tunnel guide.
-- [ ] One shared token per service (design D7): move to per-client tokens that can be revoked one at a time.
-- [ ] Token expiry: tokens never expire today; only `agentop service token --rotate` replaces one.
+- [x] One shared token per service (design D7): per-client tokens, revoked one at a time from the Status dialog or `agentop service clients`, 2026-11-14. The service token only signs a client in.
+- [x] Token expiry: a client's token runs out after 12 hours unused (`client_ttl`) and 30 days at most (`client_max_age`); the app renews it hourly while on screen, 2026-11-14.
+- [ ] Single-use pairing codes (`agentop service pair`, valid for 10 minutes), so that on a hardened host the service token never leaves the machine, with a setting to refuse the static service token from anywhere but loopback. Discussed 2026-11-14, not built.
 - [ ] Rotate the PC service's token, which was pasted into a chat. Accepted for now (2026-11-13): the service is only used by its owner, to try agentop out. Rotate before it is used for anything that matters.
 - [ ] Open CORS on `/api/v2`.
-- [ ] Token storage in the web app's `localStorage`.
+- [x] Token storage in the web app's `localStorage`: only the client's own expiring token is stored, never the service token, 2026-11-14. XSS could still read it: the CSP stays the main defence.
 - [ ] What `/api/v2/health` exposes without a token (name, version, instance ID).
 - [ ] Agents started with skip-permissions flags, reachable by anyone who holds the token.
 - [ ] The HTTPS proxy on pisces-01: public on 443 with only the token in front. Consider an IP allow-list or a second factor at nginx.

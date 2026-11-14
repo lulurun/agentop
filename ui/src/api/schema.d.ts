@@ -56,6 +56,64 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Clients */
+        get: operations["list_clients_auth_clients_get"];
+        put?: never;
+        /**
+         * Add Client
+         * @description Add a client with the service token. Nothing else accepts the service token.
+         */
+        post: operations["add_client_auth_clients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/clients/{client_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Client
+         * @description Revoke a client, this one included (to sign out). Its open sockets close within seconds.
+         */
+        delete: operations["revoke_client_auth_clients__client_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renew */
+        post: operations["renew_auth_renew_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/fs/dirs": {
         parameters: {
             query?: never;
@@ -326,12 +384,50 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** AddClient */
+        AddClient: {
+            /**
+             * Name
+             * @default Client
+             */
+            name: string;
+            /** Ttl Seconds */
+            ttl_seconds?: number | null;
+        };
         /** ChangedFile */
         ChangedFile: {
             /** Path */
             path: string;
             /** Status */
             status: string;
+        };
+        /** ClientInfo */
+        ClientInfo: {
+            /** Created At */
+            created_at: number;
+            /** Current */
+            current: boolean;
+            /** Ends At */
+            ends_at: number | null;
+            /** Expires At */
+            expires_at: number;
+            /** Id */
+            id: string;
+            /** Last Seen */
+            last_seen: number;
+            /** Name */
+            name: string;
+        };
+        /** ClientToken */
+        ClientToken: {
+            /** Client Id */
+            client_id: string;
+            /** Expires In */
+            expires_in: number;
+            /** Token */
+            token: string;
+            /** Ttl */
+            ttl: number;
         };
         /** CreateSession */
         CreateSession: {
@@ -796,6 +892,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_clients_auth_clients_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientInfo"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_client_auth_clients_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddClient"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientToken"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_client_auth_clients__client_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    renew_auth_renew_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ClientToken"];
                 };
             };
             /** @description Validation Error */

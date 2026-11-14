@@ -63,7 +63,7 @@ function ConnectionProblem() {
         detail: "Install agentop here and run agentop serve, or add a service running on another machine.",
       }
     : failureMessage(link.failure, connectionName(connection));
-  const needsToken = link.failure.kind === "no_token" || link.failure.kind === "token_rejected";
+  const needsToken = ["no_token", "expired", "token_rejected", "rate_limited"].includes(link.failure.kind);
   return (
     <div className="placard">
       <h2 className="placard-title">
@@ -83,7 +83,7 @@ function ConnectionProblem() {
           <input
             type="text" spellCheck={false} autoCapitalize="off"
             aria-label="Token"
-            placeholder="Paste the token"
+            placeholder="Paste the service token"
             autoComplete="off"
             value={token}
             onChange={(event) => setTokenText(event.target.value)}

@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, host, identity, manager
+from . import auth, config, host, identity, manager
 from .config import Settings
 from .identity import Identity
 from .plugins import PluginHost
@@ -51,8 +51,11 @@ def create_app(
     store: SessionStore | None = None,
     plugins: PluginHost | None = None,
     available: list[str] | None = None,
+    clients: auth.ClientStore | None = None,
 ) -> FastAPI:
     settings = settings or config.load()
+    # A given identity is a test's: its clients live in memory unless it gives a store too.
+    clients = clients or auth.ClientStore(None if ident else auth.clients_path())
     identity_file = None if ident else identity.identity_path()
     ident = ident or identity.load_or_create(settings.name)
     store = store or SessionStore()
@@ -68,7 +71,7 @@ def create_app(
         await store.shutdown()
 
     app = FastAPI(title="agentop", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
-    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, identity_file=identity_file, plugins=plugins, available=available)))
+    app.mount("/api/v2", create_v2_app(Context(settings, ident, store, clients=clients, identity_file=identity_file, plugins=plugins, available=available)))
 
     # The app was at /app/ until 2026-11-14. Relative, so it also works behind a proxy's path prefix.
     @app.get("/app", include_in_schema=False)
@@ -95,6 +98,11 @@ def serve(settings: Settings | None = None) -> None:
             settings.host,
         )
         raise SystemExit(1)
+    try:
+        settings.client_ttl_seconds, settings.client_max_age_seconds  # noqa: B018
+    except ValueError as e:
+        LOG.error("%s (in config.toml)", e)
+        raise SystemExit(1) from None
     try:
         tools = host.prepare()
     except host.NoAgentTools as e:

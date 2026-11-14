@@ -52,9 +52,10 @@ class ByHand:
         token = (self.home / "service.json").read_text()
         import json
 
-        self.http = httpx.Client(
-            base_url=self.base, headers={"Authorization": f"Bearer {json.loads(token)['token']}"}, timeout=10
+        added = httpx.post(
+            f"{self.base}/auth/clients", json={"name": "test"}, headers={"Authorization": f"Bearer {json.loads(token)['token']}"}
         )
+        self.http = httpx.Client(base_url=self.base, headers={"Authorization": f"Bearer {added.json()['token']}"}, timeout=10)
 
     def answers(self) -> bool:
         try:

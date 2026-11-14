@@ -16,7 +16,7 @@ Agent CLIs are built to run in a terminal, and tmux is the natural place to keep
 
 - **Session.** One agent CLI running in one tmux session. Its id is the tmux session name. A session agentop started is **managed**: it can be stopped, resumed, and sent text. One agentop finds running on its own is **external**: it is listed, and can be attached if it is in tmux.
 - **Sessions outlive everything else.** Closing the app, or restarting or updating the service, leaves every agent running. tmux owns the agents; agentop only attaches to them.
-- **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API. Every request except the health check needs the service's token.
+- **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API. The service token signs a browser or app in; each one then gets its own token, which runs out after 12 hours unused.
 - **App.** One UI, built as a web app (served by the service at `/`) and as a Tauri desktop app. Sessions are on the left, the agent's live terminal is in the middle, and details (token usage, changed files) are on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal.
 - **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It can also see the status of the service it is connected to, and restart or update it.
 - **History.** Past conversations of each tool, which can be resumed as new sessions.
@@ -72,6 +72,23 @@ ssh -N -L 9776:127.0.0.1:9775 build-box
 Then, in the app on your machine, open Connect to a service from the service menu and paste the connect-info string with the port changed to the tunnel's: `http://127.0.0.1:9776#token=…`. Use a port other than 9775 if your own machine runs a service too. Add `-f` to run the tunnel in the background, or put a `LocalForward 9776 127.0.0.1:9775` line under `Host build-box` in `~/.ssh/config`.
 
 To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` in a browser. An HTTPS proxy or TLS in the service are the other options, in [docs/v2-setup.md](docs/v2-setup.md#exposing-a-service).
+
+## Secure setup
+
+The defaults suit a service that only you reach, over loopback or a tunnel. The service token (`agentop service token`) never expires, but it only signs a client in, and the app doesn't keep it. Each browser or app gets its own token, which the app renews while it's open. After 12 hours unused, or 30 days in all, it's signed out and asks for the service token again. You can see every client, and sign any one out, in the service's Status dialog or with `agentop service clients`.
+
+For a service reachable from the internet, such as one behind an HTTPS proxy:
+
+- **Shorten the lifetimes** in `~/.agentop/config.toml`, then restart the service:
+
+  ```toml
+  client_ttl = "1h"       # signed out after an hour unused
+  client_max_age = "7d"   # and after a week, used or not
+  ```
+
+- **Rotate the service token** now and then, and at once if it was ever pasted somewhere it shouldn't be: `agentop service token --rotate`. Signed-in clients carry on. Add `--revoke-clients` to sign them all out too, if a client token may have leaked.
+- **Check who's signed in** with `agentop service clients`, and sign out anything you don't recognise with `--revoke ID`.
+- **Put something else in front** at the proxy too, such as an IP allow-list or a second factor. Tokens are the only thing in front of the agents.
 
 ## Documentation
 

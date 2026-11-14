@@ -1,10 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkConnection, isPlainRemote, newConnectionId, parseConnectInfo, tokenFromInput, reachabilityNote, type Connection } from "./connections";
+import {
+  checkConnection,
+  isPlainRemote,
+  needsRenewal,
+  newConnectionId,
+  parseConnectInfo,
+  reachabilityNote,
+  renewAgeMs,
+  tokenFromInput,
+  type Connection,
+} from "./connections";
 import { applyEvent, sortedSessions } from "./store";
 
 const HEALTH = { status: "ok", version: "1", api_version: 1, instance_id: "abc", name: "box" };
 const SERVICE = { ...HEALTH, commit: null };
-const conn: Connection = { id: "1", label: "box", url: "http://box:9775", token: "t" };
+const HOUR = 3_600_000;
+const conn: Connection = {
+  id: "1",
+  label: "box",
+  url: "http://box:9775",
+  token: "t",
+  clientId: "c1",
+  issuedAt: Date.now(),
+  expiresAt: Date.now() + 12 * HOUR,
+  ttl: 12 * 3600,
+};
+const ADDED = { client_id: "c2", token: "fresh", expires_in: 43200, ttl: 43200 };
 
 function respond(routes: Record<string, () => Response | Promise<Response>>) {
   const calls: { url: string; auth: string | null }[] = [];
@@ -92,7 +113,7 @@ describe("checkConnection", () => {
   });
   it("reports unreachable", async () => {
     respond({});
-    expect(await checkConnection(conn)).toEqual({ ok: false, kind: "unreachable" });
+    expect(await checkConnection(conn)).toMatchObject({ ok: false, kind: "unreachable" });
   });
   it("spots something else at that address", async () => {
     respond({ "/health": () => json({ hello: "world" }) });
@@ -117,12 +138,53 @@ describe("checkConnection", () => {
   });
   it("asks for a missing token without calling /service", async () => {
     const calls = respond({ "/health": () => json(HEALTH) });
-    expect(await checkConnection({ ...conn, token: "" })).toMatchObject({ ok: false, kind: "no_token" });
+    expect(await checkConnection({ ...conn, token: "", clientId: undefined })).toMatchObject({ ok: false, kind: "no_token" });
     expect(calls).toHaveLength(1);
   });
-  it("reports a rejected token", async () => {
+  it("signs in with the service token, and forgets it", async () => {
+    const calls = respond({ "/health": () => json(HEALTH), "/auth/clients": () => json(ADDED, 201), "/service": () => json(SERVICE) });
+    const result = await checkConnection({ id: "1", label: "box", url: "http://box:9775", token: "", serviceToken: "svc" });
+    expect(result.ok).toBe(true);
+    expect(result.update).toMatchObject({ token: "fresh", clientId: "c2", ttl: 43200, serviceToken: undefined });
+    expect(calls.map((c) => c.auth)).toEqual([null, "Bearer svc", "Bearer fresh"]);
+  });
+  it("treats a token saved before client tokens as the service token", async () => {
+    const calls = respond({ "/health": () => json(HEALTH), "/auth/clients": () => json(ADDED, 201), "/service": () => json(SERVICE) });
+    const result = await checkConnection({ id: "1", label: "box", url: "http://box:9775", token: "old-service-token" });
+    expect(result.update?.token).toBe("fresh");
+    expect(calls[1].auth).toBe("Bearer old-service-token");
+  });
+  it("says so when its token ran out, without sending it", async () => {
+    const calls = respond({ "/health": () => json(HEALTH) });
+    const result = await checkConnection({ ...conn, expiresAt: Date.now() - 1 });
+    expect(result).toMatchObject({ ok: false, kind: "expired", update: { token: "" } });
+    expect(calls).toHaveLength(1);
+  });
+  it("says so when its token was revoked", async () => {
     respond({ "/health": () => json(HEALTH), "/service": () => json({ detail: "no" }, 401) });
-    expect(await checkConnection(conn)).toMatchObject({ ok: false, kind: "token_rejected" });
+    expect(await checkConnection(conn)).toMatchObject({ ok: false, kind: "expired", update: { token: "" } });
+  });
+  it("reports a rejected service token, and forgets it", async () => {
+    respond({ "/health": () => json(HEALTH), "/auth/clients": () => json({ detail: "no" }, 401) });
+    const result = await checkConnection({ ...conn, token: "", clientId: undefined, serviceToken: "wrong" });
+    expect(result).toMatchObject({ ok: false, kind: "token_rejected", update: { serviceToken: undefined } });
+  });
+});
+
+describe("renewal", () => {
+  it("renews once a token is a twelfth of its lifetime old", () => {
+    expect(renewAgeMs(12 * 3600)).toBe(HOUR);
+    const now = Date.now();
+    expect(needsRenewal({ ...conn, issuedAt: now - 59 * 60_000 }, now)).toBe(false);
+    expect(needsRenewal({ ...conn, issuedAt: now - HOUR }, now)).toBe(true);
+  });
+  it("never more often than every five minutes", () => {
+    expect(renewAgeMs(3600)).toBe(5 * 60_000);
+    expect(renewAgeMs(60)).toBe(5 * 60_000);
+  });
+  it("not once it has run out: that needs the service token", () => {
+    const now = Date.now();
+    expect(needsRenewal({ ...conn, issuedAt: now - 13 * HOUR, expiresAt: now - HOUR }, now)).toBe(false);
   });
 });
 

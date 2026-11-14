@@ -2,8 +2,8 @@ import type { Connection } from "../connections";
 import type { Platform } from "./index";
 
 /**
- * The desktop app. Connections stay in the window's storage, except tokens, which
- * go to the OS keychain. Nothing else in the UI knows which shell it runs in.
+ * The desktop app. Connections stay in the window's storage, except client tokens,
+ * which go to the OS keychain. Nothing else in the UI knows which shell it runs in.
  */
 
 const SAVED_KEY = "agentop.connections";
@@ -56,6 +56,7 @@ export const tauriPlatform: Platform = {
     localStorage.setItem(SAVED_KEY, JSON.stringify(withoutTokens));
     for (const connection of connections) {
       if (connection.token) void invoke("token_set", { id: connection.id, token: connection.token }).catch(() => undefined);
+      else if (previous.some((p) => p.id === connection.id)) void invoke("token_delete", { id: connection.id }).catch(() => undefined);
     }
   },
 
@@ -67,7 +68,9 @@ export const tauriPlatform: Platform = {
       id: HOME_ID,
       label: service.name,
       url: service.url,
-      token: service.token,
+      token: "",
+      // Read from this computer's service.json, so the desktop app can always sign in again.
+      serviceToken: service.token,
       instanceId: service.instance_id,
       isHome: true,
     };

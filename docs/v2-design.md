@@ -323,9 +323,12 @@ The terminal socket is remote code execution as the user, with agents running in
 ### 7.1 Rules
 
 1. **Bind to loopback by default.** Exposing a service is an explicit choice: `agentop serve --host`, or `host` in `~/.agentop/config.toml`.
-2. **Require a bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only status, version, `api_version`, `instance_id`, and `name`.
-   - A random 256-bit token lives in `~/.agentop/service.json`, mode `0600`, and is rotated with `agentop service token --rotate`.
-   - Rotating invalidates every saved connection; clients then show "Token rejected".
+2. **Require a client's bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only status, version, `api_version`, `instance_id`, and `name`, and `POST /api/v2/auth/clients` (below).
+   - The **service token**, random and 256-bit, lives in `~/.agentop/service.json`, mode `0600`. It does one thing: `POST /api/v2/auth/clients` signs in a new client with it. Every other route refuses it. Wrong service tokens are slowed down: after 10 in a minute, from anyone, adding a client answers 429 for the rest of that minute. Clients already signed in are not affected.
+   - Each **client** (a browser, the desktop app, one CLI command) gets its own random token, which expires after `client_ttl` (default `12h`) unless renewed, and never outlives `client_max_age` (default `30d`) from sign-in. Only a SHA-256 hash of it is kept, in `~/.agentop/state/clients.json`, mode `0600`.
+   - `POST /api/v2/auth/renew` returns a new token good for another `client_ttl`. The old one keeps working for 60 seconds, for requests already on their way.
+   - `GET /api/v2/auth/clients` lists the clients, and `DELETE /api/v2/auth/clients/{id}` revokes one, this one included (to sign out). A revoked or expired client's open WebSockets close within 5 seconds, with code 4403.
+   - `agentop service token --rotate` replaces the service token. Clients already signed in stay signed in, unless `--revoke-clients` is given.
 3. **No ambient credentials.** There are no cookies. A token is only ever sent when the app attaches it deliberately, so a malicious page has nothing to ride on. This closes P1 and removes CSRF as a class of problem.
 4. **WebSockets use single-use tickets.** Browsers cannot set headers on WebSocket requests, and a token in a URL ends up in logs. `POST /api/v2/tickets` returns a ticket valid for 30s, bound to one purpose (events, or terminal for one session).
 5. **File APIs are confined.** Paths are resolved, including symlinks, and must stay inside the session's working directory.
@@ -334,17 +337,21 @@ Because any origin must be able to connect, the origin no longer decides access;
 
 - **CORS is open.** `/api/v2` answers any origin, without credentials mode, and the CORS layer sits outside auth so preflights succeed. A foreign page can read `/health` and nothing else.
 - **There is no `Origin` or `Host` allowlist in v2.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies were the thing those checks protected, and there are none. The old `/api` routes, which have no token, keep the Phase 0 checks until they are removed.
-- **The web app sets a strict CSP**: `script-src 'self'` with no inline script. It stores tokens in `localStorage`, so this is the main defence for them. `connect-src` has to stay open to user-chosen hosts.
+- **The web app sets a strict CSP**: `script-src 'self'` with no inline script. It stores client tokens in `localStorage`, so this is the main defence for them. A stolen one is good for at most `client_ttl` unless the thief keeps renewing it, and can be revoked on its own; the service token is never stored. `connect-src` has to stay open to user-chosen hosts.
 
-### 7.2 How each client gets the token
+### 7.2 How each client signs in
 
-| Client | Method |
-|--------|--------|
-| Web | `agentop open` passes it in the URL fragment, stored in `localStorage`. A visitor with no token sees a screen that explains this and accepts a pasted one. |
-| Web, other services | Pasted through Add Service |
-| Desktop, local | A Rust command reads `service.json` |
-| Desktop, other services | Pasted through Add Service, kept in the OS keychain |
-| CLI | Calls `ops` directly, as today; needs no token |
+| Client | Service token from | Client token kept in |
+|--------|--------------------|----------------------|
+| Web | `agentop open` passes it in the URL fragment, which is cleared at once. A visitor with no token sees a screen that explains this and accepts a pasted one | `localStorage` |
+| Web, other services | Pasted through Add Service | `localStorage` |
+| Desktop, local | A Rust command reads `service.json`, so it can always sign in again | OS keychain |
+| Desktop, other services | Pasted through Add Service | OS keychain |
+| CLI (`service status`, `stop`, `restart`, `update`) | `service.json` | Nowhere: it signs in for 60 seconds for each command |
+
+The service token is held in memory only until it has signed the app in. A connection saved before client tokens (2026-11-14) holds the service token; the app uses it once to sign in, and replaces it.
+
+**Renewal.** The app renews, never the service. A token is renewed once it is a twelfth of `client_ttl` old (an hour, by default), and never more often than every five minutes. The app checks every five minutes while it is on screen, and whenever it comes back on screen (`visibilitychange`, `focus`). It renews every saved service's token that is due, not only the one shown. Tabs share one `localStorage`, so one tab renews under a Web Lock (`agentop-renew:<connection>`) and the others take the new token from the `storage` event. A hidden or closed app renews nothing, so after `client_ttl` unused it is signed out, and shows "Signed out of …" with the token form. A 401 from any request does the same.
 
 ### 7.3 Remote access
 
@@ -364,7 +371,7 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health` and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
-- The proxy has no authentication of its own, so the token is the only thing in front of the agents (security review, in [TODO.md](../TODO.md)).
+- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, in [TODO.md](../TODO.md)).
 
 ## 8 Service lifecycle
 
@@ -972,7 +979,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D4 | Dialogues in the new UI | Ported in the final phase, then moved into a plugin (12.9) | Drop from the UI and keep them CLI-only |
 | D5 | Host platforms | Linux; systemd optional | Add macOS, as later work |
 | D6 | Plain HTTP on a non-loopback address | **Decided 2026-11-14:** refused. The service won't start without TLS, and the app won't add such an address. Use a tunnel or HTTPS | Allow it with a warning and a label, as before. Easier on a trusted network, but the token and terminals are readable to anyone on it |
-| D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
+| D7 | One shared token per service | **Decided 2026-11-14:** the service token only signs a client in. Each client gets its own token, which expires after 12 hours unused (`client_ttl`) and 30 days at most (`client_max_age`), is renewed by the app while in use, and can be revoked on its own (section 7.1) | One shared token for everything, as before; rotation reset every client |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
 | D9 | Handoff across hosts (12.10) | Dropped with the handoff plugin (12.10.3). `agentop send` reaches only sessions on its own host | Links from one service to another, each with its own token, after the security review |
 

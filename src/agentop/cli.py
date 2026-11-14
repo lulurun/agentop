@@ -278,17 +278,58 @@ def cmd_serve(args):
 
 
 def cmd_service_token(args):
-    from agentop.service import identity
+    from agentop.service import auth, identity
 
     if args.rotate:
         print(identity.rotate_token().token)
-        print(
-            "Rotated. The service uses it at once, and the old token stops working. "
-            "Every saved connection needs the new one.",
-            file=sys.stderr,
-        )
+        if args.revoke_clients:
+            count = auth.ClientStore(auth.clients_path()).revoke_all()
+            print(f"Rotated, and signed out {count} client(s). Each needs the new token to sign in again.", file=sys.stderr)
+        else:
+            print(
+                "Rotated. The old token can no longer add a client. Clients already signed in stay signed in; "
+                "add --revoke-clients to sign them out too.",
+                file=sys.stderr,
+            )
     else:
         print(identity.load_or_create().token)
+
+
+def _ago(seconds):
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    if seconds < 86400:
+        return f"{seconds // 3600}h"
+    return f"{seconds // 86400}d"
+
+
+def cmd_service_clients(args):
+    import time
+
+    from agentop.service import auth
+
+    store = auth.ClientStore(auth.clients_path())
+    if args.revoke_all:
+        print(f"Signed out {store.revoke_all()} client(s).")
+        return
+    if args.revoke:
+        if not store.revoke(args.revoke):
+            print(f"Error: no client {args.revoke}", file=sys.stderr)
+            sys.exit(1)
+        print(f"Signed out {args.revoke}. Its open terminals close within seconds.")
+        return
+    clients = store.list()
+    if not clients:
+        print("No clients are signed in.")
+        return
+    now = time.time()
+    col = "{:<14} {:<32} {:>8} {:>10} {:>10}"
+    print(col.format("ID", "NAME", "ADDED", "LAST SEEN", "EXPIRES IN"))
+    for c in clients:
+        print(col.format(c.id, c.name[:32], _ago(now - c.created_at), _ago(now - c.last_seen), _ago(c.expires_at - now)))
 
 
 def cmd_open(args):
@@ -318,8 +359,16 @@ def _service_health(settings):
         return None
 
 
+# The CLI signs in for one command, so its client expires almost at once.
+CLI_CLIENT_TTL_SECONDS = 60
+
+
 def _service_api(settings, method, path):
-    """Ask the service on this machine, with its own token. Returns None if it didn't answer."""
+    """Ask the service on this machine. Returns None if it didn't answer.
+
+    The service token only adds a client, so the CLI adds a short-lived one
+    with it first, and makes the request with that client's token.
+    """
     import json
     import ssl
     import urllib.error
@@ -329,23 +378,36 @@ def _service_api(settings, method, path):
 
     scheme = "https" if settings.tls else "http"
     host = "127.0.0.1" if settings.host in ("0.0.0.0", "::") else settings.host
-    request = urllib.request.Request(
-        f"{scheme}://{host}:{settings.port}/api/v2{path}",
-        method=method,
-        headers={"Authorization": f"Bearer {identity.load_or_create().token}"},
-    )
+    base = f"{scheme}://{host}:{settings.port}/api/v2"
     # Its own certificate may be self-signed, and this is the service on this machine.
     context = ssl._create_unverified_context() if settings.tls else None
-    try:
-        with urllib.request.urlopen(request, timeout=10, context=context) as response:
-            return response.status, json.load(response)
-    except urllib.error.HTTPError as exc:
+
+    def call(method, path, token, body=None):
+        data = None if body is None else json.dumps(body).encode()
+        headers = {"Authorization": f"Bearer {token}"}
+        if data is not None:
+            headers["Content-Type"] = "application/json"
+        request = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=headers)
         try:
-            return exc.code, json.load(exc)
-        except ValueError:
-            return exc.code, {}
-    except (OSError, ValueError):
-        return None
+            with urllib.request.urlopen(request, timeout=10, context=context) as response:
+                return response.status, json.load(response)
+        except urllib.error.HTTPError as exc:
+            try:
+                return exc.code, json.load(exc)
+            except ValueError:
+                return exc.code, {}
+        except (OSError, ValueError):
+            return None
+
+    added = call(
+        "POST",
+        "/auth/clients",
+        identity.load_or_create().token,
+        {"name": "agentop CLI", "ttl_seconds": CLI_CLIENT_TTL_SECONDS},
+    )
+    if added is None or added[0] >= 400:
+        return added
+    return call(method, path, added[1]["token"])
 
 
 _MANAGERS = {"systemd": "Run by its systemd unit.", "self": "Started with agentop serve."}
@@ -530,8 +592,12 @@ def main():
     service_sub.add_parser("stop", help="Stop the service. Sessions keep running")
     service_sub.add_parser("restart", help="Restart the service. Sessions keep running")
     service_sub.add_parser("update", help="Update from git, and go back if the new version fails")
-    p_token = service_sub.add_parser("token", help="Print the access token")
-    p_token.add_argument("--rotate", action="store_true", help="Replace it; every saved connection then needs it")
+    p_token = service_sub.add_parser("token", help="Print the service token, which signs a client in")
+    p_token.add_argument("--rotate", action="store_true", help="Replace it. Clients already signed in stay signed in")
+    p_token.add_argument("--revoke-clients", action="store_true", help="With --rotate: also sign out every client")
+    p_clients = service_sub.add_parser("clients", help="List the clients signed in, or sign one out")
+    p_clients.add_argument("--revoke", metavar="ID", help="Sign out this client")
+    p_clients.add_argument("--revoke-all", action="store_true", help="Sign out every client")
     p_connect = service_sub.add_parser("connect-info", help="Print a string to paste into Add Service in the app")
     p_connect.add_argument("--host", help="Address other machines use to reach this service")
     p_connect.add_argument("--url", help="Full address when behind a proxy, e.g. http://203.0.113.9:7700/agentop")
@@ -560,6 +626,7 @@ def main():
             "restart": cmd_service_control,
             "update": cmd_service_update,
             "token": cmd_service_token,
+            "clients": cmd_service_clients,
             "connect-info": cmd_service_connect_info,
         }[args.service_command](args)
         return

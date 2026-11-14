@@ -36,6 +36,20 @@ describe("connections", () => {
     await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("token_delete", { id: "a" }));
   });
 
+  it("uses this computer's service token only to sign in", async () => {
+    respond(SERVICE);
+    const home = await (await platform()).defaultConnection();
+    expect(home).toMatchObject({ token: "", serviceToken: "local" });
+  });
+
+  it("drops a token from the keychain once it is gone", async () => {
+    respond(SERVICE);
+    const app = await platform();
+    app.saveConnections([connection({ id: "a" })]);
+    app.saveConnections([connection({ id: "a", token: "" })]);
+    await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("token_delete", { id: "a" }));
+  });
+
   it("still has a home connection with no service here, to explain that", async () => {
     respond(null);
     const home = await (await platform()).defaultConnection();

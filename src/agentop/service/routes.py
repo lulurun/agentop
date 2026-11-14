@@ -1,7 +1,7 @@
 """The /api/v2 application. Mounted by app.py, and reachable from any origin.
 
-Access is decided by the token alone, because a client may be loaded from
-anywhere. That is safe because nothing here relies on an ambient credential:
+Access is decided by a client's token alone, because a client may be loaded
+from anywhere. The service token only adds a client (auth.py). That is safe because nothing here relies on an ambient credential:
 without cookies, a foreign page has nothing to ride on. See docs/v2-design.md,
 section 7.
 """
@@ -38,6 +38,9 @@ from .config import Settings
 from .identity import Identity
 from .models import (
     Accepted,
+    AddClient,
+    ClientInfo,
+    ClientToken,
     CreateSession,
     DirListing,
     FileListing,
@@ -60,6 +63,9 @@ from .store import SessionStore, StoreError
 
 WS_INVALID_TICKET = 4401
 WS_NO_SESSION = 4404
+# A client's sockets close soon after it is revoked or its token runs out.
+WS_SIGNED_OUT = 4403
+CLIENT_CHECK_SECONDS = 5.0
 # Long enough for the response to leave before the service goes away.
 LIFECYCLE_DELAY_SECONDS = 0.3
 
@@ -76,6 +82,7 @@ class Context:
     identity: Identity
     store: SessionStore
     tickets: auth.TicketStore = field(default_factory=auth.TicketStore)
+    clients: auth.ClientStore = field(default_factory=auth.ClientStore)
     started_at: float = field(default_factory=time.time)
     background: set = field(default_factory=set)
     # Set when the identity came from service.json. Then a token rotated by the
@@ -142,11 +149,54 @@ def create_v2_app(ctx: Context) -> FastAPI:
     async def store_error(_request: Request, exc: StoreError):
         return JSONResponse({"detail": exc.message}, status_code=exc.status)
 
-    def require_token(authorization: str | None = Header(default=None)) -> None:
-        if not auth.bearer_matches(authorization, ctx.current_identity().token):
-            raise HTTPException(401, "Missing or invalid token", {"WWW-Authenticate": "Bearer"})
+    def require_client(authorization: str | None = Header(default=None)) -> auth.Client:
+        client = ctx.clients.authenticate(auth.bearer_value(authorization))
+        if client is None:
+            raise HTTPException(401, "Missing, expired or revoked token", {"WWW-Authenticate": "Bearer"})
+        return client
 
-    authed = [Depends(require_token)]
+    authed = [Depends(require_client)]
+
+    def token_body(client: auth.Client, token: str) -> dict:
+        return {
+            "client_id": client.id,
+            "token": token,
+            "expires_in": max(0, int(client.expires_at - time.time())),
+            "ttl": int(ctx.settings.client_ttl_seconds),
+        }
+
+    def client_body(client: auth.Client, me: auth.Client) -> dict:
+        fields = ("id", "name", "created_at", "last_seen", "expires_at", "ends_at")
+        return {**{f: getattr(client, f) for f in fields}, "current": client.id == me.id}
+
+    @v2.post("/auth/clients", response_model=ClientToken, status_code=201)
+    async def add_client(body: AddClient, authorization: str | None = Header(default=None)):
+        """Add a client with the service token. Nothing else accepts the service token."""
+        if ctx.clients.add_blocked():
+            raise HTTPException(429, "Too many wrong tokens. Wait a minute and try again.")
+        if not auth.bearer_matches(authorization, ctx.current_identity().token):
+            ctx.clients.add_failed()
+            raise HTTPException(401, "Missing or invalid service token", {"WWW-Authenticate": "Bearer"})
+        ttl = ctx.settings.client_ttl_seconds
+        if body.ttl_seconds is not None:
+            ttl = min(ttl, body.ttl_seconds)
+        client, token = ctx.clients.add(body.name, ttl, ctx.settings.client_max_age_seconds)
+        return token_body(client, token)
+
+    @v2.post("/auth/renew", response_model=ClientToken)
+    async def renew(me: auth.Client = Depends(require_client)):
+        client, token = ctx.clients.renew(me.id, ctx.settings.client_ttl_seconds)
+        return token_body(client, token)
+
+    @v2.get("/auth/clients", response_model=list[ClientInfo])
+    async def list_clients(me: auth.Client = Depends(require_client)):
+        return [client_body(c, me) for c in ctx.clients.list()]
+
+    @v2.delete("/auth/clients/{client_id}", status_code=204)
+    async def revoke_client(client_id: str, _me: auth.Client = Depends(require_client)):
+        """Revoke a client, this one included (to sign out). Its open sockets close within seconds."""
+        if not ctx.clients.revoke(client_id):
+            raise HTTPException(404, "No such client")
     if ctx.plugins is not None:
         # Plugin routes go under /plugins/{id}/, behind the same token.
         ctx.plugins.attach(v2, authed)
@@ -242,15 +292,15 @@ def create_v2_app(ctx: Context) -> FastAPI:
         except KeyError:
             raise HTTPException(404, "No such plugin") from None
 
-    @v2.post("/tickets", response_model=Ticket, dependencies=authed)
-    async def issue_ticket(body: TicketRequest):
+    @v2.post("/tickets", response_model=Ticket)
+    async def issue_ticket(body: TicketRequest, me: auth.Client = Depends(require_client)):
         if body.purpose == "terminal":
             if not body.session_id:
                 raise HTTPException(400, "session_id is required")
             scope = auth.terminal_scope(body.session_id)
         else:
             scope = auth.EVENTS_SCOPE
-        return {"ticket": ctx.tickets.issue(scope), "expires_in": int(auth.TICKET_TTL_SECONDS)}
+        return {"ticket": ctx.tickets.issue(scope, me.id), "expires_in": int(auth.TICKET_TTL_SECONDS)}
 
     @v2.get("/tools", response_model=list[ToolInfo], dependencies=authed)
     async def tools():
@@ -361,9 +411,32 @@ def create_v2_app(ctx: Context) -> FastAPI:
         await ws.accept()
         await ws.close(code)
 
+    async def while_signed_in(ws: WebSocket, client_id: str, work) -> None:
+        """Run a socket's work until it ends, or until its client is revoked or expires, which closes it."""
+
+        async def watch():
+            while ctx.clients.is_active(client_id):
+                await asyncio.sleep(CLIENT_CHECK_SECONDS)
+
+        tasks = [asyncio.ensure_future(work), asyncio.ensure_future(watch())]
+        signed_out = False
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            signed_out = tasks[1] in done
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+        if signed_out:
+            try:
+                await ws.close(WS_SIGNED_OUT)
+            except (RuntimeError, WebSocketDisconnect):
+                pass  # already closed
+
     @v2.websocket("/ws/events")
     async def events(ws: WebSocket, ticket: str | None = None):
-        if not ctx.tickets.consume(ticket, auth.EVENTS_SCOPE):
+        client_id = ctx.tickets.consume(ticket, auth.EVENTS_SCOPE)
+        if client_id is None:
             await _reject(ws, WS_INVALID_TICKET)
             return
         await ws.accept()
@@ -377,18 +450,24 @@ def create_v2_app(ctx: Context) -> FastAPI:
             while (await ws.receive())["type"] != "websocket.disconnect":
                 pass
 
-        tasks = [asyncio.ensure_future(send_events()), asyncio.ensure_future(wait_for_disconnect())]
+        async def serve_events():
+            tasks = [asyncio.ensure_future(send_events()), asyncio.ensure_future(wait_for_disconnect())]
+            try:
+                await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+
         try:
-            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            await while_signed_in(ws, client_id, serve_events())
         finally:
             ctx.store.unsubscribe(queue)
-            for task in tasks:
-                task.cancel()
-            await asyncio.gather(*tasks, return_exceptions=True)
 
     @v2.websocket("/ws/sessions/{session_id}/terminal")
     async def session_terminal(ws: WebSocket, session_id: str, ticket: str | None = None, cols: int = 80, rows: int = 24):
-        if not ctx.tickets.consume(ticket, auth.terminal_scope(session_id)):
+        client_id = ctx.tickets.consume(ticket, auth.terminal_scope(session_id))
+        if client_id is None:
             await _reject(ws, WS_INVALID_TICKET)
             return
         # Ask tmux, not the store: a session can be attached before the next tick sees it.
@@ -397,9 +476,13 @@ def create_v2_app(ctx: Context) -> FastAPI:
             await _reject(ws, WS_NO_SESSION)
             return
         await ws.accept()
-        try:
-            await terminal.bridge(ws, tmux_session, cols, rows)
-        except WebSocketDisconnect:
-            pass
+
+        async def bridge():
+            try:
+                await terminal.bridge(ws, tmux_session, cols, rows)
+            except WebSocketDisconnect:
+                pass
+
+        await while_signed_in(ws, client_id, bridge())
 
     return v2

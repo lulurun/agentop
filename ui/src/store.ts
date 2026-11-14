@@ -1,6 +1,15 @@
 import { create } from "zustand";
 import { ApiError, ServiceClient, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
-import { checkConnection, type ConnectFailure, type Connection } from "./connections";
+import {
+  checkConnection,
+  credentialsFrom,
+  EXPIRED,
+  needsRenewal,
+  RENEW_CHECK_MS,
+  SIGNED_OUT,
+  type ConnectFailure,
+  type Connection,
+} from "./connections";
 import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import * as tabs from "./tabs";
@@ -40,7 +49,10 @@ interface AppState {
   init(): Promise<void>;
   switchTo(id: string): void;
   retry(trustNewIdentity?: boolean): void;
+  /** Sign in with the service token. */
   setToken(token: string): void;
+  /** Sign this app out of the active service, and revoke its client there. */
+  signOut(): Promise<void>;
   setView(view: View): void;
   setPluginEnabled(id: string, enabled: boolean): Promise<void>;
   updateSettings(changes: Partial<Settings>): void;
@@ -127,8 +139,21 @@ function saveLayout(layout: { leftOpen: boolean; rightOpen: boolean }) {
   }
 }
 
+/** The service token is never saved: it only signs in, and is dropped once it has. */
 function persist(connections: Connection[]) {
-  platform.saveConnections(connections.filter((c) => !c.isHome || c.token));
+  platform.saveConnections(
+    connections.filter((c) => !c.isHome || c.token || c.clientId).map(({ serviceToken: _, ...saved }) => saved),
+  );
+}
+
+const CREDENTIALS = ["token", "clientId", "issuedAt", "expiresAt", "ttl"] as const;
+
+function sameCredentials(a: Connection, b: Connection): boolean {
+  return CREDENTIALS.every((key) => a[key] === b[key]);
+}
+
+function credentialsOf(connection: Connection): Partial<Connection> {
+  return Object.fromEntries(CREDENTIALS.map((key) => [key, connection[key]]));
 }
 
 type Event =
@@ -304,6 +329,7 @@ export const useApp = create<AppState>((set, get) => {
     set({ link: { state: "connecting" }, sessions: {}, plugins: [] });
     const result = await checkConnection(connection, trustNewIdentity);
     if (mine !== attempt) return;
+    if (result.update) get().updateConnection(connection.id, result.update);
     if (!result.ok) {
       set({ link: { state: "failed", failure: result } });
       return;
@@ -313,6 +339,68 @@ export const useApp = create<AppState>((set, get) => {
       get().updateConnection(connection.id, { instanceId, ...(connection.isHome ? { label: name } : {}) });
     }
     void openEvents(mine, activeConnection(get()), result.service);
+  }
+
+  /** Take credentials another tab saved, such as a token it renewed. Changes nothing else. */
+  async function syncCredentials() {
+    const saved = await platform.loadConnections();
+    const byId = new Map(saved.map((c) => [c.id, c]));
+    let changed = false;
+    const connections = get().connections.map((c) => {
+      const other = byId.get(c.id);
+      if (!other || sameCredentials(c, other)) return c;
+      // A tab that signed out, or never signed in, must not wipe one that just did.
+      if (!other.token && c.token && (c.issuedAt ?? 0) > (other.issuedAt ?? 0)) return c;
+      changed = true;
+      return { ...c, ...credentialsOf(other) };
+    });
+    if (changed) set({ connections });
+  }
+
+  async function renewOne(id: string) {
+    const run = async () => {
+      await syncCredentials(); // another tab may have just renewed it
+      const connection = get().connections.find((c) => c.id === id);
+      if (!connection || !needsRenewal(connection)) return;
+      try {
+        const body = await new ServiceClient(connection.url, connection.token).renew();
+        get().updateConnection(id, credentialsFrom(body));
+      } catch (error) {
+        // Unreachable: try on the next check, the token is still good for hours.
+        if (!(error instanceof ApiError && error.status === 401)) return;
+        get().updateConnection(id, EXPIRED);
+        if (id === get().activeId) void connect(activeConnection(get()));
+      }
+    };
+    // One tab renews, and the others take the new token from storage.
+    const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    if (locks) await locks.request(`agentop-renew:${id}`, run);
+    else await run();
+  }
+
+  let renewing = false;
+  /** Renew every saved service's token that is due, while the app is on screen. */
+  async function renewDue() {
+    if (renewing || document.visibilityState === "hidden") return;
+    renewing = true;
+    try {
+      for (const connection of get().connections) {
+        if (needsRenewal(connection)) await renewOne(connection.id);
+      }
+    } finally {
+      renewing = false;
+    }
+  }
+
+  function watchCredentials() {
+    setInterval(() => void renewDue(), RENEW_CHECK_MS);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void renewDue();
+    });
+    window.addEventListener("focus", () => void renewDue());
+    window.addEventListener("storage", (event) => {
+      if (event.key === null || event.key === "agentop.connections") void syncCredentials();
+    });
   }
 
   return {
@@ -337,14 +425,17 @@ export const useApp = create<AppState>((set, get) => {
       let connections = saved;
       if (home) {
         const known = saved.find((c) => c.id === home.id);
-        const merged = { ...home, ...known, url: home.url, token: home.token || known?.token || "" };
+        // The page's #token=, or the desktop app's local service.json, is the service token.
+        const merged = { ...home, ...known, url: home.url, serviceToken: home.serviceToken || undefined };
         connections = [merged, ...saved.filter((c) => c.id !== home.id)];
       }
       persist(connections);
       const wanted = platform.loadActiveId();
       const activeId = connections.find((c) => c.id === wanted)?.id ?? connections[0]?.id ?? "";
       set({ connections, activeId });
-      if (activeId) void connect(activeConnection(get()));
+      watchCredentials();
+      if (activeId) await connect(activeConnection(get()));
+      void renewDue();
     },
 
     switchTo(id) {
@@ -358,7 +449,16 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setToken(token) {
-      get().updateConnection(get().activeId, { token });
+      get().updateConnection(get().activeId, { ...SIGNED_OUT, serviceToken: token });
+      void connect(activeConnection(get()));
+    },
+
+    async signOut() {
+      const connection = activeConnection(get());
+      if (connection.clientId && connection.token) {
+        await new ServiceClient(connection.url, connection.token).revokeClient(connection.clientId).catch(() => undefined);
+      }
+      get().updateConnection(connection.id, SIGNED_OUT);
       void connect(activeConnection(get()));
     },
 
@@ -440,7 +540,9 @@ export const useApp = create<AppState>((set, get) => {
         set({ error: null });
         return result;
       } catch (error) {
-        set({ error: error instanceof Error ? error.message : String(error) });
+        // Revoked or run out: the connection check says which, and offers to sign in again.
+        if (error instanceof ApiError && error.status === 401) void connect(activeConnection(get()));
+        else set({ error: error instanceof Error ? error.message : String(error) });
         return undefined;
       }
     },

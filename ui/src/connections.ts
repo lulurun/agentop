@@ -1,4 +1,4 @@
-import { ApiError, fetchHealth, NetworkError, ServiceClient, type Health, type ServiceInfo } from "./api/client";
+import { addClient, ApiError, fetchHealth, NetworkError, ServiceClient, type ClientToken, type Health, type ServiceInfo } from "./api/client";
 
 export const SUPPORTED_API_VERSIONS = { min: 1, max: 1 };
 
@@ -6,7 +6,20 @@ export interface Connection {
   id: string;
   label: string;
   url: string;
+  /** This app's own client token for the service, which expires unless renewed. Empty when signed out. */
   token: string;
+  /** The service's ID for this app as a client. Kept after the token expires, to say so. */
+  clientId?: string;
+  /** When the token was issued and when it runs out, by this device's clock (ms). */
+  issuedAt?: number;
+  expiresAt?: number;
+  /** The service's token lifetime, in seconds. */
+  ttl?: number;
+  /**
+   * The service token, held only until it has signed this app in. Never saved:
+   * persist() drops it. The desktop app reads it from this computer's service.json.
+   */
+  serviceToken?: string;
   /** Pinned on first success, to notice a different service at the same address. */
   instanceId?: string;
   /** Lists the service that served this page, which cannot be removed. */
@@ -20,6 +33,46 @@ export function connectionName(connection: Connection, serviceName?: string): st
   return connection.alias?.trim() || serviceName || connection.label;
 }
 
+/** Renew once a token is a twelfth of its lifetime old, but no more often than every five minutes. */
+export const RENEW_CHECK_MS = 5 * 60_000;
+
+export function renewAgeMs(ttlSeconds: number): number {
+  return Math.max((ttlSeconds * 1000) / 12, RENEW_CHECK_MS);
+}
+
+export function hasLiveToken(connection: Connection, now = Date.now()): boolean {
+  return !!connection.token && !!connection.clientId && (connection.expiresAt ?? 0) > now;
+}
+
+export function needsRenewal(connection: Connection, now = Date.now()): boolean {
+  if (!hasLiveToken(connection, now) || !connection.ttl) return false;
+  return now - (connection.issuedAt ?? 0) >= renewAgeMs(connection.ttl);
+}
+
+export function credentialsFrom(body: ClientToken, now = Date.now()): Partial<Connection> {
+  return {
+    token: body.token,
+    clientId: body.client_id,
+    issuedAt: now,
+    expiresAt: now + body.expires_in * 1000,
+    ttl: body.ttl,
+    serviceToken: undefined,
+  };
+}
+
+/** The token ran out or was revoked. The client ID stays, so the app can say why it's signed out. */
+export const EXPIRED: Partial<Connection> = { token: "", issuedAt: undefined, expiresAt: undefined, ttl: undefined };
+export const SIGNED_OUT: Partial<Connection> = { ...EXPIRED, clientId: undefined, serviceToken: undefined };
+
+/** What the service lists this app as. */
+export function clientName(): string {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
+  const os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS X/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
+  const desktop = "__TAURI_INTERNALS__" in window;
+  return desktop ? `agentop desktop${os ? ` on ${os}` : ""}` : `${browser}${os ? ` on ${os}` : ""}`;
+}
+
 export type ConnectFailure =
   | { kind: "unreachable" }
   | { kind: "stopped" }
@@ -27,9 +80,14 @@ export type ConnectFailure =
   | { kind: "identity_changed"; health: Health }
   | { kind: "incompatible"; health: Health }
   | { kind: "no_token"; health: Health }
-  | { kind: "token_rejected"; health: Health };
+  | { kind: "expired"; health: Health }
+  | { kind: "token_rejected"; health: Health }
+  | { kind: "rate_limited"; health: Health };
 
-export type ConnectResult = { ok: true; health: Health; service: ServiceInfo } | ({ ok: false } & ConnectFailure);
+/** `update` holds changes to the connection's credentials, which the caller saves. */
+export type ConnectResult = ({ ok: true; health: Health; service: ServiceInfo } | ({ ok: false } & ConnectFailure)) & {
+  update?: Partial<Connection>;
+};
 
 /** Accepts a plain URL, or the `url#token=…` string from `agentop service connect-info`. */
 export function parseConnectInfo(input: string): { url: string; token: string } | null {
@@ -119,13 +177,30 @@ export async function checkConnection(connection: Connection, trustNewIdentity =
   if (health.api_version < SUPPORTED_API_VERSIONS.min || health.api_version > SUPPORTED_API_VERSIONS.max) {
     return { ok: false, kind: "incompatible", health };
   }
-  if (!connection.token) return { ok: false, kind: "no_token", health };
+  let update: Partial<Connection> | undefined;
+  let token = connection.token;
+  if (!hasLiveToken(connection)) {
+    // A connection saved before client tokens holds the service token itself, which now only signs in.
+    const serviceToken = connection.serviceToken || (!connection.clientId ? connection.token : "");
+    if (!serviceToken) {
+      const signedOut = connection.token ? EXPIRED : undefined;
+      return { ok: false, kind: connection.clientId ? "expired" : "no_token", health, update: signedOut };
+    }
+    try {
+      update = credentialsFrom(await addClient(connection.url, serviceToken, clientName()));
+      token = update.token!;
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "token_rejected", health, update: SIGNED_OUT };
+      if (error instanceof ApiError && error.status === 429) return { ok: false, kind: "rate_limited", health, update: SIGNED_OUT };
+      return { ok: false, kind: "unreachable" };
+    }
+  }
   try {
-    const service = await new ServiceClient(connection.url, connection.token).service();
-    return { ok: true, health, service };
+    const service = await new ServiceClient(connection.url, token).service();
+    return { ok: true, health, service, update };
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "token_rejected", health };
-    return { ok: false, kind: "unreachable" };
+    if (error instanceof ApiError && error.status === 401) return { ok: false, kind: "expired", health, update: EXPIRED };
+    return { ok: false, kind: "unreachable", update };
   }
 }
 
@@ -159,10 +234,20 @@ export function failureMessage(failure: ConnectFailure, label: string): { title:
         title: `Enter the token for ${failure.health.name}`,
         detail: "On that machine, run agentop service token.",
       };
+    case "expired":
+      return {
+        title: `Signed out of ${failure.health.name}`,
+        detail: "This app's access ran out after a while unused, or was revoked. Enter the service token to sign in again: on that machine, run agentop service token.",
+      };
     case "token_rejected":
       return {
         title: `${failure.health.name} rejected the token`,
         detail: `Each service has its own token. Run agentop service token on ${failure.health.name} itself, not on this computer.`,
+      };
+    case "rate_limited":
+      return {
+        title: `${failure.health.name} refused for now`,
+        detail: "Too many wrong tokens were tried. Wait a minute, then try again.",
       };
   }
 }

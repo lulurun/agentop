@@ -54,6 +54,69 @@ test("the token leaves the address bar", async ({ page }) => {
   expect(page.url()).not.toContain("token");
 });
 
+const savedConnections = (page: Page) =>
+  page.evaluate(() => JSON.parse(localStorage.getItem("agentop.connections") ?? "[]") as Record<string, unknown>[]);
+
+test("the browser keeps its own expiring token, never the service token", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  const [home] = await savedConnections(page);
+  expect(JSON.stringify(home)).not.toContain(s.token);
+  expect(home.token).toBeTruthy();
+  expect(home.clientId).toBeTruthy();
+  expect(Number(home.expiresAt) - Date.now()).toBeGreaterThan(11 * 3600_000);
+});
+
+test("an old token is renewed when the app comes back on screen", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  const [before] = await savedConnections(page);
+  // Make it look two hours old, then bring the page back to the front.
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem("agentop.connections")!);
+    saved[0].issuedAt -= 2 * 3600_000;
+    localStorage.setItem("agentop.connections", JSON.stringify(saved));
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await expect.poll(async () => (await savedConnections(page))[0].token).not.toBe(before.token);
+  const [after] = await savedConnections(page);
+  expect(after.clientId).toBe(before.clientId);
+});
+
+test("an expired sign-in asks for the service token again", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem("agentop.connections")!);
+    saved[0].expiresAt = Date.now() - 1000;
+    localStorage.setItem("agentop.connections", JSON.stringify(saved));
+  });
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Signed out of alpha" })).toBeVisible();
+  await page.getByLabel("Token").fill(s.token);
+  await page.getByRole("button", { name: "Connect" }).click();
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+});
+
+test("signing out from the service dialog revokes this browser", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  const [before] = await savedConnections(page);
+  await page.locator(".switcher-current").click();
+  await page.getByRole("menuitem", { name: "alpha status" }).click();
+  const section = page.getByRole("region", { name: "Signed in" });
+  await expect(section).toContainText("(this app)");
+  await section.getByRole("button", { name: "Sign out" }).click();
+  await expect(page.getByRole("heading", { name: "Enter the token for alpha" })).toBeVisible();
+  const response = await page.request.get(`${s.url}/api/v2/sessions`, { headers: { Authorization: `Bearer ${before.token}` } });
+  expect(response.status()).toBe(401);
+});
+
 test("form to working terminal, with no refresh", async ({ page }) => {
   const errors: string[] = [];
   page.on("console", (m) => m.type() === "error" && errors.push(m.text()));

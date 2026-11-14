@@ -105,7 +105,8 @@ Everything agentop writes is under `~/.agentop` (`AGENTOP_HOME` moves it):
 | Path | What |
 |------|------|
 | `config.toml` | Settings you edit |
-| `service.json` | The service's name and token, mode `0600` |
+| `service.json` | The service's name and service token, mode `0600` |
+| `state/clients.json` | The signed-in clients, with a hash of each one's token, mode `0600` |
 | `state/` | What agentop rewrites as it runs: `sessions.json` and its lock, `plugins.json`, `update-status.json`, `update.pid` |
 | `logs/` | `serve.log` (a service started by hand), `update.log` |
 | `plugins/{id}/` | Each plugin's own files: `store.json` from `api.store`, and anything else under `api.data_dir`. The Memory archive is `plugins/memory/`, and saved dialogues are in `plugins/dialogue/dialogues/` |
@@ -156,7 +157,7 @@ The orchestrator is its own process, not part of the service, so a dialogue keep
 
 ## 6 Web layer
 
-`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs the service token. `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`).
+`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs a client's token; the service token only signs a client in, at `POST /auth/clients` (`service/auth.py`, design D7). `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`).
 
 ### Main-area tabs (v2 app)
 

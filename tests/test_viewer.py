@@ -16,6 +16,7 @@ from agentop.service.config import Settings
 from agentop.service.identity import Identity
 from agentop.service.plugins import DEFAULT_ROOT, PluginHost
 from tests.test_plugins import AUTH, TOKEN, QuietStore
+from tests.conftest import signed_in
 
 
 class FakeAgent(AgentCli):
@@ -141,7 +142,7 @@ def client(tmp_path, agent):
     (tmp_path / "outside.txt").write_text("no")
     store = QuietStore()
     host = PluginHost(store, root=root, data_dir=tmp_path / "home")
-    app = create_app(Settings(), Identity(TOKEN, "iid", "test"), store, host)
+    app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as test_client:
         store.set_rows(
             {
@@ -316,7 +317,7 @@ def claude_client(tmp_path, monkeypatch):
     shutil.copytree(DEFAULT_ROOT / "viewer", root / "viewer")
     store = QuietStore()
     host = PluginHost(store, root=root, data_dir=tmp_path / "home")
-    app = create_app(Settings(), Identity(TOKEN, "iid", "test"), store, host)
+    app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as test_client:
         store.set_rows(
             {

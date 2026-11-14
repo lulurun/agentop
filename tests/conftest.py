@@ -91,3 +91,15 @@ def fake_agents(tmux_server, monkeypatch):
     monkeypatch.setattr(scanner, "get_agent", by_name.get)
     monkeypatch.setattr(ops, "get_agent", by_name.get)
     return by_name
+
+
+def signed_in(token, name="test"):
+    """An in-memory client store in which `token` is a signed-in client's token."""
+    from dataclasses import replace
+
+    from agentop.service import auth
+
+    store = auth.ClientStore()
+    client, _ = store.add(name, 3600, None)
+    store._clients[client.id] = replace(client, token_hash=auth._hash(token))
+    return store

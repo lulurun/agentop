@@ -27,8 +27,14 @@ class LiveService:
         self.port = port
         self.base = f"http://127.0.0.1:{port}/api/v2"
         self.ident = identity.load_or_create()
-        self.headers = {"Authorization": f"Bearer {self.ident.token}"}
+        self.service_auth = {"Authorization": f"Bearer {self.ident.token}"}
+        self.headers = self.sign_in()
         self.http = httpx.Client(base_url=self.base, headers=self.headers, timeout=10)
+
+    def sign_in(self, name="test", **body):
+        response = httpx.post(f"{self.base}/auth/clients", json={"name": name, **body}, headers=self.service_auth)
+        assert response.status_code == 201, response.text
+        return {"Authorization": f"Bearer {response.json()['token']}"}
 
     def ticket(self, purpose="events", session_id=None):
         body = {"purpose": purpose, "session_id": session_id}
@@ -181,6 +187,69 @@ def test_terminal_for_a_missing_session_closes_4404(service):
     with service.terminal("no-such-session") as ws, pytest.raises(ConnectionClosed) as caught:
         ws.recv(timeout=2)
     assert caught.value.rcvd.code == 4404
+
+
+def test_the_service_token_only_adds_a_client(service):
+    assert httpx.get(f"{service.base}/sessions", headers=service.service_auth).status_code == 401
+    assert httpx.post(f"{service.base}/tickets", json={"purpose": "events"}, headers=service.service_auth).status_code == 401
+    response = httpx.post(f"{service.base}/auth/clients", json={"name": "phone"}, headers=service.service_auth)
+    body = response.json()
+    assert response.status_code == 201 and body["ttl"] == 12 * 3600 and 0 < body["expires_in"] <= body["ttl"]
+    assert body["token"] != service.ident.token
+    # A client token can't add another client.
+    assert httpx.post(f"{service.base}/auth/clients", json={}, headers=service.headers).status_code == 401
+
+
+def test_renewing_gives_a_new_token(service):
+    renewed = service.http.post("/auth/renew").json()
+    assert f"Bearer {renewed['token']}" != service.headers["Authorization"]
+    fresh = {"Authorization": f"Bearer {renewed['token']}"}
+    assert httpx.get(f"{service.base}/sessions", headers=fresh).status_code == 200
+    # The old one keeps working for a moment, for requests already on their way.
+    assert service.http.get("/sessions").status_code == 200
+
+
+def test_clients_are_listed_and_revoked_one_at_a_time(service):
+    other = service.sign_in("laptop")
+    listed = service.http.get("/auth/clients").json()
+    assert {c["name"] for c in listed} == {"test", "laptop"}
+    assert [c["current"] for c in listed if c["name"] == "test"] == [True]
+    laptop = next(c["id"] for c in listed if c["name"] == "laptop")
+    assert service.http.delete(f"/auth/clients/{laptop}").status_code == 204
+    assert httpx.get(f"{service.base}/sessions", headers=other).status_code == 401
+    assert service.http.get("/sessions").status_code == 200
+    assert service.http.delete(f"/auth/clients/{laptop}").status_code == 404
+
+
+def test_a_client_can_ask_for_a_shorter_life_but_not_a_longer_one(service):
+    short = httpx.post(f"{service.base}/auth/clients", json={"ttl_seconds": 60}, headers=service.service_auth).json()
+    assert short["expires_in"] <= 60
+    long = httpx.post(f"{service.base}/auth/clients", json={"ttl_seconds": 10**9}, headers=service.service_auth).json()
+    assert long["expires_in"] <= 12 * 3600
+
+
+def test_wrong_service_tokens_are_slowed_down(service):
+    add = f"{service.base}/auth/clients"
+    codes = [httpx.post(add, json={}, headers={"Authorization": "Bearer wrong"}).status_code for _ in range(12)]
+    assert codes[:10] == [401] * 10 and codes[-1] == 429
+    # Clients already signed in carry on.
+    assert service.http.get("/sessions").status_code == 200
+
+
+def test_revoking_a_client_closes_its_sockets(service, monkeypatch):
+    from agentop.service import routes
+
+    monkeypatch.setattr(routes, "CLIENT_CHECK_SECONDS", 0.1)
+    other = service.sign_in("tablet")
+    ticket = httpx.post(f"{service.base}/tickets", json={"purpose": "events"}, headers=other).json()["ticket"]
+    tablet = next(c["id"] for c in service.http.get("/auth/clients").json() if c["name"] == "tablet")
+    with connect(f"ws://127.0.0.1:{service.port}/api/v2/ws/events?ticket={ticket}") as ws:
+        ws.recv(timeout=5)  # the snapshot
+        service.http.delete(f"/auth/clients/{tablet}")
+        with pytest.raises(ConnectionClosed) as caught:
+            while True:
+                ws.recv(timeout=5)
+    assert caught.value.rcvd.code == routes.WS_SIGNED_OUT
 
 
 # ---------------------------------------------------------------------- the app's address
@@ -477,13 +546,16 @@ def test_session_files_refuse_escapes_and_need_the_token(service, tmp_path):
     assert httpx.get(f"{service.base}/sessions/{created['id']}/changes").status_code == 401
 
 
-def test_a_rotated_token_takes_effect_without_a_restart(service):
-    old = service.headers["Authorization"]
+def test_a_rotated_service_token_takes_effect_without_a_restart(service):
+    old = service.service_auth["Authorization"]
     instance = service.http.get("/health").json()["instance_id"]
     new = identity.rotate_token().token
+    add = f"{service.base}/auth/clients"
 
-    assert httpx.get(f"{service.base}/sessions", headers={"Authorization": old}).status_code == 401
-    assert httpx.get(f"{service.base}/sessions", headers={"Authorization": f"Bearer {new}"}).status_code == 200
+    assert httpx.post(add, json={}, headers={"Authorization": old}).status_code == 401
+    assert httpx.post(add, json={}, headers={"Authorization": f"Bearer {new}"}).status_code == 201
+    # Clients signed in before the rotation stay signed in.
+    assert service.http.get("/sessions").status_code == 200
     assert service.http.get("/health").json()["instance_id"] == instance
 
 
@@ -496,4 +568,6 @@ def test_a_service_given_its_identity_ignores_the_file(fake_agents):
     app = create_app(Settings(), ident=Identity("fixed", "i", "box"))
     identity.rotate_token()
     client = TestClient(app)
-    assert client.get("/api/v2/sessions", headers={"Authorization": "Bearer fixed"}).status_code == 200
+    response = client.post("/api/v2/auth/clients", json={}, headers={"Authorization": "Bearer fixed"})
+    assert response.status_code == 201
+    assert client.get("/api/v2/sessions", headers={"Authorization": f"Bearer {response.json()['token']}"}).status_code == 200

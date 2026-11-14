@@ -10,6 +10,8 @@ export function AddServiceDialog() {
   const [token, setToken] = useState("");
   const [label, setLabel] = useState("");
   const [result, setResult] = useState<ConnectResult | null>(null);
+  // The ID the test was made with: its sign-in belongs to that connection.
+  const [tested, setTested] = useState<Connection | null>(null);
   const [testing, setTesting] = useState(false);
 
   const parsed = parseConnectInfo(address);
@@ -18,21 +20,31 @@ export function AddServiceDialog() {
   const unencrypted = !!parsed && isPlainRemote(parsed.url);
 
   function draft(): Connection {
-    return { id: newConnectionId(), label: "", alias: label.trim() || undefined, url: parsed!.url, token: effectiveToken };
+    return { id: newConnectionId(), label: "", alias: label.trim() || undefined, url: parsed!.url, token: "", serviceToken: effectiveToken };
   }
 
   async function test(event: FormEvent) {
     event.preventDefault();
     if (!parsed || unencrypted) return;
     setTesting(true);
-    const outcome = await checkConnection(draft());
+    const candidate = draft();
+    const outcome = await checkConnection(candidate);
+    setTested(candidate);
     setResult(outcome);
     setTesting(false);
   }
 
   function save() {
-    if (!result?.ok) return;
-    addConnection({ ...draft(), label: result.health.name, instanceId: result.health.instance_id });
+    if (!result?.ok || !tested) return;
+    // Signed in by the test: the service token is not kept.
+    addConnection({
+      ...tested,
+      alias: label.trim() || undefined,
+      ...result.update,
+      serviceToken: undefined,
+      label: result.health.name,
+      instanceId: result.health.instance_id,
+    });
   }
 
   return (

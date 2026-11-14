@@ -18,6 +18,7 @@ from agentop.service.config import Settings
 from agentop.service.identity import Identity
 from agentop.service.plugins import DEFAULT_ROOT, PluginHost
 from tests.test_plugins import AUTH, TOKEN, QuietStore
+from tests.conftest import signed_in
 
 
 @pytest.fixture
@@ -139,7 +140,7 @@ def client(tmp_path, home, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     store = QuietStore()
     host = PluginHost(store, root=root, data_dir=tmp_path / "flags")
-    app = create_app(Settings(), Identity(TOKEN, "iid", "test"), store, host)
+    app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as test_client:
         yield test_client
 
