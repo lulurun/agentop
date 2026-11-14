@@ -195,6 +195,7 @@ If the dialogue has open tmux sessions (e.g. status is `running`), they are stop
 
 ```bash
 agentop serve [--host H] [--port P] [--name N] [--tls-cert F --tls-key F]   # foreground, http://127.0.0.1:9775
+                                      # a non-loopback --host needs --tls-cert and --tls-key
 agentop open                          # open the app in a browser, signed in
 agentop service status                # whether the service runs, and how
 agentop service restart               # or stop; sessions keep running

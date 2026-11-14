@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkConnection, newConnectionId, parseConnectInfo, tokenFromInput, reachabilityNote, type Connection } from "./connections";
+import { checkConnection, isPlainRemote, newConnectionId, parseConnectInfo, tokenFromInput, reachabilityNote, type Connection } from "./connections";
 import { applyEvent, sortedSessions } from "./store";
 
 const HEALTH = { status: "ok", version: "1", api_version: 1, instance_id: "abc", name: "box" };
@@ -27,13 +27,24 @@ describe("parseConnectInfo", () => {
     expect(parseConnectInfo(" http://box:9775#token=abc ")).toEqual({ url: "http://box:9775", token: "abc" });
   });
   it("defaults the scheme and drops /app", () => {
-    expect(parseConnectInfo("box:9775/app/")).toEqual({ url: "http://box:9775", token: "" });
+    expect(parseConnectInfo("box:9775/app/")).toEqual({ url: "https://box:9775", token: "" });
+    expect(parseConnectInfo("127.0.0.1:9775")?.url).toBe("http://127.0.0.1:9775");
+    expect(parseConnectInfo("localhost:9775")?.url).toBe("http://localhost:9775");
   });
   it("keeps a proxy path", () => {
     expect(parseConnectInfo("https://x.example/agentop/")?.url).toBe("https://x.example/agentop");
   });
   it("rejects nonsense", () => {
     expect(parseConnectInfo("http://")).toBeNull();
+  });
+});
+
+describe("isPlainRemote", () => {
+  it("is plain HTTP to anything but loopback", () => {
+    expect(isPlainRemote("http://box:9775")).toBe(true);
+    expect(isPlainRemote("https://box:9775")).toBe(false);
+    expect(isPlainRemote("http://127.0.0.1:9775")).toBe(false);
+    expect(isPlainRemote("http://[::1]:9775")).toBe(false);
   });
 });
 

@@ -355,9 +355,9 @@ A service can be reached from elsewhere in any of these ways:
 | Tunnel, such as `ssh -L` or a VPN | Yes | Recommended; the service stays loopback-bound |
 | Reverse proxy with TLS | Yes | Base paths are supported in the connection URL |
 | Direct bind, with `--tls-cert` and `--tls-key` | Yes | Certificate must be trusted by the client |
-| Direct bind, plain HTTP | **No** | Allowed. The token and all terminal traffic are readable on the network |
+| Direct bind, plain HTTP | **No** | Refused: the service won't start. The token and all terminal traffic would be readable on the network |
 
-The service logs a warning at startup when it listens on a non-loopback address without TLS. The app shows a "Not encrypted" label for any non-loopback `http://` connection, in the Add Service form and the switcher. It does not block the connection, since the network may be trusted.
+The service refuses to start on a non-loopback address without TLS. The Add Service form refuses a non-loopback `http://` address, with a warning, and an address typed without a scheme defaults to `https://` unless it is loopback. Connections saved before this (2026-11-14) still work, with a "Not encrypted" label in the switcher.
 
 The clipboard fallback for non-secure contexts stays, because of the following.
 
@@ -953,7 +953,7 @@ Parity list for the old dashboard, so nothing was lost by accident:
 | Japanese IME composition fails in a webview | Medium | The system locale is partly `ja_JP`, so this is tested explicitly in S1 |
 | `ws://` blocked from the Tauri origin | Medium | Spike S2, covering remote hosts; plugin fallback |
 | Browser rules block a web app connection | Medium | Spike S4; reachability guidance in the form; recommend the page from a local service or the desktop app |
-| Tokens or terminal traffic exposed on plain HTTP | Medium, if a user binds directly | Loopback default, startup warning, "Not encrypted" label, tunnel recommended |
+| Tokens or terminal traffic exposed on plain HTTP | Low | The service refuses a non-loopback bind without TLS, and the app refuses plain HTTP to another machine |
 | Token stolen from `localStorage` | Low | Strict `script-src`, no third-party scripts, rotation |
 | Acting on the wrong machine after a switch | Medium | Service name always visible; stop and update confirmations name the service; `instance_id` decides what is local |
 | Mouse mode makes copy awkward | Medium | Spike S3; `mouse` is a config option if it proves worse than the scroll benefit |
@@ -971,7 +971,7 @@ Each has a recommended default, which the plan assumes. D6 and D7 are decided fo
 | D3 | Scroll through `mouse on` per session | On for new managed sessions | Leave off, losing wheel scrollback |
 | D4 | Dialogues in the new UI | Ported in the final phase, then moved into a plugin (12.9) | Drop from the UI and keep them CLI-only |
 | D5 | Host platforms | Linux; systemd optional | Add macOS, as later work |
-| D6 | Plain HTTP on a non-loopback address | **Decided for now:** allowed, with a warning and a label. TODO: revisit | Refuse to start without TLS. Safer, but breaks "connect if reachable" on trusted networks |
+| D6 | Plain HTTP on a non-loopback address | **Decided 2026-11-14:** refused. The service won't start without TLS, and the app won't add such an address. Use a tunnel or HTTPS | Allow it with a warning and a label, as before. Easier on a trusted network, but the token and terminals are readable to anyone on it |
 | D7 | One shared token per service | **Decided for now:** yes; rotation resets every client. TODO: revisit | Per-client tokens with individual revoke |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
 | D9 | Handoff across hosts (12.10) | Dropped with the handoff plugin (12.10.3). `agentop send` reaches only sessions on its own host | Links from one service to another, each with its own token, after the security review |

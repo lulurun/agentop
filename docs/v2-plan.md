@@ -297,7 +297,7 @@ Tracked, with additions, in [TODO.md](../TODO.md#security-review).
 
 The v2.0 security model is deliberately simple and is to be revisited. Do this before recommending that anyone expose a service beyond loopback.
 
-- [ ] Plain HTTP on non-loopback addresses (design D6): decide whether to keep allowing it, or to require TLS or a tunnel.
+- [x] Plain HTTP on non-loopback addresses (design D6): refused, 2026-11-14.
 - [ ] Shared token per service (design D7): decide whether to move to per-client tokens with individual revoke.
 - [ ] Review the rest of design section 7: open CORS, token storage in `localStorage`, what `/health` exposes without auth, and agents running with skip-permissions.
 

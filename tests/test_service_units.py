@@ -141,6 +141,14 @@ def test_is_loopback(host, expected):
     assert config.Settings(host=host).is_loopback is expected
 
 
+def test_serve_refuses_plain_http_on_a_non_loopback_address(monkeypatch):
+    from agentop.service import app
+
+    monkeypatch.setattr(app.host, "prepare", lambda: pytest.fail("should refuse before preparing the host"))
+    with pytest.raises(SystemExit):
+        app.serve(config.Settings(host="0.0.0.0"))
+
+
 def test_generated_api_schema_is_current():
     """If this fails, run `npm run gen:api` in ui/ and commit the result."""
     from pathlib import Path

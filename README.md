@@ -52,6 +52,27 @@ agentop open                         # opens the app, signed in
 
 That's all agentop needs. Running it as a system service or behind a proxy is optional, and up to you. Connecting to other machines, updating, and HTTPS are in [docs/v2-setup.md](docs/v2-setup.md).
 
+## Using agentop on another machine
+
+The service only speaks plain HTTP on loopback. It refuses to start on any other address without TLS, and the app refuses to add a plain `http://` address that isn't loopback, since anyone on the network could read the token and every terminal. The simplest way to reach a machine you can SSH to is a tunnel.
+
+On the machine that runs the agents (say `build-box`):
+
+```bash
+agentop serve                        # listens on 127.0.0.1:9775 only
+agentop service connect-info         # prints http://127.0.0.1:9775#token=…
+```
+
+On your own machine, forward a local port to it over SSH and keep the command running:
+
+```bash
+ssh -N -L 9776:127.0.0.1:9775 build-box
+```
+
+Then, in the app on your machine, open Connect to a service from the service menu and paste the connect-info string with the port changed to the tunnel's: `http://127.0.0.1:9776#token=…`. Use a port other than 9775 if your own machine runs a service too. Add `-f` to run the tunnel in the background, or put a `LocalForward 9776 127.0.0.1:9775` line under `Host build-box` in `~/.ssh/config`.
+
+To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` in a browser. An HTTPS proxy or TLS in the service are the other options, in [docs/v2-setup.md](docs/v2-setup.md#exposing-a-service).
+
 ## Documentation
 
 - [Setup](docs/v2-setup.md): running the service and the app

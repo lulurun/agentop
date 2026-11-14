@@ -13,7 +13,7 @@ The old dashboard was removed on 2026-11-14, without the parity walk and the day
 
 The v2 security model is deliberately simple. Review it before recommending that anyone expose a service beyond loopback.
 
-- [ ] Plain HTTP on non-loopback addresses (design D6): keep allowing it, or require TLS or a tunnel.
+- [x] Plain HTTP on non-loopback addresses (design D6): refused, 2026-11-14. The service won't start without TLS, and the app won't add such an address; the README has an SSH tunnel guide.
 - [ ] One shared token per service (design D7): move to per-client tokens that can be revoked one at a time.
 - [ ] Token expiry: tokens never expire today; only `agentop service token --rotate` replaces one.
 - [ ] Rotate the PC service's token, which was pasted into a chat. Accepted for now (2026-11-13): the service is only used by its owner, to try agentop out. Rotate before it is used for anything that matters.

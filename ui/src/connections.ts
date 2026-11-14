@@ -35,10 +35,11 @@ export type ConnectResult = { ok: true; health: Health; service: ServiceInfo } |
 export function parseConnectInfo(input: string): { url: string; token: string } | null {
   const text = input.trim();
   const [address, fragment = ""] = text.split("#", 2);
-  const withScheme = /^https?:\/\//i.test(address) ? address : `http://${address}`;
   let parsed: URL;
   try {
-    parsed = new URL(withScheme);
+    // Without a scheme, loopback is plain HTTP and anything else HTTPS: the app refuses plain HTTP elsewhere.
+    parsed = new URL(/^https?:\/\//i.test(address) ? address : `http://${address}`);
+    if (!/^https?:\/\//i.test(address) && !isLoopback(parsed.href)) parsed = new URL(`https://${address}`);
   } catch {
     return null;
   }
@@ -66,6 +67,11 @@ export function isLoopback(url: string): boolean {
 
 export function isEncrypted(url: string): boolean {
   return new URL(url).protocol === "https:";
+}
+
+/** Plain HTTP to another machine: the token and every terminal could be read on the network, so the app refuses it. */
+export function isPlainRemote(url: string): boolean {
+  return !isEncrypted(url) && !isLoopback(url);
 }
 
 export interface ReachabilityNote {

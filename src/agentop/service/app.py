@@ -89,11 +89,12 @@ def serve(settings: Settings | None = None) -> None:
     settings = settings or config.load()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(name)s: %(message)s")
     if not settings.is_loopback and not settings.tls:
-        LOG.warning(
-            "Listening on %s without TLS: the token and all terminal traffic can be read on the network. "
-            "Prefer an SSH tunnel, or set tls_cert and tls_key.",
+        LOG.error(
+            "Refusing to listen on %s without TLS: the token and all terminal traffic could be read on the network. "
+            "Bind 127.0.0.1 and use an SSH tunnel or an HTTPS proxy, or set tls_cert and tls_key. See README.md.",
             settings.host,
         )
+        raise SystemExit(1)
     try:
         tools = host.prepare()
     except host.NoAgentTools as e:

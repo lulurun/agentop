@@ -131,7 +131,7 @@ test("the app's old address through the proxy leads to the app", async ({ page }
   await expect(page.getByRole("heading", { name: "Enter the token for devhost" })).toBeVisible();
 });
 
-test("the app loaded through the proxy over plain HTTP works, including Add service", async ({ page }) => {
+test("the app loaded through the proxy over plain HTTP works, and refuses to add a plain HTTP service", async ({ page }) => {
   test.skip(!lanAddress, "needs a non-loopback address");
   const devhost = await service("devhost");
   const other = await service("other");
@@ -147,9 +147,7 @@ test("the app loaded through the proxy over plain HTTP works, including Add serv
   await page.getByRole("menuitem", { name: "Connect to a service" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(`http://${lanAddress}:${otherProxy.port}/agentop#token=${other.token}`);
-  await expect(dialog.getByText(/Not encrypted/)).toBeVisible();
-  await dialog.getByRole("button", { name: "Test connection" }).click();
-  await expect(dialog.getByText("Found other")).toBeVisible();
-  await dialog.getByRole("button", { name: "Add and connect" }).click();
-  await expect(page.locator(".switcher-current")).toContainText("other");
+  await expect(dialog.getByText(/Plain HTTP to another machine is not allowed/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Test connection" })).toBeDisabled();
+  await expect(dialog.getByRole("button", { name: "Add and connect" })).toBeDisabled();
 });

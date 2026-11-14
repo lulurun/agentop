@@ -27,7 +27,8 @@ The service binds `127.0.0.1:9775`. `eiger-tunnel` forwards it to `pisces-01:777
 and nginx there serves it at `http://157.120.33.185:7700/agentop/`.
 
 The proxy has no authentication, and plain HTTP carries the service token where a
-network observer could read it. This is accepted for now: see plan section 9.1.
+network observer could read it. This is accepted for now: see plan section 9.1. The app
+still opens there, but Connect to a service refuses that address: add the HTTPS one below.
 
 Eiger owns this setup: the `agentop-api` systemd unit that runs `agentop serve`
 (`Eiger/deploy/agentop-api.service`, linked into `~/.config/systemd/user/`), the
@@ -143,7 +144,9 @@ another machine, in order of preference:
 3. **TLS in the service itself**: set `host`, `tls_cert` and `tls_key` in
    `~/.agentop/config.toml` (or `--host`, `--tls-cert`, `--tls-key`).
 
-Binding a non-loopback address without TLS works, with a warning in the log and a
-"Not encrypted" label in the app, but then anyone on the network path can read the
-token as it is sent, and every keystroke and screen of every terminal. Use it only
-on a network you trust completely.
+Plain HTTP on a non-loopback address is refused (design D6, since 2026-11-14): `agentop
+serve` exits with an error when `host` isn't loopback and TLS isn't set, and Connect
+to a service won't test or add a plain `http://` address that isn't loopback. Anyone
+on the network path could otherwise read the token as it is sent, and every keystroke
+and screen of every terminal. Connections saved before then still work, labelled "Not
+encrypted". The README has a short guide to the SSH tunnel.
