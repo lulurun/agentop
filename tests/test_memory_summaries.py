@@ -293,7 +293,7 @@ def plugin_client(tmp_path, monkeypatch):
     monkeypatch.setattr(agentclis, "AGENTS", [Writer()])
 
     store = QuietStore()
-    host = PluginHost(store, root=root, data_dir=tmp_path / "flags")
+    host = PluginHost(store, roots=[root], data_dir=tmp_path / "flags")
     app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as client:
         yield client

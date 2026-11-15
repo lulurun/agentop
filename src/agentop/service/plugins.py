@@ -45,6 +45,7 @@ from agentop.plugin_manifest import (  # noqa: F401 - DEFAULT_ROOT and the rest 
     incompatible_reason,
     is_enabled,
     plugin_folders,
+    plugin_roots,
     read_flags,
     read_manifest,
 )
@@ -171,9 +172,10 @@ class Plugin:
 class PluginHost:
     """Finds, loads, enables, and disables plugins, and keeps their list."""
 
-    def __init__(self, store, root: Path | None = None, data_dir: Path | None = None):
+    def __init__(self, store, roots: list[Path] | None = None, data_dir: Path | None = None):
         self.store = store
-        self.root = root or DEFAULT_ROOT
+        # Tests pass their own roots; the service always searches the built-in folder first.
+        self.roots = roots if roots is not None else plugin_roots()
         base = data_dir or paths.data_dir()
         self.data_dir = base / "plugins"
         self.flags_path = base / "state" / "plugins.json"
@@ -274,7 +276,7 @@ class PluginHost:
     # ------------------------------------------------------------------ internals
 
     def _folders(self) -> list[Path]:
-        return plugin_folders(self.root)
+        return plugin_folders(self.roots)
 
     async def _load(self, plugin: Plugin) -> None:
         """Import the plugin and call register(api), with a time limit."""

@@ -26,13 +26,13 @@ from pathlib import Path
 
 from agentop import paths
 from agentop.plugin_manifest import (
-    DEFAULT_ROOT,
     MODULE_PREFIX,
     Manifest,
     ManifestError,
     incompatible_reason,
     is_enabled,
     plugin_folders,
+    plugin_roots,
     read_flags,
     read_manifest,
 )
@@ -77,18 +77,17 @@ class PluginCli:
 def add_commands(
     subparsers: argparse._SubParsersAction,
     reserved: set[str],
-    root: Path | None = None,
+    roots: list[Path] | None = None,
     flags_path: Path | None = None,
 ) -> dict[str, Handler]:
     """Add every plugin's commands to the CLI. Returns each command's handler, by name.
 
     reserved holds the core's own command names, which no plugin may take.
     """
-    root = root or DEFAULT_ROOT
     flags = read_flags(flags_path or paths.state_dir() / "plugins.json") or {}
     handlers: dict[str, Handler] = {}
     taken = set(reserved)
-    for folder in plugin_folders(root):
+    for folder in plugin_folders(roots if roots is not None else plugin_roots()):
         try:
             manifest = read_manifest(folder)
         except ManifestError:

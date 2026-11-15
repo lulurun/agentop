@@ -5,19 +5,20 @@ with a store that never touches tmux, so session events are fed by hand.
 """
 
 import json
-import textwrap
 import time
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from agentop import plugin_manifest
 from agentop.service import plugins as plugin_mod
 from agentop.service.app import create_app
 from agentop.service.config import Settings
 from agentop.service.identity import Identity
 from agentop.service.plugins import PluginHost
 from agentop.service.store import SessionStore
+from tests.broken_plugins import BROKEN, FAILS_LATER, install, write_plugin
 from tests.conftest import signed_in
 
 TOKEN = "test-token"
@@ -40,28 +41,6 @@ class QuietStore(SessionStore):
         self._publish_changes(rows, include_volatile=True)
         old, self._sessions = self._sessions, rows
         self._notify_listeners(old, rows)
-
-
-def manifest(plugin_id, **overrides):
-    fields = {
-        "id": plugin_id,
-        "name": plugin_id.title(),
-        "version": "0.1.0",
-        "description": f"The {plugin_id} plugin",
-        "plugin_api": 1,
-        "default_enabled": True,
-        **overrides,
-    }
-    return "".join(f"{k} = {json.dumps(v)}\n" for k, v in fields.items())
-
-
-def write_plugin(root: Path, plugin_id: str, code: str | None, toml: str | None = None, **overrides) -> Path:
-    folder = root / plugin_id
-    folder.mkdir(parents=True)
-    (folder / "plugin.toml").write_text(manifest(plugin_id, **overrides) if toml is None else toml)
-    if code is not None:
-        (folder / "__init__.py").write_text(textwrap.dedent(code))
-    return folder
 
 
 GOOD = """
@@ -121,12 +100,13 @@ def env(tmp_path, monkeypatch):
     class Env:
         def __init__(self):
             self.root = root
+            self.roots = [root]
             self.data = tmp_path / "home"
             self.out = out
 
         def client(self):
             store = QuietStore()
-            host = PluginHost(store, root=self.root, data_dir=self.data)
+            host = PluginHost(store, roots=self.roots, data_dir=self.data)
             app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
             client = TestClient(app)
             client.store, client.host = store, host
@@ -340,19 +320,6 @@ def test_emit_and_list_changes_reach_the_events_socket(env):
 
 # ---------------------------------------------------------------------- broken plugins
 
-BROKEN = {
-    "bad-toml": (None, "id = [unclosed\n", "plugin.toml can't be read"),
-    "no-name": ("def register(api): pass\n", 'id = "no-name"\nversion = "1"\nplugin_api = 1\n', "'name' must be a str"),
-    "wrong-id": ("def register(api): pass\n", manifest("other"), "but the folder is 'wrong-id'"),
-    "bad-slot": ("def register(api): pass\n", manifest("bad-slot", ui=["toolbar"]), "unknown UI slot toolbar"),
-    "no-init": (None, None, "No __init__.py"),
-    "no-register": ("X = 1\n", None, "defines no register"),
-    "import-raises": ("raise RuntimeError('boom at import')\n", None, "RuntimeError: boom at import"),
-    "register-raises": ("def register(api):\n    raise ValueError('boom in register')\n", None, "ValueError: boom in register"),
-    "register-hangs": ("import time\ndef register(api):\n    time.sleep(3)\n", None, "register() took longer"),
-    "bad-event": ("def register(api):\n    api.on('nope', print)\n", None, "Unknown event 'nope'"),
-}
-
 
 @pytest.mark.parametrize("plugin_id", BROKEN)
 def test_a_broken_plugin_fails_with_its_reason(env, plugin_id):
@@ -386,8 +353,7 @@ def test_a_failed_plugin_needs_a_restart_to_retry(env):
 
 
 def test_a_failing_route_is_a_500_and_nothing_else(env):
-    code = "def register(api):\n    @api.router.get('/boom')\n    def boom():\n        raise RuntimeError('route boom')\n"
-    write_plugin(env.root, "route-raises", code)
+    write_plugin(env.root, "route-raises", FAILS_LATER["route-raises"])
     with env.client() as client:
         client_500 = TestClient(client.app, raise_server_exceptions=False)
         assert client_500.get("/api/v2/plugins/route-raises/boom", headers=AUTH).status_code == 500
@@ -396,8 +362,7 @@ def test_a_failing_route_is_a_500_and_nothing_else(env):
 
 
 def test_a_crashing_task_fails_the_plugin(env):
-    code = "async def crash():\n    raise RuntimeError('task boom')\n\ndef register(api):\n    api.task(crash)\n"
-    write_plugin(env.root, "task-crashes", code)
+    write_plugin(env.root, "task-crashes", FAILS_LATER["task-crashes"])
     with env.client() as client:
         wait_until(lambda: by_id(client)["task-crashes"]["state"] == "failed")
         assert "task boom" in by_id(client)["task-crashes"]["error"]
@@ -443,3 +408,35 @@ def test_folders_that_are_not_plugins_are_skipped(env):
     (env.root / "README.md").write_text("notes")
     with env.client() as client:
         assert by_id(client) == {}
+
+
+# ---------------------------------------------------------------------- plugin folders
+
+
+def test_the_built_in_folder_is_always_searched_first(tmp_path, monkeypatch):
+    monkeypatch.delenv(plugin_manifest.DIRS_ENV, raising=False)
+    assert plugin_manifest.plugin_roots() == [plugin_manifest.DEFAULT_ROOT]
+    one, two = tmp_path / "one", tmp_path / "two"
+    monkeypatch.setenv(plugin_manifest.DIRS_ENV, f"{one}::{two}:{one}:{plugin_manifest.DEFAULT_ROOT}")
+    assert plugin_manifest.plugin_roots() == [plugin_manifest.DEFAULT_ROOT, one, two]
+
+
+def test_plugins_load_from_every_folder_and_the_first_of_a_name_wins(env, tmp_path):
+    extra = tmp_path / "extra"
+    write_plugin(env.root, "good", GOOD)
+    write_plugin(extra, "good", "raise RuntimeError('the second good ran')\n")
+    write_plugin(extra, "other", "def register(api): pass\n")
+    env.roots = [env.root, tmp_path / "missing", extra]
+    with env.client() as client:
+        plugins = by_id(client)
+        assert {i: p["state"] for i, p in plugins.items()} == {"good": "enabled", "other": "enabled"}
+        assert client.host.plugins["other"].folder == extra / "other"
+
+
+def test_the_service_finds_the_built_in_plugins_and_the_extra_folders(tmp_path, monkeypatch):
+    install(tmp_path / "broken")
+    monkeypatch.setenv(plugin_manifest.DIRS_ENV, str(tmp_path / "broken"))
+    host = PluginHost(QuietStore(), data_dir=tmp_path / "home")
+    names = [folder.name for folder in host._folders()]
+    assert {"dialogue", "memory", "viewer"} <= set(names)
+    assert set(BROKEN) | set(FAILS_LATER) <= set(names)

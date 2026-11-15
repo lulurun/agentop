@@ -7,17 +7,23 @@ It imports nothing heavy, since every `agentop` command reads it.
 from __future__ import annotations
 
 import json
+import logging
+import os
 import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+LOG = logging.getLogger(__name__)
+
 # The plugin API this core offers. A plugin declares the version it was written for.
 PLUGIN_API = 1
 SUPPORTED_PLUGIN_APIS = range(1, PLUGIN_API + 1)
 
 DEFAULT_ROOT = Path(__file__).resolve().parent / "plugins"
+# More folders to find plugins in, separated by ':'. The built-in folder is always searched first.
+DIRS_ENV = "AGENTOP_PLUGIN_DIRS"
 MODULE_PREFIX = "agentop.plugins"
 
 UI_SLOTS = frozenset({"session-badge", "left-view", "right-panel", "settings-section", "file-viewer"})
@@ -92,14 +98,33 @@ def read_manifest(folder: Path) -> Manifest:
     )
 
 
-def plugin_folders(root: Path) -> list[Path]:
-    """The folders under root that may be plugins."""
-    try:
-        entries = sorted(root.iterdir())
-    except (FileNotFoundError, NotADirectoryError):
-        return []
-    # __pycache__, hidden folders, and stray files are not plugins.
-    return [e for e in entries if e.is_dir() and not e.name.startswith(("_", "."))]
+def plugin_roots() -> list[Path]:
+    """The folders plugins are found in: the built-in one, then each one in AGENTOP_PLUGIN_DIRS."""
+    roots = [DEFAULT_ROOT]
+    for part in os.environ.get(DIRS_ENV, "").split(os.pathsep):
+        root = Path(part).expanduser().resolve() if part.strip() else None
+        if root is not None and root not in roots:
+            roots.append(root)
+    return roots
+
+
+def plugin_folders(roots: list[Path]) -> list[Path]:
+    """The folders under the roots that may be plugins. When two share a name, the first root's wins."""
+    folders: dict[str, Path] = {}
+    for root in roots:
+        try:
+            entries = sorted(root.iterdir())
+        except (FileNotFoundError, NotADirectoryError):
+            continue
+        for entry in entries:
+            # __pycache__, hidden folders, and stray files are not plugins.
+            if not entry.is_dir() or entry.name.startswith(("_", ".")):
+                continue
+            if entry.name in folders:
+                LOG.warning("Plugin folder %s skipped: %s has the same name", entry, folders[entry.name])
+                continue
+            folders[entry.name] = entry
+    return list(folders.values())
 
 
 def incompatible_reason(version: int) -> str | None:

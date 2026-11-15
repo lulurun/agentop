@@ -648,13 +648,13 @@ default_enabled = true
 ui = ["session-badge", "settings-section"]   # UI slots it fills (12.5)
 ```
 
-Only folders inside the agentop install are scanned. Loading code from a user directory such as `~/.agentop/plugins/` would let anything that can write there run inside the service, so it is left for the security review.
+The built-in folder, `src/agentop/plugins/`, is always scanned first. `AGENTOP_PLUGIN_DIRS` adds more folders, separated by `:`; when two folders hold a plugin of the same name, the first one found wins, and the other is skipped with a warning in the log. The tests use it to install broken plugins (`tests/broken_plugins.py`). It is read from the service's environment, which only someone who can already run code as the user can set. No folder is scanned by default outside the install: loading code from a user directory such as `~/.agentop/plugins/` would let anything that can write there run inside the service, so that is left for the security review.
 
 ### 12.3 Loader
 
 The loader is part of the core. At service start it:
 
-1. Scans `src/agentop/plugins/*/plugin.toml`.
+1. Scans `*/plugin.toml` in `src/agentop/plugins/`, then in each folder in `AGENTOP_PLUGIN_DIRS` (12.2).
 2. Reads each manifest. A missing or invalid manifest gives state `failed`, with the reason.
 3. Checks `plugin_api` against the core's supported range. Outside it gives `incompatible`.
 4. Reads the saved enabled flag, falling back to `default_enabled`.

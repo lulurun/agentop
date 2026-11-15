@@ -139,7 +139,7 @@ def client(tmp_path, home, monkeypatch):
     # The plugin loads its own copy of the module, so the sources are moved through HOME.
     monkeypatch.setenv("HOME", str(home))
     store = QuietStore()
-    host = PluginHost(store, root=root, data_dir=tmp_path / "flags")
+    host = PluginHost(store, roots=[root], data_dir=tmp_path / "flags")
     app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as test_client:
         yield test_client

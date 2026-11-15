@@ -55,7 +55,7 @@ def build(root, flags=None, reserved=("list", "serve")):
         sub.add_parser(name)
     flags_path = root.parent / "flags.json"
     flags_path.write_text(json.dumps(flags or {}))
-    handlers = plugin_cli.add_commands(sub, set(reserved), root=root, flags_path=flags_path)
+    handlers = plugin_cli.add_commands(sub, set(reserved), roots=[root], flags_path=flags_path)
     return parser, handlers
 
 

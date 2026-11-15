@@ -141,7 +141,7 @@ def client(tmp_path, agent):
     (work / "blob.bin").write_bytes(b"\0\1\2")
     (tmp_path / "outside.txt").write_text("no")
     store = QuietStore()
-    host = PluginHost(store, root=root, data_dir=tmp_path / "home")
+    host = PluginHost(store, roots=[root], data_dir=tmp_path / "home")
     app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as test_client:
         store.set_rows(
@@ -316,7 +316,7 @@ def claude_client(tmp_path, monkeypatch):
     root = tmp_path / "plugins"
     shutil.copytree(DEFAULT_ROOT / "viewer", root / "viewer")
     store = QuietStore()
-    host = PluginHost(store, root=root, data_dir=tmp_path / "home")
+    host = PluginHost(store, roots=[root], data_dir=tmp_path / "home")
     app = create_app(Settings(), Identity("service-token", "iid", "test"), store, host, clients=signed_in(TOKEN))
     with TestClient(app) as test_client:
         store.set_rows(
