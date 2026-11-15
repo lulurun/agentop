@@ -23,6 +23,10 @@ _TRANSCRIPT = Path(".system_generated/logs/transcript.jsonl")
 _LOG_NAME_RE = re.compile(r"cli-(\d{8})_(\d{6})\.log")
 _USER_INPUT_RE = re.compile(r'HandleUserInput called with text: "(.+)"')
 _START_TOLERANCE_SEC = 15
+# The lines that name the conversation a run works on: a new one, or one it reopened.
+_CONVERSATION_RE = re.compile(
+    r"(?:Created conversation|Streaming conversation|found conversation|message to conversation) ([0-9a-f-]{36})"
+)
 
 # ---------------------------------------------------------------- transcripts as conversations
 
@@ -83,15 +87,16 @@ class AntigravityAgentCli(AgentCli):
         Session.paste_text_bracketed(session, text)
         Session.send_keys(session, "Enter")
 
-    def _find_log_file(self, pid: int) -> Optional[Path]:
+    def _find_log_file(self, pid: int, proc_start: Optional[float] = None) -> Optional[Path]:
         """Find the log file for this process by matching the filename timestamp to the process start time."""
         log_dir = _LOG_DIR.expanduser()
         if not log_dir.exists():
             return None
-        try:
-            proc_start = psutil.Process(pid).create_time()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            return None
+        if proc_start is None:
+            try:
+                proc_start = psutil.Process(pid).create_time()
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                return None
 
         best_file: Optional[Path] = None
         best_diff = float("inf")
@@ -109,6 +114,25 @@ class AntigravityAgentCli(AgentCli):
                 continue
 
         return best_file if best_diff <= _START_TOLERANCE_SEC else None
+
+    def _conversation_in(self, log_file: Optional[Path]) -> Optional[str]:
+        """The last conversation a CLI log says it created, opened, or sent to."""
+        if log_file is None:
+            return None
+        found = None
+        try:
+            with open(log_file, errors="replace") as f:
+                for line in f:
+                    m = _CONVERSATION_RE.search(line)
+                    if m:
+                        found = m.group(1)
+        except OSError:
+            return None
+        return found
+
+    def session_id_after(self, pid: int, started: float) -> Optional[str]:
+        """Each run of the CLI has its own log, named for when it started."""
+        return self._conversation_in(self._find_log_file(pid, started))
 
     def get_resume_cmd(self, session_id: str) -> str:
         return f"agy --conversation {session_id} --dangerously-skip-permissions"

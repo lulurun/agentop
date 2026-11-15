@@ -3,11 +3,11 @@
 import time
 
 import pytest
+from test_service_live import run_service
 
 from agentop import history, registry
 from agentop.service.config import Settings
 from agentop.service.store import SessionStore, agent_fields
-from test_service_live import run_service
 
 DAY = 86400.0
 NOW = 1_800_000_000.0
@@ -146,3 +146,84 @@ def test_resume_from_history_names_it_and_takes_it_out_of_history(fake_agents, u
         assert service.http.get("/history").json()["items"] == []
 
         assert service.http.post("/history/nope/resume").status_code == 404
+
+
+# ---------------------------------------------------------------------- telling agentop's sessions apart
+
+
+def test_claude_is_started_with_a_session_id_agentop_picks():
+    from agentop.agentclis.claude import ClaudeAgentCli
+
+    agent = ClaudeAgentCli()
+    session_id = agent.new_session_id()
+    assert len(session_id) == 36 and agent.new_session_id() != session_id
+    assert agent.start_cmd(session_id) == f"{agent.launch_cmd} --session-id {session_id}"
+
+
+def test_a_start_records_the_agent_and_any_id_it_was_given(fake_agents, tmp_path, monkeypatch):
+    from agentop import ops
+
+    agent = fake_agents["fakeagent"]
+    name = ops.start("fakeagent", str(tmp_path), "plain")["name"]
+    record = registry.load()["sessions"][name]
+    assert record["agent_pid"] and record["agent_started"] > NOW - 10 * 365 * DAY
+    assert "agent_session_id" not in record
+
+    monkeypatch.setattr(agent, "new_session_id", lambda: "picked-1")
+    monkeypatch.setattr(agent, "start_cmd", lambda session_id: f"fakeagent {session_id}")
+    name = ops.start("fakeagent", str(tmp_path), "given")["name"]
+    assert registry.load()["sessions"][name]["agent_session_id"] == "picked-1"
+
+    name = ops.resume_session("fakeagent", "resumed-1", str(tmp_path), "again")["name"]
+    assert registry.load()["sessions"][name]["agent_session_id"] == "resumed-1"
+
+
+def test_an_ended_session_without_an_id_gets_it_from_the_tools_records(monkeypatch):
+    class Agent:
+        def session_id_after(self, pid, started):
+            return {(11, 100.0): "T-11"}.get((pid, started))
+
+    monkeypatch.setattr(history, "get_agent", lambda tool: Agent() if tool == "codex" else None)
+    records = {
+        "ended-1": record(tool="codex", agent_pid=11, agent_started=100.0),
+        "unknown-2": record(tool="codex", agent_pid=12, agent_started=100.0),
+        "listed-3": record(tool="codex", agent_pid=11, agent_started=100.0),
+        "known-4": record(tool="codex", agent_pid=11, agent_started=100.0, agent_session_id="K"),
+        "old-5": {"managed": True, "ended_at": NOW},
+    }
+    assert history.resolve_agent_ids(records, {"listed-3"}) == {"ended-1": {"agent_session_id": "T-11"}}
+
+
+def test_codex_finds_the_thread_of_a_process_that_has_exited(tmp_path, monkeypatch):
+    import sqlite3
+
+    from agentop.agentclis.codex import CodexAgentCli
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    (tmp_path / ".codex").mkdir()
+    with sqlite3.connect(tmp_path / ".codex/logs_2.sqlite") as db:
+        db.execute(
+            "CREATE TABLE logs (id INTEGER PRIMARY KEY AUTOINCREMENT, ts INT, thread_id TEXT, process_uuid TEXT)"
+        )
+        db.execute("INSERT INTO logs (ts, thread_id, process_uuid) VALUES (90, 'EARLIER', 'pid:4242:a')")
+        db.execute("INSERT INTO logs (ts, thread_id, process_uuid) VALUES (150, 'THREAD', 'pid:4242:b')")
+    assert CodexAgentCli().session_id_after(4242, 100.0) == "THREAD"
+    assert CodexAgentCli().session_id_after(4243, 100.0) is None
+
+
+def test_antigravity_finds_the_conversation_in_the_log_of_its_run(tmp_path, monkeypatch):
+    from datetime import datetime
+
+    from agentop.agentclis import antigravity
+
+    monkeypatch.setattr(antigravity, "_LOG_DIR", tmp_path)
+    started = datetime(2026, 11, 15, 21, 56, 1).timestamp()
+    conversation = "d27f8d20-bfdb-4cdc-b297-c4e21978d562"
+    (tmp_path / "cli-20261115_215601.log").write_text(
+        "I1115 conversation_manager.go:1] Starting new conversation (agent=false)\n"
+        f"I1115 conversation_manager.go:2] Created conversation {conversation}\n"
+        "I1115 server.go:3] Full redraw completed (rerenderAll) for conversation  (epoch 0, items 1)\n"
+    )
+    agent = antigravity.AntigravityAgentCli()
+    assert agent.session_id_after(1, started) == conversation
+    assert agent.session_id_after(1, started + 3600) is None

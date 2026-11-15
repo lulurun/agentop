@@ -21,6 +21,28 @@ _RESUMED_AT = re.compile(r"\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
 NAME_MAX = 64
 
 
+def resolve_agent_ids(records: dict[str, dict], listed: set[str]) -> dict[str, dict]:
+    """Agent session IDs for ended sessions that never had one recorded, such as a
+    Codex session closed while the service was down, from the tool's own records.
+    Returns the fields to add, by registry name.
+    """
+    updates = {}
+    for name, record in records.items():
+        if name in listed or record.get("agent_session_id") or not record.get("managed"):
+            continue
+        pid, started = record.get("agent_pid"), record.get("agent_started")
+        agent = get_agent(record.get("tool") or "")
+        if agent is None or not pid or not started:
+            continue
+        try:
+            found = agent.session_id_after(pid, started)
+        except Exception:
+            found = None
+        if found:
+            updates[name] = {"agent_session_id": found}
+    return updates
+
+
 def last_active(tool: str, agent_session_id: str) -> float | None:
     """When the tool last wrote the session's transcript, or None when it has none."""
     agent = get_agent(tool)

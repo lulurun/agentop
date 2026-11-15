@@ -241,7 +241,12 @@ class AgentCli:
 
         progress("confirming")
         self.post_start_hook(name)
-        return {"ok": True, "name": name, "pid": tool_pid, "tmux_session": name}
+        try:
+            # With the pid, it tells this process from a later one given the same pid.
+            started = psutil.Process(tool_pid).create_time()
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            started = None
+        return {"ok": True, "name": name, "pid": tool_pid, "agent_started": started, "tmux_session": name}
 
     @staticmethod
     def _start_failed(name: str, error: str) -> dict:
@@ -255,8 +260,17 @@ class AgentCli:
         name: str | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> dict:
-        """Create a tmux session and launch the agent."""
-        return self._run_in_tmux(self.launch_cmd, cwd, short_name, params, name, on_progress)
+        """Create a tmux session and launch the agent.
+
+        A tool that takes a session ID at launch is given one, and the result
+        has it as `agent_session_id`, so the session is known as agentop's from the start.
+        """
+        session_id = self.new_session_id()
+        cmd = self.start_cmd(session_id) if session_id else self.launch_cmd
+        result = self._run_in_tmux(cmd, cwd, short_name, params, name, on_progress)
+        if session_id:
+            result["agent_session_id"] = session_id
+        return result
 
     def resume_session(
         self,
@@ -270,7 +284,25 @@ class AgentCli:
         cmd = self.get_resume_cmd(session_id)
         if not cmd:
             return {"ok": False, "error": f"{self.name} does not support session resume"}
-        return self._run_in_tmux(cmd, cwd, short_name, name=name, on_progress=on_progress)
+        result = self._run_in_tmux(cmd, cwd, short_name, name=name, on_progress=on_progress)
+        result["agent_session_id"] = session_id
+        return result
+
+    # ------------------------------------------------------------------ the tool's own session ID
+
+    def new_session_id(self) -> Optional[str]:
+        """An ID to start a new session with, for a tool that takes one at launch; else None."""
+        return None
+
+    def start_cmd(self, session_id: str) -> str:
+        """The launch command for a session with the ID from new_session_id."""
+        return self.launch_cmd
+
+    def session_id_after(self, pid: int, started: float) -> Optional[str]:
+        """The session a process started at `started` worked on, found from the tool's own
+        records, which outlive the process. None if the tool keeps none.
+        """
+        return None
 
     # ------------------------------------------------------------------ saved sessions
 

@@ -185,6 +185,10 @@ class CodexAgentCli(AgentCli):
             return None
         return row[0] if row else None
 
+    def session_id_after(self, pid: int, started: float) -> Optional[str]:
+        """Codex's log keeps which thread each process worked on, after it exits."""
+        return self._logged_thread_id(pid, started)
+
     def _thread_id(self, pid: int) -> Optional[str]:
         """The thread a running codex works on: from its log, else from `codex resume <id>`."""
         try:

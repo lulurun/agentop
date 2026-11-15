@@ -4,6 +4,7 @@ import json
 import re
 import socket
 import time
+import uuid
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
@@ -120,6 +121,12 @@ class ClaudeAgentCli(AgentCli):
         if result.get("is_error"):
             raise RuntimeError(f"claude: {str(result.get('result') or result.get('subtype'))[:200]}")
         return str(result.get("result") or "").strip()
+
+    def new_session_id(self) -> str:
+        return str(uuid.uuid4())
+
+    def start_cmd(self, session_id: str) -> str:
+        return f"{self.launch_cmd} --session-id {session_id}"
 
     def get_resume_cmd(self, session_id: str) -> str:
         return f"claude --resume {session_id} --dangerously-skip-permissions --remote-control"

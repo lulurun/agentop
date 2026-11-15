@@ -391,9 +391,14 @@ def create_v2_app(ctx: Context) -> FastAPI:
 
     def past_sessions() -> list[dict]:
         rows = ctx.store.list()
+        records = registry.load()["sessions"]
+        listed = {row["id"] for row in rows}
+        for name, fields in history.resolve_agent_ids(records, listed).items():
+            registry.upsert_session(name, fields)
+            records[name] = {**records[name], **fields}
         return history.list_history(
-            registry.load()["sessions"],
-            {row["id"] for row in rows},
+            records,
+            listed,
             {row["session_id"] for row in rows if row.get("session_id")},
             ctx.settings.history_window_seconds,
         )

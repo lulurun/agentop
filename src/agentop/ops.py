@@ -31,7 +31,13 @@ def get_sessions(with_meta: bool = True) -> list[dict]:
 
 
 def _record_start(result: dict, tool: str, cwd: str, short_name: str) -> dict:
-    """Register the outcome of a start. A failure with a tmux session is kept, to be seen and closed."""
+    """Register the outcome of a start. A failure with a tmux session is kept, to be seen and closed.
+
+    The record is what marks a session as agentop's: the tool's own session ID
+    when known at launch, and else the agent's pid and start time, from which
+    the tool's own records give the ID later, even after it exits
+    (history.resolve_agent_ids).
+    """
     name = result.get("name")
     if name:
         registry.upsert_session(
@@ -45,6 +51,9 @@ def _record_start(result: dict, tool: str, cwd: str, short_name: str) -> dict:
                 "status": "running" if result.get("ok") else "failed",
                 "step": None,
                 "error": result.get("error"),
+                "agent_session_id": result.get("agent_session_id"),
+                "agent_pid": result.get("pid"),
+                "agent_started": result.get("agent_started"),
             },
         )
     return result

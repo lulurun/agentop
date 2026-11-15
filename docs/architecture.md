@@ -45,6 +45,7 @@ The interface, with the default for each thing that differs:
 | Spotting its process | `matches(proc_name, cmdline)` |
 | Being installed | `binary` (the program `launch_cmd` runs), `skills_dir()` (where agentop installs its skills for it, or None) |
 | Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_session()`, `resume_session()`, `post_start_hook()` |
+| Its own session ID, for History | `new_session_id()` and `start_cmd(id)`, for a tool that takes an ID at launch (Claude's `--session-id`); `session_id_after(pid, started)`, the ID from the tool's own records once the process is gone (Codex's log, Antigravity's CLI log) |
 | Typing into it | `send_text(session, text)` (plain paste, then Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |
 | What it's doing | `get_session_meta()`: session ID, AI title (`get_ai_title()`), token usage, bridge URL |
@@ -122,7 +123,7 @@ The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was
 
 ### 4.2 Registry (`registry.py`)
 
-JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. The store adds each managed session's agent session ID (`agent_session_id`) and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6).
+JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A start records the agent's pid and start time, and the tool's session ID when it is known at launch; the store adds the ID and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6).
 
 ### 4.3 Ops (`ops.py`)
 
