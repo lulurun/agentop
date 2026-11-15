@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ApiError, ServiceClient, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
+import { ApiError, ServiceClient, type PluginInfo, type SavedSession, type Session, type ServiceInfo } from "./api/client";
 import {
   checkConnection,
   credentialsFrom,
@@ -14,6 +14,7 @@ import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import * as tabs from "./tabs";
 import type { Layout, OpenMode, TabContent } from "./tabs";
+import { homeOf, pluginOf, workspacesFor, type WorkspaceId } from "./workspaces";
 
 export type LinkState =
   | { state: "connecting" }
@@ -21,29 +22,39 @@ export type LinkState =
   | { state: "reconnecting"; service: ServiceInfo; socketBlocked?: boolean }
   | { state: "failed"; failure: ConnectFailure };
 
-type Dialog = "new-session" | "add-service" | "service" | "settings" | null;
-/** A plugin's left-column view is `plugin:{id}`. */
-export type View = "sessions" | "history" | `plugin:${string}`;
+type Dialog = "new-session" | "add-service" | "settings" | null;
+
+/** The History workspace's list and which past session is selected, for the active connection. */
+export interface HistoryState {
+  items: SavedSession[] | null;
+  selected: string | null;
+}
+
+export function historyKey(item: Pick<SavedSession, "tool" | "session_id">): string {
+  return `${item.tool}/${item.session_id}`;
+}
 
 interface AppState {
   connections: Connection[];
   activeId: string;
-  view: View;
+  /** The workspace shown, per connection. */
+  workspaces: Record<string, WorkspaceId>;
   settings: Settings;
   link: LinkState;
   sessions: Record<string, Session>;
   /** The connected service's plugins. Plugins differ by service, so this is reset on every switch. */
   plugins: PluginInfo[];
+  /** The plugin list has come in since connecting, so a missing plugin workspace is really missing. */
+  pluginsLoaded: boolean;
+  history: HistoryState;
   /** Selected session per connection: the focused tab's session. Session IDs are only unique within one service. */
   selected: Record<string, string>;
-  /** The main area's tabs per connection. */
-  layouts: Record<string, Layout>;
+  /** The main area's tabs per connection, one layout per workspace. */
+  layouts: Record<string, Partial<Record<WorkspaceId, Layout>>>;
   leftOpen: boolean;
   rightOpen: boolean;
   switcherOpen: boolean;
   dialog: Dialog;
-  /** The saved service the status dialog shows. */
-  statusId: string | null;
   error: string | null;
 
   init(): Promise<void>;
@@ -53,7 +64,7 @@ interface AppState {
   setToken(token: string): void;
   /** Sign this app out of the active service, and revoke its client there. */
   signOut(): Promise<void>;
-  setView(view: View): void;
+  setWorkspace(workspace: WorkspaceId): void;
   setPluginEnabled(id: string, enabled: boolean): Promise<void>;
   updateSettings(changes: Partial<Settings>): void;
   /** The service was stopped on purpose, so don't keep trying to reach it. */
@@ -61,18 +72,23 @@ interface AppState {
   addConnection(connection: Connection): void;
   updateConnection(id: string, fields: Partial<Connection>): void;
   removeConnection(id: string): void;
-  /** Show a session in the main area. By default it takes the place of the session shown now. */
+  /** Show a session in the Sessions workspace. By default it takes the place of the session shown now. */
   select(sessionId: string, mode?: OpenMode): void;
+  /** Open a tab in the workspace shown; a session's tab always opens in Sessions. */
   openTab(content: TabContent, mode?: OpenMode): void;
-  activateTab(group: number, tabId: string): void;
-  closeTab(group: number, tabId: string): void;
-  splitTab(): void;
-  moveTab(group: number, tabId: string): void;
-  focusGroup(group: number): void;
+  activateTab(workspace: WorkspaceId, group: number, tabId: string): void;
+  closeTab(workspace: WorkspaceId, group: number, tabId: string): void;
+  splitTab(workspace: WorkspaceId): void;
+  moveTab(workspace: WorkspaceId, group: number, tabId: string): void;
+  focusGroup(workspace: WorkspaceId, group: number): void;
+  loadHistory(): Promise<void>;
+  selectHistory(key: string | null): void;
+  removeHistory(item: SavedSession): Promise<void>;
   toggleLeft(): void;
   toggleRight(): void;
   setSwitcherOpen(open: boolean): void;
   setDialog(dialog: Dialog): void;
+  /** Open a service's Status tab in the workspace shown, switching to that service first. */
   openStatus(id: string): void;
   setError(error: string | null): void;
   /** Run an action against the service, showing any failure instead of throwing. */
@@ -82,34 +98,84 @@ interface AppState {
 const LAYOUT_KEY = "agentop.layout";
 const SELECTED_KEY = "agentop.selected";
 const TABS_KEY = "agentop.tabs";
+const WORKSPACE_KEY = "agentop.workspace";
 
-function loadLayouts(): Record<string, Layout> {
+type Layouts = AppState["layouts"];
+
+/**
+ * Saved tabs, per connection and workspace. Tabs saved before workspaces were
+ * one layout per connection: those become the Sessions layout.
+ */
+export function parseLayouts(saved: Record<string, unknown>): Layouts {
+  const result: Layouts = {};
+  for (const [id, value] of Object.entries(saved ?? {})) {
+    if (!value || typeof value !== "object") continue;
+    if (Array.isArray((value as Layout).groups)) {
+      const layout = tabs.parseLayout(value);
+      if (layout) result[id] = { sessions: layout };
+      continue;
+    }
+    const byWorkspace: Partial<Record<WorkspaceId, Layout>> = {};
+    for (const [workspace, layout] of Object.entries(value as Record<string, unknown>)) {
+      const parsed = tabs.parseLayout(layout);
+      if (parsed) byWorkspace[workspace as WorkspaceId] = parsed;
+    }
+    result[id] = byWorkspace;
+  }
+  return result;
+}
+
+function loadLayouts(): Layouts {
   try {
-    const saved = JSON.parse(localStorage.getItem(TABS_KEY) ?? "{}") as Record<string, unknown>;
-    return Object.fromEntries(
-      Object.entries(saved).flatMap(([id, value]) => {
-        const layout = tabs.parseLayout(value);
-        return layout ? [[id, layout]] : [];
-      }),
-    );
+    return parseLayouts(JSON.parse(localStorage.getItem(TABS_KEY) ?? "{}"));
   } catch {
     return {};
   }
+}
+
+function loadWorkspaces(): Record<string, WorkspaceId> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(WORKSPACE_KEY) ?? "{}");
+    return saved && typeof saved === "object" ? saved : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The workspace shown for the active connection. One whose plugin is off, or
+ * isn't on this service, falls back to Sessions once the plugin list is in.
+ */
+export function currentWorkspace(state: Pick<AppState, "workspaces" | "activeId" | "plugins" | "pluginsLoaded">): WorkspaceId {
+  const wanted = state.workspaces[state.activeId] ?? "sessions";
+  if (!pluginOf(wanted) || !state.pluginsLoaded) return wanted;
+  return workspacesFor(state.plugins).some((w) => w.id === wanted) ? wanted : "sessions";
 }
 
 const EMPTY_LAYOUT = tabs.emptyLayout();
 // A derived layout must be the same object each time, or every render would see a change.
 const derived = new Map<string, Layout>();
 
-/** The active connection's tabs. Before it has any, the session selected last time gets one. */
-export function layoutOf(state: Pick<AppState, "layouts" | "selected" | "activeId">): Layout {
-  const saved = state.layouts[state.activeId];
+function derive(key: string, make: () => Layout): Layout {
+  if (!derived.has(key)) derived.set(key, make());
+  return derived.get(key)!;
+}
+
+type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "workspaces" | "plugins" | "pluginsLoaded">;
+
+/**
+ * A workspace's tabs on the active connection, by default the one shown.
+ * Before it has any, it gets its pinned home tab, or for Sessions the session selected last time.
+ */
+export function layoutOf(state: LayoutState, workspace: WorkspaceId = currentWorkspace(state)): Layout {
+  const saved = state.layouts[state.activeId]?.[workspace];
   if (saved) return saved;
+  const home = homeOf(workspace);
+  if (home) return derive(`home\n${workspace}`, () => tabs.pinnedLayout(home));
+  if (workspace !== "sessions") return EMPTY_LAYOUT;
   const selected = state.selected[state.activeId];
   if (!selected) return EMPTY_LAYOUT;
-  const key = `${state.activeId}\n${selected}`;
-  if (!derived.has(key)) derived.set(key, tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "replace", "t0"));
-  return derived.get(key)!;
+  return derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "replace", "t0"));
 }
 
 function loadSelected(): Record<string, string> {
@@ -240,12 +306,59 @@ export const useApp = create<AppState>((set, get) => {
   let socket: WebSocket | null = null;
 
   async function loadPlugins(mine: number, client: ServiceClient) {
+    let plugins: PluginInfo[];
     try {
-      const plugins = await client.plugins();
-      if (mine === attempt) set({ plugins });
+      plugins = await client.plugins();
     } catch {
       // An older service has no plugins. Any other failure shows up elsewhere.
-      if (mine === attempt) set({ plugins: [] });
+      plugins = [];
+    }
+    if (mine !== attempt) return;
+    set({ plugins, pluginsLoaded: true });
+    closePluginTabs(plugins);
+  }
+
+  /** A plugin that is off takes its tabs with it, and its workspace starts afresh when it is back. */
+  function closePluginTabs(plugins: PluginInfo[]) {
+    const on = new Set(plugins.filter((p) => p.state === "enabled").map((p) => p.id));
+    const state = get();
+    const mine = state.layouts[state.activeId];
+    if (!mine) return;
+    const off = (content: TabContent) => content.kind === "plugin" && !on.has(content.plugin);
+    const next: Partial<Record<WorkspaceId, Layout>> = {};
+    let changed = false;
+    for (const [workspace, layout] of Object.entries(mine) as [WorkspaceId, Layout][]) {
+      const plugin = pluginOf(workspace);
+      if (plugin && !on.has(plugin)) {
+        changed = true;
+        continue;
+      }
+      const closed = tabs.closeWhere(layout, off);
+      if (closed !== layout) changed = true;
+      next[workspace] = closed;
+    }
+    if (changed) saveLayouts({ ...state.layouts, [state.activeId]: next });
+  }
+
+  function saveLayouts(layouts: Layouts, selected = get().selected) {
+    set({ layouts, selected });
+    try {
+      localStorage.setItem(TABS_KEY, JSON.stringify(layouts));
+      localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  function showWorkspace(workspace: WorkspaceId) {
+    const state = get();
+    if (state.workspaces[state.activeId] === workspace) return;
+    const workspaces = { ...state.workspaces, [state.activeId]: workspace };
+    set({ workspaces });
+    try {
+      localStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspaces));
+    } catch {
+      // Only a convenience.
     }
   }
 
@@ -299,34 +412,39 @@ export const useApp = create<AppState>((set, get) => {
       else if (event.type === "plugin") dispatchPluginEvent(event.id, event.data);
       else {
         set({ sessions: applyEvent(get().sessions, event) });
-        if (event.type === "session.removed") updateLayout((layout) => tabs.closeSession(layout, event.id));
+        if (event.type === "session.removed") {
+          const workspaces = new Set<WorkspaceId>(["sessions", ...(Object.keys(get().layouts[get().activeId] ?? {}) as WorkspaceId[])]);
+          for (const workspace of workspaces) updateLayout((layout) => tabs.closeSession(layout, event.id), workspace);
+        }
       }
     };
     ws.onclose = () => retry(socketFailures + 1);
   }
 
-  /** Change the active connection's tabs, keeping the selected session in step with the focused tab. */
-  function updateLayout(change: (layout: Layout) => Layout, showSessions = false) {
+  /**
+   * Change one workspace's tabs on the active connection, by default the one shown.
+   * In Sessions, the selected session follows the focused tab.
+   */
+  function updateLayout(change: (layout: Layout) => Layout, workspace: WorkspaceId = currentWorkspace(get())) {
     const state = get();
-    const layout = change(layoutOf(state));
-    const layouts = { ...state.layouts, [state.activeId]: layout };
-    const focused = tabs.focusedTab(layout);
+    const before = layoutOf(state, workspace);
+    const layout = change(before);
+    if (layout === before) return;
+    const layouts = { ...state.layouts, [state.activeId]: { ...state.layouts[state.activeId], [workspace]: layout } };
     const selected = { ...state.selected };
-    if (focused) selected[state.activeId] = tabs.sessionOf(focused.content);
-    else delete selected[state.activeId];
-    set({ layouts, selected, ...(showSessions ? { view: "sessions" as View } : {}) });
-    try {
-      localStorage.setItem(TABS_KEY, JSON.stringify(layouts));
-      localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
-    } catch {
-      // Only a convenience.
+    if (workspace === "sessions") {
+      const focused = tabs.focusedTab(layout);
+      const session = focused && tabs.sessionOf(focused.content);
+      if (session) selected[state.activeId] = session;
+      else if (!focused) delete selected[state.activeId];
     }
+    saveLayouts(layouts, selected);
   }
 
   async function connect(connection: Connection) {
     closeLink();
     const mine = attempt;
-    set({ link: { state: "connecting" }, sessions: {}, plugins: [] });
+    set({ link: { state: "connecting" }, sessions: {}, plugins: [], pluginsLoaded: false, history: { items: null, selected: null } });
     const result = await checkConnection(connection);
     if (mine !== attempt) return;
     if (result.update) get().updateConnection(connection.id, result.update);
@@ -403,18 +521,19 @@ export const useApp = create<AppState>((set, get) => {
 
   return {
     connections: [],
-    view: "sessions",
+    workspaces: loadWorkspaces(),
     settings: loadSettings(),
     activeId: "",
     link: { state: "connecting" },
     sessions: {},
     plugins: [],
+    pluginsLoaded: false,
+    history: { items: null, selected: null },
     selected: loadSelected(),
     layouts: loadLayouts(),
     ...loadLayout(),
     switcherOpen: false,
     dialog: null,
-    statusId: null,
     error: null,
 
     async init() {
@@ -460,8 +579,8 @@ export const useApp = create<AppState>((set, get) => {
       void connect(activeConnection(get()));
     },
 
-    setView(view) {
-      set({ view });
+    setWorkspace(workspace) {
+      showWorkspace(workspace);
     },
 
     async setPluginEnabled(id, enabled) {
@@ -479,7 +598,7 @@ export const useApp = create<AppState>((set, get) => {
 
     markStopped() {
       closeLink();
-      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {}, plugins: [] });
+      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {}, plugins: [], pluginsLoaded: false });
     },
 
     addConnection(connection) {
@@ -498,22 +617,44 @@ export const useApp = create<AppState>((set, get) => {
     removeConnection(id) {
       const connections = get().connections.filter((c) => c.id !== id);
       persist(connections);
-      set({ connections });
+      const { [id]: _layouts, ...layouts } = get().layouts;
+      const { [id]: _workspace, ...workspaces } = get().workspaces;
+      set({ connections, workspaces });
+      saveLayouts(layouts);
       if (get().activeId === id && connections[0]) get().switchTo(connections[0].id);
     },
 
     select(sessionId, mode = "replace") {
-      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, mode), true);
+      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, mode), "sessions");
+      showWorkspace("sessions");
     },
 
     openTab(content, mode = "tab") {
-      updateLayout((layout) => tabs.open(layout, content, mode), true);
+      const workspace = content.kind === "session" ? "sessions" : currentWorkspace(get());
+      updateLayout((layout) => tabs.open(layout, content, mode), workspace);
+      showWorkspace(workspace);
     },
-    activateTab: (group, tabId) => updateLayout((layout) => tabs.activate(layout, group, tabId)),
-    closeTab: (group, tabId) => updateLayout((layout) => tabs.close(layout, group, tabId)),
-    splitTab: () => updateLayout((layout) => tabs.split(layout)),
-    moveTab: (group, tabId) => updateLayout((layout) => tabs.moveToOther(layout, group, tabId)),
-    focusGroup: (group) => updateLayout((layout) => tabs.focusGroup(layout, group)),
+    activateTab: (workspace, group, tabId) => updateLayout((layout) => tabs.activate(layout, group, tabId), workspace),
+    closeTab: (workspace, group, tabId) => updateLayout((layout) => tabs.close(layout, group, tabId), workspace),
+    splitTab: (workspace) => updateLayout((layout) => tabs.split(layout), workspace),
+    moveTab: (workspace, group, tabId) => updateLayout((layout) => tabs.moveToOther(layout, group, tabId), workspace),
+    focusGroup: (workspace, group) => updateLayout((layout) => tabs.focusGroup(layout, group), workspace),
+
+    async loadHistory() {
+      const items = await get().act((client) => client.savedSessions(500));
+      if (!items) return;
+      const { selected } = get().history;
+      set({ history: { items, selected: selected && items.some((i) => historyKey(i) === selected) ? selected : null } });
+    },
+
+    selectHistory(selected) {
+      set({ history: { ...get().history, selected } });
+    },
+
+    async removeHistory(item) {
+      await get().act((client) => client.deleteSavedSession(item.tool, item.session_id));
+      await get().loadHistory();
+    },
 
     toggleLeft() {
       const leftOpen = !get().leftOpen;
@@ -529,7 +670,11 @@ export const useApp = create<AppState>((set, get) => {
 
     setSwitcherOpen: (switcherOpen) => set({ switcherOpen }),
     setDialog: (dialog) => set({ dialog, switcherOpen: false }),
-    openStatus: (statusId) => set({ dialog: "service", statusId, switcherOpen: false }),
+    openStatus(id) {
+      set({ switcherOpen: false, dialog: null });
+      if (id !== get().activeId) get().switchTo(id);
+      updateLayout((layout) => tabs.open(layout, { kind: "status" }, "left"));
+    },
     setError: (error) => set({ error }),
 
     async act(action) {

@@ -98,7 +98,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 |----|-------|----------|--------|
 | F1 | History: filter by tool and text, resume a past session, delete one | Resume goes through the normal start; delete removes only that entry | Not run |
 | F2 | Dialogues: open one, read it, stop a running one, remove one after confirming | All work; dialogue agents are labelled in the session list | Not run |
-| F2a | With a dialogue running, turn the Dialogues plugin off in Settings → Plugins, then on again | A warning first; once confirmed the dialogue stops, the view and labels go, its agents stay as plain sessions; turned on again, every saved dialogue is back | Not run |
+| F2a | With a dialogue running, turn the Dialogues plugin off in Status → Plugins, then on again | A warning first; once confirmed the dialogue stops, the view and labels go, its agents stay as plain sessions; turned on again, every saved dialogue is back | Not run |
 
 ## G. Service control
 

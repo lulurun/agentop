@@ -31,7 +31,7 @@ async function startSession(page: Page, s: Service, name: string) {
 async function openPanel(page: Page) {
   await page.locator(".switcher-current").click();
   await page.getByRole("menuitem", { name: /status$/ }).click();
-  return page.getByRole("dialog");
+  return page.getByRole("region", { name: "Status" });
 }
 
 /** Report one new commit, whatever the machine's real git state is. */
@@ -80,7 +80,7 @@ test("a service started by hand restarts itself, and its terminal reconnects", a
   await panel.getByRole("button", { name: "Restart service" }).click();
   await expect(panel.getByRole("status")).toContainText("Restarting");
   await expect(panel.getByRole("status")).toBeHidden({ timeout: 20_000 });
-  await panel.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Close Status" }).click();
 
   await page.getByTestId("terminal").click();
   await page.keyboard.type("after restart\n");
@@ -102,7 +102,7 @@ test("restart names the service, keeps the session, and reconnects by itself", a
 
   await s.stop();
   await s.start();
-  await panel.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Close Status" }).click();
   await expect(page.locator(".link-connected")).toBeVisible({ timeout: 15_000 });
 
   await page.getByTestId("terminal").click();

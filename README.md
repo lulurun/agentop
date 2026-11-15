@@ -19,7 +19,7 @@ Agent CLIs are built to run in a terminal, and tmux is the natural place to keep
 - **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API. The service token signs a browser or app in; each one then gets its own token, which runs out after 12 hours unused.
 - **App.** One UI, built as a web app (served by the service at `/`) and as a Tauri desktop app. Sessions are on the left, the agent's live terminal is in the middle, and details (token usage, changed files) are on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal.
 - **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It can also see the status of the service it is connected to, and restart or update it.
-- **History.** Past conversations of each tool, which can be resumed as new sessions.
+- **History.** Past conversations of each tool, in a workspace of their own: searched, filtered by tool, sorted, and resumed as new sessions.
 - **CLI.** The `agentop` command does the same from a shell: start, stop, list, history, and service control.
 
 ## Plugins
@@ -28,7 +28,7 @@ Everything above is the **core**. It is always loaded and cannot be switched off
 
 - Each plugin is one folder under `src/agentop/plugins/`, with its UI under `ui/src/plugins/`, and a `plugin.toml` manifest.
 - A core loader finds them at service start and loads each one on its own. A plugin gets a narrow API: its own routes under `/api/v2/plugins/<id>/`, core events, supervised background tasks, a hook for being turned off, its own data folder, and `agentop` commands of its own.
-- Plugin UI goes into fixed slots in the app, such as a badge on a session row, a view in the left column, or a section in Settings. Settings → Plugins switches each plugin on or off for that service.
+- Plugin UI goes into fixed slots in the app, such as a badge on a session row, a workspace in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
 - **A plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
 
 The plugins that ship with agentop are Dialogues, the File viewer, and Memory. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/v2-design.md#12-plugins).
@@ -75,7 +75,7 @@ To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` 
 
 ## Secure setup
 
-The defaults suit a service that only you reach, over loopback or a tunnel. The service token (`agentop service token`) never expires, but it only signs a client in, and the app doesn't keep it. Each browser or app gets its own token, which the app renews while it's open. After 12 hours unused, or 30 days in all, it's signed out and asks for the service token again. You can see every client, and sign any one out, in the service's Status dialog or with `agentop service clients`.
+The defaults suit a service that only you reach, over loopback or a tunnel. The service token (`agentop service token`) never expires, but it only signs a client in, and the app doesn't keep it. Each browser or app gets its own token, which the app renews while it's open. After 12 hours unused, or 30 days in all, it's signed out and asks for the service token again. You can see every client, and sign any one out, in the service's Status tab or with `agentop service clients`.
 
 **What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`. Signing in a new browser or phone still means copying that token off the machine. Single-use pairing codes would remove that, but they make every sign-in need a shell on the machine, which is a poor trade for personal use. So they are a lower-priority item in the [security review in TODO.md](TODO.md#security-review), with the rest of the open items there.
 

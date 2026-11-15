@@ -46,7 +46,18 @@ Design: [v2-design.md section 12](docs/v2-design.md#12-plugins).
 - [x] Move dialogues into the first plugin, `src/agentop/plugins/dialogue/` and `ui/src/plugins/dialogue/` (design 12.9), 2026-11-14. `api.agents` was dropped instead of built: the orchestrator is its own process (design 12.3).
 - [x] Prove it: the core suites pass with both dialogue folders deleted; disabling the plugin stops running dialogues (`api.on_disable`, after a warning in Settings), hides every dialogue UI, and leaves other sessions untouched.
 - [x] Attention indicator: the `attention` plugin, 2026-11-15 (design 12.8). It runs on the 2s `scan` tick: measured live at about 6 ms a tick for 11 sessions. Settings shows what each tick costs, and turning the plugin off stops it entirely.
-- [ ] Then, one at a time: file preview and diff (built in the File viewer), grouping by project.
+- [x] File viewer: file preview, diff against HEAD, Markdown and images, and syntax highlighting, completed 2026-11-15 (design 12.8). Grouping sessions by project, the last planned plugin, is in the backlog in [docs/plugins.md](docs/plugins.md#backlog).
+
+## Workspaces
+
+Design: [v2-design.md section 10.7](docs/v2-design.md#107-workspaces-2026-11-15), agreed 2026-11-15.
+
+- [x] Phase 1, the shell, built 2026-11-15: workspaces in the header (switcher, then the workspaces, the current one highlighted), one tab layout per workspace per connection, pinned default tabs, the side each tab kind opens on, Sessions tabs kept mounted while hidden, old saved tabs moved into Sessions. Settings becomes the gear with display options only; Status becomes a tab with the plugins in it. The `left-view` plugin slot becomes `workspace`, and Dialogues moves into one as it is. Keyboard: Ctrl+Shift+1 to 9, Ctrl+Shift+N per workspace.
+- [x] Phase 2, History, built 2026-11-15: the list (search, filter by CLI, sort by last updated or CLI) in its pinned tab, and the selected past session on the right with Resume and Remove.
+- [ ] History stats on the right: messages, tokens, transcript size. `/saved-sessions` only has the title, tool, directory and last active time today.
+- [ ] Dialogues workspace: designed in its own conversation (list on the left, the two actors split in tabs, view only; the dialogue's files on the right opening in the right group; New dialogue in the header). Dialogue sessions leave the Sessions list, and a plugin claims a session in a way the core can read without naming the plugin.
+- [ ] Memory workspace: designed in its own conversation; it closes "Search in the app" in the Memory plugin section.
+- [ ] Later: the workspace in the URL, a badge on a workspace that needs attention, `navigate(workspace, selection)` (design 10.7.6).
 
 ## Memory plugin
 

@@ -2,11 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput } from "../connections";
 import { platform } from "../platform";
-import { pluginsFor } from "../plugins/registry";
-import { PluginSlot } from "../plugins/Slot";
-import { activeClient, activeConnection, useApp } from "../store";
+import { activeClient, activeConnection, currentWorkspace, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
-import { HistoryView } from "./HistoryView";
 import { Workbench, type SessionPaneProps } from "./Workbench";
 
 type Selection = { sessions: Record<string, Session>; selected: Record<string, string>; activeId: string };
@@ -44,6 +41,7 @@ function ConnectionProblem() {
   const retry = useApp((s) => s.retry);
   const setToken = useApp((s) => s.setToken);
   const setSwitcherOpen = useApp((s) => s.setSwitcherOpen);
+  const removeConnection = useApp((s) => s.removeConnection);
   const [token, setTokenText] = useState("");
 
   if (link.state === "connecting") {
@@ -103,6 +101,11 @@ function ConnectionProblem() {
         <button type="button" onClick={() => setSwitcherOpen(true)}>
           Switch service
         </button>
+        {!connection.isHome && (
+          <button type="button" title="Remove it from this app. Its sessions keep running." onClick={() => removeConnection(connection.id)}>
+            Forget
+          </button>
+        )}
       </div>
     </div>
   );
@@ -230,14 +233,11 @@ export function MainArea() {
   const setDialog = useApp((s) => s.setDialog);
   const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
   const linked = linkState === "connected" || linkState === "reconnecting";
-  const view = useApp((s) => s.view);
-  const plugins = useApp((s) => s.plugins);
-  // A view whose plugin was disabled, or isn't on this service, falls back to the sessions.
-  const pluginView = view.startsWith("plugin:")
-    ? pluginsFor("left-view", plugins).find(({ info }) => `plugin:${info.id}` === view)?.info.id
-    : undefined;
+  const workspace = useApp(currentWorkspace);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
   const showTerminal = linked && session?.attachable && session.status !== "starting";
+
+  const renderSession = (props: Omit<SessionPaneProps, "client">) => <SessionPane key={props.tabKey} {...props} client={client} />;
 
   useEffect(() => {
     // Leaving the page would cut off the terminal.
@@ -258,26 +258,26 @@ export function MainArea() {
             its own once this is fixed.
           </p>
         </div>
-      ) : linked && view === "history" ? (
-        <HistoryView client={client} />
-      ) : linked && pluginView ? (
-        <div className="plugin-view">
-          <PluginSlot slot="left-view" only={pluginView} />
-        </div>
       ) : linked ? (
-        <Workbench
-          renderSession={(props) => <SessionPane key={props.tabKey} {...props} client={client} />}
-          empty={
-            <div className="placard">
-              <h2>Start a session, or pick one from the list</h2>
-              <div className="placard-actions">
-                <button type="button" className="primary" onClick={() => setDialog("new-session")}>
-                  New session
-                </button>
+        <>
+          {/* Sessions stays on the page under the other workspaces, so its terminals keep their connection. */}
+          <Workbench
+            workspace="sessions"
+            hidden={workspace !== "sessions"}
+            renderSession={renderSession}
+            empty={
+              <div className="placard">
+                <h2>Start a session, or pick one from the list</h2>
+                <div className="placard-actions">
+                  <button type="button" className="primary" onClick={() => setDialog("new-session")}>
+                    New session
+                  </button>
+                </div>
               </div>
-            </div>
-          }
-        />
+            }
+          />
+          {workspace !== "sessions" && <Workbench workspace={workspace} renderSession={renderSession} empty={null} />}
+        </>
       ) : (
         <ConnectionProblem />
       )}

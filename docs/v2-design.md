@@ -489,6 +489,8 @@ Session object:
 
 ### 10.1 Layout
 
+This was the layout before workspaces. Sessions keeps it; the header and the History and Dialogues views changed in [10.7](#107-workspaces-2026-11-15).
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │ [◧]  fix-auth · claude · ~/project                       ● Running  [◨]  │
@@ -569,7 +571,7 @@ The switcher is a menu in the top bar, after the selected session's name:
 - Selecting a row switches immediately (4.5).
 - Rows show live reachability from `/health`, polled every 15s only while the menu is open.
 - **Connect to a service**: URL (or pasted `connect-info` string), token, and an optional name. A Test button runs the 4.5 checks and shows the service's own name and version before saving. The form warns about unencrypted URLs and likely browser blocks.
-- **Status**, on each row, opens the service panel for that service, selected or not.
+- **Status**, on each row, opens the service panel for that service, selected or not. Since 10.7 it is a tab, opened after switching to that service.
 
 The service panel shows a name field, address, version and commit, uptime, tmux version, encryption state, and Stop, Restart, and Update buttons, enabled according to section 8.3. Update shows commits available and live step progress. The name is an alias kept only by this client; left empty, the service's own name shows. Forget removes a saved service from this client, with its token. It never affects the service or its sessions, and the service that served the web app can't be forgotten.
 
@@ -588,6 +590,70 @@ interface Platform {
 ```
 
 Everything else is shared. A CI check forbids importing `@tauri-apps/*` outside this directory.
+
+### 10.7 Workspaces (2026-11-15)
+
+Agreed on 2026-11-15, replacing the single sessions layout of 10.1. Each connection offers a set of top-level features, called **workspaces**: Sessions, History, Dialogues, Memory, and later others. Each has its own layout, and the header switches between them.
+
+#### 10.7.1 The header
+
+```
+┌──────────────────────────────────────────────────────────────────────────────────┐
+│ [◧] ● build-box ▾  Sessions  History  Dialogues      fix-auth  [New session] [⚙] [◨] │
+└──────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- The service switcher comes first. Everything after it belongs to the selected service.
+- Then the workspaces this service offers. The current one is highlighted and can't be clicked. A plugin's workspace shows only while the plugin is enabled on that service (12.6); switching to a service without the current workspace falls back to Sessions.
+- The workspace's action, if it has one: **New session** in Sessions, **New dialogue** in Dialogues (once the dialogue setup UI exists).
+- **Settings** (a gear icon), then the right-panel toggle. The left and right toggles show only in workspaces that have that panel, and Ctrl+Shift+[ and ] do nothing in the others.
+- Below 600px the workspaces become one drop-down beside the switcher, so the header still fits on a phone.
+
+#### 10.7.2 A workspace
+
+A workspace declares an optional left panel, a main area, an optional right panel, and an optional action:
+
+| Workspace | Left | Main | Right | Action |
+|-----------|------|------|-------|--------|
+| Sessions | Session list | Session tabs, optionally split, with files and Status beside them | The focused session's details | New session |
+| History | none | One pinned tab: past sessions, filtered by CLI, searched, and sorted by last updated or CLI | The selected past session: details and stats, Resume, Remove | none |
+| Dialogues (plugin) | Dialogues, for now inside the main tab; designed separately | Split: the dialogue in the left tab (the two actors side by side, view only); artifact files open in the right group | Info and the dialogue folder's files, Remove | New dialogue |
+| Memory (plugin) | Designed separately | One tab | Designed separately | none |
+
+Dialogue sessions belong to the Dialogues workspace, which watches them and manages their lifecycle; they will not be listed in Sessions. How a plugin claims a session (for example an `owner` field in the registry, so the core never names the plugin) is part of the dialogue design, not built yet.
+
+#### 10.7.3 The main area is always tabs
+
+Every workspace's main area uses the tab model of `ui/src/tabs.ts`, so the main area behaves the same everywhere:
+
+- Each connection keeps one tab layout per workspace. Switching workspaces and back keeps the tabs, the split, and what was selected.
+- A workspace starts with its own default: Sessions with no tabs (or the session selected last time), History with its list, Dialogues split as above, Memory with one tab. The default tab is **pinned**: it can be moved but not closed, so a workspace never ends up empty with nothing to reopen it from.
+- Each tab kind says which side it opens on: sessions and **Status** on the left, files (a session's files or a dialogue's artifacts) on the right. With no split, a tab opens in the only group. A tab already open anywhere is focused instead of opened twice.
+- The core owns the `session`, `status` and `history` kinds; `file` is drawn by the file-viewer plugin; a plugin adds kinds of its own through its workspace (12.6). When a plugin is turned off, its tabs close with its workspace.
+- The Sessions tabs stay mounted while another workspace shows, hidden, so terminals keep their connection and scrollback.
+- Saved tabs from before workspaces (`agentop.tabs`, one layout per connection) become the Sessions layout.
+
+#### 10.7.4 Settings and Status
+
+The old Settings dialog mixed two things: how this app looks, and the plugins of the selected service.
+
+- **Settings** (the gear) is the app's own, the same for every service: theme, terminal font size, and terminal drawing.
+- **Status** belongs to a service. Status on a switcher row opens a Status tab in the current workspace, in the left group, switching to that service first if it isn't the selected one. It has what the service panel of 10.5 had (name, address, version, uptime, Stop, Restart, Update, Forget, signed-in clients), plus the service's **Plugins**, with their switches and each plugin's own settings section. A tab has room to grow, and can sit beside a session, for example to watch an update.
+- A service that can't be reached shows the connection problem in the main area instead of tabs, with Forget for a service other than this app's own.
+
+#### 10.7.5 Keyboard
+
+| Shortcut | Action |
+|----------|--------|
+| Ctrl+Shift+1 to 9 | Switch to the first to ninth workspace |
+| Ctrl+Shift+N | The current workspace's action; New session where it has none |
+| Ctrl+Shift+K | Switch to Sessions and focus the session filter |
+
+#### 10.7.6 Later
+
+- The workspace in the URL (`/sessions`, `/history`, `/dialogues/<id>`), for the back button, deep links, and reloading in place. Until then the workspace is remembered per connection in this browser.
+- A badge on a workspace in the header when something there needs attention, such as a session waiting for input while History shows.
+- One navigation call, `navigate(workspace, selection)`, for jumps between workspaces, such as a Memory search hit opening its conversation. Resume in History already switches to Sessions.
 
 ## 11 Desktop app
 
@@ -723,13 +789,13 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 - After connecting, the app reads `GET /api/v2/plugins`. Plugins differ by service, so the list is kept per connection.
 - A plugin's UI shows only when **both** the service lists it as `enabled` **and** the app has a matching module in `ui/src/plugins/`. If either side is missing (an older app, an older service, a removed or failed plugin), the feature is hidden.
-- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a view in the left column's footer, beside History and Dialogues (`left-view`), a badge on a session row (`session-badge`), a section in Settings (`settings-section`), and the contents of a file tab in the main area (`file-viewer`). While a `file-viewer` plugin is enabled, files in the right panel open in a tab in the main area's right group when clicked; without one, clicking copies the path. A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
+- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a workspace in the header with its own tabs and panels (`workspace`, 10.7; it replaced `left-view`, a view in the left column's footer), a badge on a session row (`session-badge`), a section in Settings (`settings-section`), and the contents of a file tab in the main area (`file-viewer`). While a `file-viewer` plugin is enabled, files in the right panel open in a tab in the main area's right group when clicked; without one, clicking copies the path. A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
 - Each slot is wrapped in an error boundary. A plugin component that throws hides itself; the rest of the page keeps rendering.
 - Plugin UI calls its own routes only through a client scoped to `/api/v2/plugins/{id}/`.
-- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `leftView` (a label and a component), `rightPanel`, `settingsSection`, and `fileViewer` (a component given the file: session, source `workdir` or `transcript`, and path). Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
+- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `workspace` (a label, the pinned tab it opens with, its tab kinds, and optional left and right panels and action), `rightPanel`, `settingsSection`, and `fileViewer` (a component given the file: session, source `workdir` or `transcript`, and path). Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
 - The app fetches the plugin list each time its events socket opens, and again on every `plugins` event. Events of a type the app doesn't know are ignored, so an older app keeps working against a newer service.
 
-**Settings → Plugins** lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".
+**Status → Plugins** (Settings → Plugins before 10.7) lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".
 
 ### 12.7 Tests
 

@@ -13,7 +13,7 @@ function formatTokens(value: number): string {
   return String(value);
 }
 
-function Row({ label, value, copy }: { label: string; value: string; copy?: string }) {
+export function Row({ label, value, copy }: { label: string; value: string; copy?: string }) {
   return (
     <div className="detail-row">
       <dt>{label}</dt>

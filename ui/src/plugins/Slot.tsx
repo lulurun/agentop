@@ -41,10 +41,9 @@ function Piece({ info, ui, slot, session }: { info: PluginInfo; ui: UiPlugin; sl
       return ui.rightPanel && session ? <ui.rightPanel session={session} plugin={plugin} /> : null;
     case "settings-section":
       return ui.settingsSection ? <ui.settingsSection plugin={plugin} /> : null;
-    case "left-view":
-      return ui.leftView ? <ui.leftView.Component plugin={plugin} /> : null;
+    case "workspace":
     case "file-viewer":
-      return null; // drawn by the tab that shows the file (FileTab)
+      return null; // drawn by the workspace and the tabs it shows (PluginTab, FileTab)
   }
 }
 
@@ -76,6 +75,47 @@ function FileViewerPiece({ info, file }: { info: PluginInfo; file: FileRef }) {
   const plugin = usePluginContext(info);
   const Viewer = UI_PLUGINS[info.id]?.fileViewer;
   return Viewer ? <Viewer file={file} plugin={plugin} /> : null;
+}
+
+/** One of a plugin's views in a tab, or a note when the plugin isn't on. */
+export function PluginTab({ pluginId, view, viewKey }: { pluginId: string; view: string; viewKey?: string }) {
+  const info = useApp((s) => s.plugins.find((p) => p.id === pluginId && p.state === "enabled"));
+  const View = UI_PLUGINS[pluginId]?.workspace?.views[view];
+  if (!info || !View) {
+    return (
+      <div className="placard">
+        <h2>Not available</h2>
+        <p>This tab belongs to a plugin that isn't on for this service.</p>
+      </div>
+    );
+  }
+  return (
+    <PluginBoundary key={info.id} id={info.id}>
+      <PluginViewPiece info={info} View={View.Component} viewKey={viewKey} />
+    </PluginBoundary>
+  );
+}
+
+function PluginViewPiece({ info, View, viewKey }: { info: PluginInfo; View: NonNullable<UiPlugin["workspace"]>["views"][string]["Component"]; viewKey?: string }) {
+  const plugin = usePluginContext(info);
+  return <View plugin={plugin} viewKey={viewKey} />;
+}
+
+/** A plugin workspace's left or right panel. */
+export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left" | "right" }) {
+  const info = useApp((s) => s.plugins.find((p) => p.id === pluginId && p.state === "enabled"));
+  if (!info) return null;
+  return (
+    <PluginBoundary key={info.id} id={info.id}>
+      <PluginPanelPiece info={info} side={side} />
+    </PluginBoundary>
+  );
+}
+
+function PluginPanelPiece({ info, side }: { info: PluginInfo; side: "left" | "right" }) {
+  const plugin = usePluginContext(info);
+  const Panel = UI_PLUGINS[info.id]?.workspace?.[side];
+  return Panel ? <Panel plugin={plugin} /> : null;
 }
 
 /** Every enabled plugin's piece for a slot, each behind its own error boundary. */

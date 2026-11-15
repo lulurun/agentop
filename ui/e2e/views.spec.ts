@@ -45,11 +45,20 @@ function seedDialogue(s: Service, name: string, session = "diaabcdea-1", status 
   writeFileSync(join(directory, "progress.md"), "They agreed.");
 }
 
-test("history can be filtered, resumed, and deleted", async ({ page }) => {
+async function openStatus(page: Page, name = "box") {
+  await page.locator(".switcher-current").click();
+  await page.getByRole("menuitem", { name: `${name} status` }).click();
+  return page.getByRole("region", { name: "Status" });
+}
+
+const workspaces = (page: Page) => page.getByRole("navigation", { name: "Workspaces" });
+
+test("history is a workspace: searched, filtered, sorted, resumed, and deleted", async ({ page }) => {
   const s = await open(page);
   let saved = [
     { session_id: "aaa", tool: "claude", title: "Fix login", cwd: join(s.root, "project"), last_active: 1790000000 },
     { session_id: "bbb", tool: "codex", title: "Write docs", cwd: join(s.root, "project"), last_active: 1790000100 },
+    { session_id: "ccc", tool: "claude", title: "Old idea", cwd: join(s.root, "project"), last_active: 1780000000 },
   ];
   await page.route("**/api/v2/saved-sessions?*", (route) => route.fulfill({ json: saved }));
   await page.route("**/api/v2/saved-sessions/*/*", (route) => {
@@ -57,37 +66,85 @@ test("history can be filtered, resumed, and deleted", async ({ page }) => {
     return route.fulfill({ json: { ok: true } });
   });
 
-  await page.getByRole("button", { name: "History" }).click();
+  await workspaces(page).getByRole("button", { name: "History" }).click();
+  await expect(workspaces(page).getByRole("button", { name: "History" })).toHaveAttribute("aria-current", "page");
+  // History has no left panel, and its list is a pinned tab.
+  await expect(page.locator(".sidebar")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle left panel" })).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close History" })).toHaveCount(0);
+
   const view = page.getByRole("region", { name: "History" });
-  await expect(view).toContainText("Fix login");
-  await view.getByLabel("Filter history").fill("docs");
-  await expect(view).not.toContainText("Fix login");
-  await view.getByLabel("Filter history").fill("");
+  const titles = view.getByRole("list", { name: "Past sessions" }).locator(".view-row-title");
+  await expect(titles).toHaveText(["Write docs", "Fix login", "Old idea"]);
+  await view.getByLabel("Sort by").selectOption("tool");
+  await expect(titles).toHaveText(["Fix login", "Old idea", "Write docs"]);
+  await view.getByLabel("CLI").selectOption("codex");
+  await expect(titles).toHaveText(["Write docs"]);
+  await view.getByLabel("CLI").selectOption("");
+  await view.getByLabel("Search history").fill("login");
+  await expect(titles).toHaveText(["Fix login"]);
+  await view.getByLabel("Search history").fill("");
 
-  const row = view.getByRole("listitem").filter({ hasText: "Write docs" });
-  await row.getByRole("button", { name: "Delete" }).click();
-  await row.getByRole("button", { name: "Keep" }).click();
+  const details = page.getByRole("complementary", { name: "Past session" });
+  await view.getByRole("button", { name: /Write docs/ }).click();
+  await expect(details).toContainText("bbb");
+  await details.getByRole("button", { name: "Delete" }).click();
+  await details.getByRole("button", { name: "Keep" }).click();
   await expect(view).toContainText("Write docs");
-  await row.getByRole("button", { name: "Delete" }).click();
-  await row.getByRole("button", { name: "Delete for good" }).click();
+  await details.getByRole("button", { name: "Delete" }).click();
+  await details.getByRole("button", { name: "Delete for good" }).click();
   await expect(view).not.toContainText("Write docs");
+  await expect(page.getByText("Select a past session to see its details.")).toBeVisible();
 
-  await view.getByRole("listitem").filter({ hasText: "Fix login" }).getByRole("button", { name: "Resume" }).click();
+  await view.getByRole("button", { name: /Fix login/ }).click();
+  await page.getByRole("complementary", { name: "Past session" }).getByRole("button", { name: "Resume" }).click();
+  // Resuming lands in Sessions.
   await expect(page.getByTestId("terminal").locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
-  await expect(page.getByRole("region", { name: "History" })).toHaveCount(0);
+  await expect(workspaces(page).getByRole("button", { name: "Sessions" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("region", { name: "History" })).toBeHidden();
 });
 
 test("an empty history says so", async ({ page }) => {
   await open(page);
-  await page.getByRole("button", { name: "History" }).click();
+  await workspaces(page).getByRole("button", { name: "History" }).click();
   await expect(page.getByText("No past sessions on this service.")).toBeVisible();
+});
+
+test("each workspace keeps its tabs, and Sessions keeps its terminal connected", async ({ page }) => {
+  const s = await open(page);
+  await page.getByRole("button", { name: "New session" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
+  await dialog.getByLabel("Name").fill("keeper");
+  await dialog.getByRole("button", { name: "Start session" }).click();
+  const terminal = page.getByTestId("terminal");
+  await expect(terminal.locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
+
+  await page.keyboard.press("Control+Shift+Digit2");
+  await expect(page.getByRole("region", { name: "History" })).toBeVisible();
+  // Status opens in this workspace, on the left.
+  await openStatus(page);
+  await expect(page.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["History", "Status"]);
+
+  await page.keyboard.press("Control+Shift+Digit1");
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["keeper"]);
+  await terminal.click();
+  await page.keyboard.type("still connected\n");
+  await expect(terminal.locator(".xterm-rows")).toContainText("got: still connected", { timeout: 15_000 });
+
+  await page.reload();
+  await expect(page.locator(".link-connected")).toBeVisible();
+  await workspaces(page).getByRole("button", { name: "History" }).click();
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["History", "Status"]);
 });
 
 test("dialogues can be read, and removed after confirming", async ({ page }) => {
   const s = await open(page);
   seedDialogue(s, "debate_topic_abcde123");
 
-  await page.getByRole("button", { name: "Dialogues" }).click();
+  await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
   await page.getByRole("button", { name: "debate_topic_abcde123" }).click();
   await expect(page.getByText("Decide the plan.")).toBeVisible();
   await expect(page.getByText("They agreed.")).toBeVisible();
@@ -118,11 +175,11 @@ test("turning Dialogues off while one runs asks first, then stops it", async ({ 
   const s = await open(page);
   seedDialogue(s, "debate_topic_running1", "diaabcdea-1", "running");
   const meta = join(s.root, "state/plugins/dialogue/dialogues/debate_topic_running1/meta.json");
-  const views = page.locator(".sidebar-views");
+  const views = workspaces(page);
   await expect(views.getByRole("button", { name: "Dialogues" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Settings" }).click();
-  const entry = page.getByRole("region", { name: "Plugins" }).getByRole("listitem").filter({ hasText: "Dialogues" });
+  const status = await openStatus(page);
+  const entry = status.getByRole("region", { name: "Plugins" }).getByRole("listitem").filter({ hasText: "Dialogues" });
   await entry.getByRole("switch").click();
   await expect(entry.getByRole("alert")).toContainText("A dialogue is running");
   await entry.getByRole("button", { name: "Keep it on" }).click();
@@ -153,7 +210,7 @@ test("settings change the theme and terminal font, and persist", async ({ page }
   expect(await page.evaluate(() => localStorage.getItem("agentop.fontSize"))).toBe("16");
 });
 
-test("settings list the service's plugins, and switch them", async ({ page }) => {
+test("Status lists the service's plugins, and switches them", async ({ page }) => {
   await open(page);
   const plugin = (id: string, fields: Record<string, unknown>) => ({
     id,
@@ -169,7 +226,7 @@ test("settings list the service's plugins, and switch them", async ({ page }) =>
     plugin("attention", { name: "Waiting for input", state: "disabled" }),
     plugin("broken", { state: "failed", error: "RuntimeError: boom" }),
     plugin("future", { state: "incompatible", error: "Written for plugin API 2. Update this service." }),
-    plugin("screens", { ui: ["left-view"] }),
+    plugin("screens", { ui: ["workspace"] }),
   ];
   const patches: unknown[] = [];
   await page.route("**/api/v2/plugins", (route) => route.fulfill({ json: plugins }));
@@ -183,8 +240,11 @@ test("settings list the service's plugins, and switch them", async ({ page }) =>
   await page.reload();
   await expect(page.locator(".link-connected")).toBeVisible();
 
+  // Settings is the app's own; the service's plugins are in its Status.
   await page.getByRole("button", { name: "Settings" }).click();
-  const section = page.getByRole("region", { name: "Plugins" });
+  await expect(page.getByRole("dialog")).not.toContainText("Plugins");
+  await page.getByRole("dialog").getByRole("button", { name: "Close" }).click();
+  const section = (await openStatus(page)).getByRole("region", { name: "Plugins" });
   await expect(section.getByRole("heading")).toHaveText("Plugins on box");
 
   const attention = section.getByRole("listitem").filter({ hasText: "Waiting for input" });
@@ -209,9 +269,9 @@ test("settings list the service's plugins, and switch them", async ({ page }) =>
   await expect(section.getByRole("listitem").filter({ hasText: "screens" })).toContainText("Not available in this app");
 });
 
-test("a service with no plugins says so in settings", async ({ page }) => {
+test("a service with no plugins says so in its Status", async ({ page }) => {
   await page.route("**/api/v2/plugins", (route) => route.fulfill({ json: [] }));
   await open(page);
-  await page.getByRole("button", { name: "Settings" }).click();
+  await openStatus(page);
   await expect(page.getByText("This service has no plugins.")).toBeVisible();
 });

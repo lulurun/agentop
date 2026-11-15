@@ -1,6 +1,8 @@
 /**
  * The main area's tabs. A tab is a container: it shows an agent session's
- * terminal, or a file through whichever file-viewer plugin is enabled.
+ * terminal, a file through whichever file-viewer plugin is enabled, a
+ * service's Status, the History list, or a view of a plugin's workspace.
+ * Every workspace's main area is tabs (design 10.7.3), each with a layout of its own.
  *
  * Tabs live in groups. There are one or two groups, shown side by side, and
  * one of them has focus: its active tab decides which session the header and
@@ -23,11 +25,21 @@ export interface FileRef {
   view?: "diff";
 }
 
-export type TabContent = { kind: "session"; sessionId: string } | { kind: "file"; file: FileRef };
+export type TabContent =
+  | { kind: "session"; sessionId: string }
+  | { kind: "file"; file: FileRef }
+  | { kind: "status" }
+  | { kind: "history" }
+  /** One of a plugin's views, named by the plugin's workspace (`UiPlugin.workspace.views`). */
+  | { kind: "plugin"; plugin: string; view: string; key?: string };
+
+export type TabKind = TabContent["kind"];
 
 export interface Tab {
   id: string;
   content: TabContent;
+  /** A workspace's default tab: it can be moved, but not closed. */
+  pinned?: boolean;
 }
 
 export interface Group {
@@ -41,6 +53,8 @@ export interface Layout {
 }
 
 /**
+ * - `left`: what opening Status does. The tab is shown if it is open in either
+ *   group; otherwise it gets a new tab in the left group.
  * - `replace`: what clicking a session does. The session is shown if it is open
  *   in either group; otherwise the left group's active session tab switches to it.
  * - `tab`: a new tab in the left group, unless one there already shows it.
@@ -48,7 +62,7 @@ export interface Layout {
  *   either group; otherwise it gets a new tab in the right group, made if needed.
  * - `side`: the group other than the focused one, made if there is only one.
  */
-export type OpenMode = "replace" | "tab" | "right" | "side";
+export type OpenMode = "replace" | "tab" | "left" | "right" | "side";
 
 export const MAX_GROUPS = 2;
 
@@ -72,12 +86,30 @@ export function sameContent(a: TabContent, b: TabContent): boolean {
       (a.file.view ?? null) === (b.file.view ?? null)
     );
   }
-  return false;
+  if (a.kind === "plugin" && b.kind === "plugin") {
+    return a.plugin === b.plugin && a.view === b.view && (a.key ?? null) === (b.key ?? null);
+  }
+  return a.kind === b.kind && (a.kind === "status" || a.kind === "history");
 }
 
-/** The session a tab belongs to. A file tab belongs to the session whose directory or transcript it is from. */
-export function sessionOf(content: TabContent): string {
-  return content.kind === "session" ? content.sessionId : content.file.sessionId;
+/**
+ * The session a tab belongs to. A file tab belongs to the session whose
+ * directory or transcript it is from; other kinds belong to none.
+ */
+export function sessionOf(content: TabContent): string | undefined {
+  if (content.kind === "session") return content.sessionId;
+  if (content.kind === "file") return content.file.sessionId;
+  return undefined;
+}
+
+/** Only sessions and files make sense twice, side by side. */
+export function canSplit(content: TabContent): boolean {
+  return content.kind === "session" || content.kind === "file";
+}
+
+/** A layout of one pinned tab, the default of a workspace that opens with one. */
+export function pinnedLayout(content: TabContent, id = "home"): Layout {
+  return { groups: [{ tabs: [{ id, content, pinned: true }], active: id }], focused: 0 };
 }
 
 export function activeTab(group: Group | undefined): Tab | undefined {
@@ -106,7 +138,7 @@ export function open(layout: Layout, content: TabContent, mode: OpenMode = "repl
   if (layout.groups.length === 0) {
     return { groups: [{ tabs: [{ id, content }], active: id }], focused: 0 };
   }
-  if (mode === "replace" || mode === "right") {
+  if (mode === "replace" || mode === "right" || mode === "left") {
     for (const [index, group] of layout.groups.entries()) {
       const existing = group.tabs.find((t) => sameContent(t.content, content));
       if (existing) return withGroup({ ...layout, focused: index }, index, { ...group, active: existing.id });
@@ -154,7 +186,7 @@ function compact(layout: Layout): Layout {
 export function close(layout: Layout, groupIndex: number, tabId: string): Layout {
   const group = layout.groups[groupIndex];
   const at = group?.tabs.findIndex((t) => t.id === tabId) ?? -1;
-  if (at < 0) return layout;
+  if (at < 0 || group.tabs[at].pinned) return layout;
   const tabs = group.tabs.filter((t) => t.id !== tabId);
   // Closing the active tab shows its right neighbour, or else its left one.
   const active = group.active === tabId ? (tabs[Math.min(at, tabs.length - 1)]?.id ?? null) : group.active;
@@ -163,13 +195,24 @@ export function close(layout: Layout, groupIndex: number, tabId: string): Layout
 
 /** Close every tab that belongs to a session, as when the session is closed. */
 export function closeSession(layout: Layout, sessionId: string): Layout {
+  return closeWhere(layout, (content) => sessionOf(content) === sessionId);
+}
+
+/** Close every tab whose content matches, pinned ones too, as when a plugin is turned off. */
+export function closeWhere(layout: Layout, matches: (content: TabContent) => boolean): Layout {
   let next = layout;
   for (const tab of layout.groups.flatMap((g) => g.tabs)) {
-    if (sessionOf(tab.content) !== sessionId) continue;
+    if (!matches(tab.content)) continue;
     const index = findGroup(next, tab.id);
-    if (index !== undefined) next = close(next, index, tab.id);
+    if (index === undefined) continue;
+    next = close(unpin(next, index, tab.id), index, tab.id);
   }
   return next;
+}
+
+function unpin(layout: Layout, groupIndex: number, tabId: string): Layout {
+  const group = layout.groups[groupIndex];
+  return withGroup(layout, groupIndex, { ...group, tabs: group.tabs.map((t) => (t.id === tabId ? { ...t, pinned: false } : t)) });
 }
 
 function findGroup(layout: Layout, tabId: string): number | undefined {
@@ -180,7 +223,7 @@ function findGroup(layout: Layout, tabId: string): number | undefined {
 /** Show the focused tab in a second group beside it too. */
 export function split(layout: Layout, id = newTabId()): Layout {
   const tab = focusedTab(layout);
-  if (!tab || layout.groups.length >= MAX_GROUPS) return layout;
+  if (!tab || !canSplit(tab.content) || layout.groups.length >= MAX_GROUPS) return layout;
   return open(layout, tab.content, "side", id);
 }
 
@@ -205,15 +248,31 @@ export function moveToOther(layout: Layout, groupIndex: number, tabId: string): 
   return compact({ groups, focused: target });
 }
 
+function validContent(content: unknown): boolean {
+  if (!content || typeof content !== "object") return false;
+  const c = content as Record<string, unknown>;
+  switch (c.kind) {
+    case "session":
+      return typeof c.sessionId === "string";
+    case "file":
+      return !!c.file && typeof (c.file as FileRef).path === "string";
+    case "status":
+    case "history":
+      return true;
+    case "plugin":
+      return typeof c.plugin === "string" && typeof c.view === "string";
+    default:
+      return false;
+  }
+}
+
 /** A saved layout from storage, or null if it isn't one. */
 export function parseLayout(value: unknown): Layout | null {
   if (!value || typeof value !== "object") return null;
   const { groups, focused } = value as Layout;
   if (!Array.isArray(groups) || typeof focused !== "number") return null;
   const valid = groups.every(
-    (g) =>
-      g && Array.isArray(g.tabs) &&
-      g.tabs.every((t) => typeof t?.id === "string" && (t.content?.kind === "session" || t.content?.kind === "file")),
+    (g) => g && Array.isArray(g.tabs) && g.tabs.every((t) => typeof t?.id === "string" && validContent(t.content)),
   );
   if (!valid) return null;
   return compact({ groups: groups.slice(0, MAX_GROUPS), focused: Math.min(focused, MAX_GROUPS - 1) });

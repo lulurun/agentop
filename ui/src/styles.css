@@ -895,11 +895,6 @@ button.app-outdated:hover { background: var(--line); }
 .dialog-action-start { margin-right: auto; }
 
 /* History, dialogues, settings */
-.sidebar-views { display: flex; gap: 2px; padding: 6px 10px; border-top: 1px solid var(--line); }
-.sidebar-views button { flex: 1; border: 0; background: none; color: var(--quiet); }
-.sidebar-views button:hover:not(:disabled) { color: inherit; }
-.sidebar-views button[aria-current] { color: inherit; font-weight: 600; }
-.sidebar-views { margin-top: auto; }
 .session-tag { color: var(--starting); }
 .attention-tag { color: var(--action); font-weight: 600; }
 
@@ -921,7 +916,7 @@ button.app-outdated:hover { background: var(--line); }
 .view h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .settings-field { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .settings-field input[type="number"] { flex: none; width: 72px; }
-.settings-field select {
+.settings-field select, .view-tools select, .workspaces-compact {
   flex: none;
   width: 220px;
   padding: 6px 8px;
@@ -963,3 +958,59 @@ button.app-outdated:hover { background: var(--line); }
 .memory-note { margin: 0 0 6px; color: var(--quiet); font-size: 13px; overflow-wrap: anywhere; }
 .memory-note code { font-family: var(--code); font-size: 12px; }
 .memory-errors { margin: 0 0 6px; padding-left: 18px; color: var(--failed); font-size: 12px; }
+
+/* Workspaces (design 10.7) */
+.workspaces { display: flex; flex: none; gap: 2px; }
+.workspaces button {
+  padding: 4px 10px;
+  border-color: transparent;
+  background: none;
+  color: var(--quiet);
+}
+.workspaces button:hover:not([aria-current]) { color: var(--text); background: var(--line); }
+.workspaces button[aria-current] { color: var(--text); background: var(--line); font-weight: 600; cursor: default; }
+.workspaces-compact { display: none; flex: none; }
+.header-title > strong { margin-left: 6px; }
+@media (max-width: 599px) {
+  .workspaces { display: none; }
+  .workspaces-compact { display: block; }
+  .header-title > strong { display: none; }
+}
+
+/* Sessions stays mounted under the other workspaces, at full size so its terminals don't resize. */
+.workbench[hidden] { position: absolute; inset: 0; visibility: hidden; pointer-events: none; }
+
+.view-count { margin: 0 0 4px; color: var(--quiet); font-size: 12px; }
+.view-tools select { width: auto; }
+.workspaces-compact { width: auto; padding: 4px 6px; }
+.history-list li { border-bottom: 1px solid var(--line); }
+.history-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 8px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+}
+.history-row:hover { background: var(--line); }
+.history-row[aria-current="true"] { background: var(--line); box-shadow: inset 3px 0 0 var(--action); }
+.history-row .view-row-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.history-cwd { overflow-wrap: anywhere; }
+
+.status-view { max-width: 1100px; }
+.status-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: start; }
+.status-section h3, .settings-plugins h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; color: var(--quiet); }
+.status-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin: 12px 0 16px; }
+.status-confirm {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.status-confirm-title { margin: 0 0 6px; font-size: 15px; font-weight: 600; }
+.status-columns .settings-plugins { margin-top: 0; padding-top: 0; border-top: 0; }
+.memory-switch input { flex: none; width: auto; }

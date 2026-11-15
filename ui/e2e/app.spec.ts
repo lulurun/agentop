@@ -303,32 +303,33 @@ test("add a second service and switch between them", async ({ page }) => {
   expect(alpha.tmux("list-sessions", "-F", "#S")).toContain("on-alpha-");
 });
 
-test("a service can be renamed in its status, and forgotten", async ({ page }) => {
+test("a service can be renamed in its status tab, and forgotten", async ({ page }) => {
   const alpha = await service("alpha");
   const beta = await service("beta");
   await page.goto(alpha.signedInUrl);
   await addService(page, beta);
   await expect(page.locator(".switcher-current")).toContainText("beta");
 
-  // Rename the first service from its row, without switching to it.
+  // Status on another service's row switches to it, then opens its Status tab.
   await page.locator(".switcher-current").click();
   await page.getByRole("menuitem", { name: "alpha status" }).click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Name").fill("my pc");
-  await dialog.getByRole("button", { name: "Close" }).click();
-  await expect(page.locator(".switcher-current")).toContainText("beta");
+  await expect(page.locator(".switcher-current")).toContainText("alpha");
+  const status = page.getByRole("region", { name: "Status" });
+  await status.getByLabel("Name").fill("my pc");
+  await expect(page.locator(".switcher-current")).toContainText("my pc");
+  await page.getByRole("button", { name: "Close Status" }).click();
+  await expect(status).toHaveCount(0);
 
   // The name is kept in this browser.
   await page.reload();
-  await page.locator(".switcher-current").click();
-  await expect(page.getByRole("menuitemradio", { name: /^my pc/ })).toBeVisible();
-  await page.getByRole("menuitemradio", { name: /^my pc/ }).click();
   await expect(page.locator(".switcher-current")).toContainText("my pc");
 
   // Forgetting the other one leaves only this one.
   await page.locator(".switcher-current").click();
   await page.getByRole("menuitem", { name: "beta status" }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "Forget" }).click();
+  await expect(page.locator(".switcher-current")).toContainText("beta");
+  await page.getByRole("region", { name: "Status" }).getByRole("button", { name: "Forget" }).click();
+  await expect(page.locator(".switcher-current")).toContainText("my pc");
   await page.locator(".switcher-current").click();
   await expect(page.getByRole("menuitemradio")).toHaveCount(1);
   await expect(page.getByRole("menuitem", { name: "my pc status" })).toBeVisible();

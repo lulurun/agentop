@@ -1,21 +1,35 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { ServiceClient, Session } from "../api/client";
-import { FileTab } from "../plugins/Slot";
-import { layoutOf, sessionTitle, useApp } from "../store";
-import { MAX_GROUPS, type Group, type Tab } from "../tabs";
+import { UI_PLUGINS } from "../plugins/registry";
+import { FileTab, PluginTab } from "../plugins/Slot";
+import { activeConnection, layoutOf, sessionTitle, useApp } from "../store";
+import { canSplit, MAX_GROUPS, sessionOf, type Group, type Tab } from "../tabs";
+import type { WorkspaceId } from "../workspaces";
+import { connectionName } from "../connections";
+import { HistoryList } from "./HistoryView";
+import { StatusView } from "./StatusView";
 
 function baseName(path: string): string {
   return path.split("/").filter(Boolean).pop() ?? path;
 }
 
 function useTabLabel(tab: Tab): { label: string; title: string; status?: string } {
-  const session = useApp((s) => s.sessions[tab.content.kind === "session" ? tab.content.sessionId : tab.content.file.sessionId]);
-  if (tab.content.kind === "session") {
+  const id = sessionOf(tab.content);
+  const session = useApp((s) => (id ? s.sessions[id] : undefined));
+  const service = useApp((s) => connectionName(activeConnection(s), s.link.state === "connected" || s.link.state === "reconnecting" ? s.link.service.name : undefined));
+  const { content } = tab;
+  if (content.kind === "status") return { label: "Status", title: `Status of ${service}` };
+  if (content.kind === "history") return { label: "History", title: `Past sessions on ${service}` };
+  if (content.kind === "plugin") {
+    const label = UI_PLUGINS[content.plugin]?.workspace?.views[content.view]?.label ?? content.view;
+    return { label: content.key ? `${label}: ${content.key}` : label, title: label };
+  }
+  if (content.kind === "session") {
     return session
       ? { label: sessionTitle(session), title: session.cwd, status: session.status }
-      : { label: "Session", title: tab.content.sessionId };
+      : { label: "Session", title: content.sessionId };
   }
-  const { file } = tab.content;
+  const { file } = content;
   const where = file.source === "transcript" ? "transcript" : (session?.cwd ?? "");
   const diff = file.view === "diff";
   return { label: diff ? `${baseName(file.path)} (diff)` : baseName(file.path), title: `${diff ? "Changes to " : ""}${file.path} (${where})` };
@@ -56,7 +70,7 @@ export function Menu({ x, y, items, onClose }: { x: number; y: number; items: [s
   );
 }
 
-function TabButton({ tab, group, active, canMove }: { tab: Tab; group: number; active: boolean; canMove: boolean }) {
+function TabButton({ workspace, tab, group, active, canMove }: { workspace: WorkspaceId; tab: Tab; group: number; active: boolean; canMove: boolean }) {
   const { label, title, status } = useTabLabel(tab);
   const activateTab = useApp((s) => s.activateTab);
   const closeTab = useApp((s) => s.closeTab);
@@ -64,7 +78,7 @@ function TabButton({ tab, group, active, canMove }: { tab: Tab; group: number; a
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
 
   return (
-    <div className="tab" role="presentation" data-active={active || undefined} data-kind={tab.content.kind}>
+    <div className="tab" role="presentation" data-active={active || undefined} data-kind={tab.content.kind} data-pinned={tab.pinned || undefined}>
       <button
         type="button"
         role="tab"
@@ -72,9 +86,9 @@ function TabButton({ tab, group, active, canMove }: { tab: Tab; group: number; a
         aria-selected={active}
         title={title}
         data-status={status}
-        onClick={() => activateTab(group, tab.id)}
+        onClick={() => activateTab(workspace, group, tab.id)}
         onAuxClick={(event) => {
-          if (event.button === 1) closeTab(group, tab.id);
+          if (event.button === 1) closeTab(workspace, group, tab.id);
         }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -83,17 +97,19 @@ function TabButton({ tab, group, active, canMove }: { tab: Tab; group: number; a
       >
         {label}
       </button>
-      <button type="button" className="tab-close" aria-label={`Close ${label}`} title="Close" onClick={() => closeTab(group, tab.id)}>
-        ×
-      </button>
+      {!tab.pinned && (
+        <button type="button" className="tab-close" aria-label={`Close ${label}`} title="Close" onClick={() => closeTab(workspace, group, tab.id)}>
+          ×
+        </button>
+      )}
       {menu && (
         <Menu
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
           items={[
-            ["Close", () => closeTab(group, tab.id)],
-            ...(canMove ? ([[group === 0 ? "Move to the right" : "Move to the left", () => moveTab(group, tab.id)]] as [string, () => void][]) : []),
+            ...(tab.pinned ? [] : ([["Close", () => closeTab(workspace, group, tab.id)]] as [string, () => void][])),
+            ...(canMove ? ([[group === 0 ? "Move to the right" : "Move to the left", () => moveTab(workspace, group, tab.id)]] as [string, () => void][]) : []),
           ]}
         />
       )}
@@ -101,18 +117,19 @@ function TabButton({ tab, group, active, canMove }: { tab: Tab; group: number; a
   );
 }
 
-function TabBar({ group, index, groups }: { group: Group; index: number; groups: number }) {
+function TabBar({ workspace, group, index, groups }: { workspace: WorkspaceId; group: Group; index: number; groups: number }) {
   const splitTab = useApp((s) => s.splitTab);
   const canMove = groups > 1 || group.tabs.length > 1;
+  const active = group.tabs.find((t) => t.id === group.active);
   return (
     <div className="tab-bar">
       <div className="tab-list" role="tablist" aria-label={groups > 1 ? (index === 0 ? "Left tabs" : "Right tabs") : "Tabs"}>
         {group.tabs.map((tab) => (
-          <TabButton key={tab.id} tab={tab} group={index} active={tab.id === group.active} canMove={canMove} />
+          <TabButton key={tab.id} workspace={workspace} tab={tab} group={index} active={tab.id === group.active} canMove={canMove} />
         ))}
       </div>
-      {groups < MAX_GROUPS && (
-        <button type="button" className="icon tab-split" aria-label="Split to the right" title="Split to the right" onClick={() => splitTab()}>
+      {groups < MAX_GROUPS && active && canSplit(active.content) && (
+        <button type="button" className="icon tab-split" aria-label="Split to the right" title="Split to the right" onClick={() => splitTab(workspace)}>
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" />
             <line x1="8" y1="2.5" x2="8" y2="13.5" stroke="currentColor" />
@@ -134,12 +151,14 @@ export interface SessionPaneProps {
 
 /** One group: its tab bar and its active tab's contents. */
 function GroupView({
+  workspace,
   group,
   index,
   groups,
   focused,
   renderSession,
 }: {
+  workspace: WorkspaceId;
   group: Group;
   index: number;
   groups: number;
@@ -157,13 +176,13 @@ function GroupView({
       data-focused={focused || undefined}
       aria-label={groups > 1 ? (index === 0 ? "Left group" : "Right group") : undefined}
       onPointerDownCapture={() => {
-        if (!focused) focusGroup(index);
+        if (!focused) focusGroup(workspace, index);
       }}
       onFocusCapture={() => {
-        if (!focused) focusGroup(index);
+        if (!focused) focusGroup(workspace, index);
       }}
     >
-      <TabBar group={group} index={index} groups={groups} />
+      <TabBar workspace={workspace} group={group} index={index} groups={groups} />
       <div className="tab-body" role="tabpanel">
         {tab?.content.kind === "session"
           ? renderSession({
@@ -171,33 +190,43 @@ function GroupView({
               sessionId: tab.content.sessionId,
               tabKey: tab.id,
               focused,
-              onClose: () => closeTab(index, tab.id),
+              onClose: () => closeTab(workspace, index, tab.id),
             })
-          : tab?.content.kind === "file" && <FileTab key={tab.id} file={tab.content.file} />}
+          : tab?.content.kind === "file" ? <FileTab key={tab.id} file={tab.content.file} />
+          : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(workspace, index, tab.id)} />
+          : tab?.content.kind === "history" ? <HistoryList key={tab.id} />
+          : tab?.content.kind === "plugin" ? <PluginTab key={tab.id} pluginId={tab.content.plugin} view={tab.content.view} viewKey={tab.content.key} />
+          : null}
       </div>
     </section>
   );
 }
 
-/** The main area's tab groups. With no tabs at all, `empty` shows instead. */
+/** A workspace's tab groups. With no tabs at all, `empty` shows instead. */
 export function Workbench({
+  workspace,
   empty,
   renderSession,
+  hidden = false,
 }: {
+  workspace: WorkspaceId;
   empty: ReactNode;
   renderSession(props: Omit<SessionPaneProps, "client">): ReactNode;
+  /** Kept on the page but out of sight, so its terminals stay connected (design 10.7.3). */
+  hidden?: boolean;
 }) {
-  const layout = useApp(layoutOf);
-  if (layout.groups.length === 0) return <>{empty}</>;
+  const layout = useApp((s) => layoutOf(s, workspace));
+  if (layout.groups.length === 0) return hidden ? null : <>{empty}</>;
   return (
-    <div className="workbench" data-groups={layout.groups.length}>
+    <div className="workbench" data-groups={layout.groups.length} data-workspace={workspace} hidden={hidden || undefined} aria-hidden={hidden || undefined}>
       {layout.groups.map((group, index) => (
         <GroupView
           key={index}
+          workspace={workspace}
           group={group}
           index={index}
           groups={layout.groups.length}
-          focused={index === layout.focused}
+          focused={!hidden && index === layout.focused}
           renderSession={renderSession}
         />
       ))}

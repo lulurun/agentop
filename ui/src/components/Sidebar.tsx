@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { Session } from "../api/client";
-import { pluginsFor } from "../plugins/registry";
 import { PluginSlot } from "../plugins/Slot";
 import { sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { StatusMark } from "./icons";
@@ -19,7 +18,7 @@ function basename(path: string): string {
 /** Tools with a colour of their own. Others get a plain badge. */
 const TOOL_COLOURS = new Set(["claude", "codex", "antigravity"]);
 
-function ToolBadge({ tool }: { tool: string }) {
+export function ToolBadge({ tool }: { tool: string }) {
   return (
     <span className="tool-badge" data-tool={TOOL_COLOURS.has(tool) ? tool : undefined}>
       {tool}
@@ -79,10 +78,7 @@ export function Sidebar() {
   const selected = useApp((s) => s.selected[s.activeId]);
   const setDialog = useApp((s) => s.setDialog);
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
-  const view = useApp((s) => s.view);
-  const setView = useApp((s) => s.setView);
   const [filter, setFilter] = useState("");
-  const pluginViews = pluginsFor("left-view", useApp((s) => s.plugins));
 
   const needle = filter.trim().toLowerCase();
   const rows = sortedSessions(sessions).filter(
@@ -132,26 +128,6 @@ export function Sidebar() {
           </nav>
         </>
       )}
-      <div className="sidebar-views">
-        {linked && (
-          <>
-            <button type="button" aria-current={view === "history" ? "page" : undefined} onClick={() => setView(view === "history" ? "sessions" : "history")}>
-              History
-            </button>
-            {pluginViews.map(({ info, ui }) => {
-              const id = `plugin:${info.id}` as const;
-              return (
-                <button key={id} type="button" aria-current={view === id ? "page" : undefined} onClick={() => setView(view === id ? "sessions" : id)}>
-                  {ui.leftView!.label}
-                </button>
-              );
-            })}
-          </>
-        )}
-        <button type="button" onClick={() => setDialog("settings")}>
-          Settings
-        </button>
-      </div>
     </aside>
   );
 }

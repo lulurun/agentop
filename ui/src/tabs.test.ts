@@ -10,7 +10,8 @@ function show(layout: Layout): string {
   const groups = layout.groups.map((g) =>
     g.tabs
       .map((t) => {
-        const name = t.content.kind === "session" ? t.content.sessionId : t.content.file.path;
+        const c = t.content;
+        const name = c.kind === "session" ? c.sessionId : c.kind === "file" ? c.file.path : c.kind === "plugin" ? `${c.plugin}:${c.view}` : c.kind;
         return t.id === g.active ? `[${name}]` : name;
       })
       .join(" "),
@@ -140,5 +141,50 @@ describe("saved layouts", () => {
     expect(tabs.parseLayout(null)).toBeNull();
     expect(tabs.parseLayout({ groups: "no", focused: 0 })).toBeNull();
     expect(tabs.parseLayout({ groups: [{ tabs: [{ id: "t", content: { kind: "web" } }] }], focused: 0 })).toBeNull();
+  });
+});
+
+describe("every workspace's tabs", () => {
+  const status: TabContent = { kind: "status" };
+  const history: TabContent = { kind: "history" };
+  const dialogue: TabContent = { kind: "plugin", plugin: "dialogue", view: "dialogues" };
+
+  it("a pinned tab can't be closed", () => {
+    const layout = tabs.pinnedLayout(history);
+    expect(tabs.close(layout, 0, "home")).toBe(layout);
+  });
+
+  it("Status opens in the left group, and only once", () => {
+    const two = build([session("a"), "replace"], [file("x.txt"), "right"]);
+    const opened = tabs.open(two, status, "left", id());
+    expect(show(opened)).toBe("a [status] | [x.txt] @0");
+    const focusedRight = tabs.focusGroup(opened, 1);
+    expect(show(tabs.open(focusedRight, status, "left", id()))).toBe("a [status] | [x.txt] @0");
+  });
+
+  it("Status beside a pinned tab, with no split, joins the only group", () => {
+    expect(show(tabs.open(tabs.pinnedLayout(history), status, "left", id()))).toBe("history [status] @0");
+  });
+
+  it("only sessions and files split", () => {
+    const layout = tabs.pinnedLayout(history);
+    expect(tabs.split(layout, id())).toBe(layout);
+    expect(tabs.canSplit(dialogue)).toBe(false);
+  });
+
+  it("a plugin's tabs close with it, pinned ones too", () => {
+    const layout = tabs.open(tabs.pinnedLayout(dialogue), status, "left", id());
+    expect(show(tabs.closeWhere(layout, (c) => c.kind === "plugin"))).toBe("[status] @0");
+  });
+
+  it("plugin tabs are told apart by view and key", () => {
+    expect(tabs.sameContent(dialogue, { ...dialogue })).toBe(true);
+    expect(tabs.sameContent(dialogue, { ...dialogue, key: "abc" })).toBe(false);
+    expect(tabs.sameContent(status, history)).toBe(false);
+  });
+
+  it("saved layouts keep every kind and the pin", () => {
+    const layout = tabs.open(tabs.pinnedLayout(dialogue), status, "left", id());
+    expect(tabs.parseLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
   });
 });

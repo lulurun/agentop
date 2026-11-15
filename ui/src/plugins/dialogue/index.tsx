@@ -191,7 +191,12 @@ async function beforeDisable(plugin: PluginContext): Promise<string | null> {
 }
 
 export const plugin: UiPlugin = {
-  leftView: { label: "Dialogues", Component: DialoguesView },
+  // For now the list and a dialogue's details share the one pinned tab. The workspace's own layout is designed separately (design 10.7.2).
+  workspace: {
+    label: "Dialogues",
+    home: "dialogues",
+    views: { dialogues: { label: "Dialogues", Component: DialoguesView } },
+  },
   sessionBadge: DialogueBadge,
   beforeDisable,
 };

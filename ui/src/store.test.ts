@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "./api/client";
-import { sessionSummary } from "./store";
+import { parseLayouts, sessionSummary } from "./store";
 
 function session(fields: Partial<Session>): Session {
   return { id: "s", display_name: "agentop", description: "", managed: true, ai_title: null, ...fields } as Session;
@@ -18,5 +18,17 @@ describe("sessionSummary", () => {
   it("is nothing when the summary is already the title", () => {
     expect(sessionSummary(session({ managed: false, ai_title: "Same text" }))).toBeNull();
     expect(sessionSummary(session({}))).toBeNull();
+  });
+});
+
+describe("saved tabs", () => {
+  const layout = { groups: [{ tabs: [{ id: "t", content: { kind: "session", sessionId: "a" } }], active: "t" }], focused: 0 };
+
+  it("tabs saved before workspaces become the Sessions tabs", () => {
+    expect(parseLayouts({ home: layout })).toEqual({ home: { sessions: layout } });
+  });
+
+  it("reads tabs per workspace, and drops what isn't a layout", () => {
+    expect(parseLayouts({ home: { sessions: layout, history: { groups: "no" } } })).toEqual({ home: { sessions: layout } });
   });
 });

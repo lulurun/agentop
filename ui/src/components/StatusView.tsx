@@ -4,8 +4,8 @@ import { ApiError, ServiceClient } from "../api/client";
 import { connectionName, isEncrypted, isLoopback } from "../connections";
 import { activeConnection, useApp } from "../store";
 import { ClientsSection } from "./ClientsSection";
-import { Dialog } from "./Dialog";
 import { formatDuration } from "./format";
+import { PluginsSection } from "./PluginsSection";
 
 type Action = "restart" | "stop" | "update";
 
@@ -70,11 +70,12 @@ function updateSummary(info: UpdateInfo | null): string {
   return info.behind === 1 ? "1 new commit" : `${info.behind} new commits`;
 }
 
-export function ServicePanel() {
-  const activeId = useApp((s) => s.activeId);
-  const active = useApp(activeConnection);
-  const connection = useApp((s) => s.connections.find((c) => c.id === s.statusId)) ?? active;
-  const setDialog = useApp((s) => s.setDialog);
+/**
+ * The selected service's Status, in a tab (design 10.7.4): what it is, Stop,
+ * Restart and Update, the clients signed in to it, and its plugins.
+ */
+export function StatusView({ onClose }: { onClose(): void }) {
+  const connection = useApp(activeConnection);
   const markStopped = useApp((s) => s.markStopped);
   const updateConnection = useApp((s) => s.updateConnection);
   const removeConnection = useApp((s) => s.removeConnection);
@@ -134,8 +135,8 @@ export function ServicePanel() {
     try {
       if (action === "stop") {
         await client.stopService();
-        setDialog(null);
-        if (connection.id === activeId) markStopped();
+        onClose();
+        markStopped();
         return;
       }
       if (action === "restart") {
@@ -158,9 +159,11 @@ export function ServicePanel() {
   const asking = pending && confirmation(pending, name, update?.behind, info?.manager);
 
   return (
-    <Dialog title={asking ? asking.title : name}>
-      {asking ? (
-        <>
+    <section className="view status-view" aria-label="Status">
+      <h2>{name}</h2>
+      {asking && (
+        <div className="status-confirm" role="alertdialog" aria-label={asking.title}>
+          <h3 className="status-confirm-title">{asking.title}</h3>
           <p className="dialog-text">{asking.detail}</p>
           {error && <p className="form-error" role="alert">{error}</p>}
           <div className="dialog-actions">
@@ -171,11 +174,14 @@ export function ServicePanel() {
               {asking.button}
             </button>
           </div>
-        </>
-      ) : (
-        <>
-          {unreachable && !updating && !busyRestarting && <p className="form-error" role="alert">This service isn't answering.</p>}
-          {restarting && <p className="service-progress" role="status">Restarting…</p>}
+        </div>
+      )}
+      {!asking && error && <p className="form-error" role="alert">{error}</p>}
+      {unreachable && !updating && !busyRestarting && <p className="form-error" role="alert">This service isn't answering.</p>}
+      {restarting && <p className="service-progress" role="status">Restarting…</p>}
+      <div className="status-columns">
+        <section className="status-section" aria-label="Service">
+          <h3>Service</h3>
           <label className="field">
             Name
             <input
@@ -206,17 +212,13 @@ export function ServicePanel() {
               agentop serve.
             </p>
           )}
-          {info && <ClientsSection client={client} connection={connection} />}
-          <div className="dialog-actions">
-            <button type="button" className="dialog-action-start" data-autofocus onClick={() => setDialog(null)}>
-              Close
-            </button>
+          <div className="status-actions">
             {!connection.isHome && (
               <button
                 type="button"
                 title="Remove it from this app. Its sessions keep running."
                 onClick={() => {
-                  setDialog(null);
+                  onClose();
                   removeConnection(connection.id);
                 }}
               >
@@ -238,8 +240,10 @@ export function ServicePanel() {
               Update
             </button>
           </div>
-        </>
-      )}
-    </Dialog>
+          {info && <ClientsSection client={client} connection={connection} />}
+        </section>
+        <PluginsSection />
+      </div>
+    </section>
   );
 }

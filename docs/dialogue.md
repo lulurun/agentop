@@ -6,7 +6,7 @@ The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dia
 
 Dialogue data is persisted to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`.
 
-The app shows them in the Dialogues view and labels their sessions in the list. Turning the plugin off in Settings → Plugins stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
+The app shows them in the Dialogues view and labels their sessions in the list. Turning the plugin off in Status → Plugins (Status on the service switcher) stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
 
 ## 2 How it works
 

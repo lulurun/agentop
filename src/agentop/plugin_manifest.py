@@ -26,7 +26,7 @@ DEFAULT_ROOT = Path(__file__).resolve().parent / "plugins"
 DIRS_ENV = "AGENTOP_PLUGIN_DIRS"
 MODULE_PREFIX = "agentop.plugins"
 
-UI_SLOTS = frozenset({"session-badge", "left-view", "right-panel", "settings-section", "file-viewer"})
+UI_SLOTS = frozenset({"session-badge", "workspace", "right-panel", "settings-section", "file-viewer"})
 
 _ID = re.compile(r"[a-z0-9-]+")
 # A command name: what follows `agentop`.
