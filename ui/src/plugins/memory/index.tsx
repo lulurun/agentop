@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PluginContext, UiPlugin } from "../types";
+import { ConversationView, DetailsPanel, EmptyView, SearchPanel, tabLabel } from "./Workspace";
 
 interface Status {
   folder: string;
@@ -22,6 +23,7 @@ interface Status {
     by: string | null;
     last_run: { errors: string[] } | null;
   };
+  recall: { searches: number; empty: number; misses: number; wrong: number };
 }
 
 function formatSize(bytes: number): string {
@@ -76,11 +78,7 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
   if (!status) return null;
   const last = status.last_sweep;
   const summaries = status.summaries;
-  const errors = [
-    ...(last?.errors ?? []),
-    ...(status.messages.last_index?.errors ?? []),
-    ...(summaries.last_run?.errors ?? []),
-  ];
+  const errors = [...(last?.errors ?? []), ...(status.messages.last_index?.errors ?? []), ...(summaries.last_run?.errors ?? [])];
   return (
     <div className="memory-status">
       <p className="memory-note">
@@ -103,6 +101,10 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
             .map(([tool, t]) => `${tool} ${t.messages}`)
             .join(", ")})`}
         .
+      </p>
+      <p className="memory-note">
+        {status.recall.searches} searches, {status.recall.empty} with no results.{" "}
+        {status.recall.misses ? `${status.recall.misses} misses noted (${status.recall.wrong} found the wrong thing), in recall.jsonl.` : "No misses noted."}
       </p>
       <label className="memory-switch">
         <input
@@ -135,5 +137,14 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
 }
 
 export const plugin: UiPlugin = {
+  workspace: {
+    label: "Memory",
+    views: {
+      conversation: { label: "Conversation", Component: ConversationView, tabLabel },
+    },
+    empty: EmptyView,
+    left: SearchPanel,
+    right: DetailsPanel,
+  },
   settingsSection: ArchiveStatus,
 };

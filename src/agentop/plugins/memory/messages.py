@@ -303,6 +303,24 @@ class Messages:
         finally:
             db.close()
 
+    def session(self, tool: str | None, session: str) -> dict | None:
+        """What the table knows of a session: its tool, project, first and last message, and how many."""
+        if not self.path.exists():
+            return None
+        db = self._connect()
+        try:
+            row = db.execute(
+                "SELECT tool, MAX(project), MIN(at), MAX(at), COUNT(*) FROM messages"
+                " WHERE session = ? AND (? IS NULL OR tool = ?) GROUP BY tool ORDER BY MAX(at) DESC LIMIT 1",
+                (session, tool, tool),
+            ).fetchone()
+        finally:
+            db.close()
+        if not row:
+            return None
+        tool_, project, first_at, last_at, count = row
+        return {"tool": tool_, "session": session, "project": project, "first_at": first_at, "last_at": last_at, "messages": count}
+
     def conversation(self, tool: str | None, session: str, around: int | None = None, radius: int = 6) -> list[dict]:
         """A session's messages, oldest first. With `around` (a message id), only those near it."""
         if not self.path.exists():

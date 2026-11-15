@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 import time
+import tomllib
 
 import pytest
 from fastapi.testclient import TestClient
@@ -13,14 +14,15 @@ from fastapi.testclient import TestClient
 from agentop import agentclis
 from agentop.agentclis.base import AgentCli
 from agentop.agentclis.claude import ClaudeAgentCli
+from agentop.agentclis.codex import CodexAgentCli
 from agentop.plugins.memory import summaries as sm
 from agentop.plugins.memory.messages import Messages
 from agentop.service.app import create_app
 from agentop.service.config import Settings
 from agentop.service.identity import Identity
 from agentop.service.plugins import DEFAULT_ROOT, PluginHost
-from tests.test_plugins import AUTH, TOKEN, QuietStore
 from tests.conftest import signed_in
+from tests.test_plugins import AUTH, TOKEN, QuietStore
 
 NOW = time.time()
 OLD = NOW - 2 * 3600
@@ -206,6 +208,18 @@ def test_claude_answer_is_the_result_line():
         claude.ask_answer("")
 
 
+def test_codex_exec_is_not_a_session_and_saves_nothing():
+    codex = CodexAgentCli()
+    system = 'Say "hi".\nThen stop. 日本語'
+    cmd = codex.ask_cmd(system)
+    assert cmd[:2] == ["codex", "exec"] and "--ephemeral" in cmd and cmd[-1] == "-"
+    assert "features.shell_tool=false" in cmd
+    # The system prompt is a TOML string that reads back as it was.
+    setting = next(arg for arg in cmd if arg.startswith("developer_instructions="))
+    assert tomllib.loads(setting)["developer_instructions"] == system
+    assert not codex.matches("codex", " ".join(cmd[:-1]))
+
+
 class Echo(AgentCli):
     """Answers with what it was given, through a real subprocess."""
 
@@ -351,3 +365,73 @@ def test_the_cli_shows_sessions_found_by_their_summary(table, tmp_path):
     out = recall("--session", "lunch")
     assert out.startswith("=== Lunch plans")
     assert json.loads(recall("restaurant", "--json"))["sessions"][0]["session"] == "lunch"
+
+
+# ---------------------------------------------------------------- recall misses
+
+
+def test_a_miss_takes_the_searches_just_before_it_from_the_same_place(tmp_path, monkeypatch):
+    from agentop.plugins.memory.recall_log import RecallLog
+
+    log = RecallLog(tmp_path / "recall.jsonl")
+    clock = [1000.0]
+    monkeypatch.setattr(time, "time", lambda: clock[0])
+    log.search("old words", 0, 0, "cli")
+    clock[0] += 3600
+    log.search("sushi", 0, 0, "cli")
+    log.search("寿司", 2, 0, "cli")
+    log.search("sushi", 0, 0, "cli")
+    log.search("from the app", 1, 1, "app")
+    entry = log.miss("the sushi place Yamada recommended", "nothing", "cli")
+    assert entry["tried"] == ["寿司", "sushi"]
+    log.miss("a link", "wrong", "app", tried=["link"])
+    with tmp_path.joinpath("recall.jsonl").open("a") as f:
+        f.write('{"type": "search", "cut sh')  # a line a crash left half written
+    assert [m["looked_for"] for m in log.misses()] == ["a link", "the sushi place Yamada recommended"]
+    assert log.status() == {"searches": 5, "empty": 3, "misses": 2, "wrong": 1, "last_miss": log.misses()[0]}
+    with pytest.raises(ValueError):
+        log.miss("x", "maybe", "cli")
+
+
+def test_the_app_searches_and_notes_a_miss(plugin_client):
+    wait_for(plugin_client, lambda s: s["summaries"]["summaries"] == 1)
+    found = plugin_client.get("/api/v2/plugins/memory/recall", params={"q": "sushi"}, headers=AUTH).json()
+    assert [m["session"] for m in found["messages"]] == ["s1"]
+    plugin_client.get("/api/v2/plugins/memory/recall", params={"q": "ramen"}, headers=AUTH)
+    added = plugin_client.post("/api/v2/plugins/memory/misses", json={"looked_for": "the ramen shop"}, headers=AUTH)
+    assert added.status_code == 200 and added.json()["tried"] == ["sushi", "ramen"]
+    bad = plugin_client.post("/api/v2/plugins/memory/misses", json={"looked_for": "x", "kind": "maybe"}, headers=AUTH)
+    assert bad.status_code == 400
+    status = plugin_client.get("/api/v2/plugins/memory/status", headers=AUTH).json()
+    assert status["recall"]["searches"] == 2 and status["recall"]["empty"] == 1 and status["recall"]["misses"] == 1
+    misses = plugin_client.get("/api/v2/plugins/memory/misses", headers=AUTH).json()
+    assert [m["looked_for"] for m in misses] == ["the ramen shop"]
+
+
+def test_the_cli_notes_its_searches_and_a_miss(tmp_path):
+    import os
+    import sys
+
+    env = {**os.environ, "AGENTOP_HOME": str(tmp_path / "state"), "HOME": str(tmp_path)}
+
+    def recall(*args):
+        return subprocess.run([sys.executable, "-m", "agentop.cli", "recall", *args], env=env, capture_output=True, text=True)
+
+    folder = tmp_path / "state" / "plugins" / "memory"
+    folder.mkdir(parents=True)
+    say(Messages(folder / "messages.sqlite", folder / "archive"), "lunch", "where should we go", "Sushi Dai")
+    recall("ramen")
+    out = recall("--missed", "the ramen shop").stdout
+    assert out.startswith("Noted that recall found nothing for: the ramen shop, after searching for: ramen")
+    assert "wrong thing" in recall("--missed", "the sushi link", "--wrong").stdout
+    assert recall("ramen", "--wrong").returncode != 0
+    lines = [json.loads(line) for line in (folder / "recall.jsonl").read_text().splitlines()]
+    assert [(e["type"], e.get("kind")) for e in lines] == [("search", None), ("miss", "nothing"), ("miss", "wrong")]
+
+
+def test_a_session_has_its_details_and_summary(plugin_client):
+    wait_for(plugin_client, lambda s: s["summaries"]["summaries"] == 1)
+    found = plugin_client.get("/api/v2/plugins/memory/session", params={"session": "s1"}, headers=AUTH).json()
+    assert found["tool"] == "claude" and found["messages"] == 2
+    assert found["first_at"] < found["last_at"] and found["summary"]["title"] == "Lunch plans"
+    assert plugin_client.get("/api/v2/plugins/memory/session", params={"session": "nope"}, headers=AUTH).json() is None

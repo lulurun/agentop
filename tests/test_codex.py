@@ -92,6 +92,9 @@ def test_resume_on_the_command_line_names_the_thread(home, monkeypatch):
         ("codex", "codex -c features.code_mode_host=true app-server --listen unix://", False),
         ("codex", "/home/u/.codex/packages/standalone/releases/0.153.4/bin/codex app-server daemon pid-update-loop", False),
         ("codex-code-mode-host", "/home/u/.codex/packages/standalone/releases/0.165.0/bin/codex-code-mode-host", False),
+        ("codex", "codex exec --ephemeral --model gpt-6-luna -", False),
+        ("codex", "/home/u/.codex/packages/standalone/releases/0.169.0/bin/codex exec -", False),
+        ("codex", "codex 'exec the tests'", True),
     ],
 )
 def test_codex_background_processes_are_not_agents(name, cmdline, agent):

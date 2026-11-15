@@ -85,8 +85,46 @@ class CodexAgentCli(AgentCli):
     def matches(self, proc_name: str, cmdline: str) -> bool:
         if not super().matches(proc_name, cmdline):
             return False
-        words = {word.split("/")[-1] for word in cmdline.split()} | {proc_name}
-        return not any(helper in words for helper in self._HELPERS)
+        words = [word.split("/")[-1] for word in cmdline.split()]
+        if any(helper in {*words, proc_name} for helper in self._HELPERS):
+            return False
+        # `codex exec` answers one prompt and exits: a script's, or agentop's
+        # own (ask), never a session to list.
+        after = words.index("codex") + 1 if "codex" in words else 1
+        return words[after : after + 1] != ["exec"]
+
+    # ------------------------------------------------------------------ one-shot prompts
+
+    # The fast, cheap model is plenty for summaries.
+    ask_model = "gpt-6-luna"
+
+    def ask_cmd(self, system: str) -> list[str]:
+        # --ephemeral writes no rollout, so an answer never becomes a session to
+        # archive. --ignore-user-config skips the user's MCP servers and
+        # settings (sign-in still comes from ~/.codex), and with the shell tool
+        # off the model can only answer. The system prompt goes in as the
+        # developer instructions, a TOML string.
+        return [
+            "codex",
+            "exec",
+            "--ephemeral",
+            "--skip-git-repo-check",
+            "--ignore-user-config",
+            "--ignore-rules",
+            "--sandbox",
+            "read-only",
+            "--color",
+            "never",
+            "--model",
+            self.ask_model,
+            "-c",
+            "model_reasoning_effort=low",
+            "-c",
+            "features.shell_tool=false",
+            "-c",
+            f"developer_instructions={json.dumps(system, ensure_ascii=False)}",
+            "-",
+        ]
 
     @property
     def launch_cmd(self) -> str:

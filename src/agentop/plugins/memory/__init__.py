@@ -12,13 +12,14 @@ import asyncio
 import shutil
 import threading
 
-from fastapi import Body
+from fastapi import Body, HTTPException
 
 from agentop import agentclis
 from agentop.agentclis import AgentCli
 
 from .archive import Archive
 from .messages import Messages
+from .recall_log import KINDS, RecallLog
 from .summaries import Summaries
 
 SWEEP_SECONDS = 300
@@ -36,6 +37,7 @@ def register(api):
     archive = Archive(api.data_dir)
     messages = Messages(api.data_dir / "messages.sqlite", archive.files_dir)
     summaries = Summaries(messages)
+    recall_log = RecallLog(api.data_dir / "recall.jsonl")
     last_index: dict = {}
     last_summaries: dict = {}
     # One sweep at a time: the timer, a session exiting, and "Sweep now" can all ask at once.
@@ -137,6 +139,7 @@ def register(api):
                 "by": " ".join(filter(None, [agent.name, agent.ask_model])) if agent else None,
                 "last_run": last_summaries or None,
             },
+            "recall": recall_log.status(),
         }
 
     @api.router.get("/status")
@@ -176,6 +179,49 @@ def register(api):
     ):
         """Messages holding every word of `q`, best match first. `since` is seconds since the epoch."""
         return await asyncio.to_thread(messages.search, q, max(1, min(limit, 200)), tool, project, since)
+
+    @api.router.get("/recall")
+    async def recall(
+        q: str, limit: int = 50, tool: str | None = None, project: str | None = None, since: float | None = None
+    ):
+        """The app's search: sessions by their summary, then messages, noted in the recall log."""
+
+        def run() -> dict:
+            limit_ = max(1, min(limit, 200))
+            found = {
+                "sessions": summaries.search(q, 10, tool, project, since),
+                "messages": messages.search(q, limit_, tool, project, since),
+            }
+            recall_log.search(q, len(found["messages"]), len(found["sessions"]), "app")
+            return found
+
+        return await asyncio.to_thread(run)
+
+    @api.router.post("/misses")
+    async def add_miss(looked_for: str = Body(...), kind: str = Body("nothing"), tried: list[str] | None = Body(None)):
+        """Note that a recall didn't find what was wanted (nothing, or the wrong thing)."""
+        if kind not in KINDS:
+            raise HTTPException(400, f"kind is one of {', '.join(KINDS)}")
+        if not looked_for.strip():
+            raise HTTPException(400, "Say what you were looking for")
+        return await asyncio.to_thread(recall_log.miss, looked_for, kind, "app", tried)
+
+    @api.router.get("/misses")
+    async def get_misses(limit: int = 50):
+        """The latest recall misses, newest first."""
+        return await asyncio.to_thread(recall_log.misses, max(1, min(limit, 500)))
+
+    @api.router.get("/session")
+    async def session_info(session: str, tool: str | None = None):
+        """A session's details and its summary, or null when no message of it is recorded."""
+
+        def run() -> dict | None:
+            found = messages.session(tool, session)
+            if found:
+                found["summary"] = summaries.get(found["tool"], session)
+            return found
+
+        return await asyncio.to_thread(run)
 
     @api.router.get("/conversation")
     async def conversation(session: str, tool: str | None = None, around: int | None = None, radius: int = 6):

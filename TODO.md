@@ -56,7 +56,7 @@ Design: [v2-design.md section 10.7](docs/v2-design.md#107-workspaces-2026-11-15)
 - [x] Phase 2, History, built 2026-11-15: the list (search, filter by CLI, sort by last updated or CLI) in its pinned tab, and the selected past session on the right with Resume and Remove.
 - [ ] History stats on the right: messages, tokens, transcript size. `/saved-sessions` only has the title, tool, directory and last active time today.
 - [ ] Dialogues workspace: designed in its own conversation (list on the left, the two actors split in tabs, view only; the dialogue's files on the right opening in the right group; New dialogue in the header). Dialogue sessions leave the Sessions list, and a plugin claims a session in a way the core can read without naming the plugin.
-- [ ] Memory workspace: designed in its own conversation; it closes "Search in the app" in the Memory plugin section.
+- [x] Memory workspace, 2026-11-15: search on the left, a conversation per tab opened at the hit, the session's summary on the right (design 12.11.3, phase 6).
 - [ ] Later: the workspace in the URL, a badge on a workspace that needs attention, `navigate(workspace, selection)` (design 10.7.6).
 
 ## Memory plugin
@@ -68,9 +68,10 @@ Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-
 - [x] Phase 3: conversation view for transcripts in the File viewer (`agentop/conversation.py`, shared with the messages table); Transcripts list falls back to the archive.
 - [x] Phase 4: recall: FTS5 trigram search, `/search` and `/conversation` routes, `agentop recall`, and the `recall` skill (`src/agentop/skills/recall/`).
 - [x] Phase 5: session summaries (title, summary, keywords) written by `claude --print` on Haiku, searched beside the messages; `recall` lists matching sessions first.
-- [ ] Search in the app: a Memory view that searches and opens the conversation around a hit, with the matching sessions' summaries.
-- [ ] Record recall misses (nothing found, or the wrong thing), to decide on hybrid search with embeddings ([design 12.11.4](docs/v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
-- [ ] Session summaries from Codex too (`codex exec`), for a host without Claude Code.
+- [x] Search in the app: the Memory workspace, 2026-11-15 (design 12.11.3, phase 6).
+- [x] Record recall misses (nothing found, or the wrong thing), 2026-11-15: every search and each miss in `plugins/memory/recall.jsonl`, from `agentop recall --missed` (the skill runs it when a recall fails) and the app's Didn't find it?. Counts in Settings → Memory.
+- [ ] Once misses have been noted for a while, read `recall.jsonl` and decide on hybrid search with embeddings ([design 12.11.4](docs/v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
+- [x] Session summaries from Codex too, for a host without Claude Code, 2026-11-15: `codex exec --ephemeral` on `gpt-6-luna`, with no shell tool and without the user's config. Claude Code still comes first where both are installed.
 - [x] A recall skill for Codex sessions too: agentop serve installs the skills into `~/.codex/skills/` (2026-11-13).
-- [ ] Decide whether to raise Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage. Left alone for now.
+- [x] Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage: decided 2026-11-15 not to change it. agentop is a wrapper on top of the CLIs and leaves their settings as they are; the archive sweep is the backstop.
 - [ ] Later: archives from other hosts, aggregated in one place.

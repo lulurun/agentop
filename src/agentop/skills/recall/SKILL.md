@@ -5,7 +5,7 @@ description: Find something from a past conversation with an agent on this machi
 
 # Recall: search past conversations
 
-agentop's Memory plugin keeps every prompt and reply from every agent session on this machine (agentop `docs/v2-design.md` section 12.11). `agentop recall` searches it. It only reads; it changes nothing.
+agentop's Memory plugin keeps every prompt and reply from every agent session on this machine (agentop `docs/v2-design.md` section 12.11). `agentop recall` searches it. It only reads the conversations; the one thing it writes is its own note of searches and misses (step 4).
 
 ## 1. Search
 
@@ -49,6 +49,20 @@ Read before answering: the name, the link, or who sent it is often a message or 
 - Say where it came from: the date, the project, and the tool, so the user can find it again.
 - If several conversations fit, list them briefly and ask which one was meant.
 - If nothing is found, say what you searched for. Never guess a name or a link.
+
+## 4. Note a miss
+
+agentop counts misses to decide whether keyword search is enough. Note one, once per recall, when:
+
+- you tried variants and found nothing that fits, or
+- the user says what you found is the wrong thing.
+
+```bash
+agentop recall --missed "the sushi place Yamada recommended"           # found nothing
+agentop recall --missed "the sushi place Yamada recommended" --wrong   # found the wrong thing
+```
+
+Say what the user was looking for, in their words. The searches you just made are attached by themselves. Don't note a miss for a search that found nothing before another one found the answer.
 
 ## Limits
 

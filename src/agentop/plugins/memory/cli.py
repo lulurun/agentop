@@ -17,6 +17,7 @@ from pathlib import Path
 from agentop import agentclis
 
 from .messages import Messages
+from .recall_log import RecallLog
 from .summaries import Summaries
 
 
@@ -30,7 +31,8 @@ def register_cli(cli) -> None:
             "antigravity on this machine. A message matches when it holds every word; put a\n"
             "phrase in quotes. Words match anywhere, so part of a name or a URL works.\n\n"
             "  agentop recall atama link\n"
-            "  agentop recall --session <session> --around <#id>"
+            "  agentop recall --session <session> --around <#id>\n"
+            "  agentop recall --missed \"the sushi place Yamada recommended\" [--wrong]"
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -42,6 +44,12 @@ def register_cli(cli) -> None:
     parser.add_argument("--session", help="Read this session's conversation instead of searching")
     parser.add_argument("--around", type=int, help="With --session: only the messages near this #id")
     parser.add_argument("--radius", type=int, default=6, help="With --around: messages on each side (default 6)")
+    parser.add_argument(
+        "--missed",
+        metavar="WHAT",
+        help="Note that a recall didn't find WHAT was wanted, with the searches just made, and search nothing",
+    )
+    parser.add_argument("--wrong", action="store_true", help="With --missed: something was found, but the wrong thing")
     parser.add_argument("--json", action="store_true", help="Print JSON")
 
 
@@ -68,6 +76,19 @@ def recall(args: argparse.Namespace, folder: Path) -> None:
     """Search the record of past conversations. Reads the database directly, no service needed."""
     table = Messages(folder / "messages.sqlite", folder / "archive")
     summaries = Summaries(table)
+    log = RecallLog(folder / "recall.jsonl")
+    if args.missed is not None:
+        if not args.missed.strip():
+            raise SystemExit("Error: --missed takes what was looked for")
+        entry = log.miss(args.missed, "wrong" if args.wrong else "nothing", "cli")
+        if args.json:
+            print(json.dumps(entry, indent=2, ensure_ascii=False))
+        else:
+            tried = f", after searching for: {', '.join(entry['tried'])}" if entry["tried"] else ""
+            print(f"Noted that recall {'found the wrong thing' if args.wrong else 'found nothing'} for: {entry['looked_for']}{tried}")
+        return
+    if args.wrong:
+        raise SystemExit("Error: --wrong goes with --missed")
     if not table.path.exists():
         print("Nothing recorded yet. The Memory plugin builds its record once the service has run with it enabled.")
         return
@@ -102,6 +123,7 @@ def recall(args: argparse.Namespace, folder: Path) -> None:
     since = _since(args.since) if args.since else None
     hits = table.search(query, args.limit, args.tool or None, args.project or None, since)
     sessions = summaries.search(query, 5, args.tool or None, args.project or None, since)
+    log.search(query, len(hits), len(sessions), "cli")
     if args.json:
         print(json.dumps({"sessions": sessions, "messages": hits}, indent=2, ensure_ascii=False))
         return

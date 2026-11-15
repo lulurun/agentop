@@ -337,3 +337,58 @@ test("a service with no plugins says so in its Status", async ({ page }) => {
   await openStatus(page);
   await expect(page.getByText("This service has no plugins.")).toBeVisible();
 });
+
+test("the Memory workspace searches past conversations, opens one at the hit, and notes a miss", async ({ page }) => {
+  const s = new Service("box");
+  cleanup.push(() => s.dispose());
+  const log = join(s.root, ".claude/projects/-work-lunch");
+  mkdirSync(log, { recursive: true });
+  const say = (uuid: string, type: "user" | "assistant", text: string, minute: number) => ({
+    type,
+    uuid,
+    sessionId: "lunch-1",
+    cwd: "/work/lunch",
+    timestamp: `2026-10-01T12:${String(minute).padStart(2, "0")}:00Z`,
+    message: { role: type, content: type === "user" ? text : [{ type: "text", text }] },
+  });
+  const records = [
+    say("u1", "user", "Where should we eat on Friday?", 0),
+    say("a1", "assistant", "Yamada recommended Sushi Dai, see https://example.com/sushidai", 1),
+    ...Array.from({ length: 30 }, (_, i) => say(`f${i}`, i % 2 ? "assistant" : "user", `Filler message ${i}`, 2 + i)),
+  ];
+  writeFileSync(join(log, "lunch-1.jsonl"), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  await s.start();
+  await page.goto(s.signedInUrl);
+  await expect(page.locator(".link-connected")).toBeVisible();
+
+  await workspaces(page).getByRole("button", { name: "Memory" }).click();
+  await expect(page.locator(".main .placard")).toContainText("Search past conversations");
+  const panel = page.locator(".sidebar");
+  await panel.getByRole("searchbox", { name: "Search past conversations" }).fill("sushi");
+  await panel.getByRole("searchbox", { name: "Search past conversations" }).press("Enter");
+  const hits = panel.getByRole("list", { name: "Messages" });
+  await expect(hits.getByRole("button")).toHaveCount(1);
+  await expect(hits.locator("mark").first()).toHaveText("Sushi");
+  await expect(hits).toContainText("You asked: Where should we eat on Friday?");
+  await hits.getByRole("button").click();
+
+  const tab = page.getByRole("main").locator(".memory-conversation");
+  await expect(tab.locator(".message")).toHaveCount(32);
+  const hit = tab.locator(".message[data-hit]");
+  await expect(hit).toContainText("Yamada recommended");
+  await expect(hit.getByRole("link", { name: "https://example.com/sushidai" })).toBeVisible();
+  await expect(hit).toBeInViewport();
+  await expect(page.locator(".details")).toContainText("lunch-1");
+  await expect(page.locator(".details")).toContainText("32");
+  await expect(page.locator(".details")).toContainText("Not summarized yet");
+
+  await panel.getByRole("searchbox", { name: "Search past conversations" }).fill("ramen");
+  await panel.getByRole("button", { name: "Search" }).click();
+  await expect(panel).toContainText("No message has all of: ramen");
+  await panel.getByRole("button", { name: "Didn't find it?" }).click();
+  await panel.getByRole("textbox", { name: "What were you looking for?" }).fill("the ramen shop");
+  await panel.getByRole("button", { name: "Note the miss" }).click();
+  await expect(panel.getByRole("status")).toContainText("“sushi”, “ramen”");
+  const noted = readFileSync(join(s.root, "state/plugins/memory/recall.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
+  expect(noted.at(-1)).toMatchObject({ type: "miss", kind: "nothing", looked_for: "the ramen shop", tried: ["sushi", "ramen"] });
+});
