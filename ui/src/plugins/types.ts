@@ -30,6 +30,8 @@ export interface LoginContext {
   id: string;
   /** The plugin's name, as the service lists it. */
   name: string;
+  /** The service's base URL, to tell services apart in anything the plugin keeps. */
+  url: string;
   /** The service's name for this app, to sign in as. */
   clientName: string;
   client: PluginClient;

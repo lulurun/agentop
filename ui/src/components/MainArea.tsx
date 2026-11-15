@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
-import { connectionName, failureMessage, tokenFromInput } from "../connections";
+import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } from "../connections";
 import { platform } from "../platform";
 import { LoginMethods, useLoginMethods } from "../plugins/Login";
 import { PluginPanel } from "../plugins/Slot";
@@ -38,6 +38,15 @@ function Starting({ session }: { session: Session }) {
   );
 }
 
+/** With another way to sign in on the screen, the service token is no longer the only thing to ask for. */
+function signInMessage(failure: ConnectFailure, label: string, otherWays: boolean): { title: string; detail: string } {
+  if (otherWays && failure.kind === "no_token") return { title: `Sign in to ${label}`, detail: "" };
+  if (otherWays && failure.kind === "expired") {
+    return { title: `Signed out of ${label}`, detail: "This app's access ran out after a while unused, or was revoked. Sign in again." };
+  }
+  return failureMessage(failure, label);
+}
+
 function ConnectionProblem() {
   const link = useApp((s) => s.link);
   const connection = useApp(activeConnection);
@@ -65,7 +74,7 @@ function ConnectionProblem() {
         title: "No service on this computer",
         detail: "Install agentop here and run agentop serve, or add a service running on another machine.",
       }
-    : failureMessage(link.failure, connectionName(connection));
+    : signInMessage(link.failure, connectionName(connection), methods.length > 0);
   const needsToken = ["no_token", "expired", "token_rejected", "rate_limited"].includes(link.failure.kind);
   return (
     <div className="placard">
@@ -73,7 +82,7 @@ function ConnectionProblem() {
         {down && <span className="link-dot link-failed" aria-hidden="true" />}
         {title}
       </h2>
-      <p>{detail}</p>
+      {detail && <p>{detail}</p>}
       {needsToken && methods.length > 0 && (
         <>
           <LoginMethods url={connection.url} methods={methods} />

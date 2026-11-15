@@ -77,7 +77,19 @@ To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` 
 
 The defaults suit a service that only you reach, over loopback or a tunnel. The service token (`agentop service token`) never expires, but it only signs a client in, and the app doesn't keep it. Each browser or app gets its own token, which the app renews while it's open. After 12 hours unused, or 30 days in all, it's signed out and asks for the service token again. You can see every client, and sign any one out, in the service's Status tab or with `agentop service clients`.
 
-**What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`. Signing in a new browser or phone still means copying that token off the machine. Single-use pairing codes would remove that, but they make every sign-in need a shell on the machine, which is a poor trade for personal use. So they are a lower-priority item in the [backlog](docs/v2-plan.md#91-security).
+**Signing in without the token.** Copying the service token onto a phone is awkward, so the Email code plugin offers another way in: the sign-in screen gets a "Send me a sign-in code" button, and a 6-digit code goes to one address you set on the service. A code works for 10 minutes, once, in the browser that asked for it. Whoever can read that mailbox can sign in, so protect it (two-factor sign-in, at least). To set it up, write `~/.agentop/plugins/email-code/config.toml` and `chmod 600` it:
+
+```toml
+to = "you@example.com"
+smtp_host = "smtp.gmail.com"
+smtp_port = 587
+smtp_user = "you@gmail.com"
+smtp_password = "an app password"
+```
+
+Then turn on **Email code** in the service's Status tab, under Plugins, and check it with `agentop email-code test`.
+
+**What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`.
 
 For a service reachable from the internet, such as one behind an HTTPS proxy:
 

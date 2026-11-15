@@ -465,7 +465,21 @@ button.app-outdated:hover { background: var(--line); }
 .placard-title { display: flex; align-items: center; gap: 10px; }
 .placard-actions { display: flex; gap: 8px; margin-top: 14px; }
 .token-form { display: flex; gap: 8px; }
+.token-form input { flex: 1; min-width: 0; }
+.token-form button { flex: none; white-space: nowrap; }
 .login-method { margin: 0 0 14px; }
+.email-code > p { margin: 0 0 8px; }
+.email-code .form-error { margin: 8px 0 0; }
+.email-code .link-button {
+  margin-top: 8px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--action);
+  font: inherit;
+  cursor: pointer;
+}
+.email-code .link-button:disabled { color: var(--quiet); cursor: default; }
 .placard .login-or { margin: 14px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 
 .steps { margin: 16px 0 0; padding: 0; list-style: none; }

@@ -296,7 +296,7 @@ Work agreed but not started, and ideas not yet scheduled. It replaces `TODO.md` 
 
 The security review of design section 7 was finished on 2026-11-15: TLS required off loopback, per-client expiring tokens that can be revoked, a closed `/health`, open CORS and skip-permissions agents kept on purpose. One item is left, at lower priority, because it makes signing in less convenient, which matters little on a hardened host and a lot for personal use.
 
-- [ ] Single-use pairing codes, so the service token never has to leave the machine. Discussed 2026-11-14, not built.
+- [ ] Single-use pairing codes, so the service token never has to leave the machine. Discussed 2026-11-14, not built. For a phone, the Email code login plugin (design 7.4, 2026-11-16) now removes most of the need. Approving a new device from one already signed in would be another login plugin.
   - Today the service token never expires, and signing in a browser or phone means copying it off the machine (into a chat, a password manager, a phone). Each copy can leak, and whoever has it can sign in clients until it's rotated.
   - `agentop service pair` on the machine prints a short code, such as `K7QF-2M9X`. It is typed into the app's sign-in form instead of the service token, works once, and expires after 10 minutes, so a code that leaks later is useless. Making one needs shell access to the machine (SSH, or sitting at it).
   - A setting turns the service token off for `POST /api/v2/auth/clients` entirely, so pairing codes are the only way in. Without it the codes add little. It can't be "refuse it except from loopback": behind a proxy such as nginx on pisces-01, every request comes from `127.0.0.1`.

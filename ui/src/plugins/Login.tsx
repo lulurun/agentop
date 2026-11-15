@@ -41,7 +41,7 @@ export function LoginMethods({ url, methods }: { url: string; methods: LoginMeth
 function LoginPiece({ url, method }: { url: string; method: LoginMethod }) {
   const signIn = useApp((s) => s.signIn);
   const login = useMemo<LoginContext>(
-    () => ({ id: method.id, name: method.name, clientName: clientName(), client: publicPluginClient(url, method.id), signIn }),
+    () => ({ id: method.id, name: method.name, url, clientName: clientName(), client: publicPluginClient(url, method.id), signIn }),
     [url, method, signIn],
   );
   const Component = UI_PLUGINS[method.id]?.login;

@@ -23,7 +23,7 @@ src/agentop/
   service/               The service: app.py (assembly), routes.py (/api/v2), store.py (sessions),
                          plugins.py (the plugin loader), terminal.py, host.py, update.py, ...
   service/webdist/       The built web app (ui/), served at / (not committed)
-  plugins/               dialogue/, memory/, viewer/: one folder per plugin
+  plugins/               attention/, dialogue/, email-code/, memory/, viewer/: one folder per plugin
 ui/                      The app: React and TypeScript, built by Vite; ui/src/plugins/ holds plugin UIs
 desktop/                 The Tauri desktop app, which bundles the same UI
 ```

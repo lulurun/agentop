@@ -1,0 +1,8 @@
+id = "email-code"
+name = "Email code"
+version = "0.1.0"
+description = "Sign in with a code sent by email, to the address set in ~/.agentop/plugins/email-code/config.toml. A code works for 10 minutes, once, in the browser that asked for it. Off until set up: agentop email-code test checks the settings."
+plugin_api = 1
+default_enabled = false
+ui = ["login"]
+cli = ["email-code"]

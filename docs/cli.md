@@ -108,6 +108,14 @@ Above the messages, **Sessions about this** lists up to five sessions whose summ
 
 Each search is noted in `~/.agentop/plugins/memory/recall.jsonl`, with how many messages and sessions it found. `--missed` notes a miss there: what was looked for, `--wrong` when something was found but not the right thing, and the searches made from the command line in the 30 minutes before. The skill notes one at the end of a recall that failed. Misses decide whether keyword search needs embeddings beside it ([design 12.11.4](v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)); the Memory workspace and Status show the count.
 
+### 1.7 email-code
+
+Check the Email code plugin's settings, `~/.agentop/plugins/email-code/config.toml`, by sending a test mail to the address sign-in codes go to. The command is the plugin's: with the plugin off (it is off until you turn it on), it says so and does nothing. The settings are in [design 7.4](v2-design.md#74-ways-to-sign-in-2026-11-16).
+
+```bash
+agentop email-code test
+```
+
 ## 2 Dialogue commands
 
 All dialogue subcommands are under `agentop dialogue`. The command comes from the Dialogues plugin: while the plugin is off, `agentop dialogue` says so and does nothing.
