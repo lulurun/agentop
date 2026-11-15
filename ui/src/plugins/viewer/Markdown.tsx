@@ -32,8 +32,8 @@ export interface MarkdownProps {
   file: FileRef;
   plugin: PluginContext;
   label: string;
-  /** Open another file from the same source, beside this one when `side`. */
-  onOpen(path: string, side: boolean): void;
+  /** Open another file from the same source, in the right group as any file click does. */
+  onOpen(path: string): void;
 }
 
 export default function Markdown({ text, file, plugin, label, onOpen }: MarkdownProps) {
@@ -59,7 +59,7 @@ export default function Markdown({ text, file, plugin, label, onOpen }: Markdown
       const follow = (event: MouseEvent) => {
         event.preventDefault();
         if (target.kind === "anchor") jump(target.id);
-        else onOpen(target.path, event.ctrlKey || event.metaKey);
+        else onOpen(target.path);
       };
       return (
         <a href={href} onClick={follow} title={target.kind === "file" ? target.path : undefined}>

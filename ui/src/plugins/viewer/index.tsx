@@ -213,7 +213,7 @@ function DiffViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
           <button
             type="button"
             title="Open the file as it is now"
-            onClick={(event) => openTab({ kind: "file", file: { ...file, view: undefined } }, event.ctrlKey || event.metaKey ? "side" : "tab")}
+            onClick={() => openTab({ kind: "file", file: { ...file, view: undefined } }, "right")}
           >
             Open file
           </button>
@@ -335,8 +335,8 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
     return ["raw"];
   }, [result, file.path]);
   const showing: Mode = mode && modes.includes(mode) ? mode : modes[0];
-  const openBeside = useCallback(
-    (path: string, side: boolean) => openTab({ kind: "file", file: { sessionId: file.sessionId, source: file.source, path } }, side ? "side" : "tab"),
+  const openLinked = useCallback(
+    (path: string) => openTab({ kind: "file", file: { sessionId: file.sessionId, source: file.source, path } }, "right"),
     [file, openTab],
   );
   const lines = useMemo(() => {
@@ -367,7 +367,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
           </p>
         )}
         <Suspense fallback={null}>
-          <Markdown text={result.text} file={file} plugin={plugin} label={`Preview of ${file.path}`} onOpen={openBeside} />
+          <Markdown text={result.text} file={file} plugin={plugin} label={`Preview of ${file.path}`} onOpen={openLinked} />
         </Suspense>
       </>
     );

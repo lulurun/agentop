@@ -23,8 +23,8 @@ function useClient() {
 }
 
 /**
- * A file in a list. With a file viewer enabled it opens in a tab, and Ctrl or
- * Cmd opens it beside the current one. Without one, clicking copies its path.
+ * A file in a list. With a file viewer enabled it opens in a tab in the right
+ * group. Without one, clicking copies its path.
  */
 function FileRow({ file, absolute, children }: { file: FileRef | null; absolute: string; children: ReactNode }) {
   const viewer = useFileViewer();
@@ -41,7 +41,7 @@ function FileRow({ file, absolute, children }: { file: FileRef | null; absolute:
       type="button"
       className="file-row"
       title={absolute}
-      onClick={(event) => openTab({ kind: "file", file }, event.ctrlKey || event.metaKey ? "side" : "tab")}
+      onClick={() => openTab({ kind: "file", file }, "right")}
     >
       {children}
     </button>

@@ -3,8 +3,10 @@
  * terminal, or a file through whichever file-viewer plugin is enabled.
  *
  * Tabs live in groups. There are one or two groups, shown side by side, and
- * one of them has focus: that is where opening a session or file lands, and
- * its active tab decides which session the header and right panel show.
+ * one of them has focus: its active tab decides which session the header and
+ * right panel show. Clicking a session opens it in the left group (the only
+ * one, when there is one), and clicking a file opens it in the right group,
+ * made if needed. Tabs can then be moved between the groups freely.
  *
  * Everything here is a pure function of a Layout, so it is tested on its own.
  */
@@ -39,12 +41,14 @@ export interface Layout {
 }
 
 /**
- * - `replace`: what clicking a session does. The session's tab is shown if it
- *   is open; otherwise the active session tab switches to it.
- * - `tab`: a new tab in the focused group, unless one already shows it.
- * - `side`: the other group, made if there is only one.
+ * - `replace`: what clicking a session does. The session is shown if it is open
+ *   in either group; otherwise the left group's active session tab switches to it.
+ * - `tab`: a new tab in the left group, unless one there already shows it.
+ * - `right`: what clicking a file does. The file is shown if it is open in
+ *   either group; otherwise it gets a new tab in the right group, made if needed.
+ * - `side`: the group other than the focused one, made if there is only one.
  */
-export type OpenMode = "replace" | "tab" | "side";
+export type OpenMode = "replace" | "tab" | "right" | "side";
 
 export const MAX_GROUPS = 2;
 
@@ -102,24 +106,32 @@ export function open(layout: Layout, content: TabContent, mode: OpenMode = "repl
   if (layout.groups.length === 0) {
     return { groups: [{ tabs: [{ id, content }], active: id }], focused: 0 };
   }
-  if (mode === "side") {
+  if (mode === "replace" || mode === "right") {
+    for (const [index, group] of layout.groups.entries()) {
+      const existing = group.tabs.find((t) => sameContent(t.content, content));
+      if (existing) return withGroup({ ...layout, focused: index }, index, { ...group, active: existing.id });
+    }
+  }
+  if (mode === "side" || mode === "right") {
+    const target = mode === "right" ? 1 : 1 - layout.focused;
     if (layout.groups.length < MAX_GROUPS) {
       return { groups: [...layout.groups, { tabs: [{ id, content }], active: id }], focused: layout.groups.length };
     }
-    return open({ ...layout, focused: 1 - layout.focused }, content, "tab", id);
+    const group = layout.groups[target];
+    const existing = group.tabs.find((t) => sameContent(t.content, content));
+    return withGroup({ ...layout, focused: target }, target, existing ? { ...group, active: existing.id } : insertAfterActive(group, { id, content }));
   }
 
-  const index = Math.min(layout.focused, layout.groups.length - 1);
-  const group = layout.groups[index];
+  const group = layout.groups[0];
   const existing = group.tabs.find((t) => sameContent(t.content, content));
-  if (existing) return withGroup({ ...layout, focused: index }, index, { ...group, active: existing.id });
+  if (existing) return withGroup({ ...layout, focused: 0 }, 0, { ...group, active: existing.id });
 
   const current = activeTab(group);
   if (mode === "replace" && content.kind === "session" && current?.content.kind === "session") {
     const tabs = group.tabs.map((t) => (t.id === current.id ? { ...t, content } : t));
-    return withGroup({ ...layout, focused: index }, index, { ...group, tabs });
+    return withGroup({ ...layout, focused: 0 }, 0, { ...group, tabs });
   }
-  return withGroup({ ...layout, focused: index }, index, insertAfterActive(group, { id, content }));
+  return withGroup({ ...layout, focused: 0 }, 0, insertAfterActive(group, { id, content }));
 }
 
 export function activate(layout: Layout, groupIndex: number, tabId: string): Layout {

@@ -38,12 +38,12 @@ describe("opening", () => {
   });
 
   it("a session or file already open is shown, not opened twice", () => {
-    const layout = build([session("a"), "replace"], [file("x.txt"), "tab"], [session("a"), "replace"], [file("x.txt"), "tab"]);
-    expect(show(layout)).toBe("a [x.txt] @0");
+    const layout = build([session("a"), "replace"], [file("x.txt"), "right"], [session("a"), "replace"], [file("x.txt"), "right"]);
+    expect(show(layout)).toBe("[a] | [x.txt] @1");
   });
 
   it("clicking a session while a file is active opens a tab for it", () => {
-    expect(show(build([file("x.txt"), "tab"], [session("b"), "replace"]))).toBe("x.txt [b] @0");
+    expect(show(build([file("x.txt"), "right"], [session("b"), "replace"]))).toBe("x.txt [b] @0");
   });
 
   it("to the side makes a second group, then uses it", () => {
@@ -51,10 +51,36 @@ describe("opening", () => {
     expect(show(layout)).toBe("[a] | [b] @1");
     expect(show(tabs.open(tabs.focusGroup(layout, 0), session("c"), "side", id()))).toBe("[a] | b [c] @1");
   });
+});
 
-  it("clicking a session lands in the focused group", () => {
-    const layout = tabs.focusGroup(build([session("a"), "replace"], [session("b"), "side"]), 0);
-    expect(show(tabs.open(layout, session("c"), "replace", id()))).toBe("[c] | [b] @0");
+describe("sessions open on the left, files on the right", () => {
+  it("a file makes the right group, and more files join it", () => {
+    const layout = build([session("a"), "replace"], [file("x.txt"), "right"], [file("y.txt"), "right"]);
+    expect(show(layout)).toBe("[a] | x.txt [y.txt] @1");
+  });
+
+  it("a file opens on the right even while the left group has focus", () => {
+    const layout = tabs.focusGroup(build([session("a"), "replace"], [file("x.txt"), "right"]), 0);
+    expect(show(tabs.open(layout, file("y.txt"), "right", id()))).toBe("[a] | x.txt [y.txt] @1");
+  });
+
+  it("clicking a session lands in the left group, even while the right has focus", () => {
+    const layout = build([session("a"), "replace"], [file("x.txt"), "right"]);
+    expect(show(tabs.open(layout, session("c"), "replace", id()))).toBe("[c] | [x.txt] @0");
+    expect(show(tabs.open(layout, session("c"), "tab", id()))).toBe("a [c] | [x.txt] @0");
+  });
+
+  it("a tab moved to the other group is shown there when clicked again", () => {
+    const opened = build([session("a"), "replace"], [file("x.txt"), "right"], [file("y.txt"), "right"]);
+    const moved = tabs.moveToOther(opened, 1, opened.groups[1].tabs[0].id);
+    expect(show(moved)).toBe("a [x.txt] | [y.txt] @0");
+    expect(show(tabs.open(tabs.focusGroup(moved, 1), file("x.txt"), "right", id()))).toBe("a [x.txt] | [y.txt] @0");
+    const sessionMoved = tabs.moveToOther(moved, 0, moved.groups[0].tabs[0].id);
+    expect(show(tabs.open(tabs.focusGroup(sessionMoved, 0), session("a"), "replace", id()))).toBe("[x.txt] | y.txt [a] @1");
+  });
+
+  it("a file alone fills the main area", () => {
+    expect(show(build([file("x.txt"), "right"]))).toBe("[x.txt] @0");
   });
 });
 

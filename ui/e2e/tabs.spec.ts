@@ -66,11 +66,12 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
   await expect(page.locator(".main").getByRole("tab")).toHaveText(["two", "one"]);
 });
 
-test("a file from the right panel opens in a tab", async ({ page }) => {
+test("a file from the right panel opens in the right group, beside the terminal", async ({ page }) => {
   const s = await service("alpha");
   const project = join(s.root, "project");
   mkdirSync(join(project, "src"), { recursive: true });
   writeFileSync(join(project, "src", "hello.py"), "print('hello')\nprint('again')\n");
+  writeFileSync(join(project, "notes.txt"), "notes\n");
   await page.goto(s.signedInUrl);
   await startSession(page, "demo", project);
 
@@ -79,17 +80,27 @@ test("a file from the right panel opens in a tab", async ({ page }) => {
   await details.getByRole("button", { name: "src" }).click();
   await details.getByRole("button", { name: "hello.py" }).click();
 
-  const main = page.locator(".main");
-  await expect(main.getByRole("tab")).toHaveText(["demo", "hello.py"]);
-  await expect(main.getByLabel("Contents of src/hello.py")).toHaveText("print('hello')\nprint('again')\n");
-  await expect(main.getByText("2 lines")).toBeVisible();
-
-  // Moved beside the terminal, the file keeps focus: the terminal reopening on the left doesn't take it.
-  await main.getByRole("tab", { name: "hello.py" }).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Move to the right" }).click();
+  const left = page.getByRole("region", { name: "Left group" });
+  const right = page.getByRole("region", { name: "Right group" });
+  await expect(left.getByRole("tab")).toHaveText(["demo"]);
+  await expect(right.getByRole("tab")).toHaveText(["hello.py"]);
+  await expect(right).toHaveAttribute("data-focused", "true");
+  await expect(right.getByLabel("Contents of src/hello.py")).toHaveText("print('hello')\nprint('again')\n");
+  await expect(right.getByText("2 lines")).toBeVisible();
   await expect(page.getByTestId("terminal")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Right group" })).toHaveAttribute("data-focused", "true");
-  await expect(page.getByRole("region", { name: "Right group" }).getByLabel("Contents of src/hello.py")).toBeVisible();
+
+  // Clicking the session goes back to the left; another file still opens on the right.
+  await row(page, "demo").click();
+  await expect(left).toHaveAttribute("data-focused", "true");
+  await details.getByRole("button", { name: "notes.txt" }).click();
+  await expect(right.getByRole("tab")).toHaveText(["hello.py", "notes.txt"]);
+  await expect(right).toHaveAttribute("data-focused", "true");
+
+  // A file can still be moved to the left.
+  await right.getByRole("tab", { name: "hello.py" }).click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Move to the left" }).click();
+  await expect(left.getByRole("tab")).toHaveText(["demo", "hello.py"]);
+  await expect(right.getByRole("tab")).toHaveText(["notes.txt"]);
 });
 
 test("a Markdown file opens drawn, with its links and images", async ({ page }) => {
