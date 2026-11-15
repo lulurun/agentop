@@ -56,7 +56,7 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
 
   // The right panel follows the focused group.
   await page.getByRole("region", { name: "Left group" }).getByRole("tab", { name: "one" }).click();
-  await expect(page.locator(".header-title strong")).toHaveText("one");
+  await expect(page.locator(".details").getByRole("button", { name: "one", exact: true })).toBeVisible();
 
   await page.getByRole("region", { name: "Right group" }).getByRole("button", { name: "Close two" }).click();
   await expect(page.getByRole("region", { name: "Right group" })).toHaveCount(0);

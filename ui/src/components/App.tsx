@@ -1,13 +1,13 @@
 import { useEffect } from "react";
 import { PluginPanel } from "../plugins/Slot";
 import { isAppShortcut } from "../shortcuts";
-import { currentWorkspace, sessionTitle, useApp } from "../store";
+import { currentWorkspace, useApp } from "../store";
 import { pluginOf, workspacesFor } from "../workspaces";
 import { DetailsPanel } from "./DetailsPanel";
 import { HistoryDetails } from "./HistoryView";
 import { AddServiceDialog } from "./ServiceDialogs";
 import { AppOutdated, ServiceSwitcher } from "./ServiceSwitcher";
-import { MainArea, selectedSession } from "./MainArea";
+import { MainArea } from "./MainArea";
 import { NewSessionDialog } from "./NewSessionDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
@@ -74,7 +74,6 @@ export function App() {
   }, []);
 
   if (!activeId || !connections.length) return null;
-  const session = selectedSession(state);
   const plugin = pluginOf(current.id);
 
   return (
@@ -89,7 +88,6 @@ export function App() {
           <ServiceSwitcher />
           {linked && <WorkspaceNav />}
           <AppOutdated />
-          {current.id === "sessions" && session && <strong title={session.cwd}>{sessionTitle(session)}</strong>}
         </div>
         {linked && <WorkspaceAction />}
         <button type="button" className="icon" aria-label="Settings" title="Settings" onClick={() => setDialog("settings")}>

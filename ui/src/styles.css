@@ -184,14 +184,6 @@ input::placeholder { color: var(--quiet); }
   white-space: nowrap;
   color: var(--quiet);
 }
-.header-title strong {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-  font-weight: 600;
-}
 
 .sidebar {
   grid-area: left;
@@ -970,11 +962,9 @@ button.app-outdated:hover { background: var(--line); }
 .workspaces button:hover:not([aria-current]) { color: var(--text); background: var(--line); }
 .workspaces button[aria-current] { color: var(--text); background: var(--line); font-weight: 600; cursor: default; }
 .workspaces-compact { display: none; flex: none; }
-.header-title > strong { margin-left: 6px; }
 @media (max-width: 599px) {
   .workspaces { display: none; }
   .workspaces-compact { display: block; }
-  .header-title > strong { display: none; }
 }
 
 /* Sessions stays mounted under the other workspaces, at full size so its terminals don't resize. */
