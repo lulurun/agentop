@@ -323,7 +323,7 @@ The terminal socket is remote code execution as the user, with agents running in
 ### 7.1 Rules
 
 1. **Bind to loopback by default.** Exposing a service is an explicit choice: `agentop serve --host`, or `host` in `~/.agentop/config.toml`.
-2. **Require a client's bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only `{"status": "ok"}`, and `POST /api/v2/auth/clients` (below). The service's name and version are behind the token, in `/service`, so a stranger learns only that something answers.
+2. **Require a client's bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only `{"status": "ok"}`, `POST /api/v2/auth/clients` (below), `GET /api/v2/auth/methods`, and a login plugin's public routes (7.4). The service's name and version are behind the token, in `/service`, so a stranger learns only that something answers.
    - The **service token**, random and 256-bit, lives in `~/.agentop/service.json`, mode `0600`. It does one thing: `POST /api/v2/auth/clients` signs in a new client with it. Every other route refuses it. Wrong service tokens are slowed down: after 10 in a minute, from anyone, adding a client answers 429 for the rest of that minute. Clients already signed in are not affected.
    - Each **client** (a browser, the desktop app, one CLI command) gets its own random token, which expires after `client_ttl` (default `12h`) unless renewed, and never outlives `client_max_age` (default `30d`) from sign-in. Only a SHA-256 hash of it is kept, in `~/.agentop/state/clients.json`, mode `0600`.
    - `POST /api/v2/auth/renew` returns a new token good for another `client_ttl`. The old one keeps working until the new one is first used, then 60 seconds more, for requests already on their way. Until then it works as long as the new one would: a phone that loses the reply carrying the new token goes on with the old one, and renews with it again (2026-11-16).
@@ -370,8 +370,17 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
-- A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health` and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
+- A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health`, `/api/v2/auth/methods`, a login plugin's public routes (7.4) and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
 - The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [v2-plan.md 9.1](v2-plan.md#91-security)).
+
+### 7.4 Ways to sign in (2026-11-16)
+
+The service token is one way to sign in, and always there: it is the recovery path, and what `agentop open`, the CLI and the desktop app use. Other ways are plugins, which can be turned on and off like any plugin (12.4).
+
+- **Every way ends the same.** A login plugin only decides who may sign in. It then calls `api.sign_in(name)`, which adds an ordinary client, exactly as `POST /auth/clients` does with the service token, and returns its `ClientToken`. Renewal, expiry, revocation and the client list are the core's, and a plugin can't issue any other kind of credential.
+- **`GET /api/v2/auth/methods`**, with no token, lists the ways to sign in: `[{id: "token", name: "Service token"}, …]`, then each enabled plugin whose manifest names the `login` UI slot, as `{id, name}`. It says nothing else about the service. An older service answers 404, which the app reads as the service token only.
+- **Public routes.** A login plugin adds routes with no client token on `api.public_router`; they are mounted at `/api/v2/plugins/{id}/…` like its other routes, and are 404 unless it is enabled. Only a plugin with the `login` slot may add them: any other plugin that does fails to load. Public routes face anyone who can reach the service, so the plugin limits its own attempts.
+- **The sign-in screen** ("Enter the token for …", "Signed out of …") asks the service for its methods and shows, above the token form, the `login` component of each one the app has a module for. The component gets a client for the plugin's public routes, the name to sign in as, and `signIn(token)`, which saves the token and connects.
 
 ## 8 Service lifecycle
 
@@ -789,12 +798,13 @@ Flags live in `~/.agentop/state/plugins.json`: `{"attention": {"enabled": false}
 
 ### 12.5 API
 
-All require the token.
+All require the token, except a login plugin's public routes (7.4).
 
 ```
 GET   /api/v2/plugins          → [{id, name, version, description, state, error, ui}]
 PATCH /api/v2/plugins/{id}     {enabled: bool} → the updated entry
 *     /api/v2/plugins/{id}/…   the plugin's own routes, 404 unless enabled
+GET   /api/v2/auth/methods     no token: the service token, then each enabled login plugin
 ```
 
 `GET /api/v2/service` gains a `plugins` count, and every change to the list is pushed on the events socket as `{"type": "plugins"}`, so open clients update without polling. `/api/v2/health` stays plugin-free, so a connection's checks (4.5) never depend on a plugin.
@@ -805,10 +815,10 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 - After connecting, the app reads `GET /api/v2/plugins`. Plugins differ by service, so the list is kept per connection.
 - A plugin's UI shows only when **both** the service lists it as `enabled` **and** the app has a matching module in `ui/src/plugins/`. If either side is missing (an older app, an older service, a removed or failed plugin), the feature is hidden.
-- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a workspace in the header with its own tabs and panels (`workspace`, 10.7; it replaced `left-view`, a view in the left column's footer), a badge on a session row (`session-badge`), a section in Settings (`settings-section`), and the contents of a file tab in the main area (`file-viewer`). While a `file-viewer` plugin is enabled, files in the right panel open in a tab in the main area's right group when clicked; without one, clicking copies the path. A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
+- Plugin UI goes into fixed **slots**: a row in the right panel (`right-panel`), a workspace in the header with its own tabs and panels (`workspace`, 10.7; it replaced `left-view`, a view in the left column's footer), a badge on a session row (`session-badge`), a section in Settings (`settings-section`), the contents of a file tab in the main area (`file-viewer`), and a way to sign in on the sign-in screen (`login`, 7.4). While a `file-viewer` plugin is enabled, files in the right panel open in a tab in the main area's right group when clicked; without one, clicking copies the path. A manifest naming any other slot is invalid. Core layout code renders each slot from the plugin list and never names a plugin.
 - Each slot is wrapped in an error boundary. A plugin component that throws hides itself; the rest of the page keeps rendering.
 - Plugin UI calls its own routes only through a client scoped to `/api/v2/plugins/{id}/`.
-- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `workspace` (a label, its tab kinds, and an optional placard for when no tab is open, left and right panels and action), `rightPanel`, `settingsSection`, and `fileViewer` (a component given the file: session, source `workdir` or `transcript`, and path). Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
+- A plugin's UI is `ui/src/plugins/{id}/index.tsx`, exporting `plugin`: an object with any of `sessionBadge`, `workspace` (a label, its tab kinds, and an optional placard for when no tab is open, left and right panels and action), `rightPanel`, `settingsSection`, `fileViewer` (a component given the file: session, source `workdir` or `transcript`, and path), and `login` (a component given a `LoginContext`, 7.4). Each component gets a context with the plugin's info, its scoped client, and `onEvent` for its `api.emit` messages. The app finds these modules at build time (`ui/src/plugins/registry.ts`).
 - The app fetches the plugin list each time its events socket opens, and again on every `plugins` event. Events of a type the app doesn't know are ignored, so an older app keeps working against a newer service.
 
 **Status → Plugins** (Settings → Plugins before 10.7) lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".

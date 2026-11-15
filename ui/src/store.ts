@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ApiError, ServiceClient, type HistoryItem, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
+import { ApiError, ServiceClient, type ClientToken, type HistoryItem, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
 import {
   checkConnection,
   credentialsFrom,
@@ -71,6 +71,8 @@ interface AppState {
   retry(): void;
   /** Sign in with the service token. */
   setToken(token: string): void;
+  /** Take a client token another way of signing in got (a login plugin), and connect with it. */
+  signIn(token: ClientToken): void;
   /** Sign this app out of the active service, and revoke its client there. */
   signOut(): Promise<void>;
   setWorkspace(workspace: WorkspaceId): void;
@@ -592,6 +594,11 @@ export const useApp = create<AppState>((set, get) => {
 
     setToken(token) {
       get().updateConnection(get().activeId, { ...SIGNED_OUT, serviceToken: token });
+      void connect(activeConnection(get()));
+    },
+
+    signIn(token) {
+      get().updateConnection(get().activeId, credentialsFrom(token));
       void connect(activeConnection(get()));
     },
 

@@ -19,6 +19,7 @@ export type PatchSession = components["schemas"]["PatchSession"];
 export type PluginInfo = components["schemas"]["PluginInfo"];
 export type ClientToken = components["schemas"]["ClientToken"];
 export type ClientInfo = components["schemas"]["ClientInfo"];
+export type LoginMethod = components["schemas"]["LoginMethod"];
 
 export class ApiError extends Error {
   constructor(
@@ -39,6 +40,23 @@ export function fetchHealth(baseUrl: string): Promise<Health> {
 /** Sign a new client in with the service token. The service token is good for nothing else. */
 export function addClient(baseUrl: string, serviceToken: string, name: string): Promise<ClientToken> {
   return new ServiceClient(baseUrl, serviceToken).request<ClientToken>("POST", "/auth/clients", { name });
+}
+
+const TOKEN_ONLY: LoginMethod[] = [{ id: "token", name: "Service token" }];
+
+/** The ways to sign in to a service. No token needed. A service from before 2026-11-16 has only the service token. */
+export async function fetchLoginMethods(baseUrl: string): Promise<LoginMethod[]> {
+  try {
+    return await new ServiceClient(baseUrl, "").get<LoginMethod[]>("/auth/methods");
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return TOKEN_ONLY;
+    throw error;
+  }
+}
+
+/** A login plugin's public routes, `/api/v2/plugins/{id}/…`, called without a token. */
+export function publicPluginClient(baseUrl: string, id: string): PluginClient {
+  return new ServiceClient(baseUrl, "").plugin(id);
 }
 
 /** One service, addressed by base URL. Nothing here is global, so services stay separate. */

@@ -196,6 +196,57 @@ def test_a_plugin_can_import_its_own_modules(env):
         assert client.get("/api/v2/plugins/multi/answer", headers=AUTH).json() == 42
 
 
+# ---------------------------------------------------------------------- login methods
+
+LOGIN = """
+def register(api):
+    @api.public_router.post("/sign-in")
+    def sign_in(body: dict):
+        if body.get("secret") != "open sesame":
+            from fastapi import HTTPException
+            raise HTTPException(401, "No")
+        return api.sign_in("Phone")
+"""
+
+
+def test_the_service_token_is_always_a_login_method(env):
+    with env.client() as client:
+        assert client.get("/api/v2/auth/methods").json() == [{"id": "token", "name": "Service token"}]
+
+
+def test_a_login_plugin_signs_in_an_ordinary_client_without_a_token(env):
+    write_plugin(env.root, "secret", LOGIN, ui=["login"])
+    with env.client() as client:
+        methods = client.get("/api/v2/auth/methods").json()
+        assert methods == [{"id": "token", "name": "Service token"}, {"id": "secret", "name": "Secret"}]
+        assert client.post("/api/v2/plugins/secret/sign-in", json={"secret": "wrong"}).status_code == 401
+        body = client.post("/api/v2/plugins/secret/sign-in", json={"secret": "open sesame"}).json()
+        assert set(body) == {"client_id", "token", "expires_in", "ttl"}
+        mine = {"Authorization": f"Bearer {body['token']}"}
+        assert client.get("/api/v2/sessions", headers=mine).status_code == 200
+        listed = client.get("/api/v2/auth/clients", headers=mine).json()
+        assert [c["name"] for c in listed if c["current"]] == ["Phone"]
+        # Renewed and revoked like any client.
+        assert client.post("/api/v2/auth/renew", headers=mine).status_code == 200
+
+
+def test_a_disabled_login_plugin_is_no_way_in(env):
+    write_plugin(env.root, "secret", LOGIN, ui=["login"])
+    with env.client() as client:
+        client.patch("/api/v2/plugins/secret", json={"enabled": False}, headers=AUTH)
+        assert [m["id"] for m in client.get("/api/v2/auth/methods").json()] == ["token"]
+        assert client.post("/api/v2/plugins/secret/sign-in", json={"secret": "open sesame"}).status_code == 404
+
+
+def test_only_a_login_plugin_may_have_public_routes(env):
+    write_plugin(env.root, "sneaky", LOGIN, ui=["session-badge"])
+    with env.client() as client:
+        info = by_id(client)["sneaky"]
+        assert info["state"] == "failed" and "login" in info["error"]
+        assert client.post("/api/v2/plugins/sneaky/sign-in", json={"secret": "open sesame"}).status_code == 404
+        assert [m["id"] for m in client.get("/api/v2/auth/methods").json()] == ["token"]
+
+
 # ---------------------------------------------------------------------- enable and disable
 
 

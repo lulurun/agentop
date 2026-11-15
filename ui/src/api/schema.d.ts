@@ -97,6 +97,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/methods": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Login Methods
+         * @description The ways to sign in, for the sign-in screen. No token needed. The service token is always one.
+         */
+        get: operations["login_methods_auth_methods_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/renew": {
         parameters: {
             query?: never;
@@ -633,6 +653,13 @@ export interface components {
              */
             truncated: boolean;
         };
+        /** LoginMethod */
+        LoginMethod: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** PatchPlugin */
         PatchPlugin: {
             /** Enabled */
@@ -1109,6 +1136,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_methods_auth_methods_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginMethod"][];
                 };
             };
         };

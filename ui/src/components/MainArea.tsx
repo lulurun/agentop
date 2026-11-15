@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput } from "../connections";
 import { platform } from "../platform";
+import { LoginMethods, useLoginMethods } from "../plugins/Login";
 import { PluginPanel } from "../plugins/Slot";
 import { activeClient, activeConnection, currentWorkspace, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
@@ -45,6 +46,7 @@ function ConnectionProblem() {
   const setSwitcherOpen = useApp((s) => s.setSwitcherOpen);
   const removeConnection = useApp((s) => s.removeConnection);
   const [token, setTokenText] = useState("");
+  const methods = useLoginMethods(connection.url);
 
   if (link.state === "connecting") {
     return (
@@ -72,6 +74,12 @@ function ConnectionProblem() {
         {title}
       </h2>
       <p>{detail}</p>
+      {needsToken && methods.length > 0 && (
+        <>
+          <LoginMethods url={connection.url} methods={methods} />
+          <p className="login-or">Or paste the service token:</p>
+        </>
+      )}
       {needsToken && (
         <form
           className="token-form"

@@ -36,6 +36,7 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException
 from agentop import paths
 from agentop.plugin_manifest import (  # noqa: F401 - DEFAULT_ROOT and the rest are imported from here too
     DEFAULT_ROOT,
+    LOGIN_SLOT,
     MODULE_PREFIX,
     PLUGIN_API,
     SUPPORTED_PLUGIN_APIS,
@@ -92,6 +93,9 @@ class PluginAPI:
         self._host = host
         self.id = plugin.id
         self.router = APIRouter()
+        # Routes that need no client token, for signing in. Only a plugin whose
+        # manifest names the `login` slot may add them (see sign_in).
+        self.public_router = APIRouter()
         self.log = logging.getLogger(f"{MODULE_PREFIX}.{plugin.id}")
         # The plugin's own folder, for files of its own. Made when first written to.
         self.data_dir = host.data_dir / plugin.id
@@ -132,6 +136,19 @@ class PluginAPI:
     def sessions(self) -> list[dict]:
         """A snapshot of the session list. Changing it changes nothing."""
         return self._host.store.list()
+
+    def sign_in(self, name: str) -> dict:
+        """Sign a new client in, as the service token does, and return its token.
+
+        For a login plugin's public routes, once the plugin has decided the
+        caller may sign in. The client is an ordinary one: it expires, is
+        renewed, and is revoked like any other. Returns the `ClientToken` body.
+        """
+        if self._plugin.state != ENABLED:
+            raise RuntimeError("The plugin is not enabled")
+        if self._host.sign_in is None:
+            raise RuntimeError("This service can't sign clients in")
+        return self._host.sign_in(name)
 
     def emit(self, data: Any) -> None:
         """Send `{"type": "plugin", "id": ..., "data": ...}` to clients, for the plugin's UI."""
@@ -182,15 +199,18 @@ class PluginHost:
         self.plugins: dict[str, Plugin] = {}
         self._app: FastAPI | None = None
         self._auth: list = []
+        # Signs a client in and returns its ClientToken body. Set by attach().
+        self.sign_in: Callable[[str], dict] | None = None
         self._running: set[asyncio.Task] = set()
         self._started = False
 
     # ------------------------------------------------------------------ lifecycle
 
-    def attach(self, app: FastAPI, auth_dependencies: list) -> None:
-        """Where plugin routes are mounted, and the auth they inherit."""
+    def attach(self, app: FastAPI, auth_dependencies: list, sign_in: Callable[[str], dict] | None = None) -> None:
+        """Where plugin routes are mounted, the auth they inherit, and how a login plugin signs a client in."""
         self._app = app
         self._auth = auth_dependencies
+        self.sign_in = sign_in
 
     async def startup(self) -> None:
         self.plugins = {}
@@ -240,6 +260,14 @@ class PluginHost:
         plugin = self.plugins.get(plugin_id)
         return plugin is not None and plugin.state == ENABLED
 
+    def login_methods(self) -> list[dict]:
+        """The enabled plugins that are a way to sign in, for the sign-in screen."""
+        return [
+            {"id": p.id, "name": p.manifest.name}
+            for p in sorted(self.plugins.values(), key=lambda p: p.id)
+            if p.state == ENABLED and p.manifest is not None and LOGIN_SLOT in p.manifest.ui
+        ]
+
     # ------------------------------------------------------------------ enable and disable
 
     async def set_enabled(self, plugin_id: str, enabled: bool) -> dict:
@@ -284,6 +312,8 @@ class PluginHost:
         api = PluginAPI(plugin, self)
         try:
             await asyncio.wait_for(asyncio.to_thread(self._import_and_register, plugin, api), REGISTER_TIMEOUT_SECONDS)
+            if api.public_router.routes and LOGIN_SLOT not in plugin.manifest.ui:
+                raise PermissionError(f"Only a plugin with the '{LOGIN_SLOT}' UI slot may add public routes")
         except TimeoutError:
             self._fail(plugin, f"register() took longer than {REGISTER_TIMEOUT_SECONDS:g}s", publish=False)
             return
@@ -301,6 +331,14 @@ class PluginHost:
                 dependencies=[*self._auth, Depends(gate)],
                 include_in_schema=False,
             )
+            if api.public_router.routes:
+                # No client token: the caller is signing in. Still 404 unless enabled.
+                self._app.include_router(
+                    api.public_router,
+                    prefix=f"/plugins/{plugin.id}",
+                    dependencies=[Depends(gate)],
+                    include_in_schema=False,
+                )
 
     def _import_and_register(self, plugin: Plugin, api: PluginAPI) -> None:
         name = f"{MODULE_PREFIX}.{plugin.id}"

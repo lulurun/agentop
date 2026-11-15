@@ -43,7 +43,8 @@ function Piece({ info, ui, slot, session }: { info: PluginInfo; ui: UiPlugin; sl
       return ui.settingsSection ? <ui.settingsSection plugin={plugin} /> : null;
     case "workspace":
     case "file-viewer":
-      return null; // drawn by the workspace and the tabs it shows (PluginTab, FileTab)
+    case "login":
+      return null; // drawn by the workspace and the tabs it shows (PluginTab, FileTab), or the sign-in screen (LoginMethods)
   }
 }
 

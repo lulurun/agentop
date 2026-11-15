@@ -1,9 +1,9 @@
 import type { ComponentType } from "react";
-import type { PluginInfo, Session } from "../api/client";
+import type { ClientToken, PluginInfo, Session } from "../api/client";
 import type { FileRef } from "../tabs";
 
 /** The UI slots a plugin can fill. They match `ui` in a plugin's plugin.toml. */
-export type Slot = "session-badge" | "workspace" | "right-panel" | "settings-section" | "file-viewer";
+export type Slot = "session-badge" | "workspace" | "right-panel" | "settings-section" | "file-viewer" | "login";
 
 /** Requests to the plugin's own routes, `/api/v2/plugins/{id}/…`. It can reach nothing else. */
 export interface PluginClient {
@@ -20,6 +20,21 @@ export interface PluginContext {
   client: PluginClient;
   /** Listen for the plugin's `api.emit(data)`. Returns a function that stops listening. */
   onEvent(listener: (data: unknown) => void): () => void;
+}
+
+/**
+ * What a login plugin's component is given, on the sign-in screen. There is no
+ * token yet, so its client reaches only the plugin's public routes.
+ */
+export interface LoginContext {
+  id: string;
+  /** The plugin's name, as the service lists it. */
+  name: string;
+  /** The service's name for this app, to sign in as. */
+  clientName: string;
+  client: PluginClient;
+  /** Hand over the token the plugin's route returned (`api.sign_in`). The app saves it and connects. */
+  signIn(token: ClientToken): void;
 }
 
 /** A view a plugin's tab shows. `viewKey` tells apart tabs of the same view, such as one per dialogue. */
@@ -61,6 +76,11 @@ export interface UiPlugin {
    */
   fileViewer?: ComponentType<{ file: FileRef; plugin: PluginContext }>;
   /**
+   * A way to sign in, on the sign-in screen beside the service token. It shows
+   * while the service lists the plugin in `GET /auth/methods`.
+   */
+  login?: ComponentType<{ login: LoginContext }>;
+  /**
    * Asked before Settings turns the plugin off. A message warns the user, who
    * then confirms; null turns it off at once. A failure counts as null.
    */
@@ -73,4 +93,5 @@ export const SLOT_KEYS: Record<Slot, keyof UiPlugin> = {
   "right-panel": "rightPanel",
   "settings-section": "settingsSection",
   "file-viewer": "fileViewer",
+  login: "login",
 };

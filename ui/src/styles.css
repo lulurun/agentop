@@ -465,6 +465,8 @@ button.app-outdated:hover { background: var(--line); }
 .placard-title { display: flex; align-items: center; gap: 10px; }
 .placard-actions { display: flex; gap: 8px; margin-top: 14px; }
 .token-form { display: flex; gap: 8px; }
+.login-method { margin: 0 0 14px; }
+.placard .login-or { margin: 14px 0 8px; padding-top: 14px; border-top: 1px solid var(--line); }
 
 .steps { margin: 16px 0 0; padding: 0; list-style: none; }
 .steps li {

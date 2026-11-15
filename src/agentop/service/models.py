@@ -229,6 +229,12 @@ class AddClient(BaseModel):
     ttl_seconds: int | None = Field(default=None, ge=1)
 
 
+class LoginMethod(BaseModel):
+    # "token" for the service token, else the id of the plugin that offers it.
+    id: str
+    name: str
+
+
 class ClientToken(BaseModel):
     client_id: str
     token: str

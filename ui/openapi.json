@@ -517,6 +517,24 @@
         "title": "HistoryStats",
         "type": "object"
       },
+      "LoginMethod": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "LoginMethod",
+        "type": "object"
+      },
       "PatchPlugin": {
         "properties": {
           "enabled": {
@@ -1640,6 +1658,29 @@
           }
         },
         "summary": "Revoke Client"
+      }
+    },
+    "/auth/methods": {
+      "get": {
+        "description": "The ways to sign in, for the sign-in screen. No token needed. The service token is always one.",
+        "operationId": "login_methods_auth_methods_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/LoginMethod"
+                  },
+                  "title": "Response Login Methods Auth Methods Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Login Methods"
       }
     },
     "/auth/renew": {

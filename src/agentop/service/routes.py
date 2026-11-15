@@ -48,6 +48,7 @@ from .models import (
     Health,
     HistoryListing,
     HistoryStats,
+    LoginMethod,
     PatchPlugin,
     PatchSession,
     PluginInfo,
@@ -184,6 +185,17 @@ def create_v2_app(ctx: Context) -> FastAPI:
         client, token = ctx.clients.add(body.name, ttl, ctx.settings.client_max_age_seconds)
         return token_body(client, token)
 
+    def sign_in(name: str) -> dict:
+        """How a login plugin signs a client in: the same as with the service token."""
+        client, token = ctx.clients.add(name[:80] or "Client", ctx.settings.client_ttl_seconds, ctx.settings.client_max_age_seconds)
+        return token_body(client, token)
+
+    @v2.get("/auth/methods", response_model=list[LoginMethod])
+    async def login_methods():
+        """The ways to sign in, for the sign-in screen. No token needed. The service token is always one."""
+        plugins = ctx.plugins.login_methods() if ctx.plugins else []
+        return [{"id": "token", "name": "Service token"}, *plugins]
+
     @v2.post("/auth/renew", response_model=ClientToken)
     async def renew(me: auth.Client = Depends(require_client), authorization: str | None = Header(default=None)):
         client, token = ctx.clients.renew(me.id, ctx.settings.client_ttl_seconds, auth.bearer_value(authorization))
@@ -200,7 +212,7 @@ def create_v2_app(ctx: Context) -> FastAPI:
             raise HTTPException(404, "No such client")
     if ctx.plugins is not None:
         # Plugin routes go under /plugins/{id}/, behind the same token.
-        ctx.plugins.attach(v2, authed)
+        ctx.plugins.attach(v2, authed, sign_in)
 
     # No token needed, so it answers whether the service is up and nothing else.
     @v2.get("/health", response_model=Health)
