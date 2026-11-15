@@ -329,10 +329,10 @@ export const useApp = create<AppState>((set, get) => {
   let attempt = 0;
   let socket: WebSocket | null = null;
 
-  async function loadPlugins(mine: number, client: ServiceClient) {
+  async function loadPlugins(mine: number) {
     let plugins: PluginInfo[];
     try {
-      plugins = await client.plugins();
+      plugins = await activeClient(get()).plugins();
     } catch {
       // An older service has no plugins. Any other failure shows up elsewhere.
       plugins = [];
@@ -392,27 +392,21 @@ export const useApp = create<AppState>((set, get) => {
     socket = null;
   }
 
-  async function openEvents(
-    mine: number,
-    connection: Connection,
-    service: ServiceInfo,
-    delay = RETRY_MS.first,
-    socketFailures = 0,
-  ) {
-    const client = new ServiceClient(connection.url, connection.token);
+  async function openEvents(mine: number, service: ServiceInfo, delay = RETRY_MS.first, socketFailures = 0) {
     const retry = (failures: number) => {
       if (mine !== attempt) return;
       set({ link: { state: "reconnecting", service, socketBlocked: failures >= BLOCKED_AFTER } });
       setTimeout(() => {
-        if (mine === attempt) void openEvents(mine, connection, service, Math.min(delay * 2, RETRY_MS.max), failures);
+        if (mine === attempt) void openEvents(mine, service, Math.min(delay * 2, RETRY_MS.max), failures);
       }, delay);
     };
 
     let url: string;
     try {
-      url = await client.eventsUrl();
+      // The token as it is now: it may have been renewed since this connection was opened.
+      url = await activeClient(get()).eventsUrl();
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) void connect(connection);
+      if (error instanceof ApiError && error.status === 401) void connect(activeConnection(get()));
       else retry(0); // the service itself is away, which says nothing about its socket
       return;
     }
@@ -426,13 +420,13 @@ export const useApp = create<AppState>((set, get) => {
         socketFailures = 0;
         set({ link: { state: "connected", service } });
         // On every open, so a reconnect also catches changes made while away.
-        void loadPlugins(mine, client);
+        void loadPlugins(mine);
       }
     };
     ws.onmessage = (message) => {
       if (mine !== attempt) return;
       const event = JSON.parse(message.data) as Event;
-      if (event.type === "plugins") void loadPlugins(mine, client);
+      if (event.type === "plugins") void loadPlugins(mine);
       else if (event.type === "plugin") dispatchPluginEvent(event.id, event.data);
       else {
         set({ sessions: applyEvent(get().sessions, event) });
@@ -465,10 +459,14 @@ export const useApp = create<AppState>((set, get) => {
     saveLayouts(layouts, selected);
   }
 
-  async function connect(connection: Connection) {
+  async function connect(target: Connection) {
     closeLink();
     const mine = attempt;
     set({ link: { state: "connecting" }, sessions: {}, plugins: [], pluginsLoaded: false, history: NO_HISTORY });
+    // Another tab may have renewed the token while this one was asleep: don't call it signed out.
+    await syncCredentials();
+    if (mine !== attempt) return;
+    const connection = get().connections.find((c) => c.id === target.id) ?? target;
     const result = await checkConnection(connection);
     if (mine !== attempt) return;
     if (result.update) get().updateConnection(connection.id, result.update);
@@ -478,7 +476,7 @@ export const useApp = create<AppState>((set, get) => {
     }
     const { name } = result.service;
     if (connection.isHome && connection.label !== name) get().updateConnection(connection.id, { label: name });
-    void openEvents(mine, activeConnection(get()), result.service);
+    void openEvents(mine, result.service);
     // For the limit on active sessions, even with the left panel shut.
     void get().loadHistory();
   }

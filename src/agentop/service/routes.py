@@ -185,8 +185,8 @@ def create_v2_app(ctx: Context) -> FastAPI:
         return token_body(client, token)
 
     @v2.post("/auth/renew", response_model=ClientToken)
-    async def renew(me: auth.Client = Depends(require_client)):
-        client, token = ctx.clients.renew(me.id, ctx.settings.client_ttl_seconds)
+    async def renew(me: auth.Client = Depends(require_client), authorization: str | None = Header(default=None)):
+        client, token = ctx.clients.renew(me.id, ctx.settings.client_ttl_seconds, auth.bearer_value(authorization))
         return token_body(client, token)
 
     @v2.get("/auth/clients", response_model=list[ClientInfo])

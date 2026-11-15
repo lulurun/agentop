@@ -29,7 +29,9 @@ from agentop.paths import state_dir
 
 TICKET_TTL_SECONDS = 30.0
 EVENTS_SCOPE = "events"
-# A replaced token keeps working this long, so requests already on their way don't fail.
+# A replaced token keeps working until its replacement is first used, then this
+# long more, so requests already on their way don't fail. Until then it works as
+# long as the new one would: a phone may lose the reply that carried the new token.
 RENEW_GRACE_SECONDS = 60.0
 # Failed tries with the service token, across all callers: behind a proxy they all look alike.
 ADD_FAILURES_ALLOWED = 10
@@ -72,6 +74,8 @@ class Client:
     token_hash: str
     previous_hash: str | None = None
     previous_until: float = 0.0
+    # False from a renewal until the new token is first used.
+    confirmed: bool = True
 
 
 class ClientStore:
@@ -170,13 +174,27 @@ class ClientStore:
             current = hmac.compare_digest(client.token_hash, digest)
             previous = client.previous_hash is not None and hmac.compare_digest(client.previous_hash, digest)
             if (current or (previous and now < client.previous_until)) and self._live(client, now):
+                if current and not client.confirmed:
+                    # The new token arrived: the old one has only the short grace left.
+                    until = min(client.previous_until, now + RENEW_GRACE_SECONDS)
+                    client = replace(client, last_seen=now, confirmed=True, previous_until=until)
+                    self._clients[client.id] = client
+                    self._save()
+                    return client
                 client = replace(client, last_seen=now)
                 self._clients[client.id] = client  # last_seen is written with the next change
                 return client
         return None
 
-    def renew(self, client_id: str, ttl: float) -> tuple[Client, str]:
-        """A new token, good for another `ttl`. The old one stops working after a short grace."""
+    def renew(self, client_id: str, ttl: float, used: str | None = None) -> tuple[Client, str]:
+        """A new token, good for another `ttl`.
+
+        The token it replaces keeps working until the new one is first used, then
+        for a short grace. Which token that is: the current one, unless it was never
+        used, as when the reply that carried it was lost. Then it is `used`, the
+        token this renewal was asked with, so a client that never got the last new
+        token can go on with the one it has.
+        """
         self._reload()
         client = self._clients[client_id]
         now = self._clock()
@@ -187,8 +205,9 @@ class ClientStore:
         client = replace(
             client,
             token_hash=_hash(token),
-            previous_hash=client.token_hash,
-            previous_until=now + RENEW_GRACE_SECONDS,
+            previous_hash=_hash(used) if used and not client.confirmed else client.token_hash,
+            previous_until=expires,
+            confirmed=False,
             expires_at=expires,
             last_seen=now,
         )

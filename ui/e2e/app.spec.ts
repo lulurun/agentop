@@ -88,6 +88,36 @@ test("an old token is renewed when the app comes back on screen", async ({ page 
   expect(after.clientId).toBe(before.clientId);
 });
 
+test("a service restart long after a renewal keeps the app signed in", async ({ page }) => {
+  test.setTimeout(120_000);
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await startSession(page, s, "demo");
+  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
+  const [before] = await savedConnections(page);
+  // Age the token, let the app take that in as if another tab wrote it, and bring it back on screen.
+  await page.evaluate(() => {
+    const saved = JSON.parse(localStorage.getItem("agentop.connections")!);
+    saved[0].issuedAt -= 2 * 3600_000;
+    localStorage.setItem("agentop.connections", JSON.stringify(saved));
+    window.dispatchEvent(new StorageEvent("storage", { key: "agentop.connections" }));
+  });
+  await expect.poll(async () => (await savedConnections(page))[0].issuedAt).toBeLessThan(before.issuedAt);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect.poll(async () => (await savedConnections(page))[0].token).not.toBe(before.token);
+  const [after] = await savedConnections(page);
+  // The new token is used, and then the old one's grace runs out.
+  const headers = { Authorization: `Bearer ${after.token}` };
+  expect((await page.request.get(`${s.url}/api/v2/sessions`, { headers })).status()).toBe(200);
+  await page.waitForTimeout(62_000);
+  await s.stop();
+  await expect(page.getByText("Reconnecting…")).toBeVisible();
+  await s.start();
+  await expect(page.getByText("Reconnecting…")).toBeHidden({ timeout: 20_000 });
+  await expect(row(page, "demo")).toBeVisible();
+  expect((await savedConnections(page))[0].token).toBe(after.token);
+});
+
 test("an expired sign-in asks for the service token again", async ({ page }) => {
   const s = await service("alpha");
   await page.goto(s.signedInUrl);

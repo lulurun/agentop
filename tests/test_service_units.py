@@ -137,14 +137,45 @@ def test_a_client_token_expires_unless_renewed(tmp_path):
     assert store.list() == []
 
 
-def test_a_replaced_token_works_for_a_short_grace_only(tmp_path):
+def test_a_replaced_token_works_for_a_short_grace_once_the_new_one_is_used(tmp_path):
     clock = Clock()
     store = auth.ClientStore(tmp_path / "clients.json", clock=clock)
     client, old = store.add("phone", ttl=3600, max_age=None)
-    store.renew(client.id, ttl=3600)
+    _, new = store.renew(client.id, ttl=3600, used=old)
+    clock.now += auth.RENEW_GRACE_SECONDS * 10
+    assert store.authenticate(old) is not None  # the new one hasn't been seen yet
+    assert store.authenticate(new) is not None
+    clock.now += auth.RENEW_GRACE_SECONDS - 1
     assert store.authenticate(old) is not None
-    clock.now += auth.RENEW_GRACE_SECONDS + 1
+    clock.now += 2
     assert store.authenticate(old) is None
+    # Also after a restart: the first use of the new token is saved.
+    assert auth.ClientStore(tmp_path / "clients.json", clock=clock).authenticate(old) is None
+
+
+def test_a_client_that_lost_the_renewal_reply_goes_on_with_its_old_token(tmp_path):
+    clock = Clock()
+    store = auth.ClientStore(tmp_path / "clients.json", clock=clock)
+    client, old = store.add("phone", ttl=3600, max_age=None)
+    store.renew(client.id, ttl=3600, used=old)  # the reply never arrives
+    clock.now += 3000
+    assert store.authenticate(old) is not None
+    _, new = store.renew(client.id, ttl=3600, used=old)
+    assert store.authenticate(new) is not None
+
+
+def test_a_late_renewal_with_a_replaced_token_keeps_the_token_in_use(tmp_path):
+    clock = Clock()
+    store = auth.ClientStore(tmp_path / "clients.json", clock=clock)
+    client, first = store.add("phone", ttl=3600, max_age=None)
+    _, second = store.renew(client.id, ttl=3600, used=first)
+    assert store.authenticate(second) is not None
+    # Another tab still holds the first token, within its grace, and renews with it.
+    _, third = store.renew(client.id, ttl=3600, used=first)
+    assert store.authenticate(second) is not None
+    assert store.authenticate(third) is not None
+    clock.now += auth.RENEW_GRACE_SECONDS + 1
+    assert store.authenticate(first) is None and store.authenticate(second) is None
 
 
 def test_renewal_never_goes_past_the_maximum_age(tmp_path):
