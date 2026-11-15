@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="160 180 704 664" width="256" height="242" role="img" aria-label="Agentop">
+  <defs>
+    <mask id="bar-cutout-transparent">
+      <rect x="0" y="0" width="1024" height="1024" fill="white" />
+      <rect x="175" y="485" width="674" height="182" rx="18" fill="black" />
+    </mask>
+  </defs>
+
+  <path d="M 464 196 H 560 L 845 828 H 721 L 512 346 L 303 828 H 179 Z" fill="#1EDBE5" mask="url(#bar-cutout-transparent)" />
+
+  <text x="512" y="618" text-anchor="middle" font-family="Inter, &#39;Noto Sans&#39;, -apple-system, BlinkMacSystemFont, &#39;Segoe UI&#39;, Roboto, Helvetica, Arial, sans-serif" font-weight="800" font-size="168" letter-spacing="-2">
+    <tspan fill="#1EDBE5">gent</tspan><tspan fill="#50E73A">op</tspan>
+  </text>
+</svg>
