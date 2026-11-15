@@ -227,3 +227,21 @@ def test_antigravity_finds_the_conversation_in_the_log_of_its_run(tmp_path, monk
     agent = antigravity.AntigravityAgentCli()
     assert agent.session_id_after(1, started) == conversation
     assert agent.session_id_after(1, started + 3600) is None
+
+
+def test_a_running_session_records_its_directory_and_process_for_later():
+    import os
+
+    import psutil
+
+    rows = {"old-1": {"managed": True, "tool": "antigravity", "cwd": "/w", "pid": os.getpid()}}
+    records = {"old-1": {"managed": True}}
+    fields = agent_fields(rows, records)["old-1"]
+    assert fields == {
+        "tool": "antigravity",
+        "cwd": "/w",
+        "agent_pid": os.getpid(),
+        "agent_started": psutil.Process(os.getpid()).create_time(),
+    }
+    records["old-1"].update(fields)
+    assert agent_fields(rows, records) == {}

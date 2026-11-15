@@ -15,6 +15,8 @@ import os
 import re
 import time
 
+import psutil
+
 from agentop import ops, registry
 from agentop.tmux import Session
 
@@ -133,18 +135,38 @@ def counts_as_active(row: dict) -> bool:
     return bool(row.get("managed")) and not row.get("owner")
 
 
+def _process_started(pid: int) -> float | None:
+    try:
+        return psutil.Process(pid).create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        return None
+
+
 def agent_fields(rows: dict[str, dict], records: dict[str, dict]) -> dict[str, dict]:
-    """What to add to each managed session's record so History can list and resume it once it ends."""
+    """What to add to each managed session's record so History can list and resume it once it ends.
+
+    The tool's own session ID when the scanner has it; else the agent's pid and
+    start time, from which the tool's records give it later (history.resolve_agent_ids).
+    A record from before agentop kept the directory gets it from the running session.
+    """
     updates = {}
     for name, row in rows.items():
         record = records.get(name)
-        if not record or not row.get("managed") or not row.get("session_id"):
+        if not record or not row.get("managed"):
             continue
-        fields = {"agent_session_id": row["session_id"]}
+        fields = {}
+        if row.get("session_id"):
+            fields["agent_session_id"] = row["session_id"]
         if row.get("ai_title"):
             fields["ai_title"] = row["ai_title"]
         if row.get("tool") and not record.get("tool"):
             fields["tool"] = row["tool"]
+        if row.get("cwd") and not record.get("cwd"):
+            fields["cwd"] = row["cwd"]
+        if row.get("pid") and row["pid"] != record.get("agent_pid"):
+            started = _process_started(row["pid"])
+            if started:
+                fields.update(agent_pid=row["pid"], agent_started=started)
         changed = {k: v for k, v in fields.items() if record.get(k) != v}
         if changed:
             updates[name] = changed
