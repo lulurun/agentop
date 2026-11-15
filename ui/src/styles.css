@@ -21,6 +21,14 @@
   --tool-claude: #e08a6b;
   --tool-codex: #5fc79b;
   --tool-antigravity: #7aa7ff;
+  --syn-keyword: #ff8f80;
+  --syn-string: #9fd39a;
+  --syn-number: #79c0ff;
+  --syn-comment: #7f8c9b;
+  --syn-title: #d2a8ff;
+  --syn-type: #f0c074;
+  --syn-attr: #6fd6c8;
+  --syn-meta: #93a0af;
 }
 
 @media (prefers-color-scheme: light) {
@@ -44,6 +52,14 @@
     --tool-claude: #b4532f;
     --tool-codex: #137a55;
     --tool-antigravity: #2f5fc4;
+    --syn-keyword: #c4322a;
+    --syn-string: #1a7f37;
+    --syn-number: #0550ae;
+    --syn-comment: #6b7786;
+    --syn-title: #8250df;
+    --syn-type: #9a5b00;
+    --syn-attr: #0b7a75;
+    --syn-meta: #5b6878;
   }
 }
 
@@ -67,6 +83,14 @@
   --tool-claude: #b4532f;
   --tool-codex: #137a55;
   --tool-antigravity: #2f5fc4;
+  --syn-keyword: #c4322a;
+  --syn-string: #1a7f37;
+  --syn-number: #0550ae;
+  --syn-comment: #6b7786;
+  --syn-title: #8250df;
+  --syn-type: #9a5b00;
+  --syn-attr: #0b7a75;
+  --syn-meta: #5b6878;
 }
 
 * { box-sizing: border-box; }
@@ -656,6 +680,19 @@ button.app-outdated:hover { background: var(--line); }
 /* An image file, in the middle of the tab, shrunk to fit but never enlarged */
 .viewer-image { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
 .viewer-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* Syntax colours, for the text view and code blocks in Markdown (highlight.js class names) */
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-literal, .hljs-doctag { color: var(--syn-keyword); }
+.hljs-string, .hljs-regexp, .hljs-char, .hljs-addition, .hljs-template-tag, .hljs-symbol { color: var(--syn-string); }
+.hljs-number, .hljs-variable, .hljs-template-variable, .hljs-link { color: var(--syn-number); }
+.hljs-comment, .hljs-quote { color: var(--syn-comment); font-style: italic; }
+.hljs-title, .hljs-section, .hljs-selector-id, .hljs-name { color: var(--syn-title); }
+.hljs-type, .hljs-class .hljs-title, .hljs-title.class_, .hljs-selector-class { color: var(--syn-type); }
+.hljs-attr, .hljs-attribute, .hljs-property, .hljs-params, .hljs-selector-attr, .hljs-selector-pseudo { color: var(--syn-attr); }
+.hljs-meta, .hljs-bullet, .hljs-subst, .hljs-punctuation { color: var(--syn-meta); }
+.hljs-deletion { color: var(--syn-keyword); }
+.hljs-strong { font-weight: 600; }
+.hljs-emphasis { font-style: italic; }
 
 /* A changed file's diff: old and new line numbers, then the line */
 .diff { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 8px; color: var(--term-fg); font-family: var(--code); font-size: 12.5px; line-height: 1.55; tab-size: 4; outline: none; }

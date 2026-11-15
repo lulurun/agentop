@@ -4,10 +4,11 @@ import { useApp } from "../../store";
 import type { FileRef } from "../../tabs";
 import type { PluginContext, UiPlugin } from "../types";
 import { parseDiff, type DiffRow } from "./diff";
-import { isImage, isMarkdown } from "./paths";
+import { isImage, isMarkdown, languageFor } from "./paths";
 
 // Its libraries load the first time a Markdown file is opened.
 const Markdown = lazy(() => import("./Markdown"));
+const Code = lazy(() => import("./Code"));
 
 interface FileText {
   path: string;
@@ -339,6 +340,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
     (path: string) => openTab({ kind: "file", file: { sessionId: file.sessionId, source: file.source, path } }, "right"),
     [file, openTab],
   );
+  const language = languageFor(file.path);
   const lines = useMemo(() => {
     if (!result || result.binary) return 0;
     const count = result.text.split("\n").length;
@@ -393,7 +395,13 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
             </pre>
           )}
           <pre className="viewer-text" tabIndex={0} aria-label={`Contents of ${file.path}`}>
-            {result.text}
+            {language ? (
+              <Suspense fallback={result.text}>
+                <Code text={result.text} language={language} />
+              </Suspense>
+            ) : (
+              result.text
+            )}
           </pre>
         </div>
       </>

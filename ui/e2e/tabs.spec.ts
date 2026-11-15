@@ -87,6 +87,8 @@ test("a file from the right panel opens in the right group, beside the terminal"
   await expect(right).toHaveAttribute("data-focused", "true");
   await expect(right.getByLabel("Contents of src/hello.py")).toHaveText("print('hello')\nprint('again')\n");
   await expect(right.getByText("2 lines")).toBeVisible();
+  // Coloured as Python, with the text unchanged.
+  await expect(right.getByLabel("Contents of src/hello.py").locator(".hljs-string").first()).toHaveText("'hello'");
   await expect(page.getByTestId("terminal")).toBeVisible();
 
   // Clicking the session goes back to the left; another file still opens on the right.
@@ -124,6 +126,11 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
       "",
       "- [x] done",
       "",
+      "```python",
+      "def hello():",
+      "    return 1",
+      "```",
+      "",
       "![a dot](img/dot.png)",
       "",
       "<script>window.ran = true</script>",
@@ -148,6 +155,7 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
   await expect(preview.locator("strong")).toHaveText("this");
   await expect(preview.getByRole("cell", { name: "claude" })).toBeVisible();
   await expect(preview.getByRole("checkbox")).toBeChecked();
+  await expect(preview.locator("pre code .hljs-keyword").first()).toHaveText("def");
   await expect(preview.getByRole("link", { name: "https://example.com/docs" })).toHaveAttribute("target", "_blank");
   await expect(preview.getByRole("img", { name: "a dot" })).toHaveAttribute("src", /^data:image\/png;base64,/);
   // HTML is drawn, but nothing in it runs.

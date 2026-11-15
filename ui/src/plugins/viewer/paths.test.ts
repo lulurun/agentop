@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isImage, isMarkdown, linkTarget, resolve } from "./paths";
+import { isImage, isMarkdown, languageFor, linkTarget, resolve } from "./paths";
 
 describe("isMarkdown", () => {
   it("knows Markdown by its extension", () => {
@@ -48,5 +48,36 @@ describe("linkTarget", () => {
   it("is nothing when empty or above the root", () => {
     expect(linkTarget("a.md", "").kind).toBe("none");
     expect(linkTarget("a.md", "../up.md").kind).toBe("none");
+  });
+});
+
+describe("languageFor", () => {
+  it("picks a language by extension, ignoring case", () => {
+    expect(languageFor("src/app.py")).toBe("python");
+    expect(languageFor("ui/src/tabs.TS")).toBe("typescript");
+    expect(languageFor("pyproject.toml")).toBe("ini");
+    expect(languageFor("deploy/agentop-api.service")).toBe("ini");
+  });
+
+  it("knows some files by name", () => {
+    expect(languageFor("Dockerfile")).toBe("dockerfile");
+    expect(languageFor("docker/Dockerfile.dev")).toBe("dockerfile");
+    expect(languageFor("Makefile")).toBe("makefile");
+    expect(languageFor("home/.zshrc")).toBe("bash");
+  });
+
+  it("leaves anything else plain", () => {
+    expect(languageFor("notes.txt")).toBeNull();
+    expect(languageFor("README")).toBeNull();
+    expect(languageFor(".env")).toBeNull();
+    expect(languageFor("guide.md")).toBeNull();
+  });
+});
+
+describe("the registered grammars", () => {
+  it("cover every language a file can map to", async () => {
+    const { lowlight } = await import("./highlight");
+    const { LANGUAGE_NAMES } = await import("./paths");
+    for (const name of LANGUAGE_NAMES) expect(lowlight.registered(name), name).toBe(true);
   });
 });

@@ -58,3 +58,44 @@ function decode(text: string): string {
     return text;
   }
 }
+
+// The languages the viewer colours (registered in highlight.ts), by file extension.
+// Anything else is shown as plain text.
+const LANGUAGE_BY_EXTENSION: Record<string, string> = {
+  py: "python", pyi: "python",
+  js: "javascript", mjs: "javascript", cjs: "javascript", jsx: "javascript",
+  ts: "typescript", mts: "typescript", cts: "typescript", tsx: "typescript",
+  json: "json", jsonl: "json", jsonc: "json",
+  toml: "ini", ini: "ini", cfg: "ini", conf: "ini", service: "ini", timer: "ini", desktop: "ini",
+  yaml: "yaml", yml: "yaml",
+  sh: "bash", bash: "bash", zsh: "bash",
+  go: "go",
+  rs: "rust",
+  html: "xml", htm: "xml", xml: "xml", svg: "xml", plist: "xml",
+  css: "css",
+  sql: "sql",
+  diff: "diff", patch: "diff",
+  mk: "makefile",
+  c: "c", h: "c",
+  cc: "cpp", cpp: "cpp", cxx: "cpp", hpp: "cpp", hh: "cpp",
+  java: "java",
+};
+
+const LANGUAGE_BY_NAME: Record<string, string> = {
+  dockerfile: "dockerfile", containerfile: "dockerfile",
+  makefile: "makefile", gnumakefile: "makefile",
+  ".bashrc": "bash", ".zshrc": "bash", ".profile": "bash", ".bash_profile": "bash",
+  ".gitconfig": "ini", ".editorconfig": "ini",
+};
+
+/** Every language a file can map to, so a test can check each has a grammar. */
+export const LANGUAGE_NAMES = [...new Set([...Object.values(LANGUAGE_BY_EXTENSION), ...Object.values(LANGUAGE_BY_NAME)])];
+
+/** The language to colour a file as, or null to show it plain. */
+export function languageFor(path: string): string | null {
+  const name = (path.split("/").pop() ?? "").toLowerCase();
+  if (LANGUAGE_BY_NAME[name]) return LANGUAGE_BY_NAME[name];
+  if (name.startsWith("dockerfile.")) return "dockerfile";
+  const dot = name.lastIndexOf(".");
+  return dot > 0 ? (LANGUAGE_BY_EXTENSION[name.slice(dot + 1)] ?? null) : null;
+}

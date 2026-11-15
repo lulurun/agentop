@@ -5,6 +5,7 @@
  * HTML in the file is drawn as GitHub draws it: kept, then cleaned with
  * GitHub's own list of what's allowed, so no script, style, frame or event
  * handler gets into the page. react-markdown also drops javascript: links.
+ * Fenced code blocks are coloured after that (highlight.ts).
  */
 
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
@@ -15,6 +16,7 @@ import rehypeSlug from "rehype-slug";
 import remarkGfm from "remark-gfm";
 import type { FileRef } from "../../tabs";
 import type { PluginContext } from "../types";
+import { rehypeHighlight } from "./highlight";
 import { linkTarget } from "./paths";
 
 // Ids get a prefix, so one in the file can't clash with the app's own elements:
@@ -89,7 +91,7 @@ export default function Markdown({ text, file, plugin, label, onOpen }: Markdown
   return (
     <div className="markdown-scroll" ref={scroller} tabIndex={0} aria-label={label}>
       <article className="markdown">
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize, [rehypeSlug, { prefix: PREFIX }]]} components={components}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeRaw, rehypeSanitize, [rehypeSlug, { prefix: PREFIX }], rehypeHighlight]} components={components}>
           {text}
         </ReactMarkdown>
       </article>
