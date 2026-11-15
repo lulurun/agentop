@@ -341,6 +341,19 @@ class AgentCli:
         """
         return None
 
+    def side_conversation(self, path: Path) -> bool:
+        """Whether a transcript file is a conversation the agent held on its own, such as a
+        subagent's, rather than the one with the user. History's message counts leave these out.
+        """
+        return False
+
+    def token_usage(self, path: Path) -> Optional[dict]:
+        """The tokens one transcript file records, as `TokenUsage` fields, or None if it records none.
+
+        Input tokens leave out what was read from the cache, which is counted on its own.
+        """
+        return None
+
     def searchable(self, relative: Path) -> bool:
         """Whether a transcript's messages go in the Memory search table. `relative` is to the transcripts root."""
         return True

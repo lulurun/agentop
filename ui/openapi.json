@@ -461,6 +461,62 @@
         "title": "HistoryListing",
         "type": "object"
       },
+      "HistoryStats": {
+        "description": "What a past session's transcript holds.",
+        "properties": {
+          "archived": {
+            "description": "The tool deleted its own files; these are the Memory archive's copy",
+            "title": "Archived",
+            "type": "boolean"
+          },
+          "bytes": {
+            "description": "Their size on disk",
+            "title": "Bytes",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Transcript files: the conversation log and what the tool keeps beside it",
+            "title": "Files",
+            "type": "integer"
+          },
+          "prompts": {
+            "description": "What the user typed, in the main conversation (not a subagent's)",
+            "title": "Prompts",
+            "type": "integer"
+          },
+          "replies": {
+            "description": "The agent's text replies in the main conversation",
+            "title": "Replies",
+            "type": "integer"
+          },
+          "token_usage": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TokenUsage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Summed over every file, subagents included; None if the tool records none"
+          },
+          "truncated": {
+            "description": "More files than the listing limit; only those counted",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "prompts",
+          "replies",
+          "files",
+          "bytes",
+          "truncated",
+          "archived"
+        ],
+        "title": "HistoryStats",
+        "type": "object"
+      },
       "PatchPlugin": {
         "properties": {
           "enabled": {
@@ -1869,6 +1925,61 @@
           }
         },
         "summary": "Resume History"
+      }
+    },
+    "/history/{history_id}/stats": {
+      "get": {
+        "operationId": "history_stats_history__history_id__stats_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "history_id",
+            "required": true,
+            "schema": {
+              "title": "History Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "History Stats"
       }
     },
     "/plugins": {

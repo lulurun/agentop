@@ -136,6 +136,9 @@ def test_resume_from_history_names_it_and_takes_it_out_of_history(fake_agents, u
         body = service.http.get("/history").json()
         assert [i["id"] for i in body["items"]] == ["demo-1"]
         assert body["window_seconds"] == 30 * DAY
+        stats = service.http.get("/history/demo-1/stats").json()
+        assert (stats["files"], stats["prompts"], stats["token_usage"]) == (0, 0, None)
+        assert service.http.get("/history/nope/stats").status_code == 404
 
         response = service.http.post("/history/demo-1/resume")
         assert response.status_code == 202, response.text

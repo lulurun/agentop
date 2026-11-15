@@ -7,6 +7,8 @@ export type ServiceInfo = components["schemas"]["ServiceInfo"];
 export type UpdateInfo = components["schemas"]["UpdateInfo"];
 export type HistoryItem = components["schemas"]["HistoryItem"];
 export type HistoryListing = components["schemas"]["HistoryListing"];
+export type HistoryStats = components["schemas"]["HistoryStats"];
+export type TokenUsage = components["schemas"]["TokenUsage"];
 export type ToolInfo = components["schemas"]["ToolInfo"];
 export type DirListing = components["schemas"]["DirListing"];
 export type FileListing = components["schemas"]["FileListing"];
@@ -98,6 +100,7 @@ export class ServiceClient {
     this.get<FileListing>(`/sessions/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
   changes = (id: string) => this.get<GitChanges>(`/sessions/${encodeURIComponent(id)}/changes`);
   history = () => this.get<HistoryListing>("/history");
+  historyStats = (id: string) => this.get<HistoryStats>(`/history/${encodeURIComponent(id)}/stats`);
   resumeHistory = (id: string) => this.request<Session>("POST", `/history/${encodeURIComponent(id)}/resume`);
   deleteHistory = (id: string) => this.request("DELETE", `/history/${encodeURIComponent(id)}`);
   create = (body: CreateSession) => this.request<Session>("POST", "/sessions", body);

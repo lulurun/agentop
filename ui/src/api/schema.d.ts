@@ -202,6 +202,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/history/{history_id}/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History Stats */
+        get: operations["history_stats_history__history_id__stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugins": {
         parameters: {
             query?: never;
@@ -577,6 +594,44 @@ export interface components {
              * @description Only sessions used this recently are listed
              */
             window_seconds: number;
+        };
+        /**
+         * HistoryStats
+         * @description What a past session's transcript holds.
+         */
+        HistoryStats: {
+            /**
+             * Archived
+             * @description The tool deleted its own files; these are the Memory archive's copy
+             */
+            archived: boolean;
+            /**
+             * Bytes
+             * @description Their size on disk
+             */
+            bytes: number;
+            /**
+             * Files
+             * @description Transcript files: the conversation log and what the tool keeps beside it
+             */
+            files: number;
+            /**
+             * Prompts
+             * @description What the user typed, in the main conversation (not a subagent's)
+             */
+            prompts: number;
+            /**
+             * Replies
+             * @description The agent's text replies in the main conversation
+             */
+            replies: number;
+            /** @description Summed over every file, subagents included; None if the tool records none */
+            token_usage?: components["schemas"]["TokenUsage"] | null;
+            /**
+             * Truncated
+             * @description More files than the listing limit; only those counted
+             */
+            truncated: boolean;
         };
         /** PatchPlugin */
         PatchPlugin: {
@@ -1227,6 +1282,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_stats_history__history_id__stats_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                history_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryStats"];
                 };
             };
             /** @description Validation Error */

@@ -47,6 +47,7 @@ from .models import (
     GitChanges,
     Health,
     HistoryListing,
+    HistoryStats,
     PatchPlugin,
     PatchSession,
     PluginInfo,
@@ -417,6 +418,11 @@ def create_v2_app(ctx: Context) -> FastAPI:
             "active": ctx.store.active_count(),
             "max_active": ctx.store.max_active,
         }
+
+    @v2.get("/history/{history_id}/stats", response_model=HistoryStats, dependencies=authed)
+    async def history_stats(history_id: str):
+        item = await past_session(history_id)
+        return await asyncio.to_thread(transcripts.transcript_stats, item["tool"], item["session_id"])
 
     @v2.post("/history/{history_id}/resume", response_model=SessionModel, status_code=202, dependencies=authed)
     async def resume_history(history_id: str):

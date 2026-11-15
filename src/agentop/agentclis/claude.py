@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Optional
 
 from agentop.agentclis.base import AgentCli, files_under
-from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, texts
+from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 
 _PROJECTS_DIR = Path("~/.claude/projects")
 
@@ -148,7 +148,10 @@ class ClaudeAgentCli(AgentCli):
         if not TRANSCRIPT.search(path.name):
             return None
         # A subagent's log is a conversation too, one the main log leaves out.
-        return messages, {"sidechain": "subagents" in path.parts}
+        return messages, {"sidechain": self.side_conversation(path)}
+
+    def side_conversation(self, path: Path) -> bool:
+        return "subagents" in path.parts
 
     def searchable(self, relative: Path) -> bool:
         """Only the main conversations, `<project>/<session>.jsonl`: not subagents or tool output."""
@@ -246,38 +249,34 @@ class ClaudeAgentCli(AgentCli):
         except (OSError, json.JSONDecodeError):
             return None
 
-    def _read_token_usage(self, jsonl_path: Path) -> Optional[dict]:
-        """Sum token usage across unique assistant messages in a JSONL file."""
+    def token_usage(self, path: Path) -> Optional[dict]:
+        """The usage of each assistant message, summed. A message written in several records counts once."""
+        if not TRANSCRIPT.search(path.name):
+            return None
         try:
-            seen_ids: set = set()
-            totals = {
-                "input_tokens": 0,
-                "output_tokens": 0,
-                "cache_creation_input_tokens": 0,
-                "cache_read_input_tokens": 0,
-            }
-            with open(jsonl_path) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                        if obj.get("type") != "assistant":
-                            continue
-                        msg = obj.get("message", {})
-                        msg_id = msg.get("id")
-                        if not msg_id or msg_id in seen_ids:
-                            continue
-                        seen_ids.add(msg_id)
-                        usage = msg.get("usage", {})
-                        for k in totals:
-                            totals[k] += usage.get(k, 0)
-                    except json.JSONDecodeError:
-                        continue
-            return totals if seen_ids else None
+            records = list(json_lines(path))
         except OSError:
             return None
+        seen: set = set()
+        totals = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+        }
+        for obj in records:
+            if obj.get("type") != "assistant":
+                continue
+            msg = obj.get("message")
+            msg_id = msg.get("id") if isinstance(msg, dict) else None
+            if not msg_id or msg_id in seen:
+                continue
+            seen.add(msg_id)
+            usage = msg.get("usage") or {}
+            for k in totals:
+                value = usage.get(k)
+                totals[k] += value if isinstance(value, int) else 0
+        return totals if seen else None
 
     def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
         """Read the AI-generated title from ~/.claude/projects/{slug}/{session_id}.jsonl."""
@@ -327,7 +326,7 @@ class ClaudeAgentCli(AgentCli):
 
         jsonl_path = self._get_jsonl_path(pid, cwd)
         if jsonl_path:
-            token_usage = self._read_token_usage(jsonl_path)
+            token_usage = self.token_usage(jsonl_path)
             if token_usage:
                 result["token_usage"] = token_usage
 

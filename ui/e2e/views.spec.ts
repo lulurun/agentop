@@ -118,6 +118,10 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   const view = page.getByRole("region", { name: "Past session" });
   await history.getByRole("button", { name: /docs/ }).click();
   await expect(view).toContainText("bbb");
+  // What its transcript holds: here an empty one, with no tokens recorded.
+  await expect(view).toContainText("Prompts0");
+  await expect(view).toContainText("3 B in 1 file");
+  await expect(view).toContainText("Not recorded by codex.");
   await history.getByRole("button", { name: /scratch/ }).click();
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["scratch"]);
   await view.getByRole("button", { name: "Delete" }).click();

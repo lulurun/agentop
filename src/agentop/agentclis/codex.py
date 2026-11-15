@@ -11,7 +11,7 @@ from typing import Optional
 import psutil
 
 from agentop.agentclis.base import AgentCli, files_under
-from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, texts
+from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.tmux import Session
 
 _HOME = Path("~/.codex")
@@ -265,37 +265,33 @@ class CodexAgentCli(AgentCli):
             return None
         return dict(row)
 
-    def _read_rollout_token_usage(self, rollout_path: str) -> Optional[dict]:
-        """Scan a rollout JSONL for the last token_count event and return token usage."""
+    def token_usage(self, path: Path) -> Optional[dict]:
+        """The last running total in a rollout (its last `token_count` event).
+
+        Codex counts cache reads and writes inside `input_tokens`; they are taken out here, as the other tools report them.
+        """
+        if not TRANSCRIPT.search(path.name) or not path.name.startswith("rollout-"):
+            return None
+        last: Optional[dict] = None
         try:
-            path = Path(rollout_path)
-            if not path.exists():
-                return None
-            last_usage: Optional[dict] = None
-            with open(path) as f:
-                for line in f:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        obj = json.loads(line)
-                        payload = obj.get("payload") or {}
-                        if obj.get("type") == "event_msg" and payload.get("type") == "token_count":
-                            total = (payload.get("info") or {}).get("total_token_usage")
-                            if total:
-                                last_usage = total
-                    except json.JSONDecodeError:
-                        continue
-            if not last_usage:
-                return None
-            return {
-                "input_tokens": last_usage.get("input_tokens", 0),
-                "output_tokens": last_usage.get("output_tokens", 0),
-                "cache_read_input_tokens": last_usage.get("cached_input_tokens", 0),
-                "cache_creation_input_tokens": 0,
-            }
+            for obj in json_lines(path):
+                payload = obj.get("payload") or {}
+                if obj.get("type") == "event_msg" and isinstance(payload, dict) and payload.get("type") == "token_count":
+                    total = (payload.get("info") or {}).get("total_token_usage")
+                    if total:
+                        last = total
         except OSError:
             return None
+        if not last:
+            return None
+        cached = last.get("cached_input_tokens", 0)
+        written = last.get("cache_write_input_tokens", 0)
+        return {
+            "input_tokens": max(last.get("input_tokens", 0) - cached - written, 0),
+            "output_tokens": last.get("output_tokens", 0),
+            "cache_read_input_tokens": cached,
+            "cache_creation_input_tokens": last.get("cache_write_input_tokens", 0),
+        }
 
     def get_resume_cmd(self, session_id: str) -> str:
         return f"codex resume {session_id}"
@@ -401,7 +397,8 @@ class CodexAgentCli(AgentCli):
         if title:
             meta["ai_title"] = title
         if thread.get("rollout_path"):
-            token_usage = self._read_rollout_token_usage(thread["rollout_path"])
+            path = Path(thread["rollout_path"])
+            token_usage = self.token_usage(path) if path.is_file() else None
             if token_usage:
                 meta["token_usage"] = token_usage
         return meta

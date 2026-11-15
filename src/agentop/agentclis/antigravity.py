@@ -11,7 +11,7 @@ from typing import Optional
 import psutil
 
 from agentop.agentclis.base import AgentCli
-from agentop.conversation import TRANSCRIPT, Message, Reader, epoch
+from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines
 from agentop.tmux import Session
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
@@ -180,6 +180,30 @@ class AntigravityAgentCli(AgentCli):
         if not TRANSCRIPT.search(path.name) or not path.name.startswith("transcript.jsonl") or path.parent.name != "logs":
             return None
         return messages, {"session": path.parents[2].name}
+
+    def token_usage(self, path: Path) -> Optional[dict]:
+        """Each model step's tokens, summed. A step written more than once counts once."""
+        if self.conversation_reader(path) is None:
+            return None
+        steps: dict = {}
+        try:
+            for obj in json_lines(path):
+                if any(k in obj for k in ("input_tokens", "output_tokens", "cache_read_tokens")):
+                    steps[obj.get("step_index", len(steps))] = obj
+        except OSError:
+            return None
+        if not steps:
+            return None
+
+        def total(key: str) -> int:
+            return sum(v for s in steps.values() if isinstance(v := s.get(key), int))
+
+        return {
+            "input_tokens": total("input_tokens"),
+            "output_tokens": total("output_tokens"),
+            "cache_read_input_tokens": total("cache_read_tokens"),
+            "cache_creation_input_tokens": 0,
+        }
 
     def transcript_files(self, session_id: str, root: Optional[Path] = None) -> tuple[Optional[Path], list[Path]]:
         """Everything in the conversation's brain folder: the transcript and the artifacts beside it."""

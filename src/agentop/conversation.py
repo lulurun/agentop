@@ -78,6 +78,24 @@ def records(data: Iterator[bytes], context: dict, reader: Reader) -> Iterator[Me
             yield from reader(record, context)
 
 
+def lines(path: Path) -> list[bytes]:
+    """The lines of a transcript file, decompressed if it is a `.jsonl.zst`."""
+    with open(path, "rb") as f:
+        data = zstandard.ZstdDecompressor().stream_reader(f).read() if compressed(path) else f.read()
+    return data.splitlines()
+
+
+def json_lines(path: Path) -> Iterator[dict]:
+    """The JSON objects in a transcript file. A line that isn't one is skipped."""
+    for line in lines(path):
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            yield record
+
+
 def read(agent: AgentCli | None, path: Path) -> list[Message] | None:
     """Every message in one transcript file, or None if it isn't a transcript the tool knows."""
     how = agent.conversation_reader(path) if agent else None

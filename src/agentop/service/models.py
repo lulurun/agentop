@@ -90,6 +90,18 @@ class HistoryListing(BaseModel):
     max_active: int = Field(description="How many may be active at once; resuming waits for one to close")
 
 
+class HistoryStats(BaseModel):
+    """What a past session's transcript holds."""
+
+    prompts: int = Field(description="What the user typed, in the main conversation (not a subagent's)")
+    replies: int = Field(description="The agent's text replies in the main conversation")
+    token_usage: TokenUsage | None = Field(None, description="Summed over every file, subagents included; None if the tool records none")
+    files: int = Field(description="Transcript files: the conversation log and what the tool keeps beside it")
+    bytes: int = Field(description="Their size on disk")
+    truncated: bool = Field(description="More files than the listing limit; only those counted")
+    archived: bool = Field(description="The tool deleted its own files; these are the Memory archive's copy")
+
+
 class ToolInfo(BaseModel):
     name: str
     installed: bool

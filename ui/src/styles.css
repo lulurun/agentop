@@ -1178,3 +1178,4 @@ button.app-outdated:hover { background: var(--line); }
 .history-row .session-meta { grid-column: 1; }
 .past-session { max-width: 760px; }
 .past-session dl { margin: 0 0 8px; }
+.past-session h3 { margin: 14px 0 6px; color: var(--quiet); }

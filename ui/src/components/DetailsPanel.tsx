@@ -1,17 +1,11 @@
 import { useState } from "react";
-import type { Session } from "../api/client";
+import type { Session, TokenUsage } from "../api/client";
 import { platform } from "../platform";
 import { PluginSlot } from "../plugins/Slot";
 import { useApp } from "../store";
 import { FilesSection } from "./FilesSection";
-import { formatDuration } from "./format";
+import { formatDuration, formatTokens } from "./format";
 import { selectedSession } from "./MainArea";
-
-function formatTokens(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}k`;
-  return String(value);
-}
 
 export function Row({ label, value, copy }: { label: string; value: string; copy?: string }) {
   return (
@@ -92,15 +86,24 @@ function BridgeRow({ url }: { url: string }) {
   );
 }
 
+/** Token counts, as rows of a `<dl>`. */
+export function TokenRows({ usage }: { usage: TokenUsage }) {
+  return (
+    <>
+      <Row label="Input" value={formatTokens(usage.input_tokens ?? 0)} />
+      <Row label="Output" value={formatTokens(usage.output_tokens ?? 0)} />
+      <Row label="Cache read" value={formatTokens(usage.cache_read_input_tokens ?? 0)} />
+      <Row label="Cache write" value={formatTokens(usage.cache_creation_input_tokens ?? 0)} />
+    </>
+  );
+}
+
 function Usage({ session }: { session: Session }) {
   const usage = session.token_usage;
   if (!usage) return <p className="detail-empty">Not reported by this tool yet.</p>;
   return (
     <dl>
-      <Row label="Input" value={formatTokens(usage.input_tokens ?? 0)} />
-      <Row label="Output" value={formatTokens(usage.output_tokens ?? 0)} />
-      <Row label="Cache read" value={formatTokens(usage.cache_read_input_tokens ?? 0)} />
-      <Row label="Cache write" value={formatTokens(usage.cache_creation_input_tokens ?? 0)} />
+      <TokenRows usage={usage} />
     </dl>
   );
 }

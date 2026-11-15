@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { HistoryItem } from "../api/client";
+import type { HistoryItem, HistoryStats } from "../api/client";
 import { activeCount, useApp } from "../store";
-import { Row } from "./DetailsPanel";
+import { Row, TokenRows } from "./DetailsPanel";
+import { formatBytes } from "./format";
 import { FoldSection, ToolBadge } from "./Sidebar";
 
 function when(seconds: number | null | undefined): string {
@@ -118,7 +119,48 @@ export function HistorySection({ selected }: { selected?: string }) {
   );
 }
 
-/** A past session in the main area: what it was, and Resume or Delete. */
+/**
+ * What a past session's transcript holds. Read when the tab opens, and again
+ * when the session was used since: the service reads the whole transcript.
+ */
+function TranscriptStats({ item }: { item: HistoryItem }) {
+  const act = useApp((s) => s.act);
+  const [stats, setStats] = useState<HistoryStats | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    setStats(undefined);
+    void act((client) => client.historyStats(item.id)).then((found) => {
+      if (live) setStats(found ?? null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [act, item.id, item.last_active]);
+
+  if (stats === undefined) return <p className="detail-empty">Reading the transcript…</p>;
+  if (stats === null) return <p className="detail-empty">The transcript couldn't be read.</p>;
+  const files = `${stats.files}${stats.truncated ? "+" : ""} ${stats.files === 1 ? "file" : "files"}`;
+  return (
+    <>
+      <h3>Transcript</h3>
+      <dl>
+        <Row label="Prompts" value={String(stats.prompts)} />
+        <Row label="Replies" value={String(stats.replies)} />
+        <Row label="Size" value={`${formatBytes(stats.bytes)} in ${files}${stats.archived ? ", from the Memory archive" : ""}`} />
+      </dl>
+      <h3>Tokens</h3>
+      {stats.token_usage ? (
+        <dl>
+          <TokenRows usage={stats.token_usage} />
+        </dl>
+      ) : (
+        <p className="detail-empty">Not recorded by {item.tool}.</p>
+      )}
+    </>
+  );
+}
+
+/** A past session in the main area: what it was, its transcript, and Resume or Delete. */
 export function PastSessionView({ historyId, onClose }: { historyId: string; onClose(): void }) {
   const item = useItem(historyId);
   const loaded = useApp((s) => s.history.items !== null);
@@ -160,6 +202,7 @@ export function PastSessionView({ historyId, onClose }: { historyId: string; onC
         <Row label="Last used" value={when(item.last_active)} />
         <Row label="Session ID" value={item.session_id} copy={item.session_id} />
       </dl>
+      <TranscriptStats item={item} />
       <div className="details-actions" aria-label="Actions">
         {confirming ? (
           <>

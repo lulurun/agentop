@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
 import { activeClient, useApp } from "../../store";
+import { formatBytes } from "../../components/format";
 import { TerminalView } from "../../terminal/TerminalView";
 import type { PluginClient, PluginContext, UiPlugin } from "../types";
 import { NewDialogue } from "./NewDialogue";
@@ -59,12 +60,6 @@ function duration(seconds: number | null): string {
   if (minutes < 1) return `${Math.round(seconds)}s`;
   if (minutes < 60) return `${minutes} min`;
   return `${Math.floor(minutes / 60)} h ${minutes % 60} min`;
-}
-
-function size(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 const sideName = (d: DialogueSummary, side: Side) => (side === "a" ? d.name_a : d.name_b);
@@ -253,7 +248,7 @@ function FileView({ plugin, viewKey = "" }: { plugin: PluginContext; viewKey?: s
         <span className="viewer-path" title={`${path} (${id})`}>
           {path}
         </span>
-        {file && <span className="viewer-meta">{size(file.size)}</span>}
+        {file && <span className="viewer-meta">{formatBytes(file.size)}</span>}
         {markdown && file && !file.binary && (
           <span className="viewer-modes">
             <button type="button" aria-pressed={!raw} onClick={() => setRaw(false)}>
@@ -310,7 +305,7 @@ function FileLinks({ id, files }: { id: string; files: DialogueFile[] }) {
           <button type="button" className="file-row" onClick={() => openFile(id, f.path)} title={`Open ${f.path}`}>
             <span className="file-glyph" aria-hidden="true">·</span>
             <span>{f.path.replace(/^deliverables\//, "")}</span>
-            <span className="file-size">{size(f.size)}</span>
+            <span className="file-size">{formatBytes(f.size)}</span>
           </button>
         </li>
       ))}

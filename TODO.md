@@ -55,8 +55,8 @@ Design: [v2-design.md section 10.7](docs/v2-design.md#107-workspaces-2026-11-15)
 - [x] Phase 1, the shell, built 2026-11-15: workspaces in the header (switcher, then the workspaces, the current one highlighted), one tab layout per workspace per connection, pinned default tabs, the side each tab kind opens on, Sessions tabs kept mounted while hidden, old saved tabs moved into Sessions. Settings becomes the gear with display options only; Status becomes a tab with the plugins in it. The `left-view` plugin slot becomes `workspace`, and Dialogues moves into one as it is. Keyboard: Ctrl+Shift+1 to 9, Ctrl+Shift+N per workspace.
 - [x] Phase 2, History, built 2026-11-15: the list (search, filter by CLI, sort by last updated or CLI) in its pinned tab, and the selected past session on the right with Resume and Remove.
 - [x] History moved into Sessions' left panel, 2026-11-15 (design 10.7.7): only sessions agentop started, used within `history_window` (30d); a past session opens as a tab with Resume and Delete; at most `max_active_sessions` (20) active; a resumed session is named `<name> <last used>`.
-- [ ] History stats on a past session's tab: messages, tokens, transcript size.
-- [ ] Dialogues workspace: designed in its own conversation (list on the left, the two actors split in tabs, view only; the dialogue's files on the right opening in the right group; New dialogue in the header). Dialogue sessions leave the Sessions list, and a plugin claims a session in a way the core can read without naming the plugin.
+- [x] History stats on a past session's tab, 2026-11-15: prompts and replies, tokens (subagents included), and the transcript's files and size, from `GET /history/{id}/stats`.
+- [x] Dialogues workspace, 2026-11-15: the list on the left, the two actors split in tabs, view only; the dialogue's files open in the right group; New dialogue in the header. Dialogue sessions leave the Sessions list: a plugin claims a session with its `owner` field, which the core reads without naming the plugin.
 - [x] Memory workspace, 2026-11-15: search on the left, a conversation per tab opened at the hit, the session's summary on the right (design 12.11.3, phase 6).
 - [ ] Later: the workspace in the URL, a badge on a workspace that needs attention, `navigate(workspace, selection)` (design 10.7.6).
 
@@ -75,4 +75,4 @@ Design: [v2-design.md section 12.11](docs/v2-design.md#1211-memory-agentops-own-
 - [x] Session summaries from Codex too, for a host without Claude Code, 2026-11-15: `codex exec --ephemeral` on `gpt-6-luna`, with no shell tool and without the user's config. Claude Code still comes first where both are installed.
 - [x] A recall skill for Codex sessions too: agentop serve installs the skills into `~/.codex/skills/` (2026-11-13).
 - [x] Claude Code's `cleanupPeriodDays` (default 30 days) as a backstop for a long service outage: decided 2026-11-15 not to change it. agentop is a wrapper on top of the CLIs and leaves their settings as they are; the archive sweep is the backstop.
-- [ ] Later: archives from other hosts, aggregated in one place.
+- [x] Archives from other hosts, aggregated in one place: decided 2026-11-15 not to support it for now. Memory stays per host.
