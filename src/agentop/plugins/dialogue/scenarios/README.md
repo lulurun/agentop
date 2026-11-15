@@ -7,6 +7,11 @@ with any brief that fits its interaction style.
 
 Older or domain-specific scenarios live under `shelf/`.
 
+Each scenario here has a `summary` and a `description`: the brief's template,
+with `{field}` placeholders the app's New dialogue wizard asks for. Shelf
+scenarios have none, and the wizard asks for a title and the whole brief.
+See docs/dialogue.md, section 4.1a.
+
 ---
 
 ## Product development workflow

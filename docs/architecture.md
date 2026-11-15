@@ -121,7 +121,7 @@ The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was
 
 ### 4.2 Registry (`registry.py`)
 
-JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions.
+JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6).
 
 ### 4.3 Ops (`ops.py`)
 
@@ -157,7 +157,7 @@ The orchestrator is its own process, not part of the service, so a dialogue keep
 
 ## 6 Web layer
 
-`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs a client's token; the service token only signs a client in, at `POST /auth/clients` (`service/auth.py`, design D7). `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`).
+`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs a client's token; the service token only signs a client in, at `POST /auth/clients` (`service/auth.py`, design D7). `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`). With `readonly=true`, or for a session with an `owner`, it attaches with `-f read-only,ignore-size`, drops what the client sends, and takes the window's size, which it tells the client in a `{"type": "size"}` frame; the terminal then scales its font to show the whole window.
 
 ### Main-area tabs (v2 app)
 

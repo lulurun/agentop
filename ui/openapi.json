@@ -695,6 +695,17 @@
             ],
             "title": "Memory Mb"
           },
+          "owner": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner"
+          },
           "pid": {
             "anyOf": [
               {

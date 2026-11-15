@@ -157,6 +157,9 @@ class SessionModel(BaseModel):
     step: Literal["creating", "launching", "waiting", "confirming"] | None
     error: str | None
     managed: bool
+    # The plugin that started the session for its own use, such as a dialogue's agents.
+    # The app leaves such sessions out of the session list, and their terminal is read-only.
+    owner: str | None = None
     attachable: bool
     cwd: str
     created_at: float | None

@@ -17,6 +17,22 @@ from .status import DialogueStatus
 
 LOG = logging.getLogger(__name__)
 
+TURNS_FILE = "turns.jsonl"
+# A dialogue in one of these has ended: its relay is over and its sessions are closed or closing.
+FINISHED = frozenset(
+    {
+        DialogueStatus.STOPPED,
+        DialogueStatus.COMPLETED,
+        DialogueStatus.ERROR,
+        DialogueStatus.AGENT_REPEATEDLY_MISSING_DELIMITER,
+    }
+)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
 def dialogues_dir() -> Path:
     """Where saved dialogues are: the plugin's own folder, ~/.agentop/plugins/dialogue/dialogues/."""
     return paths.plugins_dir() / "dialogue" / "dialogues"
@@ -36,6 +52,7 @@ class DialogueMeta:
     error: str | None = None
     scenario_name: str = ""
     brief_name: str = ""
+    end_time: str | None = None
 
     def _dir(self) -> Path:
         if self.scenario_name and self.brief_name:
@@ -50,6 +67,15 @@ class DialogueMeta:
 
     def progress_path(self) -> Path:
         return self._dir() / "progress.md"
+
+    def turns_path(self) -> Path:
+        return self._dir() / TURNS_FILE
+
+    def record_turn(self, turn: int, side: str, name: str, status: str, body: str) -> None:
+        """Append one message an agent sent to turns.jsonl, the dialogue's transcript."""
+        line = {"turn": turn, "side": side, "name": name, "status": status, "body": body, "at": _now()}
+        with open(self.turns_path(), "a") as f:
+            f.write(json.dumps(line) + "\n")
 
     def save(self) -> None:
         self._dir().mkdir(parents=True, exist_ok=True)
@@ -68,6 +94,7 @@ class DialogueMeta:
                     "error": self.error,
                     "scenario_name": self.scenario_name,
                     "brief_name": self.brief_name,
+                    "end_time": self.end_time,
                 },
                 indent=2,
             )
@@ -76,6 +103,8 @@ class DialogueMeta:
     def update(self, fields: dict) -> None:
         for k, v in fields.items():
             setattr(self, k, v)
+        if self.status in FINISHED and not self.end_time:
+            self.end_time = _now()
         LOG.info("%s %s", self.id, self.status)
         self.save()
 
@@ -98,7 +127,7 @@ class DialogueMeta:
             agent_a=agent_a,
             agent_b=agent_b,
             max_turns=max_turns,
-            start_time=datetime.now(timezone.utc).isoformat(),
+            start_time=_now(),
             status=DialogueStatus.STARTING,
             scenario_name=scenario_name,
             brief_name=brief_name,
@@ -131,6 +160,7 @@ class DialogueMeta:
                 error=data.get("error"),
                 scenario_name=data.get("scenario_name", ""),
                 brief_name=data.get("brief_name", ""),
+                end_time=data.get("end_time"),
             )
         except (json.JSONDecodeError, KeyError, TypeError):
             return None

@@ -1,4 +1,25 @@
 name = "implementation-requirements"
+summary = "ProductOwner turns an approved direction into requirements; TechnicalArchitect challenges feasibility and testability."
+
+# The brief's template. The New dialogue wizard asks for each {field}.
+description = """
+# {title}
+
+## Approved product direction
+{product_direction}
+
+## Sources to read
+{sources}
+
+## Constraints
+{constraints}
+
+## Deliverables
+{deliverables}
+
+## Acceptance criteria
+{acceptance_criteria}
+"""
 
 [settings]
 max_turns = 80

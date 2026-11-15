@@ -56,6 +56,7 @@ def _base_row(session_id: str, record: dict, tmux_sessions: dict[str, int]) -> d
         "step": None,
         "error": None,
         "managed": bool(record.get("managed") or record.get("status")),
+        "owner": record.get("owner"),
         "attachable": attached is not None,
         "cwd": record.get("cwd") or "",
         "created_at": record.get("created_at"),

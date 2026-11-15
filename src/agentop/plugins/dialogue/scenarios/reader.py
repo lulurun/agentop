@@ -16,6 +16,9 @@ class Scenario:
     role_b: str
     max_turns: int | None = None
     opening: str | None = None  # optional kickoff prompt sent after role_a
+    summary: str = ""  # one line, for the New dialogue wizard
+    # The brief's template: Markdown with {placeholder} fields the wizard asks for.
+    description: str | None = None
 
 
 def load(path: str | Path) -> Scenario:
@@ -71,6 +74,8 @@ def load(path: str | Path) -> Scenario:
             role_b=role_b_section["prompt"],
             max_turns=max_turns,
             opening=opening,
+            summary=str(data.get("summary") or "").strip(),
+            description=data.get("description"),
         )
     except KeyError as exc:
         raise ValueError(f"Scenario file {p} is missing key: {exc}") from exc

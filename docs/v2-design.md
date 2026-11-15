@@ -832,7 +832,7 @@ Dialogues are built already, so moving them is also the test of the plugin syste
 
 **What moves into `ui/src/plugins/dialogue/`:** the Dialogues view, filling the left-column view slot, and the "dialogue" label on session rows, filling the session-badge slot. Core files stop naming dialogues: the session list, the store, and the API client.
 
-**What stays in the core:** nothing dialogue-specific. The core keeps the generic pieces dialogues needed: starting a session under a given short name, `Actor` send and receive, and stop. A dialogue's agents (`dia{id}a`, `dia{id}b`) remain ordinary managed sessions.
+**What stays in the core:** nothing dialogue-specific. The core keeps the generic pieces dialogues needed: starting a session under a given short name, `Actor` send and receive, and stop. A dialogue's agents (`dia{id}a`, `dia{id}b`) remain ordinary managed sessions, marked with `owner: "dialogue"` since 2026-11-15: the session list leaves out a session with an owner, and its terminal is read-only (the plugin's workspace shows them instead, [dialogue.md 8](dialogue.md#8-in-the-app)).
 
 **Data.** Saved dialogues are in `~/.agentop/plugins/dialogue/dialogues/` (moved there from `~/.agent-dashboard/dialogues/` on 2026-11-11, ahead of the code), in the same format. Removing or disabling the plugin never deletes them, and enabling it again shows them all.
 

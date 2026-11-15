@@ -130,6 +130,7 @@ export class ServiceClient {
   }
 
   eventsUrl = () => this.socketUrl("/ws/events", "events");
-  terminalUrl = (id: string, cols: number, rows: number) =>
-    this.socketUrl(`/ws/sessions/${encodeURIComponent(id)}/terminal`, "terminal", id, `&cols=${cols}&rows=${rows}`);
+  /** `readOnly` watches without typing or resizing. The service makes a plugin's own session read-only anyway. */
+  terminalUrl = (id: string, cols: number, rows: number, readOnly = false) =>
+    this.socketUrl(`/ws/sessions/${encodeURIComponent(id)}/terminal`, "terminal", id, `&cols=${cols}&rows=${rows}${readOnly ? "&readonly=true" : ""}`);
 }

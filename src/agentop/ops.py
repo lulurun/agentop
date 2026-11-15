@@ -57,8 +57,12 @@ def start(
     params: dict | None = None,
     name: str | None = None,
     on_progress=None,
+    owner: str | None = None,
 ) -> dict:
     """Launch a new managed agent session.
+
+    `owner` names the plugin the session is for (see SessionModel.owner). It is
+    recorded before the agent starts, so the session is never listed without it.
 
     Returns {"ok": True, "name": …, "pid": …}
          or {"ok": False, "error": …}, with "name" if a tmux session was left behind.
@@ -66,6 +70,9 @@ def start(
     agent = get_agent(tool)
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {tool}"}
+    if owner:
+        name = name or agent.new_session_name(short_name)
+        registry.upsert_session(name, {"owner": owner})
     result = agent.start_session(cwd, short_name, params, name=name, on_progress=on_progress)
     return _record_start(result, tool, cwd, short_name)
 

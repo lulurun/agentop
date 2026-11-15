@@ -10,18 +10,28 @@ Nothing here runs at import, so the orchestrator process and the CLI can load
 the package without FastAPI.
 """
 
-from __future__ import annotations
-
+# No `from __future__ import annotations`: FastAPI reads the request body's model,
+# defined inside register(), from the route's annotations.
 import re
 
 
 def register(api) -> None:
     import asyncio
 
+    import threading
+
     from fastapi import HTTPException
+    from pydantic import BaseModel, Field
 
     from . import ops
     from .model import dialogues_dir
+
+    class NewDialogue(BaseModel):
+        scenario: str
+        values: dict[str, str] = Field(default_factory=dict)
+        agent_a: str = "claude"
+        agent_b: str = "claude"
+        max_turns: int = 0
 
     def exact_name(dialogue_id: str) -> str:
         """A dialogue ID names a folder that remove deletes, so it must be exactly that name.
@@ -39,6 +49,53 @@ def register(api) -> None:
     @api.router.get("/dialogues")
     async def list_dialogues():
         return await asyncio.to_thread(ops.list_dialogues)
+
+    @api.router.get("/scenarios")
+    async def list_scenarios():
+        return await asyncio.to_thread(ops.list_scenarios)
+
+    @api.router.post("/dialogues", status_code=202)
+    async def create_dialogue(body: NewDialogue):
+        try:
+            meta = await asyncio.to_thread(
+                ops.new_dialogue, body.scenario, body.values, body.agent_a, body.agent_b, body.max_turns
+            )
+        except ops.DialogueInputError as exc:
+            raise HTTPException(400, str(exc)) from None
+
+        def launch():
+            try:
+                result = ops.launch_dialogue(meta)
+                if not result.get("ok"):
+                    api.log.warning("Dialogue %s did not start: %s", meta.id, result.get("error"))
+            except Exception:
+                api.log.exception("Dialogue %s failed to launch", meta.id)
+
+        # Starting both agents takes as long as they take to boot: the request returns now, and the
+        # dialogue shows as `starting` until its orchestrator runs.
+        threading.Thread(target=launch, name=f"dialogue-launch-{meta.id}", daemon=True).start()
+        return {"id": meta._dir().name}
+
+    @api.router.get("/dialogues/{dialogue_id}/turns")
+    async def dialogue_turns(dialogue_id: str):
+        turns = await asyncio.to_thread(ops.get_turns, exact_name(dialogue_id))
+        if turns is None:
+            raise HTTPException(404, "No such dialogue")
+        return turns
+
+    @api.router.get("/dialogues/{dialogue_id}/files")
+    async def dialogue_files(dialogue_id: str):
+        rows = await asyncio.to_thread(ops.list_files, exact_name(dialogue_id))
+        if rows is None:
+            raise HTTPException(404, "No such dialogue")
+        return rows
+
+    @api.router.get("/dialogues/{dialogue_id}/file")
+    async def dialogue_file(dialogue_id: str, path: str):
+        found = await asyncio.to_thread(ops.read_file, exact_name(dialogue_id), path)
+        if found is None:
+            raise HTTPException(404, "No such file")
+        return found
 
     @api.router.get("/dialogues/{dialogue_id}")
     async def get_dialogue(dialogue_id: str):

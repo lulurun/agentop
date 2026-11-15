@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -43,6 +43,7 @@ function seedDialogue(s: Service, name: string, session = "diaabcdea-1", status 
   );
   writeFileSync(join(directory, "brief.md"), "Decide the plan.");
   writeFileSync(join(directory, "progress.md"), "They agreed.");
+  return directory;
 }
 
 async function openStatus(page: Page, name = "box") {
@@ -140,18 +141,75 @@ test("each workspace keeps its tabs, and Sessions keeps its terminal connected",
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["History", "Status"]);
 });
 
-test("dialogues can be read, and removed after confirming", async ({ page }) => {
+test("a finished dialogue shows each agent's messages side by side, its stats and artifacts, and can be removed", async ({ page }) => {
   const s = await open(page);
-  seedDialogue(s, "debate_topic_abcde123");
+  const directory = seedDialogue(s, "debate_topic_abcde123");
+  writeFileSync(join(directory, "scenario.toml"), 'name = "debate"\n[role_a]\nname = "Pro"\nprompt = "x"\n[role_b]\nname = "Con"\nprompt = "y"\n');
+  const turns = [
+    { turn: 1, side: "a", name: "Pro", status: "continue", body: "We should **ship** it.", at: "2026-11-01T00:01:00+00:00" },
+    { turn: 2, side: "b", name: "Con", status: "continue", body: "Not before the tests.", at: "2026-11-01T00:02:00+00:00" },
+    { turn: 3, side: "a", name: "Pro", status: "complete", body: "Agreed: tests first.", at: "2026-11-01T00:03:00+00:00" },
+  ];
+  writeFileSync(join(directory, "turns.jsonl"), turns.map((t) => JSON.stringify(t)).join("\n") + "\n");
+  mkdirSync(join(directory, "deliverables"));
+  writeFileSync(join(directory, "deliverables/plan.md"), "# The plan\n\nTests first.");
 
   await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
-  await page.getByRole("button", { name: "debate_topic_abcde123" }).click();
-  await expect(page.getByText("Decide the plan.")).toBeVisible();
-  await expect(page.getByText("They agreed.")).toBeVisible();
+  const list = page.locator(".sidebar").getByRole("navigation", { name: "Dialogues" });
+  await list.getByRole("button", { name: /Decide the plan/ }).click();
 
-  await page.getByRole("button", { name: "Remove", exact: true }).click();
-  await page.getByRole("button", { name: "Remove for good" }).click();
-  await expect(page.getByText("No dialogues on this service.")).toBeVisible();
+  const left = page.getByRole("region", { name: "Left group" });
+  const right = page.getByRole("region", { name: "Right group" });
+  await expect(left.locator(".dialogue-message")).toHaveCount(2);
+  await expect(left.locator(".dialogue-message strong", { hasText: "ship" })).toBeVisible();
+  await expect(left).toContainText("Marked the dialogue complete");
+  await expect(right.locator(".dialogue-message")).toHaveText([/Not before the tests/]);
+
+  const details = page.locator(".details");
+  await expect(details).toContainText("3 of 10");
+  await expect(details).toContainText("Pro marked it complete");
+  await details.getByRole("button", { name: /plan\.md/ }).click();
+  await expect(right.getByRole("heading", { name: "The plan" })).toBeVisible();
+
+  await details.getByRole("button", { name: "Remove dialogue…" }).click();
+  await details.getByRole("button", { name: "Remove for good" }).click();
+  await expect(list).toContainText("None yet.");
+  await expect(page.getByRole("region", { name: "Right group" })).toHaveCount(0);
+});
+
+test("the New dialogue wizard asks for every field, then starts two agents watched read-only and kept out of the session list", async ({ page }) => {
+  const s = await open(page);
+  await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
+  await page.locator(".header").getByRole("button", { name: "New dialogue" }).click();
+
+  const wizard = page.getByRole("region", { name: "New dialogue" });
+  await wizard.getByLabel("Scenario").selectOption("shelf/pm-sde");
+  const start = wizard.getByRole("button", { name: "Start dialogue" });
+  await expect(start).toBeDisabled();
+  await wizard.getByLabel("Title").fill("Ship the widget");
+  await expect(start).toBeDisabled();
+  await wizard.getByLabel("Brief text").fill("Build the widget, with tests.");
+  await expect(start).toBeEnabled();
+  await start.click();
+
+  await expect(wizard).toHaveCount(0);
+  const details = page.locator(".details");
+  await expect(details).toContainText("Ship the widget");
+  const left = page.getByRole("region", { name: "Left group" });
+  await expect(left.locator(".viewer-meta", { hasText: "Live, read-only" })).toBeVisible({ timeout: 20_000 });
+  await expect(left.getByTestId("terminal")).toContainText("fake agent ready");
+  await expect(page.getByRole("region", { name: "Right group" }).getByTestId("terminal")).toContainText("fake agent ready");
+
+  const brief = join(s.root, "state/plugins/dialogue/dialogues");
+  const folder = readdirSync(brief)[0];
+  expect(readFileSync(join(brief, folder, "brief.md"), "utf8")).toBe("# Ship the widget\n\nBuild the widget, with tests.\n");
+
+  // Both agents run, but the session list leaves them out. (It may list agents running elsewhere on this machine.)
+  const agents = s.tmux("list-sessions", "-F", "#{session_name}").split("\n").filter((name) => /^dia[0-9a-f]{4}[ab]/.test(name));
+  expect(agents).toHaveLength(2);
+  await workspaces(page).getByRole("button", { name: "Sessions" }).click();
+  await expect(page.locator(".session-list")).toBeVisible();
+  await expect(page.locator(".session-row", { hasText: /dia[0-9a-f]{4}[ab]/ })).toHaveCount(0);
 });
 
 test("a session in a dialogue is labelled in the list", async ({ page }) => {

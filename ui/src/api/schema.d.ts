@@ -619,6 +619,8 @@ export interface components {
             managed: boolean;
             /** Memory Mb */
             memory_mb: number | null;
+            /** Owner */
+            owner?: string | null;
             /** Pid */
             pid: number | null;
             /** Runtime Seconds */

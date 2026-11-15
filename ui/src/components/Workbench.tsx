@@ -21,8 +21,11 @@ function useTabLabel(tab: Tab): { label: string; title: string; status?: string 
   if (content.kind === "status") return { label: "Status", title: `Status of ${service}` };
   if (content.kind === "history") return { label: "History", title: `Past sessions on ${service}` };
   if (content.kind === "plugin") {
-    const label = UI_PLUGINS[content.plugin]?.workspace?.views[content.view]?.label ?? content.view;
-    return { label: content.key ? `${label}: ${content.key}` : label, title: label };
+    const view = UI_PLUGINS[content.plugin]?.workspace?.views[content.view];
+    const label = view?.label ?? content.view;
+    if (!content.key) return { label, title: label };
+    const named = view?.tabLabel?.(content.key);
+    return { label: named ?? `${label}: ${content.key}`, title: named ?? label };
   }
   if (content.kind === "session") {
     return session

@@ -459,7 +459,9 @@ def create_v2_app(ctx: Context) -> FastAPI:
             ctx.store.unsubscribe(queue)
 
     @v2.websocket("/ws/sessions/{session_id}/terminal")
-    async def session_terminal(ws: WebSocket, session_id: str, ticket: str | None = None, cols: int = 80, rows: int = 24):
+    async def session_terminal(
+        ws: WebSocket, session_id: str, ticket: str | None = None, cols: int = 80, rows: int = 24, readonly: bool = False
+    ):
         client_id = ctx.tickets.consume(ticket, auth.terminal_scope(session_id))
         if client_id is None:
             await _reject(ws, WS_INVALID_TICKET)
@@ -470,10 +472,12 @@ def create_v2_app(ctx: Context) -> FastAPI:
             await _reject(ws, WS_NO_SESSION)
             return
         await ws.accept()
+        # A plugin's session, such as a dialogue's agent, is only ever watched: typing would break what drives it.
+        read_only = readonly or bool((ctx.store.get(session_id) or {}).get("owner"))
 
         async def bridge():
             try:
-                await terminal.bridge(ws, tmux_session, cols, rows)
+                await terminal.bridge(ws, tmux_session, cols, rows, read_only)
             except WebSocketDisconnect:
                 pass
 

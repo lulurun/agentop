@@ -1,4 +1,25 @@
 name = "product-direction"
+summary = "ProductStrategist proposes a product direction; ProductCritic challenges scope, decision logic and drift."
+
+# The brief's template. The New dialogue wizard asks for each {field}.
+description = """
+# {title}
+
+## Product topic
+{subject}
+
+## Users and the problem they have
+{users_and_problem}
+
+## Sources to read
+{sources}
+
+## Constraints and non-goals
+{constraints}
+
+## Deliverables
+{deliverables}
+"""
 
 [settings]
 max_turns = 80

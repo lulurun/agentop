@@ -30,6 +30,31 @@ function themeFromTokens(): ITheme {
   };
 }
 
+let cellRatio: number | null = null;
+
+/** A cell's width per pixel of font size, measured once. */
+function cellWidthRatio(): number {
+  if (cellRatio === null) {
+    try {
+      const context = document.createElement("canvas").getContext("2d");
+      if (context) {
+        context.font = "100px 'JetBrains Mono', ui-monospace, monospace";
+        cellRatio = context.measureText("M").width / 100 || 0.6;
+      }
+    } catch {
+      // No canvas: the usual ratio of a monospace font.
+    }
+    cellRatio ??= 0.6;
+  }
+  return cellRatio;
+}
+
+/** The font size that shows a window of `cols` × `rows` whole in `host`, no larger than `max`. */
+export function fittingFontSize(width: number, height: number, cols: number, rows: number, max: number, ratio = cellWidthRatio()): number {
+  const size = Math.min(width / (cols * ratio), height / (rows * 1.2), max);
+  return Math.max(6, Math.floor(size * 2) / 2);
+}
+
 function loadRenderer(term: Terminal) {
   const setting = loadSettings().renderer;
   if (setting === "dom") return;
@@ -51,12 +76,14 @@ interface Props {
   overlay?: ReactNode;
   /** Whether the search shortcut opens this terminal's search, and the terminal takes the keyboard when it opens. Off for a terminal in a group without focus. */
   searchable?: boolean;
+  /** Watched only: nothing typed is sent, it never takes the keyboard, and tmux keeps the window's size. Fixed for the terminal's life. */
+  readOnly?: boolean;
 }
 
 /** The only code that touches xterm, so the terminal library can be replaced in one place. */
-export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay, searchable = true }: Props) {
+export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay, searchable = true, readOnly = false }: Props) {
   const host = useRef<HTMLDivElement>(null);
-  const lockedRef = useRef(locked);
+  const lockedRef = useRef(locked || readOnly);
   const searchableRef = useRef(searchable);
   searchableRef.current = searchable;
   const term = useRef<Terminal | null>(null);
@@ -76,7 +103,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
       fontFamily: "'JetBrains Mono', ui-monospace, monospace",
       fontSize: loadSettings().fontSize,
       lineHeight: 1.2,
-      cursorBlink: true,
+      cursorBlink: !readOnly,
       allowProposedApi: true, // unicode11 needs it
       scrollback: 2000, // history lives in tmux
       theme: themeFromTokens(),
@@ -86,6 +113,16 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     });
     term.current = terminal;
     const fit = new FitAddon();
+    // A read-only terminal shows the window at the size tmux keeps it (sent in a "size" frame),
+    // with its font scaled to fit, instead of fitting its columns to the space.
+    let windowSize: { cols: number; rows: number } | null = null;
+    const fitWindow = () => {
+      const box = host.current;
+      if (!windowSize || !box?.offsetWidth) return;
+      const fontSize = fittingFontSize(box.clientWidth, box.clientHeight, windowSize.cols, windowSize.rows, loadSettings().fontSize);
+      if (terminal.options.fontSize !== fontSize) terminal.options.fontSize = fontSize;
+      if (terminal.cols !== windowSize.cols || terminal.rows !== windowSize.rows) terminal.resize(windowSize.cols, windowSize.rows);
+    };
     const searchAddon = new SearchAddon();
     search.current = searchAddon;
     terminal.loadAddon(fit);
@@ -134,7 +171,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
       if (disposed) return;
       let url: string;
       try {
-        url = await client.terminalUrl(sessionId, terminal.cols, terminal.rows);
+        url = await client.terminalUrl(sessionId, terminal.cols, terminal.rows, readOnly);
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) return;
         scheduleRetry();
@@ -156,6 +193,10 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
         if (typeof message.data === "string") {
           const control = JSON.parse(message.data);
           if (control.type === "closed") closing = control.reason === "detached" ? "detached" : "ended";
+          if (control.type === "size" && readOnly) {
+            windowSize = { cols: control.cols, rows: control.rows };
+            fitWindow();
+          }
         } else {
           terminal.write(new Uint8Array(message.data));
         }
@@ -177,7 +218,9 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(fitFrame);
       fitFrame = requestAnimationFrame(() => {
-        if (!disposed && host.current?.offsetWidth) fit.fit();
+        if (disposed || !host.current?.offsetWidth) return;
+        if (windowSize) fitWindow();
+        else fit.fit();
       });
     });
     observer.observe(host.current!);
@@ -200,22 +243,22 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
       terminal.dispose();
       term.current = null;
     };
-  }, [client, sessionId]);
+  }, [client, sessionId, readOnly]);
 
   useEffect(() => {
     if (focusRequest && !lockedRef.current) term.current?.focus();
   }, [focusRequest]);
 
   useEffect(() => {
-    lockedRef.current = locked;
+    lockedRef.current = locked || readOnly;
     const terminal = term.current;
     if (!terminal) return;
-    terminal.options.disableStdin = locked;
+    terminal.options.disableStdin = locked || readOnly;
     if (locked) {
       terminal.blur();
       setSearching(false);
     }
-  }, [locked]);
+  }, [locked, readOnly]);
 
   useEffect(() => {
     if (!searchable) return;
@@ -225,7 +268,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
   }, [searchable]);
 
   return (
-    <div className="terminal" data-status={status} data-locked={locked || undefined}>
+    <div className="terminal" data-status={status} data-locked={locked || undefined} data-readonly={readOnly || undefined}>
       <div className="terminal-host" ref={host} data-testid="terminal" inert={locked} />
       {locked && overlay}
       {searching && (

@@ -76,6 +76,8 @@ interface AppState {
   select(sessionId: string, mode?: OpenMode): void;
   /** Open a tab in the workspace shown; a session's tab always opens in Sessions. */
   openTab(content: TabContent, mode?: OpenMode): void;
+  /** Change a workspace's tabs with a function of its layout, such as a plugin showing two tabs side by side. */
+  editLayout(workspace: WorkspaceId, change: (layout: Layout) => Layout): void;
   activateTab(workspace: WorkspaceId, group: number, tabId: string): void;
   closeTab(workspace: WorkspaceId, group: number, tabId: string): void;
   splitTab(workspace: WorkspaceId): void;
@@ -634,6 +636,7 @@ export const useApp = create<AppState>((set, get) => {
       updateLayout((layout) => tabs.open(layout, content, mode), workspace);
       showWorkspace(workspace);
     },
+    editLayout: (workspace, change) => updateLayout(change, workspace),
     activateTab: (workspace, group, tabId) => updateLayout((layout) => tabs.activate(layout, group, tabId), workspace),
     closeTab: (workspace, group, tabId) => updateLayout((layout) => tabs.close(layout, group, tabId), workspace),
     splitTab: (workspace) => updateLayout((layout) => tabs.split(layout), workspace),

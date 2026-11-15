@@ -1,4 +1,22 @@
 name = "implementation-handoff"
+summary = "ImplementationLead prepares a handoff for one code agent; CodeReviewer audits it."
+
+# The brief's template. The New dialogue wizard asks for each {field}.
+description = """
+# {title}
+
+## What to build
+{objective}
+
+## Requirements and sources
+{requirements}
+
+## Code areas involved
+{code_areas}
+
+## Deliverables
+{deliverables}
+"""
 
 [settings]
 max_turns = 60

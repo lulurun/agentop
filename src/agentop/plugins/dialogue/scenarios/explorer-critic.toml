@@ -1,4 +1,25 @@
 name = "explorer-critic"
+summary = "Explorer reads the sources and drafts the deliverables; Critic reads the same sources and challenges them."
+
+# The brief's template. The New dialogue wizard asks for each {field}.
+description = """
+# {title}
+
+## Topic
+{subject}
+
+## Sources to explore
+{sources}
+
+## Deliverables
+{deliverables}
+
+## Challenge criteria
+{challenge_criteria}
+
+## Acceptance criteria
+{acceptance_criteria}
+"""
 
 [settings]
 max_turns = 80

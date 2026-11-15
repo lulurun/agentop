@@ -25,6 +25,8 @@ export interface PluginContext {
 /** A view a plugin's tab shows. `viewKey` tells apart tabs of the same view, such as one per dialogue. */
 export interface PluginView {
   label: string;
+  /** The label of one of its tabs, from the tab's `viewKey`. Without it the tab shows `label: viewKey`. */
+  tabLabel?(viewKey: string): string;
   Component: ComponentType<{ plugin: PluginContext; viewKey?: string }>;
 }
 

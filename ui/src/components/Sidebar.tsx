@@ -81,8 +81,9 @@ export function Sidebar() {
   const [filter, setFilter] = useState("");
 
   const needle = filter.trim().toLowerCase();
+  // A plugin's own sessions, such as a dialogue's agents, are shown in its workspace instead.
   const rows = sortedSessions(sessions).filter(
-    (s) => !needle || `${sessionTitle(s)} ${s.tool ?? ""} ${s.cwd}`.toLowerCase().includes(needle),
+    (s) => !s.owner && (!needle || `${sessionTitle(s)} ${s.tool ?? ""} ${s.cwd}`.toLowerCase().includes(needle)),
   );
   const managed = rows.filter((s) => s.managed);
   const external = rows.filter((s) => !s.managed);

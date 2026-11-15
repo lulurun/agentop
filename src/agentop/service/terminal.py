@@ -78,11 +78,13 @@ async def _pty_to_socket(ws: WebSocket, fd: int) -> None:
         loop.remove_reader(fd)
 
 
-async def _socket_to_pty(ws: WebSocket, fd: int, proc: asyncio.subprocess.Process) -> None:
+async def _socket_to_pty(ws: WebSocket, fd: int, proc: asyncio.subprocess.Process, read_only: bool) -> None:
     while True:
         message = await ws.receive()
         if message["type"] == "websocket.disconnect":
             return
+        if read_only:
+            continue  # keys and sizes alike: a watcher changes nothing
         if message.get("bytes") is not None:
             await _write_all(fd, message["bytes"])
         elif message.get("text") is not None:
@@ -109,15 +111,24 @@ async def _end_process(proc: asyncio.subprocess.Process) -> None:
         await proc.wait()
 
 
-async def bridge(ws: WebSocket, tmux_session: str, cols: int, rows: int) -> None:
-    """Attach to a tmux session over an accepted WebSocket, until either side ends."""
+async def bridge(ws: WebSocket, tmux_session: str, cols: int, rows: int, read_only: bool = False) -> None:
+    """Attach to a tmux session over an accepted WebSocket, until either side ends.
+
+    A read-only attach drops what the client types, and tmux itself ignores the
+    client's keys (`-r`). It takes the window's size instead of the client's,
+    which it is told in a `{"type": "size"}` frame, so the whole window shows and
+    watching never resizes it under the agent.
+    """
+    window = await asyncio.to_thread(Session.window_size, tmux_session) if read_only else None
+    if window:
+        cols, rows = window
     master, slave = pty.openpty()
     try:
         _set_size(master, *clamp_size(cols, rows))
         os.set_blocking(master, False)
         env = {**os.environ, "TERM": "xterm-256color", "COLORTERM": "truecolor"}
         proc = await asyncio.create_subprocess_exec(
-            *tmux.argv("-u", "attach-session", "-t", tmux.session_target(tmux_session)),
+            *tmux.argv("-u", "attach-session", *(["-f", "read-only,ignore-size"] if read_only else []), "-t", tmux.session_target(tmux_session)),
             stdin=slave,
             stdout=slave,
             stderr=slave,
@@ -130,9 +141,11 @@ async def bridge(ws: WebSocket, tmux_session: str, cols: int, rows: int) -> None
     finally:
         os.close(slave)
 
+    if window:
+        await ws.send_text(json.dumps({"type": "size", "cols": cols, "rows": rows}))
     tasks = [
         asyncio.ensure_future(_pty_to_socket(ws, master)),
-        asyncio.ensure_future(_socket_to_pty(ws, master, proc)),
+        asyncio.ensure_future(_socket_to_pty(ws, master, proc, read_only)),
     ]
     output_task = tasks[0]
     try:

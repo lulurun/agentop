@@ -187,6 +187,12 @@ class DialogueOrchestrator(threading.Thread):
                 )
                 break
 
+            side = "a" if actor is d.instance_a.actor else "b"
+            try:
+                d.meta.record_turn(turn, side, actor.name, str(receive_status), body)
+            except OSError as exc:
+                LOG.warning("Could not record turn %d: %s", turn, exc)
+
             if receive_status == ReceiveStatus.COMPLETE:
                 LOG.info("dialogue %s complete signal from %s turn %d", d.id, actor.name, turn)
                 break

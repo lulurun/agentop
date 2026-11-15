@@ -155,6 +155,26 @@ class Session:
             return False
 
     @staticmethod
+    def fix_size(name: str, cols: int, rows: int) -> bool:
+        """Give the session's window a size no attached client changes (`window-size manual`)."""
+        try:
+            if run("set-option", "-w", "-t", pane_target(name), "window-size", "manual").returncode != 0:
+                return False
+            return run("resize-window", "-t", pane_target(name), "-x", str(cols), "-y", str(rows)).returncode == 0
+        except _ERRORS:
+            return False
+
+    @staticmethod
+    def window_size(name: str) -> tuple[int, int] | None:
+        """The (cols, rows) of the session's window, or None."""
+        try:
+            r = run("display-message", "-p", "-t", pane_target(name), "#{window_width} #{window_height}", timeout=3, text=True)
+            cols, rows = (int(v) for v in r.stdout.split())
+            return cols, rows
+        except (*_ERRORS, ValueError):
+            return None
+
+    @staticmethod
     def _load_and_paste(name: str, payload: bytes, bracketed: bool = False) -> bool:
         """Load payload into the tmux buffer and paste it into the session.
 
