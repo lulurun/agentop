@@ -32,13 +32,13 @@ export interface PluginView {
 
 /**
  * A plugin's workspace in the header (design 10.7). Its main area is tabs, like
- * every workspace's, and it opens with its `home` view in one pinned tab.
+ * every workspace's. With no tabs open it shows `empty`, as Sessions shows its placard.
  */
 export interface PluginWorkspace {
   label: string;
-  /** The view of the pinned tab the workspace opens with, one of `views`. */
-  home: string;
   views: Record<string, PluginView>;
+  /** The main area with no tabs open. */
+  empty?: ComponentType<{ plugin: PluginContext }>;
   left?: ComponentType<{ plugin: PluginContext }>;
   right?: ComponentType<{ plugin: PluginContext }>;
   /** A button in the header, such as New dialogue. */

@@ -1016,7 +1016,6 @@ button.app-outdated:hover { background: var(--line); }
 .memory-switch input { flex: none; width: auto; }
 
 /* The Dialogues workspace */
-.dialogue-new { width: 100%; }
 .dialogue-row .session-name { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .dialogue-row { align-items: start; }
 .dialogue-row .mark { margin-top: 6px; }

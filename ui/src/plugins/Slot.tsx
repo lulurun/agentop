@@ -101,8 +101,8 @@ function PluginViewPiece({ info, View, viewKey }: { info: PluginInfo; View: NonN
   return <View plugin={plugin} viewKey={viewKey} />;
 }
 
-/** A plugin workspace's left or right panel. */
-export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left" | "right" }) {
+/** A plugin workspace's left or right panel, or its main area with no tabs open. */
+export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left" | "right" | "empty" }) {
   const info = useApp((s) => s.plugins.find((p) => p.id === pluginId && p.state === "enabled"));
   if (!info) return null;
   return (
@@ -112,7 +112,7 @@ export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left"
   );
 }
 
-function PluginPanelPiece({ info, side }: { info: PluginInfo; side: "left" | "right" }) {
+function PluginPanelPiece({ info, side }: { info: PluginInfo; side: "left" | "right" | "empty" }) {
   const plugin = usePluginContext(info);
   const Panel = UI_PLUGINS[info.id]?.workspace?.[side];
   return Panel ? <Panel plugin={plugin} /> : null;

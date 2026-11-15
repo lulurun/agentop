@@ -155,6 +155,10 @@ test("a finished dialogue shows each agent's messages side by side, its stats an
   writeFileSync(join(directory, "deliverables/plan.md"), "# The plan\n\nTests first.");
 
   await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
+  // No tabs to start with: a placard, as in Sessions, and the left panel is only the list.
+  await expect(page.locator(".main .placard")).toContainText("Create a new dialogue, or pick one from the list");
+  await expect(page.locator('.workbench[data-workspace="plugin:dialogue"]')).toHaveCount(0);
+  await expect(page.locator(".sidebar").getByRole("button", { name: "New dialogue" })).toHaveCount(0);
   const list = page.locator(".sidebar").getByRole("navigation", { name: "Dialogues" });
   await list.getByRole("button", { name: /Decide the plan/ }).click();
 

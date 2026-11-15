@@ -109,21 +109,8 @@ function DialogueList({ plugin }: { plugin: PluginContext }) {
   );
 }
 
-function LeftPanel({ plugin }: { plugin: PluginContext }) {
-  return (
-    <>
-      <div className="sidebar-actions">
-        <button type="button" className="primary dialogue-new" onClick={openWizard}>
-          New dialogue
-        </button>
-      </div>
-      <DialogueList plugin={plugin} />
-    </>
-  );
-}
-
-/** The workspace's pinned tab, as the Sessions workspace looks with nothing open. */
-function HomeView() {
+/** What the workspace shows with no tabs open, as the Sessions workspace does. */
+function EmptyView() {
   return (
     <div className="placard">
       <h2>Create a new dialogue, or pick one from the list</h2>
@@ -528,14 +515,13 @@ function fileLabel(viewKey: string): string {
 export const plugin: UiPlugin = {
   workspace: {
     label: "Dialogues",
-    home: "dialogues",
     views: {
-      dialogues: { label: "Dialogues", Component: HomeView },
       new: { label: "New dialogue", Component: NewDialogue },
       agent: { label: "Agent", Component: AgentView, tabLabel: agentLabel },
       file: { label: "File", Component: FileView, tabLabel: fileLabel },
     },
-    left: LeftPanel,
+    empty: EmptyView,
+    left: DialogueList,
     right: RightPanel,
     action: { label: "New dialogue", run: openWizard },
   },

@@ -40,10 +40,14 @@ export function pluginOf(id: WorkspaceId): string | undefined {
   return id.startsWith("plugin:") ? id.slice("plugin:".length) : undefined;
 }
 
-/** The pinned tab a workspace opens with. Sessions has none: it opens empty, or with the session selected last. */
+/** The pinned tab a workspace opens with: History's list. Others open empty, or Sessions with the session selected last. */
 export function homeOf(id: WorkspaceId): TabContent | undefined {
-  if (id === "history") return { kind: "history" };
-  const plugin = pluginOf(id);
-  const home = plugin ? UI_PLUGINS[plugin]?.workspace?.home : undefined;
-  return plugin && home ? { kind: "plugin", plugin, view: home } : undefined;
+  return id === "history" ? { kind: "history" } : undefined;
+}
+
+/** A plugin tab whose view its plugin's UI no longer has, such as a pinned home tab saved before plugins had none. */
+export function isStaleTab(content: TabContent): boolean {
+  if (content.kind !== "plugin") return false;
+  const workspace = UI_PLUGINS[content.plugin]?.workspace;
+  return !!workspace && !workspace.views[content.view];
 }

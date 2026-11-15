@@ -2,8 +2,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput } from "../connections";
 import { platform } from "../platform";
+import { PluginPanel } from "../plugins/Slot";
 import { activeClient, activeConnection, currentWorkspace, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
+import { pluginOf } from "../workspaces";
 import { Workbench, type SessionPaneProps } from "./Workbench";
 
 type Selection = { sessions: Record<string, Session>; selected: Record<string, string>; activeId: string };
@@ -276,7 +278,13 @@ export function MainArea() {
               </div>
             }
           />
-          {workspace !== "sessions" && <Workbench workspace={workspace} renderSession={renderSession} empty={null} />}
+          {workspace !== "sessions" && (
+            <Workbench
+              workspace={workspace}
+              renderSession={renderSession}
+              empty={pluginOf(workspace) ? <PluginPanel pluginId={pluginOf(workspace)!} side="empty" /> : null}
+            />
+          )}
         </>
       ) : (
         <ConnectionProblem />

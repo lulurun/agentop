@@ -187,8 +187,8 @@ This is handled transparently: the `Actor` types with its tool's `AgentCli.send_
 
 The Dialogues workspace (`ui/src/plugins/dialogue/`):
 
-- **New dialogue** (in the header and the left panel) opens the wizard in a tab: pick a scenario, fill in its brief's fields, pick each agent's tool and the maximum turns. Starting returns at once; the agents boot in the background, and the dialogue shows as Starting until its orchestrator runs.
-- **The left panel** lists dialogues In progress and Finished. Picking one shows agent A in the left tab group and agent B in the right one, replacing the dialogue shown before.
+- **New dialogue** (in the header, and on the placard shown while no tab is open) opens the wizard in a tab: pick a scenario, fill in its brief's fields, pick each agent's tool and the maximum turns. Starting returns at once; the agents boot in the background, and the dialogue shows as Starting until its orchestrator runs.
+- **The left panel** is only the list: dialogues In progress and Finished. Picking one shows agent A in the left tab group and agent B in the right one, replacing the dialogue shown before.
 - **An agent's tab** shows its tmux session live and read-only while the dialogue runs (the service attaches with `tmux attach -f read-only,ignore-size` and drops anything typed, and the terminal scales its font to show the whole window). Once the dialogue has ended it shows the agent's messages from `turns.jsonl`, drawn as Markdown.
 - **The right panel** shows the dialogue's status, scenario, agents, times and folder; its stats (turns, messages and words per agent, how long it took, what ended it, format retries); its artifacts (the files under `deliverables/`) and its brief and progress, each opening in a tab; and Stop and Remove. Remove asks first, then stops the agents if they run and deletes the folder.
 

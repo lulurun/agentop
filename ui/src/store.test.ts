@@ -31,4 +31,12 @@ describe("saved tabs", () => {
   it("reads tabs per workspace, and drops what isn't a layout", () => {
     expect(parseLayouts({ home: { sessions: layout, history: { groups: "no" } } })).toEqual({ home: { sessions: layout } });
   });
+
+  it("drops a plugin tab whose view is gone, such as the old pinned Dialogues tab", () => {
+    const agent = { id: "a", content: { kind: "plugin", plugin: "dialogue", view: "agent", key: "d1:a" } };
+    const old = { id: "home", pinned: true, content: { kind: "plugin", plugin: "dialogue", view: "dialogues" } };
+    const saved = { groups: [{ tabs: [old, agent], active: "home" }], focused: 0 };
+    const tabs = parseLayouts({ home: { "plugin:dialogue": saved } }).home["plugin:dialogue"]!.groups.flatMap((g) => g.tabs);
+    expect(tabs.map((t) => t.id)).toEqual(["a"]);
+  });
 });

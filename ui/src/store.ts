@@ -14,7 +14,7 @@ import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import * as tabs from "./tabs";
 import type { Layout, OpenMode, TabContent } from "./tabs";
-import { homeOf, pluginOf, workspacesFor, type WorkspaceId } from "./workspaces";
+import { homeOf, isStaleTab, pluginOf, workspacesFor, type WorkspaceId } from "./workspaces";
 
 export type LinkState =
   | { state: "connecting" }
@@ -120,7 +120,7 @@ export function parseLayouts(saved: Record<string, unknown>): Layouts {
     const byWorkspace: Partial<Record<WorkspaceId, Layout>> = {};
     for (const [workspace, layout] of Object.entries(value as Record<string, unknown>)) {
       const parsed = tabs.parseLayout(layout);
-      if (parsed) byWorkspace[workspace as WorkspaceId] = parsed;
+      if (parsed) byWorkspace[workspace as WorkspaceId] = tabs.closeWhere(parsed, isStaleTab);
     }
     result[id] = byWorkspace;
   }
