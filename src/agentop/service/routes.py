@@ -29,7 +29,7 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from agentop import agentclis, ops
+from agentop import agentclis, history, ops, registry
 from agentop.agentclis import AGENTS
 from agentop.tmux import Session
 
@@ -46,10 +46,10 @@ from .models import (
     FileListing,
     GitChanges,
     Health,
+    HistoryListing,
     PatchPlugin,
     PatchSession,
     PluginInfo,
-    SavedSession,
     ServiceInfo,
     SessionModel,
     Ticket,
@@ -389,15 +389,45 @@ def create_v2_app(ctx: Context) -> FastAPI:
             raise HTTPException(404, "Session not found")
         return await asyncio.to_thread(transcripts.list_transcripts, row.get("tool"), row.get("session_id"))
 
-    @v2.get("/saved-sessions", response_model=list[SavedSession], dependencies=authed)
-    async def saved_sessions(tool: str | None = None, limit: int = 50):
-        return await asyncio.to_thread(ops.get_saved_sessions, tool, limit, ctx.store.last_scan)
+    def past_sessions() -> list[dict]:
+        rows = ctx.store.list()
+        return history.list_history(
+            registry.load()["sessions"],
+            {row["id"] for row in rows},
+            {row["session_id"] for row in rows if row.get("session_id")},
+            ctx.settings.history_window_seconds,
+        )
 
-    @v2.delete("/saved-sessions/{tool}/{session_id:path}", dependencies=authed)
-    async def delete_saved_session(tool: str, session_id: str):
-        result = await asyncio.to_thread(ops.delete_saved_session, tool, session_id)
+    async def past_session(history_id: str) -> dict:
+        found = next((i for i in await asyncio.to_thread(past_sessions) if i["id"] == history_id), None)
+        if found is None:
+            raise HTTPException(404, "No such past session")
+        return found
+
+    @v2.get("/history", response_model=HistoryListing, dependencies=authed)
+    async def list_history():
+        return {
+            "items": await asyncio.to_thread(past_sessions),
+            "window_seconds": ctx.settings.history_window_seconds,
+            "active": ctx.store.active_count(),
+            "max_active": ctx.store.max_active,
+        }
+
+    @v2.post("/history/{history_id}/resume", response_model=SessionModel, status_code=202, dependencies=authed)
+    async def resume_history(history_id: str):
+        item = await past_session(history_id)
+        if not item["cwd"]:
+            raise HTTPException(400, "This session's directory isn't known")
+        name = history.resume_name(item)
+        return await ctx.store.create(item["tool"], item["cwd"], None, item["session_id"], display_name=name)
+
+    @v2.delete("/history/{history_id}", dependencies=authed)
+    async def delete_history(history_id: str):
+        item = await past_session(history_id)
+        result = await asyncio.to_thread(ops.delete_saved_session, item["tool"], item["session_id"])
         if not result["ok"]:
             raise HTTPException(400, result["error"])
+        await asyncio.to_thread(registry.remove_agent_session, item["tool"], item["session_id"])
         return result
 
     async def _reject(ws: WebSocket, code: int) -> None:

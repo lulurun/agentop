@@ -29,7 +29,12 @@ describe("saved tabs", () => {
   });
 
   it("reads tabs per workspace, and drops what isn't a layout", () => {
-    expect(parseLayouts({ home: { sessions: layout, history: { groups: "no" } } })).toEqual({ home: { sessions: layout } });
+    expect(parseLayouts({ home: { sessions: layout, "plugin:x": { groups: "no" } } })).toEqual({ home: { sessions: layout } });
+  });
+
+  it("drops the History workspace's tabs: History is in Sessions' left panel now", () => {
+    const old = { groups: [{ tabs: [{ id: "home", pinned: true, content: { kind: "history" } }], active: "home" }], focused: 0 };
+    expect(parseLayouts({ home: { sessions: layout, history: old } })).toEqual({ home: { sessions: layout } });
   });
 
   it("drops a plugin tab whose view is gone, such as the old pinned Dialogues tab", () => {

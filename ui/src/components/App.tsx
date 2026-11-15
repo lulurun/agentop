@@ -4,7 +4,6 @@ import { isAppShortcut } from "../shortcuts";
 import { currentWorkspace, useApp } from "../store";
 import { pluginOf, workspacesFor } from "../workspaces";
 import { DetailsPanel } from "./DetailsPanel";
-import { HistoryDetails } from "./HistoryView";
 import { AddServiceDialog } from "./ServiceDialogs";
 import { AppOutdated, ServiceSwitcher } from "./ServiceSwitcher";
 import { MainArea } from "./MainArea";
@@ -103,7 +102,7 @@ export function App() {
         (current.id === "sessions" ? <Sidebar /> : plugin && <aside className="sidebar"><PluginPanel pluginId={plugin} side="left" /></aside>)}
       <MainArea />
       {showRight &&
-        (current.id === "sessions" ? <DetailsPanel /> : current.id === "history" ? <HistoryDetails /> : plugin && <aside className="details"><PluginPanel pluginId={plugin} side="right" /></aside>)}
+        (current.id === "sessions" ? <DetailsPanel /> : plugin && <aside className="details"><PluginPanel pluginId={plugin} side="right" /></aside>)}
       {(showLeft || showRight) && <div className="scrim" onClick={() => { if (showLeft) toggleLeft(); if (showRight) toggleRight(); }} />}
       {state.dialog === "new-session" && <NewSessionDialog />}
       {state.dialog === "add-service" && <AddServiceDialog />}

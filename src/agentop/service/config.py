@@ -41,6 +41,10 @@ class Settings:
     # How long a client stays signed in without renewing, and how long at most.
     client_ttl: str | int = "12h"
     client_max_age: str | int = "30d"
+    # Past sessions agentop started are listed while they were used this recently.
+    history_window: str | int = "30d"
+    # How many sessions agentop runs at once, not counting a plugin's own.
+    max_active_sessions: int = 20
 
     @property
     def is_loopback(self) -> bool:
@@ -61,6 +65,13 @@ class Settings:
     @property
     def client_max_age_seconds(self) -> float | None:
         return parse_duration(self.client_max_age)
+
+    @property
+    def history_window_seconds(self) -> float:
+        seconds = parse_duration(self.history_window)
+        if seconds is None:
+            raise ValueError(f"history_window must be a duration, such as 30d, not {self.history_window!r}")
+        return seconds
 
     @property
     def tls(self) -> bool:

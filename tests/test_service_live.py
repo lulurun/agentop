@@ -118,7 +118,7 @@ def test_service_says_what_it_is_to_a_client(service):
     assert "instance_id" not in body and "token" not in json.dumps(body)
 
 
-@pytest.mark.parametrize("path", ["/service", "/sessions", "/tools", "/fs/dirs", "/saved-sessions"])
+@pytest.mark.parametrize("path", ["/service", "/sessions", "/tools", "/fs/dirs", "/history"])
 def test_everything_else_needs_the_token(service, path):
     assert httpx.get(service.base + path).status_code == 401
     bad = {"Authorization": "Bearer wrong"}

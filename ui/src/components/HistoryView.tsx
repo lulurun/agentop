@@ -1,148 +1,185 @@
 import { useEffect, useMemo, useState } from "react";
-import type { SavedSession } from "../api/client";
-import { historyKey, useApp } from "../store";
+import type { HistoryItem } from "../api/client";
+import { activeCount, useApp } from "../store";
 import { Row } from "./DetailsPanel";
 import { ToolBadge } from "./Sidebar";
 
-type Sort = "updated" | "tool";
-
-function when(item: SavedSession): string {
-  return item.last_active != null ? new Date(item.last_active * 1000).toLocaleString() : "Unknown";
+function when(seconds: number | null | undefined): string {
+  return seconds != null ? new Date(seconds * 1000).toLocaleString() : "Unknown";
 }
 
-function useSelectedItem(): SavedSession | undefined {
-  const history = useApp((s) => s.history);
-  return history.items?.find((i) => historyKey(i) === history.selected);
+/** Short, for a row: the month, day and time. */
+function short(seconds: number): string {
+  return new Date(seconds * 1000).toLocaleString(undefined, { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-/** The History workspace's pinned tab: every past session on the service, to search, filter and sort. */
-export function HistoryList() {
+function days(seconds: number | null): string {
+  if (seconds == null) return "";
+  const d = Math.round(seconds / 86400);
+  return d === 1 ? "the last day" : `the last ${d} days`;
+}
+
+/** The past session a tab shows, from the History list. */
+function useItem(historyId: string): HistoryItem | undefined {
+  return useApp((s) => s.history.items?.find((i) => i.id === historyId));
+}
+
+/** Whether another session may be resumed now, and the limit. */
+function useLimit(): { atLimit: boolean; max: number } {
+  const max = useApp((s) => s.history.maxActive);
+  const active = useApp((s) => activeCount(s.sessions));
+  return { atLimit: active >= max, max };
+}
+
+export const LIMIT_MESSAGE = "Active sessions are at the limit. Close a session to resume this one.";
+
+/**
+ * History, under the active sessions in Sessions' left panel: the past sessions
+ * agentop started and used within the window, newest first.
+ */
+export function HistorySection({ selected }: { selected?: string }) {
   const history = useApp((s) => s.history);
   const loadHistory = useApp((s) => s.loadHistory);
-  const selectHistory = useApp((s) => s.selectHistory);
-  const rightOpen = useApp((s) => s.rightOpen);
-  const toggleRight = useApp((s) => s.toggleRight);
+  const openTab = useApp((s) => s.openTab);
+  const sessionIds = useApp((s) => Object.keys(s.sessions).sort().join("\n"));
   const [search, setSearch] = useState("");
   const [tool, setTool] = useState("");
-  const [sort, setSort] = useState<Sort>("updated");
 
+  // A closed session joins History, and a resumed one leaves it.
   useEffect(() => {
-    if (history.items === null) void loadHistory();
-  }, [history.items, loadHistory]);
+    const timer = setTimeout(() => void loadHistory(), history.items === null ? 0 : 1500);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionIds, loadHistory]);
 
   const tools = useMemo(() => [...new Set((history.items ?? []).map((i) => i.tool))].sort(), [history.items]);
   const needle = search.trim().toLowerCase();
-  const rows = useMemo(() => {
-    const kept = (history.items ?? []).filter(
-      (i) =>
-        (!tool || i.tool === tool) &&
-        (!needle || `${i.title ?? ""} ${i.tool} ${i.cwd ?? ""} ${i.session_id}`.toLowerCase().includes(needle)),
-    );
-    const newest = (a: SavedSession, b: SavedSession) => (b.last_active ?? 0) - (a.last_active ?? 0);
-    return kept.sort(sort === "tool" ? (a, b) => a.tool.localeCompare(b.tool) || newest(a, b) : newest);
-  }, [history.items, tool, needle, sort]);
+  const rows = useMemo(
+    () =>
+      (history.items ?? [])
+        .filter(
+          (i) =>
+            (!tool || i.tool === tool) &&
+            (!needle || `${i.name} ${i.title ?? ""} ${i.description} ${i.cwd}`.toLowerCase().includes(needle)),
+        )
+        .sort((a, b) => b.last_active - a.last_active),
+    [history.items, tool, needle],
+  );
 
-  function pick(item: SavedSession) {
-    selectHistory(historyKey(item));
-    // On a narrow screen the details are an overlay, shut until asked for.
-    if (!rightOpen && window.innerWidth < 900) toggleRight();
+  function open(item: HistoryItem, mode: "replace" | "tab") {
+    openTab({ kind: "past", historyId: item.id }, mode);
   }
 
   return (
-    <section className="view history" aria-label="History">
-      <div className="view-tools">
-        <input type="search" aria-label="Search history" placeholder="Search titles, directories, IDs" value={search} onChange={(event) => setSearch(event.target.value)} />
+    <section className="sidebar-section history-section" aria-label="History">
+      <h3 className="session-group" title={history.windowSeconds ? `Sessions agentop started, used in ${days(history.windowSeconds)}` : undefined}>
+        History
+      </h3>
+      <div className="sidebar-actions history-tools">
+        <input type="search" aria-label="Filter history" placeholder="Filter history" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select aria-label="CLI" value={tool} onChange={(event) => setTool(event.target.value)}>
           <option value="">All CLIs</option>
           {tools.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
-        <select aria-label="Sort by" value={sort} onChange={(event) => setSort(event.target.value as Sort)}>
-          <option value="updated">Last updated</option>
-          <option value="tool">CLI</option>
-        </select>
-        <button type="button" onClick={() => void loadHistory()}>Refresh</button>
       </div>
-      {history.items === null ? (
-        <p className="view-empty">Loading…</p>
-      ) : rows.length === 0 ? (
-        <p className="view-empty">{needle || tool ? "No past sessions match." : "No past sessions on this service."}</p>
-      ) : (
-        <>
-          <p className="view-count">{rows.length === 1 ? "1 past session" : `${rows.length} past sessions`}</p>
-          <ul className="view-list history-list" aria-label="Past sessions">
-            {rows.map((item) => {
-              const key = historyKey(item);
-              return (
-                <li key={key}>
-                  <button type="button" className="history-row" aria-current={key === history.selected ? "true" : undefined} onClick={() => pick(item)}>
-                    <span className="view-row-title">{item.title || item.session_id}</span>
-                    <span className="view-row-meta">
-                      <ToolBadge tool={item.tool} />
-                      {item.cwd && <span className="history-cwd">{item.cwd}</span>}
-                      <span>{when(item)}</span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        </>
-      )}
+      <nav className="session-list" aria-label="Past sessions">
+        {history.items === null ? (
+          <p className="session-empty">Loading…</p>
+        ) : rows.length === 0 ? (
+          <p className="session-empty">{needle || tool ? "No past sessions match." : `No sessions ended in ${days(history.windowSeconds)}.`}</p>
+        ) : (
+          rows.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className="session-row history-row"
+              title={item.cwd}
+              aria-current={item.id === selected ? "true" : undefined}
+              onClick={(event) => open(item, event.ctrlKey || event.metaKey ? "tab" : "replace")}
+              onAuxClick={(event) => {
+                if (event.button === 1) open(item, "tab");
+              }}
+            >
+              <span className="session-name">{item.name}</span>
+              <span className="session-meta">
+                <ToolBadge tool={item.tool} />
+                <span title={when(item.last_active)}>{short(item.last_active)}</span>
+                <span className="session-summary">{item.description || item.title || item.cwd}</span>
+              </span>
+            </button>
+          ))
+        )}
+      </nav>
     </section>
   );
 }
 
-/** The History workspace's right panel: the selected past session, to resume or remove. */
-export function HistoryDetails() {
-  const item = useSelectedItem();
-  const act = useApp((s) => s.act);
-  const select = useApp((s) => s.select);
+/** A past session in the main area: what it was, and Resume or Delete. */
+export function PastSessionView({ historyId, onClose }: { historyId: string; onClose(): void }) {
+  const item = useItem(historyId);
+  const loaded = useApp((s) => s.history.items !== null);
+  const resumeHistory = useApp((s) => s.resumeHistory);
   const removeHistory = useApp((s) => s.removeHistory);
+  const { atLimit } = useLimit();
   const [confirming, setConfirming] = useState(false);
-  const key = item && historyKey(item);
-  useEffect(() => setConfirming(false), [key]);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => setConfirming(false), [historyId]);
 
-  if (!item) return <aside className="details"><p className="detail-empty">Select a past session to see its details.</p></aside>;
-
-  async function resume(item: SavedSession) {
-    const created = await act((c) =>
-      c.create({ tool: item.tool, cwd: item.cwd ?? "", name: null, resume: { session_id: item.session_id } }),
+  if (!item) {
+    return (
+      <section className="view past-session" aria-label="Past session">
+        <p className="view-empty">{loaded ? "This session is no longer in History: it was resumed, deleted, or last used too long ago." : "Loading…"}</p>
+        {loaded && <div className="stop-buttons"><button type="button" onClick={onClose}>Close tab</button></div>}
+      </section>
     );
-    if (created) select(created.id);
   }
 
+  async function run(action: () => Promise<void>) {
+    setBusy(true);
+    try {
+      await action();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const resumable = !!item.cwd && !atLimit;
   return (
-    <aside className="details" aria-label="Past session">
-      <section>
-        <h3>Details</h3>
-        <dl>
-          <Row label="Title" value={item.title || "Untitled"} />
-          <Row label="Tool" value={item.tool} />
-          <Row label="Directory" value={item.cwd || "Unknown"} copy={item.cwd || undefined} />
-          <Row label="Session ID" value={item.session_id} copy={item.session_id} />
-          <Row label="Updated" value={when(item)} />
-        </dl>
-      </section>
-      <section className="details-actions" aria-label="Actions">
+    <section className="view past-session" aria-label="Past session">
+      <h2>{item.name}</h2>
+      <dl>
+        <Row label="Title" value={item.title || "Untitled"} />
+        {item.description && <Row label="Description" value={item.description} />}
+        <Row label="CLI" value={item.tool} />
+        <Row label="Directory" value={item.cwd || "Unknown"} copy={item.cwd || undefined} />
+        <Row label="Started" value={when(item.created_at)} />
+        <Row label="Last used" value={when(item.last_active)} />
+        <Row label="Session ID" value={item.session_id} copy={item.session_id} />
+      </dl>
+      <div className="details-actions" aria-label="Actions">
         {confirming ? (
           <>
             <p className="stop-note">Delete this session's transcript from {item.tool}? It can't be resumed afterwards.</p>
             <div className="stop-buttons">
               <button type="button" onClick={() => setConfirming(false)}>Keep</button>
-              <button type="button" className="primary" onClick={() => void removeHistory(item)}>Delete for good</button>
+              <button type="button" className="primary" disabled={busy} onClick={() => void run(() => removeHistory(item))}>Delete for good</button>
             </div>
           </>
         ) : (
-          <div className="stop-buttons">
-            <button type="button" className="primary" disabled={!item.cwd} title={item.cwd ? undefined : "Its directory isn't known"} onClick={() => void resume(item)}>
-              Resume
-            </button>
-            <button type="button" onClick={() => setConfirming(true)}>Delete</button>
-          </div>
+          <>
+            {atLimit && <p className="stop-note" role="status">{LIMIT_MESSAGE}</p>}
+            {!item.cwd && <p className="stop-note">Its directory isn't known, so it can't be resumed.</p>}
+            <div className="stop-buttons">
+              <button type="button" className="primary" disabled={!resumable || busy} onClick={() => void run(() => resumeHistory(item))}>
+                Resume
+              </button>
+              <button type="button" onClick={() => setConfirming(true)}>Delete</button>
+            </div>
+          </>
         )}
-      </section>
-    </aside>
+      </div>
+    </section>
   );
 }

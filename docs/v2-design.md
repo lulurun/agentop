@@ -446,7 +446,8 @@ All routes are under `/api/v2`. The existing `/api` routes stay until cutover, s
 | `DELETE` | `/sessions/{id}` | Kill tmux and remove an `exited` or `failed` session |
 | `GET` | `/sessions/{id}/files?path=` | One directory of the working tree |
 | `GET` | `/sessions/{id}/changes` | Git branch, dirty state, changed files |
-| `GET`, `DELETE` | `/saved-sessions`, `/saved-sessions/{tool}/{id}` | History |
+| `GET` | `/history` | History (10.7.7): past sessions agentop started, used within `history_window`, and the active-session limit |
+| `POST`, `DELETE` | `/history/{id}/resume`, `/history/{id}` | Resume a past session (409 at the limit), or delete its transcript from its tool |
 | `GET`, `POST`, `DELETE` | `/dialogues`, `/dialogues/{id}`, `/dialogues/{id}/stop` | Dialogues. Moves to `/plugins/dialogue/…` (12.9) |
 | `WS` | `/ws/events?ticket=` | Change stream |
 | `WS` | `/ws/sessions/{id}/terminal?ticket=&cols=&rows=` | Terminal |
@@ -593,13 +594,13 @@ Everything else is shared. A CI check forbids importing `@tauri-apps/*` outside 
 
 ### 10.7 Workspaces (2026-11-15)
 
-Agreed on 2026-11-15, replacing the single sessions layout of 10.1. Each connection offers a set of top-level features, called **workspaces**: Sessions, History, Dialogues, Memory, and later others. Each has its own layout, and the header switches between them.
+Agreed on 2026-11-15, replacing the single sessions layout of 10.1. Each connection offers a set of top-level features, called **workspaces**: Sessions, Dialogues, Memory, and later others. Each has its own layout, and the header switches between them. History was a workspace too until later on 2026-11-15, when it moved into Sessions' left panel (10.7.7).
 
 #### 10.7.1 The header
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
-│ [◧] ● build-box ▾  Sessions  History  Dialogues      fix-auth  [New session] [⚙] [◨] │
+│ [◧] ● build-box ▾  Sessions  Dialogues  Memory       fix-auth  [New session] [⚙] [◨] │
 └──────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -615,8 +616,7 @@ A workspace declares an optional left panel, a main area, an optional right pane
 
 | Workspace | Left | Main | Right | Action |
 |-----------|------|------|-------|--------|
-| Sessions | Session list | Session tabs, optionally split, with files and Status beside them | The focused session's details | New session |
-| History | none | One pinned tab: past sessions, filtered by CLI, searched, and sorted by last updated or CLI | The selected past session: details and stats, Resume, Remove | none |
+| Sessions | Active sessions, then History (10.7.7) | Session tabs, optionally split, with files, past sessions and Status beside them | The focused session's details | New session |
 | Dialogues (plugin) | Dialogues, for now inside the main tab; designed separately | Split: the dialogue in the left tab (the two actors side by side, view only); artifact files open in the right group | Info and the dialogue folder's files, Remove | New dialogue |
 | Memory (plugin) | Search: words, CLI, since; matching sessions, then messages; Didn't find it? | A conversation per tab, opened at the hit | The session's summary and details | none |
 
@@ -627,9 +627,9 @@ Dialogue sessions belong to the Dialogues workspace, which watches them and mana
 Every workspace's main area uses the tab model of `ui/src/tabs.ts`, so the main area behaves the same everywhere:
 
 - Each connection keeps one tab layout per workspace. Switching workspaces and back keeps the tabs, the split, and what was selected.
-- A workspace starts with its own default: Sessions with no tabs (or the session selected last time), History with its list, Dialogues with no tabs (a placard with New dialogue, as Sessions has), Memory with no tabs (a placard; the search is in its left panel). A default tab is **pinned**: it can be moved but not closed, so a workspace never ends up empty with nothing to reopen it from. A workspace that opens with no tabs shows a placard instead, which offers its action.
+- A workspace starts with its own default: Sessions with no tabs (or the session selected last time), Dialogues with no tabs (a placard with New dialogue, as Sessions has), Memory with no tabs (a placard; the search is in its left panel). A default tab is **pinned**: it can be moved but not closed, so a workspace never ends up empty with nothing to reopen it from. A workspace that opens with no tabs shows a placard instead, which offers its action.
 - Each tab kind says which side it opens on: sessions and **Status** on the left, files (a session's files or a dialogue's artifacts) on the right. With no split, a tab opens in the only group. A tab already open anywhere is focused instead of opened twice.
-- The core owns the `session`, `status` and `history` kinds; `file` is drawn by the file-viewer plugin; a plugin adds kinds of its own through its workspace (12.6). When a plugin is turned off, its tabs close with its workspace.
+- The core owns the `session`, `status` and `past` kinds; `file` is drawn by the file-viewer plugin; a plugin adds kinds of its own through its workspace (12.6). When a plugin is turned off, its tabs close with its workspace.
 - The Sessions tabs stay mounted while another workspace shows, hidden, so terminals keep their connection and scrollback.
 - Saved tabs from before workspaces (`agentop.tabs`, one layout per connection) become the Sessions layout.
 
@@ -651,9 +651,20 @@ The old Settings dialog mixed two things: how this app looks, and the plugins of
 
 #### 10.7.6 Later
 
-- The workspace in the URL (`/sessions`, `/history`, `/dialogues/<id>`), for the back button, deep links, and reloading in place. Until then the workspace is remembered per connection in this browser.
-- A badge on a workspace in the header when something there needs attention, such as a session waiting for input while History shows.
-- One navigation call, `navigate(workspace, selection)`, for jumps between workspaces, such as a Memory search hit opening its conversation. Resume in History already switches to Sessions.
+- The workspace in the URL (`/sessions`, `/dialogues/<id>`), for the back button, deep links, and reloading in place. Until then the workspace is remembered per connection in this browser.
+- A badge on a workspace in the header when something there needs attention, such as a session waiting for input while Memory shows.
+- One navigation call, `navigate(workspace, selection)`, for jumps between workspaces, such as a Memory search hit opening its conversation.
+
+#### 10.7.7 History in the Sessions panel (2026-11-15)
+
+History is no longer a workspace. It lists only what is worth reopening: sessions agentop started, used recently.
+
+- **What is listed.** A past session is one agentop started (managed, not a plugin's), no longer in the session list, whose tool still has its transcript, last written within `history_window` (`config.toml`, default `"30d"`). Sessions started elsewhere are not listed. The registry records each managed session's agent session ID (`agent_session_id`) and title once the service sees them, and keeps an ended session's record at least as long as the window. A session resumed again and again is one row, its latest record.
+- **The left panel** has two sections. **Active sessions**, with a keyword filter and the count against the limit (`3/20`); sessions started elsewhere stay under it as before. **History**, with a keyword filter and a CLI filter, newest first by last use.
+- **A past session opens as a tab** (`past`) in the main area, in the left group when split, taking the place of the past session shown, as a session does (Ctrl-click for a new tab). It shows the name, title, description, CLI, directory, when it started and was last used, and the session ID, with **Resume** and **Delete** (asks first; deletes the transcript from its tool, and agentop's records of it).
+- **The active-session limit.** At most `max_active_sessions` (`config.toml`, default 20) sessions agentop started are active at once, counting every one in the list (starting, running, exited or failed until closed), not plugins' own. The service refuses a start or resume past it (409). The app disables Resume, saying "Active sessions are at the limit. Close a session to resume this one.", and Start session in New session.
+- **A resumed session's name** is the original name and when it was last used, `fix-auth 2026-11-03 09:05`, in the service's time zone. Resuming it again replaces the date rather than adding another. Its tab becomes the new session's terminal.
+- `agentop history` (the CLI) still lists every saved session of every tool; only the app narrowed.
 
 ## 11 Desktop app
 
@@ -677,7 +688,7 @@ Agentop grows from here through plugins. The features that exist today are the *
 - The terminal bridge and tmux integration.
 - The main area's tabs: one or two groups side by side, each tab holding a session's terminal or a file (drawn by a `file-viewer` plugin).
 - The right panel: details, token usage, and changed and all files. A changed file opens as its diff.
-- History.
+- History, in the Sessions panel (10.7.7).
 - Service status, stop, restart, update, and token handling.
 - Connections and service switching, settings, and the plugin loader itself (12.3).
 

@@ -13,6 +13,7 @@ src/agentop/
   agent_instance.py      Wires AgentCli + Actor into one runtime object
   scanner.py             Process detection and session building
   ops.py                 Business logic used by both the service and the CLI
+  history.py             The app's History: past sessions agentop started, used within the window
   registry.py            Persistent managed-session registry
   tmux.py                tmux subprocess wrappers
   paths.py               Where agentop keeps its files (~/.agentop)
@@ -121,7 +122,7 @@ The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was
 
 ### 4.2 Registry (`registry.py`)
 
-JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6).
+JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. The store adds each managed session's agent session ID (`agent_session_id`) and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6).
 
 ### 4.3 Ops (`ops.py`)
 

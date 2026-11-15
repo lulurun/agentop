@@ -21,6 +21,7 @@ from agentop.tmux import Session
 LOG = logging.getLogger(__name__)
 
 TICK_SECONDS = 2.0
+DEFAULT_MAX_ACTIVE = 20
 META_EVERY_TICKS = 5
 PRUNE_EVERY_TICKS = 300
 
@@ -127,9 +128,37 @@ def _visible(row: dict) -> dict:
     return {k: v for k, v in row.items() if k not in _VOLATILE_KEYS}
 
 
+def counts_as_active(row: dict) -> bool:
+    """Whether a row takes one of the max_active places: a session agentop started, still listed, not a plugin's."""
+    return bool(row.get("managed")) and not row.get("owner")
+
+
+def agent_fields(rows: dict[str, dict], records: dict[str, dict]) -> dict[str, dict]:
+    """What to add to each managed session's record so History can list and resume it once it ends."""
+    updates = {}
+    for name, row in rows.items():
+        record = records.get(name)
+        if not record or not row.get("managed") or not row.get("session_id"):
+            continue
+        fields = {"agent_session_id": row["session_id"]}
+        if row.get("ai_title"):
+            fields["ai_title"] = row["ai_title"]
+        if row.get("tool") and not record.get("tool"):
+            fields["tool"] = row["tool"]
+        changed = {k: v for k, v in fields.items() if record.get(k) != v}
+        if changed:
+            updates[name] = changed
+    return updates
+
+
 class SessionStore:
-    def __init__(self, tick_seconds: float = TICK_SECONDS):
+    def __init__(
+        self, tick_seconds: float = TICK_SECONDS, max_active: int = DEFAULT_MAX_ACTIVE, retention_seconds: float | None = None
+    ):
         self.tick_seconds = tick_seconds
+        self.max_active = max_active
+        # How long an ended session's record is kept: History's window.
+        self.retention_seconds = retention_seconds
         self.last_scan: list[dict] = []
         self.last_updated = 0.0
         self._sessions: dict[str, dict] = {}
@@ -188,6 +217,12 @@ class SessionStore:
     def get(self, session_id: str) -> dict | None:
         return copy.deepcopy(self._sessions.get(session_id))
 
+    def active_count(self) -> int:
+        return sum(1 for row in self._sessions.values() if counts_as_active(row))
+
+    def at_limit(self) -> bool:
+        return self.active_count() >= self.max_active
+
     def tmux_session(self, session_id: str) -> str:
         """Return the tmux session to attach to. A session not seen yet is assumed to be its own ID."""
         row = self._sessions.get(session_id) or {}
@@ -218,12 +253,15 @@ class SessionStore:
 
         rows = merge_sessions(scan, tmux_sessions, records, self._starting, self._meta, time.time())
         self._meta = {k: v for k, v in self._meta.items() if k in rows}
+        if with_meta:
+            for name, fields in agent_fields(rows, records).items():
+                await asyncio.to_thread(registry.upsert_session, name, fields)
         self._publish_changes(rows, include_volatile=with_meta)
         old, self._sessions = self._sessions, rows
         self._notify_listeners(old, rows)
 
         if self._ticks % PRUNE_EVERY_TICKS == 0:
-            await asyncio.to_thread(registry.mark_ended_and_prune, set(tmux_sessions))
+            await asyncio.to_thread(registry.mark_ended_and_prune, set(tmux_sessions), None, self.retention_seconds)
 
     # ------------------------------------------------------------------ events
 
@@ -295,8 +333,16 @@ class SessionStore:
 
     # ------------------------------------------------------------------ actions
 
-    async def create(self, tool: str, cwd: str, name: str | None = None, resume_id: str | None = None) -> dict:
-        """Validate, record the session as `starting`, and begin starting it in the background."""
+    async def create(
+        self, tool: str, cwd: str, name: str | None = None, resume_id: str | None = None, display_name: str | None = None
+    ) -> dict:
+        """Validate, record the session as `starting`, and begin starting it in the background.
+
+        `name` goes into the tmux session's name; `display_name`, shown instead
+        when given, can be any text, such as a resumed session's name and date.
+        """
+        if self.at_limit():
+            raise StoreError(409, f"{self.max_active} sessions are active, the most allowed. Close one to start another")
         agent = ops.get_agent(tool)
         if not agent:
             raise StoreError(400, f"Unknown tool: {tool}")
@@ -318,17 +364,20 @@ class SessionStore:
             "managed": True,
             "tool": tool,
             "cwd": cwd,
-            "display_name": short_name,
+            "display_name": display_name or short_name,
             "created_at": time.time(),
             "status": "starting",
             "step": "creating",
         }
+        if resume_id is not None:
+            # Known before the agent says so, so History drops it at once.
+            record["agent_session_id"] = resume_id
         await asyncio.to_thread(registry.upsert_session, session_id, record)
         async with self._lock:
             self._starting[session_id] = record
             await self._refresh_locked(with_meta=False)
 
-        task = asyncio.create_task(self._run_start(session_id, tool, cwd, short_name, resume_id))
+        task = asyncio.create_task(self._run_start(session_id, tool, cwd, short_name, resume_id, display_name))
         self._start_tasks.add(task)
         task.add_done_callback(self._start_tasks.discard)
         return self.get(session_id)
@@ -342,7 +391,9 @@ class SessionStore:
         row["step"] = step
         self._publish({"type": "session.upserted", "session": copy.deepcopy(row)})
 
-    async def _run_start(self, session_id: str, tool: str, cwd: str, short_name: str, resume_id: str | None) -> None:
+    async def _run_start(
+        self, session_id: str, tool: str, cwd: str, short_name: str, resume_id: str | None, display_name: str | None
+    ) -> None:
         loop = asyncio.get_running_loop()
 
         def on_progress(step: str) -> None:
@@ -361,6 +412,9 @@ class SessionStore:
             LOG.exception("Start of %s failed", session_id)
             result = {"ok": False, "error": str(exc)}
 
+        if display_name and result.get("name"):
+            # ops records the short name as the display name.
+            await asyncio.to_thread(registry.upsert_session, session_id, {"display_name": display_name})
         if not result.get("ok"):
             error = result.get("error") or "Failed to start"
             await asyncio.to_thread(

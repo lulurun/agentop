@@ -18,6 +18,7 @@ from pathlib import Path
 
 from agentop.paths import state_dir
 
+# The least time an ended session's record is kept: History lists it from here.
 ENDED_RETENTION_SECONDS = 30 * 24 * 3600
 
 _lock = threading.Lock()
@@ -103,13 +104,15 @@ def set_description(name: str, description: str | None):
         return True
 
 
-def mark_ended_and_prune(live_names: set[str], now: float | None = None) -> list[str]:
+def mark_ended_and_prune(live_names: set[str], now: float | None = None, retention: float | None = None) -> list[str]:
     """Stamp records whose tmux session is gone, and drop those that have been gone too long.
 
+    `retention` is how long that is, at least ENDED_RETENTION_SECONDS.
     Failed starts are kept: they are the user's to dismiss.
     Returns the names that were removed.
     """
     now = time.time() if now is None else now
+    retention = max(retention or 0, ENDED_RETENTION_SECONDS)
     removed = []
     with _exclusive():
         data = load()
@@ -121,10 +124,26 @@ def mark_ended_and_prune(live_names: set[str], now: float | None = None) -> list
             if ended_at is None:
                 record["ended_at"] = now
                 changed = True
-            elif now - ended_at > ENDED_RETENTION_SECONDS:
+            elif now - ended_at > retention:
                 del data["sessions"][name]
                 removed.append(name)
                 changed = True
         if changed:
             save(data)
     return removed
+
+
+def remove_agent_session(tool: str, agent_session_id: str) -> list[str]:
+    """Drop every record of the agent session, as when its transcript is deleted. Returns their names."""
+    with _exclusive():
+        data = load()
+        names = [
+            name
+            for name, record in data["sessions"].items()
+            if record.get("tool") == tool and record.get("agent_session_id") == agent_session_id
+        ]
+        for name in names:
+            del data["sessions"][name]
+        if names:
+            save(data)
+    return names

@@ -151,6 +151,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List History */
+        get: operations["list_history_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/{history_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete History */
+        delete: operations["delete_history_history__history_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/history/{history_id}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Resume History */
+        post: operations["resume_history_history__history_id__resume_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/plugins": {
         parameters: {
             query?: never;
@@ -183,40 +234,6 @@ export interface paths {
         head?: never;
         /** Patch Plugin */
         patch: operations["patch_plugin_plugins__plugin_id__patch"];
-        trace?: never;
-    };
-    "/saved-sessions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Saved Sessions */
-        get: operations["saved_sessions_saved_sessions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/saved-sessions/{tool}/{session_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Saved Session */
-        delete: operations["delete_saved_session_saved_sessions__tool___session_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
         trace?: never;
     };
     "/service": {
@@ -503,6 +520,64 @@ export interface components {
             /** Status */
             status: string;
         };
+        /**
+         * HistoryItem
+         * @description A past session agentop started, still resumable.
+         */
+        HistoryItem: {
+            /** Created At */
+            created_at?: number | null;
+            /** Cwd */
+            cwd: string;
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /** Ended At */
+            ended_at?: number | null;
+            /**
+             * Id
+             * @description Its record in the registry: the agentop session it was last
+             */
+            id: string;
+            /**
+             * Last Active
+             * @description When the tool last wrote its transcript
+             */
+            last_active: number;
+            /** Name */
+            name: string;
+            /**
+             * Session Id
+             * @description The agent tool's own ID for it
+             */
+            session_id: string;
+            /** Title */
+            title?: string | null;
+            /** Tool */
+            tool: string;
+        };
+        /** HistoryListing */
+        HistoryListing: {
+            /**
+             * Active
+             * @description Sessions agentop runs now, not counting a plugin's own
+             */
+            active: number;
+            /** Items */
+            items: components["schemas"]["HistoryItem"][];
+            /**
+             * Max Active
+             * @description How many may be active at once; resuming waits for one to close
+             */
+            max_active: number;
+            /**
+             * Window Seconds
+             * @description Only sessions used this recently are listed
+             */
+            window_seconds: number;
+        };
         /** PatchPlugin */
         PatchPlugin: {
             /** Enabled */
@@ -542,21 +617,6 @@ export interface components {
         ResumeRef: {
             /** Session Id */
             session_id: string;
-        };
-        /** SavedSession */
-        SavedSession: {
-            /** Cwd */
-            cwd?: string | null;
-            /** Last Active */
-            last_active?: number | null;
-            /** Session Id */
-            session_id: string;
-            /** Title */
-            title?: string | null;
-            /** Tool */
-            tool: string;
-        } & {
-            [key: string]: unknown;
         };
         /** ServiceInfo */
         ServiceInfo: {
@@ -1083,6 +1143,103 @@ export interface operations {
             };
         };
     };
+    list_history_history_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryListing"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_history_history__history_id__delete: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                history_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    resume_history_history__history_id__resume_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                history_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_plugins_plugins_get: {
         parameters: {
             query?: never;
@@ -1138,74 +1295,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PluginInfo"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    saved_sessions_saved_sessions_get: {
-        parameters: {
-            query?: {
-                tool?: string | null;
-                limit?: number;
-            };
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SavedSession"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_saved_session_saved_sessions__tool___session_id__delete: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path: {
-                tool: string;
-                session_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

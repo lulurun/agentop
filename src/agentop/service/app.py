@@ -58,7 +58,7 @@ def create_app(
     clients = clients or auth.ClientStore(None if ident else auth.clients_path())
     identity_file = None if ident else identity.identity_path()
     ident = ident or identity.load_or_create(settings.name)
-    store = store or SessionStore()
+    store = store or SessionStore(max_active=settings.max_active_sessions, retention_seconds=settings.history_window_seconds)
     plugins = plugins or PluginHost(store)
 
     @asynccontextmanager

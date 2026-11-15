@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { ApiError, ServiceClient, type PluginInfo, type SavedSession, type Session, type ServiceInfo } from "./api/client";
+import { ApiError, ServiceClient, type HistoryItem, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
 import {
   checkConnection,
   credentialsFrom,
@@ -14,7 +14,7 @@ import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import * as tabs from "./tabs";
 import type { Layout, OpenMode, TabContent } from "./tabs";
-import { homeOf, isStaleTab, pluginOf, workspacesFor, type WorkspaceId } from "./workspaces";
+import { isKnownWorkspace, isStaleTab, pluginOf, workspacesFor, type WorkspaceId } from "./workspaces";
 
 export type LinkState =
   | { state: "connecting" }
@@ -24,14 +24,21 @@ export type LinkState =
 
 type Dialog = "new-session" | "add-service" | "settings" | null;
 
-/** The History workspace's list and which past session is selected, for the active connection. */
+/** History, in Sessions' left panel: the past sessions agentop started, for the active connection. */
 export interface HistoryState {
-  items: SavedSession[] | null;
-  selected: string | null;
+  /** Newest first. Null until loaded. */
+  items: HistoryItem[] | null;
+  /** How recently a session must have been used to be listed. */
+  windowSeconds: number | null;
+  /** How many sessions may be active at once. */
+  maxActive: number;
 }
 
-export function historyKey(item: Pick<SavedSession, "tool" | "session_id">): string {
-  return `${item.tool}/${item.session_id}`;
+const NO_HISTORY: HistoryState = { items: null, windowSeconds: null, maxActive: 20 };
+
+/** The sessions that count towards the limit: the ones agentop started, not a plugin's own. */
+export function activeCount(sessions: Record<string, Session>): number {
+  return Object.values(sessions).filter((s) => s.managed && !s.owner).length;
 }
 
 interface AppState {
@@ -84,8 +91,10 @@ interface AppState {
   moveTab(workspace: WorkspaceId, group: number, tabId: string): void;
   focusGroup(workspace: WorkspaceId, group: number): void;
   loadHistory(): Promise<void>;
-  selectHistory(key: string | null): void;
-  removeHistory(item: SavedSession): Promise<void>;
+  /** Resume a past session; its tab becomes the new session's. */
+  resumeHistory(item: HistoryItem): Promise<void>;
+  /** Delete a past session's transcript from its tool, and close its tab. */
+  removeHistory(item: HistoryItem): Promise<void>;
   toggleLeft(): void;
   toggleRight(): void;
   setSwitcherOpen(open: boolean): void;
@@ -119,6 +128,7 @@ export function parseLayouts(saved: Record<string, unknown>): Layouts {
     }
     const byWorkspace: Partial<Record<WorkspaceId, Layout>> = {};
     for (const [workspace, layout] of Object.entries(value as Record<string, unknown>)) {
+      if (!isKnownWorkspace(workspace)) continue;
       const parsed = tabs.parseLayout(layout);
       if (parsed) byWorkspace[workspace as WorkspaceId] = tabs.closeWhere(parsed, isStaleTab);
     }
@@ -149,7 +159,8 @@ function loadWorkspaces(): Record<string, WorkspaceId> {
  * isn't on this service, falls back to Sessions once the plugin list is in.
  */
 export function currentWorkspace(state: Pick<AppState, "workspaces" | "activeId" | "plugins" | "pluginsLoaded">): WorkspaceId {
-  const wanted = state.workspaces[state.activeId] ?? "sessions";
+  const saved = state.workspaces[state.activeId];
+  const wanted = saved && isKnownWorkspace(saved) ? saved : "sessions";
   if (!pluginOf(wanted) || !state.pluginsLoaded) return wanted;
   return workspacesFor(state.plugins).some((w) => w.id === wanted) ? wanted : "sessions";
 }
@@ -167,13 +178,11 @@ type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "workspa
 
 /**
  * A workspace's tabs on the active connection, by default the one shown.
- * Before it has any, it gets its pinned home tab, or for Sessions the session selected last time.
+ * Before it has any, Sessions gets the session selected last time.
  */
 export function layoutOf(state: LayoutState, workspace: WorkspaceId = currentWorkspace(state)): Layout {
   const saved = state.layouts[state.activeId]?.[workspace];
   if (saved) return saved;
-  const home = homeOf(workspace);
-  if (home) return derive(`home\n${workspace}`, () => tabs.pinnedLayout(home));
   if (workspace !== "sessions") return EMPTY_LAYOUT;
   const selected = state.selected[state.activeId];
   if (!selected) return EMPTY_LAYOUT;
@@ -446,7 +455,7 @@ export const useApp = create<AppState>((set, get) => {
   async function connect(connection: Connection) {
     closeLink();
     const mine = attempt;
-    set({ link: { state: "connecting" }, sessions: {}, plugins: [], pluginsLoaded: false, history: { items: null, selected: null } });
+    set({ link: { state: "connecting" }, sessions: {}, plugins: [], pluginsLoaded: false, history: NO_HISTORY });
     const result = await checkConnection(connection);
     if (mine !== attempt) return;
     if (result.update) get().updateConnection(connection.id, result.update);
@@ -457,6 +466,8 @@ export const useApp = create<AppState>((set, get) => {
     const { name } = result.service;
     if (connection.isHome && connection.label !== name) get().updateConnection(connection.id, { label: name });
     void openEvents(mine, activeConnection(get()), result.service);
+    // For the limit on active sessions, even with the left panel shut.
+    void get().loadHistory();
   }
 
   /** Take credentials another tab saved, such as a token it renewed. Changes nothing else. */
@@ -530,7 +541,7 @@ export const useApp = create<AppState>((set, get) => {
     sessions: {},
     plugins: [],
     pluginsLoaded: false,
-    history: { items: null, selected: null },
+    history: NO_HISTORY,
     selected: loadSelected(),
     layouts: loadLayouts(),
     ...loadLayout(),
@@ -644,18 +655,31 @@ export const useApp = create<AppState>((set, get) => {
     focusGroup: (workspace, group) => updateLayout((layout) => tabs.focusGroup(layout, group), workspace),
 
     async loadHistory() {
-      const items = await get().act((client) => client.savedSessions(500));
-      if (!items) return;
-      const { selected } = get().history;
-      set({ history: { items, selected: selected && items.some((i) => historyKey(i) === selected) ? selected : null } });
+      const listing = await get().act((client) => client.history());
+      if (!listing) return;
+      set({ history: { items: listing.items, windowSeconds: listing.window_seconds, maxActive: listing.max_active } });
     },
 
-    selectHistory(selected) {
-      set({ history: { ...get().history, selected } });
+    async resumeHistory(item) {
+      const created = await get().act((client) => client.resumeHistory(item.id));
+      if (!created) return;
+      const past = (content: TabContent) => content.kind === "past" && content.historyId === item.id;
+      const session: TabContent = { kind: "session", sessionId: created.id };
+      updateLayout((layout) => {
+        const swapped = {
+          ...layout,
+          groups: layout.groups.map((g) => ({ ...g, tabs: g.tabs.map((t) => (past(t.content) ? { ...t, content: session } : t)) })),
+        };
+        return tabs.open(swapped, session, "replace");
+      }, "sessions");
+      showWorkspace("sessions");
+      void get().loadHistory();
     },
 
     async removeHistory(item) {
-      await get().act((client) => client.deleteSavedSession(item.tool, item.session_id));
+      const done = await get().act((client) => client.deleteHistory(item.id));
+      if (done === undefined) return;
+      updateLayout((layout) => tabs.closeWhere(layout, (c) => c.kind === "past" && c.historyId === item.id), "sessions");
       await get().loadHistory();
     },
 

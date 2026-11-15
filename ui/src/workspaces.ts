@@ -1,13 +1,13 @@
 /**
- * The workspaces a service offers (design 10.7): Sessions and History from the
- * core, and one per enabled plugin that has a workspace. Each has its own
+ * The workspaces a service offers (design 10.7): Sessions from the core, whose
+ * left panel also lists History, and one per enabled plugin that has a workspace. Each has its own
  * layout: an optional left and right panel, and a main area of tabs.
  */
 import type { PluginInfo } from "./api/client";
 import { pluginsFor, UI_PLUGINS } from "./plugins/registry";
 import type { TabContent } from "./tabs";
 
-export type WorkspaceId = "sessions" | "history" | `plugin:${string}`;
+export type WorkspaceId = "sessions" | `plugin:${string}`;
 
 export interface WorkspaceInfo {
   id: WorkspaceId;
@@ -20,7 +20,6 @@ export interface WorkspaceInfo {
 
 const CORE: WorkspaceInfo[] = [
   { id: "sessions", label: "Sessions", left: true, right: true },
-  { id: "history", label: "History", left: false, right: true },
 ];
 
 export function workspacesFor(plugins: PluginInfo[]): WorkspaceInfo[] {
@@ -40,9 +39,9 @@ export function pluginOf(id: WorkspaceId): string | undefined {
   return id.startsWith("plugin:") ? id.slice("plugin:".length) : undefined;
 }
 
-/** The pinned tab a workspace opens with: History's list. Others open empty, or Sessions with the session selected last. */
-export function homeOf(id: WorkspaceId): TabContent | undefined {
-  return id === "history" ? { kind: "history" } : undefined;
+/** A workspace this app still offers: History was one until 2026-11-15, and is now in Sessions' left panel. */
+export function isKnownWorkspace(id: string): id is WorkspaceId {
+  return id === "sessions" || id.startsWith("plugin:");
 }
 
 /** A plugin tab whose view its plugin's UI no longer has, such as a pinned home tab saved before plugins had none. */

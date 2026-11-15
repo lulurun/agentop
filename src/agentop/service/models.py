@@ -68,14 +68,26 @@ class UpdateInfo(BaseModel):
     last_run: UpdateRun | None
 
 
-class SavedSession(BaseModel):
-    model_config = ConfigDict(extra="allow")
+class HistoryItem(BaseModel):
+    """A past session agentop started, still resumable."""
 
-    session_id: str
+    id: str = Field(description="Its record in the registry: the agentop session it was last")
     tool: str
+    session_id: str = Field(description="The agent tool's own ID for it")
+    name: str
     title: str | None = None
-    cwd: str | None = None
-    last_active: float | None = None
+    description: str = ""
+    cwd: str
+    created_at: float | None = None
+    ended_at: float | None = None
+    last_active: float = Field(description="When the tool last wrote its transcript")
+
+
+class HistoryListing(BaseModel):
+    items: list[HistoryItem]
+    window_seconds: float = Field(description="Only sessions used this recently are listed")
+    active: int = Field(description="Sessions agentop runs now, not counting a plugin's own")
+    max_active: int = Field(description="How many may be active at once; resuming waits for one to close")
 
 
 class ToolInfo(BaseModel):

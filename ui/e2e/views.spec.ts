@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -54,62 +54,114 @@ async function openStatus(page: Page, name = "box") {
 
 const workspaces = (page: Page) => page.getByRole("navigation", { name: "Workspaces" });
 
-test("history is a workspace: searched, filtered, sorted, resumed, and deleted", async ({ page }) => {
-  const s = await open(page);
-  let saved = [
-    { session_id: "aaa", tool: "claude", title: "Fix login", cwd: join(s.root, "project"), last_active: 1790000000 },
-    { session_id: "bbb", tool: "codex", title: "Write docs", cwd: join(s.root, "project"), last_active: 1790000100 },
-    { session_id: "ccc", tool: "claude", title: "Old idea", cwd: join(s.root, "project"), last_active: 1780000000 },
-  ];
-  await page.route("**/api/v2/saved-sessions?*", (route) => route.fulfill({ json: saved }));
-  await page.route("**/api/v2/saved-sessions/*/*", (route) => {
-    saved = saved.filter((item) => !route.request().url().endsWith(item.session_id));
-    return route.fulfill({ json: { ok: true } });
-  });
+/** Past sessions agentop started, each with a transcript last written `ago` seconds back. */
+function seedHistory(s: Service, past: { id: string; name: string; tool: "claude" | "codex"; agent: string; ago: number; description?: string }[]) {
+  const sessions: Record<string, unknown> = {};
+  const now = Date.now() / 1000;
+  for (const p of past) {
+    sessions[p.id] = {
+      managed: true,
+      tool: p.tool,
+      agent_session_id: p.agent,
+      display_name: p.name,
+      description: p.description,
+      cwd: join(s.root, "project"),
+      created_at: now - p.ago - 600,
+      ended_at: now - p.ago,
+    };
+    const folder = p.tool === "claude" ? join(s.root, ".claude/projects/-project") : join(s.root, ".codex/sessions/2026/11/15");
+    mkdirSync(folder, { recursive: true });
+    const file = join(folder, p.tool === "claude" ? `${p.agent}.jsonl` : `rollout-2026-11-15-${p.agent}.jsonl`);
+    writeFileSync(file, "{}\n");
+    utimesSync(file, now - p.ago, now - p.ago);
+  }
+  mkdirSync(join(s.root, "state/state"), { recursive: true });
+  writeFileSync(join(s.root, "state/state/sessions.json"), JSON.stringify({ sessions }));
+}
 
-  await workspaces(page).getByRole("button", { name: "History" }).click();
-  await expect(workspaces(page).getByRole("button", { name: "History" })).toHaveAttribute("aria-current", "page");
-  // History has no left panel, and its list is a pinned tab.
-  await expect(page.locator(".sidebar")).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Toggle left panel" })).toHaveCount(0);
-  await expect(page.getByRole("tab", { name: "History" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close History" })).toHaveCount(0);
+const pastRows = (page: Page) => page.getByRole("navigation", { name: "Past sessions" }).locator(".session-name");
 
-  const view = page.getByRole("region", { name: "History" });
-  const titles = view.getByRole("list", { name: "Past sessions" }).locator(".view-row-title");
-  await expect(titles).toHaveText(["Write docs", "Fix login", "Old idea"]);
-  await view.getByLabel("Sort by").selectOption("tool");
-  await expect(titles).toHaveText(["Fix login", "Old idea", "Write docs"]);
-  await view.getByLabel("CLI").selectOption("codex");
-  await expect(titles).toHaveText(["Write docs"]);
-  await view.getByLabel("CLI").selectOption("");
-  await view.getByLabel("Search history").fill("login");
-  await expect(titles).toHaveText(["Fix login"]);
-  await view.getByLabel("Search history").fill("");
+test("history is under the active sessions: filtered, opened, deleted, and resumed with its date", async ({ page }) => {
+  const s = await new Service("box").start();
+  cleanup.push(() => s.dispose());
+  seedHistory(s, [
+    { id: "fix-login-1", name: "fix-login", tool: "claude", agent: "aaa", ago: 7200, description: "Login bug" },
+    { id: "docs-2", name: "docs", tool: "codex", agent: "bbb", ago: 3600 },
+    { id: "scratch-3", name: "scratch", tool: "claude", agent: "ccc", ago: 10_800 },
+    // Last used longer ago than the 30-day window.
+    { id: "old-4", name: "old", tool: "claude", agent: "ddd", ago: 40 * 86400 },
+  ]);
+  await page.goto(s.signedInUrl);
+  await expect(page.locator(".link-connected")).toBeVisible();
 
-  const details = page.getByRole("complementary", { name: "Past session" });
-  await view.getByRole("button", { name: /Write docs/ }).click();
-  await expect(details).toContainText("bbb");
-  await details.getByRole("button", { name: "Delete" }).click();
-  await details.getByRole("button", { name: "Keep" }).click();
-  await expect(view).toContainText("Write docs");
-  await details.getByRole("button", { name: "Delete" }).click();
-  await details.getByRole("button", { name: "Delete for good" }).click();
-  await expect(view).not.toContainText("Write docs");
-  await expect(page.getByText("Select a past session to see its details.")).toBeVisible();
+  // History is no workspace of its own.
+  await expect(workspaces(page).getByRole("button", { name: "History" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("0/20");
+  await expect(pastRows(page)).toHaveText(["docs", "fix-login", "scratch"]);
+  const history = page.getByRole("region", { name: "History" });
+  await history.getByLabel("CLI").selectOption("codex");
+  await expect(pastRows(page)).toHaveText(["docs"]);
+  await history.getByLabel("CLI").selectOption("");
+  await history.getByLabel("Filter history").fill("login bug");
+  await expect(pastRows(page)).toHaveText(["fix-login"]);
+  await history.getByLabel("Filter history").fill("");
 
-  await view.getByRole("button", { name: /Fix login/ }).click();
-  await page.getByRole("complementary", { name: "Past session" }).getByRole("button", { name: "Resume" }).click();
-  // Resuming lands in Sessions.
+  // A past session opens in the main area; another takes its tab's place.
+  const view = page.getByRole("region", { name: "Past session" });
+  await history.getByRole("button", { name: /docs/ }).click();
+  await expect(view).toContainText("bbb");
+  await history.getByRole("button", { name: /scratch/ }).click();
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["scratch"]);
+  await view.getByRole("button", { name: "Delete" }).click();
+  await view.getByRole("button", { name: "Keep" }).click();
+  await view.getByRole("button", { name: "Delete" }).click();
+  await view.getByRole("button", { name: "Delete for good" }).click();
+  await expect(pastRows(page)).toHaveText(["docs", "fix-login"]);
+  await expect(page.getByRole("main").getByRole("tab")).toHaveCount(0);
+  expect(existsSync(join(s.root, ".claude/projects/-project/ccc.jsonl"))).toBe(false);
+
+  await history.getByRole("button", { name: /fix-login/ }).click();
+  await view.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("terminal").locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
-  await expect(workspaces(page).getByRole("button", { name: "Sessions" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("region", { name: "History" })).toBeHidden();
+  // Named for when it was last used, and no longer in History.
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText([/^fix-login \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/]);
+  await expect(page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(/^fix-login 20/)).toBeVisible();
+  await expect(pastRows(page)).toHaveText(["docs"]);
+  await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("1/20");
+});
+
+test("resuming waits for a session to close once the active sessions are at the limit", async ({ page }) => {
+  const s = await new Service("box").start();
+  cleanup.push(() => s.dispose());
+  seedHistory(s, [{ id: "fix-login-1", name: "fix-login", tool: "claude", agent: "aaa", ago: 7200 }]);
+  await page.route("**/api/v2/history", async (route) => {
+    const response = await route.fetch();
+    return route.fulfill({ response, json: { ...(await response.json()), max_active: 1 } });
+  });
+  await page.goto(s.signedInUrl);
+  await expect(page.locator(".link-connected")).toBeVisible();
+
+  const view = page.getByRole("region", { name: "Past session" });
+  await page.getByRole("region", { name: "History" }).getByRole("button", { name: /fix-login/ }).click();
+  await expect(view.getByRole("button", { name: "Resume" })).toBeEnabled();
+
+  await page.getByRole("button", { name: "New session" }).first().click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
+  await dialog.getByLabel("Name").fill("busy");
+  await dialog.getByRole("button", { name: "Start session" }).click();
+  await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("1/1");
+
+  await page.getByRole("region", { name: "History" }).getByRole("button", { name: /fix-login/ }).click();
+  await expect(view.getByRole("button", { name: "Resume" })).toBeDisabled();
+  await expect(view).toContainText("Active sessions are at the limit. Close a session to resume this one.");
+  await page.getByRole("button", { name: "New session" }).first().click();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Start session" })).toBeDisabled();
 });
 
 test("an empty history says so", async ({ page }) => {
   await open(page);
-  await workspaces(page).getByRole("button", { name: "History" }).click();
-  await expect(page.getByText("No past sessions on this service.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "History" })).toContainText("No sessions ended in the last 30 days.");
 });
 
 test("each workspace keeps its tabs, and Sessions keeps its terminal connected", async ({ page }) => {
@@ -123,11 +175,11 @@ test("each workspace keeps its tabs, and Sessions keeps its terminal connected",
   await expect(terminal.locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
 
   await page.keyboard.press("Control+Shift+Digit2");
-  await expect(page.getByRole("region", { name: "History" })).toBeVisible();
+  await expect(workspaces(page).getByRole("button", { name: "Dialogues" })).toHaveAttribute("aria-current", "page");
   // Status opens in this workspace, on the left.
   await openStatus(page);
   await expect(page.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["History", "Status"]);
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["Status"]);
 
   await page.keyboard.press("Control+Shift+Digit1");
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["keeper"]);
@@ -137,8 +189,8 @@ test("each workspace keeps its tabs, and Sessions keeps its terminal connected",
 
   await page.reload();
   await expect(page.locator(".link-connected")).toBeVisible();
-  await workspaces(page).getByRole("button", { name: "History" }).click();
-  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["History", "Status"]);
+  await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["Status"]);
 });
 
 test("a finished dialogue shows each agent's messages side by side, its stats and artifacts, and can be removed", async ({ page }) => {
@@ -212,7 +264,7 @@ test("the New dialogue wizard asks for every field, then starts two agents watch
   const agents = s.tmux("list-sessions", "-F", "#{session_name}").split("\n").filter((name) => /^dia[0-9a-f]{4}[ab]/.test(name));
   expect(agents).toHaveLength(2);
   await workspaces(page).getByRole("button", { name: "Sessions" }).click();
-  await expect(page.locator(".session-list")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Sessions", exact: true })).toBeVisible();
   await expect(page.locator(".session-row", { hasText: /dia[0-9a-f]{4}[ab]/ })).toHaveCount(0);
 });
 

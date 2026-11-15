@@ -1,7 +1,9 @@
 import { useState } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
-import { sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
+import { activeCount, layoutOf, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
+import { focusedTab } from "../tabs";
+import { HistorySection } from "./HistoryView";
 import { StatusMark } from "./icons";
 import { Menu } from "./Workbench";
 
@@ -78,6 +80,11 @@ export function Sidebar() {
   const selected = useApp((s) => s.selected[s.activeId]);
   const setDialog = useApp((s) => s.setDialog);
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
+  const maxActive = useApp((s) => s.history.maxActive);
+  const pastOpen = useApp((s) => {
+    const content = focusedTab(layoutOf(s, "sessions"))?.content;
+    return content?.kind === "past" ? content.historyId : undefined;
+  });
   const [filter, setFilter] = useState("");
 
   const needle = filter.trim().toLowerCase();
@@ -87,24 +94,31 @@ export function Sidebar() {
   );
   const managed = rows.filter((s) => s.managed);
   const external = rows.filter((s) => !s.managed);
+  const active = activeCount(sessions);
+  // The selected session is only marked while its tab, not a past session's, has focus.
+  const current = pastOpen ? undefined : selected;
 
   return (
     <aside className="sidebar">
       {linked && (
         <>
+          <section className="sidebar-section active-section" aria-label="Active sessions">
+          <h3 className="session-group" title={`At most ${maxActive} sessions started by agentop can be active at once`}>
+            Active sessions <span className="session-count" data-full={active >= maxActive || undefined}>{active}/{maxActive}</span>
+          </h3>
           <div className="sidebar-actions">
             <input
               id="session-filter"
               type="search"
               aria-label="Filter sessions"
-              placeholder="Filter sessions"
+              placeholder="Filter active sessions"
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
             />
           </div>
           <nav className="session-list" aria-label="Sessions">
             {managed.map((s) => (
-              <SessionRow key={s.id} session={s} selected={s.id === selected} />
+              <SessionRow key={s.id} session={s} selected={s.id === current} />
             ))}
             {rows.length === 0 && (
               <p className="session-empty">
@@ -122,11 +136,13 @@ export function Sidebar() {
               <>
                 <h3 className="session-group">Started elsewhere</h3>
                 {external.map((s) => (
-                  <SessionRow key={s.id} session={s} selected={s.id === selected} />
+                  <SessionRow key={s.id} session={s} selected={s.id === current} />
                 ))}
               </>
             )}
           </nav>
+          </section>
+          <HistorySection selected={pastOpen} />
         </>
       )}
     </aside>

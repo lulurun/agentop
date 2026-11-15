@@ -347,6 +347,120 @@
         "title": "Health",
         "type": "object"
       },
+      "HistoryItem": {
+        "description": "A past session agentop started, still resumable.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "cwd": {
+            "title": "Cwd",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "title": "Description",
+            "type": "string"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "id": {
+            "description": "Its record in the registry: the agentop session it was last",
+            "title": "Id",
+            "type": "string"
+          },
+          "last_active": {
+            "description": "When the tool last wrote its transcript",
+            "title": "Last Active",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "The agent tool's own ID for it",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "tool",
+          "session_id",
+          "name",
+          "cwd",
+          "last_active"
+        ],
+        "title": "HistoryItem",
+        "type": "object"
+      },
+      "HistoryListing": {
+        "properties": {
+          "active": {
+            "description": "Sessions agentop runs now, not counting a plugin's own",
+            "title": "Active",
+            "type": "integer"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryItem"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "max_active": {
+            "description": "How many may be active at once; resuming waits for one to close",
+            "title": "Max Active",
+            "type": "integer"
+          },
+          "window_seconds": {
+            "description": "Only sessions used this recently are listed",
+            "title": "Window Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "items",
+          "window_seconds",
+          "active",
+          "max_active"
+        ],
+        "title": "HistoryListing",
+        "type": "object"
+      },
       "PatchPlugin": {
         "properties": {
           "enabled": {
@@ -461,58 +575,6 @@
           "session_id"
         ],
         "title": "ResumeRef",
-        "type": "object"
-      },
-      "SavedSession": {
-        "additionalProperties": true,
-        "properties": {
-          "cwd": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Cwd"
-          },
-          "last_active": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Last Active"
-          },
-          "session_id": {
-            "title": "Session Id",
-            "type": "string"
-          },
-          "title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Title"
-          },
-          "tool": {
-            "title": "Tool",
-            "type": "string"
-          }
-        },
-        "required": [
-          "session_id",
-          "tool"
-        ],
-        "title": "SavedSession",
         "type": "object"
       },
       "ServiceInfo": {
@@ -1655,6 +1717,160 @@
         "summary": "Health"
       }
     },
+    "/history": {
+      "get": {
+        "operationId": "list_history_history_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HistoryListing"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List History"
+      }
+    },
+    "/history/{history_id}": {
+      "delete": {
+        "operationId": "delete_history_history__history_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "history_id",
+            "required": true,
+            "schema": {
+              "title": "History Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete History"
+      }
+    },
+    "/history/{history_id}/resume": {
+      "post": {
+        "operationId": "resume_history_history__history_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "history_id",
+            "required": true,
+            "schema": {
+              "title": "History Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionModel"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume History"
+      }
+    },
     "/plugins": {
       "get": {
         "operationId": "list_plugins_plugins_get",
@@ -1768,144 +1984,6 @@
           }
         },
         "summary": "Patch Plugin"
-      }
-    },
-    "/saved-sessions": {
-      "get": {
-        "operationId": "saved_sessions_saved_sessions_get",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "tool",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Tool"
-            }
-          },
-          {
-            "in": "query",
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "default": 50,
-              "title": "Limit",
-              "type": "integer"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/SavedSession"
-                  },
-                  "title": "Response Saved Sessions Saved Sessions Get",
-                  "type": "array"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Saved Sessions"
-      }
-    },
-    "/saved-sessions/{tool}/{session_id}": {
-      "delete": {
-        "operationId": "delete_saved_session_saved_sessions__tool___session_id__delete",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "tool",
-            "required": true,
-            "schema": {
-              "title": "Tool",
-              "type": "string"
-            }
-          },
-          {
-            "in": "path",
-            "name": "session_id",
-            "required": true,
-            "schema": {
-              "title": "Session Id",
-              "type": "string"
-            }
-          },
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Delete Saved Session"
       }
     },
     "/service": {

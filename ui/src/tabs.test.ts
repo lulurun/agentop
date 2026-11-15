@@ -11,7 +11,7 @@ function show(layout: Layout): string {
     g.tabs
       .map((t) => {
         const c = t.content;
-        const name = c.kind === "session" ? c.sessionId : c.kind === "file" ? c.file.path : c.kind === "plugin" ? `${c.plugin}:${c.view}` : c.kind;
+        const name = c.kind === "session" ? c.sessionId : c.kind === "file" ? c.file.path : c.kind === "plugin" ? `${c.plugin}:${c.view}` : c.kind === "past" ? `past:${c.historyId}` : c.kind;
         return t.id === g.active ? `[${name}]` : name;
       })
       .join(" "),
@@ -146,7 +146,8 @@ describe("saved layouts", () => {
 
 describe("every workspace's tabs", () => {
   const status: TabContent = { kind: "status" };
-  const history: TabContent = { kind: "history" };
+  const history: TabContent = { kind: "plugin", plugin: "memory", view: "search" };
+  const past = (historyId: string): TabContent => ({ kind: "past", historyId });
   const dialogue: TabContent = { kind: "plugin", plugin: "dialogue", view: "dialogues" };
 
   it("a pinned tab can't be closed", () => {
@@ -163,7 +164,7 @@ describe("every workspace's tabs", () => {
   });
 
   it("Status beside a pinned tab, with no split, joins the only group", () => {
-    expect(show(tabs.open(tabs.pinnedLayout(history), status, "left", id()))).toBe("history [status] @0");
+    expect(show(tabs.open(tabs.pinnedLayout(history), status, "left", id()))).toBe("memory:search [status] @0");
   });
 
   it("only sessions and files split", () => {
@@ -181,6 +182,15 @@ describe("every workspace's tabs", () => {
     expect(tabs.sameContent(dialogue, { ...dialogue })).toBe(true);
     expect(tabs.sameContent(dialogue, { ...dialogue, key: "abc" })).toBe(false);
     expect(tabs.sameContent(status, history)).toBe(false);
+  });
+
+  it("a past session takes the place of the past session shown, not of a session", () => {
+    const one = tabs.open(build([session("a"), "replace"]), past("h1"), "replace", id());
+    expect(show(one)).toBe("a [past:h1] @0");
+    expect(show(tabs.open(one, past("h2"), "replace", id()))).toBe("a [past:h2] @0");
+    expect(show(tabs.open(one, past("h2"), "tab", id()))).toBe("a past:h1 [past:h2] @0");
+    expect(tabs.sameContent(past("h1"), past("h1"))).toBe(true);
+    expect(tabs.canSplit(past("h1"))).toBe(false);
   });
 
   it("saved layouts keep every kind and the pin", () => {

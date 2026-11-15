@@ -886,7 +886,7 @@ button.app-outdated:hover { background: var(--line); }
 .dialog-text { margin: 0; color: var(--quiet); }
 .dialog-action-start { margin-right: auto; }
 
-/* History, dialogues, settings */
+/* Dialogues, settings */
 .session-tag { color: var(--starting); }
 .attention-tag { color: var(--action); font-weight: 600; }
 
@@ -973,22 +973,6 @@ button.app-outdated:hover { background: var(--line); }
 .view-count { margin: 0 0 4px; color: var(--quiet); font-size: 12px; }
 .view-tools select { width: auto; }
 .workspaces-compact { width: auto; padding: 4px 6px; }
-.history-list li { border-bottom: 1px solid var(--line); }
-.history-row {
-  display: grid;
-  gap: 4px;
-  width: 100%;
-  padding: 10px 8px;
-  border: 0;
-  border-radius: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-}
-.history-row:hover { background: var(--line); }
-.history-row[aria-current="true"] { background: var(--line); box-shadow: inset 3px 0 0 var(--action); }
-.history-row .view-row-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
-.history-cwd { overflow-wrap: anywhere; }
 
 .status-view { max-width: 1100px; }
 .status-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 24px; align-items: start; }
@@ -1146,3 +1130,28 @@ button.app-outdated:hover { background: var(--line); }
 .memory-keywords { margin: 0 0 8px; }
 .memory-made { margin: 0 0 8px; color: var(--quiet); font-size: 12px; }
 .memory-conversation .viewer-path { font-family: inherit; font-size: 13px; font-weight: 600; }
+
+/* Sessions' left panel: the active sessions, then History (design 10.7) */
+.sidebar-section { display: flex; flex-direction: column; min-height: 0; }
+.active-section { flex: 1 1 55%; }
+.history-section { flex: 1 1 45%; border-top: 1px solid var(--line); }
+.sidebar-section > .session-group { display: flex; align-items: baseline; justify-content: space-between; margin-top: 12px; }
+.session-count { font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.session-count[data-full] { color: var(--failed); font-weight: 600; }
+.history-tools { display: flex; gap: 6px; padding-top: 4px; }
+.history-tools input { flex: 1; min-width: 0; }
+.history-tools select {
+  flex: none;
+  max-width: 40%;
+  padding: 4px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+/* A past session's row has no status mark, so its name starts where a mark would be. */
+.history-row { grid-template-columns: minmax(0, 1fr); --row-edge: var(--action); }
+.history-row .session-meta { grid-column: 1; }
+.past-session { max-width: 760px; }
+.past-session dl { margin: 0 0 8px; }

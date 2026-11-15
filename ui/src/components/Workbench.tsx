@@ -6,7 +6,7 @@ import { activeConnection, layoutOf, sessionTitle, useApp } from "../store";
 import { canSplit, MAX_GROUPS, sessionOf, type Group, type Tab } from "../tabs";
 import type { WorkspaceId } from "../workspaces";
 import { connectionName } from "../connections";
-import { HistoryList } from "./HistoryView";
+import { PastSessionView } from "./HistoryView";
 import { StatusView } from "./StatusView";
 
 function baseName(path: string): string {
@@ -16,10 +16,12 @@ function baseName(path: string): string {
 function useTabLabel(tab: Tab): { label: string; title: string; status?: string } {
   const id = sessionOf(tab.content);
   const session = useApp((s) => (id ? s.sessions[id] : undefined));
+  const historyId = tab.content.kind === "past" ? tab.content.historyId : undefined;
+  const past = useApp((s) => (historyId ? s.history.items?.find((i) => i.id === historyId) : undefined));
   const service = useApp((s) => connectionName(activeConnection(s), s.link.state === "connected" || s.link.state === "reconnecting" ? s.link.service.name : undefined));
   const { content } = tab;
   if (content.kind === "status") return { label: "Status", title: `Status of ${service}` };
-  if (content.kind === "history") return { label: "History", title: `Past sessions on ${service}` };
+  if (content.kind === "past") return { label: past?.name ?? "Past session", title: past ? `Past session in ${past.cwd}` : "Past session" };
   if (content.kind === "plugin") {
     const view = UI_PLUGINS[content.plugin]?.workspace?.views[content.view];
     const label = view?.label ?? content.view;
@@ -197,7 +199,7 @@ function GroupView({
             })
           : tab?.content.kind === "file" ? <FileTab key={tab.id} file={tab.content.file} />
           : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(workspace, index, tab.id)} />
-          : tab?.content.kind === "history" ? <HistoryList key={tab.id} />
+          : tab?.content.kind === "past" ? <PastSessionView key={tab.id} historyId={tab.content.historyId} onClose={() => closeTab(workspace, index, tab.id)} />
           : tab?.content.kind === "plugin" ? <PluginTab key={tab.id} pluginId={tab.content.plugin} view={tab.content.view} viewKey={tab.content.key} />
           : null}
       </div>

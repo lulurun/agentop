@@ -1,7 +1,7 @@
 /**
  * The main area's tabs. A tab is a container: it shows an agent session's
  * terminal, a file through whichever file-viewer plugin is enabled, a
- * service's Status, the History list, or a view of a plugin's workspace.
+ * service's Status, a past session from History, or a view of a plugin's workspace.
  * Every workspace's main area is tabs (design 10.7.3), each with a layout of its own.
  *
  * Tabs live in groups. There are one or two groups, shown side by side, and
@@ -29,7 +29,8 @@ export type TabContent =
   | { kind: "session"; sessionId: string }
   | { kind: "file"; file: FileRef }
   | { kind: "status" }
-  | { kind: "history" }
+  /** A past session from the History list, by its ID there (`HistoryItem.id`), to resume or delete. */
+  | { kind: "past"; historyId: string }
   /** One of a plugin's views, named by the plugin's workspace (`UiPlugin.workspace.views`). */
   | { kind: "plugin"; plugin: string; view: string; key?: string };
 
@@ -55,8 +56,9 @@ export interface Layout {
 /**
  * - `left`: what opening Status does. The tab is shown if it is open in either
  *   group; otherwise it gets a new tab in the left group.
- * - `replace`: what clicking a session does. The session is shown if it is open
- *   in either group; otherwise the left group's active session tab switches to it.
+ * - `replace`: what clicking a session or a past session does. It is shown if it
+ *   is open in either group; otherwise the left group's active tab of the same
+ *   kind switches to it.
  * - `tab`: a new tab in the left group, unless one there already shows it.
  * - `right`: what clicking a file does. The file is shown if it is open in
  *   either group; otherwise it gets a new tab in the right group, made if needed.
@@ -89,7 +91,8 @@ export function sameContent(a: TabContent, b: TabContent): boolean {
   if (a.kind === "plugin" && b.kind === "plugin") {
     return a.plugin === b.plugin && a.view === b.view && (a.key ?? null) === (b.key ?? null);
   }
-  return a.kind === b.kind && (a.kind === "status" || a.kind === "history");
+  if (a.kind === "past" && b.kind === "past") return a.historyId === b.historyId;
+  return a.kind === b.kind && a.kind === "status";
 }
 
 /**
@@ -159,7 +162,7 @@ export function open(layout: Layout, content: TabContent, mode: OpenMode = "repl
   if (existing) return withGroup({ ...layout, focused: 0 }, 0, { ...group, active: existing.id });
 
   const current = activeTab(group);
-  if (mode === "replace" && content.kind === "session" && current?.content.kind === "session") {
+  if (mode === "replace" && (content.kind === "session" || content.kind === "past") && current?.content.kind === content.kind) {
     const tabs = group.tabs.map((t) => (t.id === current.id ? { ...t, content } : t));
     return withGroup({ ...layout, focused: 0 }, 0, { ...group, tabs });
   }
@@ -257,8 +260,9 @@ function validContent(content: unknown): boolean {
     case "file":
       return !!c.file && typeof (c.file as FileRef).path === "string";
     case "status":
-    case "history":
       return true;
+    case "past":
+      return typeof c.historyId === "string";
     case "plugin":
       return typeof c.plugin === "string" && typeof c.view === "string";
     default:

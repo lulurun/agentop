@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { DirListing, ToolInfo } from "../api/client";
-import { activeClient, useApp } from "../store";
+import { activeClient, activeCount, useApp } from "../store";
 import { Dialog } from "./Dialog";
 
 const RECENT_KEY = "agentop.recentDirs";
@@ -35,6 +35,8 @@ export function NewSessionDialog() {
   const [listing, setListing] = useState<DirListing | null>(null);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const maxActive = useApp((s) => s.history.maxActive);
+  const atLimit = useApp((s) => activeCount(s.sessions) >= s.history.maxActive);
   const recent = useMemo(loadRecent, []);
   // Answers can arrive out of order, so only the newest request may change the form.
   const latestRequest = useRef(0);
@@ -119,9 +121,10 @@ export function NewSessionDialog() {
           <input value={name} placeholder="Optional, taken from the directory" onChange={(event) => setName(event.target.value)} maxLength={32} spellCheck={false} />
         </label>
         {error && <p className="form-error" role="alert">{error}</p>}
+        {atLimit && !error && <p className="form-error" role="status">{maxActive} sessions are active, the most allowed. Close a session to start another.</p>}
         <div className="dialog-actions">
           <button type="button" onClick={() => setDialog(null)}>Cancel</button>
-          <button type="submit" className="primary" disabled={!tool || !cwd || submitting}>Start session</button>
+          <button type="submit" className="primary" disabled={!tool || !cwd || submitting || atLimit}>Start session</button>
         </div>
       </form>
     </Dialog>
