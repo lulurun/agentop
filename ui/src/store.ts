@@ -60,6 +60,8 @@ interface AppState {
   layouts: Record<string, Partial<Record<WorkspaceId, Layout>>>;
   leftOpen: boolean;
   rightOpen: boolean;
+  /** The left panel's sections folded shut, by ID: `active`, `elsewhere`, `history`. */
+  folded: string[];
   switcherOpen: boolean;
   dialog: Dialog;
   error: string | null;
@@ -97,6 +99,7 @@ interface AppState {
   removeHistory(item: HistoryItem): Promise<void>;
   toggleLeft(): void;
   toggleRight(): void;
+  setFolded(section: string, folded: boolean): void;
   setSwitcherOpen(open: boolean): void;
   setDialog(dialog: Dialog): void;
   /** Open a service's Status tab in the workspace shown, switching to that service first. */
@@ -107,6 +110,16 @@ interface AppState {
 }
 
 const LAYOUT_KEY = "agentop.layout";
+const FOLDED_KEY = "agentop.folded";
+
+function loadFolded(): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(FOLDED_KEY) ?? "[]");
+    return Array.isArray(saved) ? saved.filter((s) => typeof s === "string") : [];
+  } catch {
+    return [];
+  }
+}
 const SELECTED_KEY = "agentop.selected";
 const TABS_KEY = "agentop.tabs";
 const WORKSPACE_KEY = "agentop.workspace";
@@ -545,6 +558,7 @@ export const useApp = create<AppState>((set, get) => {
     selected: loadSelected(),
     layouts: loadLayouts(),
     ...loadLayout(),
+    folded: loadFolded(),
     switcherOpen: false,
     dialog: null,
     error: null,
@@ -693,6 +707,16 @@ export const useApp = create<AppState>((set, get) => {
       const rightOpen = !get().rightOpen;
       set({ rightOpen });
       saveLayout({ leftOpen: get().leftOpen, rightOpen });
+    },
+
+    setFolded(section, shut) {
+      const folded = get().folded.filter((s) => s !== section).concat(shut ? [section] : []);
+      set({ folded });
+      try {
+        localStorage.setItem(FOLDED_KEY, JSON.stringify(folded));
+      } catch {
+        // Only a convenience.
+      }
     },
 
     setSwitcherOpen: (switcherOpen) => set({ switcherOpen }),

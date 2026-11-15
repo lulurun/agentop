@@ -106,6 +106,14 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   await expect(pastRows(page)).toHaveText(["fix-login"]);
   await history.getByLabel("Filter history").fill("");
 
+  // Each section folds by its title, and stays folded after a reload.
+  await history.getByRole("button", { name: /^History/ }).click();
+  await expect(pastRows(page)).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "History" }).getByRole("button", { name: /^History/ })).toHaveAttribute("aria-expanded", "false");
+  await history.getByRole("button", { name: /^History/ }).click();
+  await expect(pastRows(page)).toHaveText(["docs", "fix-login", "scratch"]);
+
   // A past session opens in the main area; another takes its tab's place.
   const view = page.getByRole("region", { name: "Past session" });
   await history.getByRole("button", { name: /docs/ }).click();

@@ -1131,11 +1131,34 @@ button.app-outdated:hover { background: var(--line); }
 .memory-made { margin: 0 0 8px; color: var(--quiet); font-size: 12px; }
 .memory-conversation .viewer-path { font-family: inherit; font-size: 13px; font-weight: 600; }
 
-/* Sessions' left panel: the active sessions, then History (design 10.7) */
-.sidebar-section { display: flex; flex-direction: column; min-height: 0; }
-.active-section { flex: 1 1 55%; }
-.history-section { flex: 1 1 45%; border-top: 1px solid var(--line); }
-.sidebar-section > .session-group { display: flex; align-items: baseline; justify-content: space-between; margin-top: 12px; }
+/* Sessions' left panel: Active sessions, Started elsewhere, History, one list that scrolls (design 10.7.7) */
+.sidebar-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
+.sidebar-scroll .session-list { flex: none; overflow: visible; }
+.sidebar-section > .session-group { margin: 10px 0 2px; padding: 0 8px; }
+.fold-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.fold-toggle:hover { background: var(--raised); color: var(--text); }
+.fold-title { flex: 1; }
+.fold-chevron {
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -1px);
+  transition: transform 120ms ease;
+}
+.sidebar-section[data-folded] .fold-chevron { transform: rotate(-45deg); }
 .session-count { font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
 .session-count[data-full] { color: var(--failed); font-weight: 600; }
 .history-tools { display: flex; gap: 6px; padding-top: 4px; }

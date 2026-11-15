@@ -61,6 +61,7 @@ export function App() {
         case "KeyK":
           app.setWorkspace("sessions");
           if (!app.leftOpen) app.toggleLeft();
+          app.setFolded("active", false);
           requestAnimationFrame(() => document.getElementById("session-filter")?.focus());
           break;
         case "KeyF":

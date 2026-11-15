@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
 import { activeCount, layoutOf, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
@@ -101,50 +101,86 @@ export function Sidebar() {
   return (
     <aside className="sidebar">
       {linked && (
-        <>
-          <section className="sidebar-section active-section" aria-label="Active sessions">
-          <h3 className="session-group" title={`At most ${maxActive} sessions started by agentop can be active at once`}>
-            Active sessions <span className="session-count" data-full={active >= maxActive || undefined}>{active}/{maxActive}</span>
-          </h3>
-          <div className="sidebar-actions">
-            <input
-              id="session-filter"
-              type="search"
-              aria-label="Filter sessions"
-              placeholder="Filter active sessions"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-            />
-          </div>
-          <nav className="session-list" aria-label="Sessions">
-            {managed.map((s) => (
-              <SessionRow key={s.id} session={s} selected={s.id === current} />
-            ))}
-            {rows.length === 0 && (
-              <p className="session-empty">
-                {needle ? "No sessions match." : (
-                  <>
-                    No sessions yet.{" "}
-                    <button type="button" className="link" onClick={() => setDialog("new-session")}>
-                      Start one
-                    </button>
-                  </>
-                )}
-              </p>
-            )}
-            {external.length > 0 && (
-              <>
-                <h3 className="session-group">Started elsewhere</h3>
+        <div className="sidebar-scroll">
+          <FoldSection
+            id="active"
+            title="Active sessions"
+            hint={`At most ${maxActive} sessions started by agentop can be active at once`}
+            extra={<span className="session-count" data-full={active >= maxActive || undefined}>{active}/{maxActive}</span>}
+          >
+            <div className="sidebar-actions">
+              <input
+                id="session-filter"
+                type="search"
+                aria-label="Filter sessions"
+                placeholder="Filter sessions"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+              />
+            </div>
+            <nav className="session-list" aria-label="Sessions">
+              {managed.map((s) => (
+                <SessionRow key={s.id} session={s} selected={s.id === current} />
+              ))}
+              {managed.length === 0 && (
+                <p className="session-empty">
+                  {needle ? "No sessions match." : (
+                    <>
+                      No sessions yet.{" "}
+                      <button type="button" className="link" onClick={() => setDialog("new-session")}>
+                        Start one
+                      </button>
+                    </>
+                  )}
+                </p>
+              )}
+            </nav>
+          </FoldSection>
+          {external.length > 0 && (
+            <FoldSection id="elsewhere" title="Started elsewhere" extra={<span className="session-count">{external.length}</span>}>
+              <nav className="session-list" aria-label="Started elsewhere">
                 {external.map((s) => (
                   <SessionRow key={s.id} session={s} selected={s.id === current} />
                 ))}
-              </>
-            )}
-          </nav>
-          </section>
+              </nav>
+            </FoldSection>
+          )}
           <HistorySection selected={pastOpen} />
-        </>
+        </div>
       )}
     </aside>
+  );
+}
+
+/** One of the left panel's sections, folded shut or open by clicking its title. Remembered in this browser. */
+export function FoldSection({
+  id,
+  title,
+  hint,
+  extra,
+  children,
+}: {
+  id: string;
+  title: string;
+  hint?: string;
+  extra?: ReactNode;
+  children: ReactNode;
+}) {
+  const folded = useApp((s) => s.folded.includes(id));
+  const setFolded = useApp((s) => s.setFolded);
+  const body = `section-${id}`;
+  return (
+    <section className="sidebar-section" aria-label={title} data-folded={folded || undefined}>
+      <h3 className="session-group">
+        <button type="button" className="fold-toggle" aria-expanded={!folded} aria-controls={body} title={hint} onClick={() => setFolded(id, !folded)}>
+          <span className="fold-chevron" aria-hidden="true" />
+          <span className="fold-title">{title}</span>
+          {extra}
+        </button>
+      </h3>
+      <div id={body} hidden={folded}>
+        {children}
+      </div>
+    </section>
   );
 }

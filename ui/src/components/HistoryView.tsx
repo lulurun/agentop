@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { HistoryItem } from "../api/client";
 import { activeCount, useApp } from "../store";
 import { Row } from "./DetailsPanel";
-import { ToolBadge } from "./Sidebar";
+import { FoldSection, ToolBadge } from "./Sidebar";
 
 function when(seconds: number | null | undefined): string {
   return seconds != null ? new Date(seconds * 1000).toLocaleString() : "Unknown";
@@ -71,10 +71,12 @@ export function HistorySection({ selected }: { selected?: string }) {
   }
 
   return (
-    <section className="sidebar-section history-section" aria-label="History">
-      <h3 className="session-group" title={history.windowSeconds ? `Sessions agentop started, used in ${days(history.windowSeconds)}` : undefined}>
-        History
-      </h3>
+    <FoldSection
+      id="history"
+      title="History"
+      hint={history.windowSeconds ? `Sessions agentop started, used in ${days(history.windowSeconds)}` : undefined}
+      extra={history.items && <span className="session-count">{history.items.length}</span>}
+    >
       <div className="sidebar-actions history-tools">
         <input type="search" aria-label="Filter history" placeholder="Filter history" value={search} onChange={(event) => setSearch(event.target.value)} />
         <select aria-label="CLI" value={tool} onChange={(event) => setTool(event.target.value)}>
@@ -112,7 +114,7 @@ export function HistorySection({ selected }: { selected?: string }) {
           ))
         )}
       </nav>
-    </section>
+    </FoldSection>
   );
 }
 
