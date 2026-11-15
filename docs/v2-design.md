@@ -371,7 +371,7 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health` and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
-- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, in [TODO.md](../TODO.md)).
+- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [v2-plan.md 9.2](v2-plan.md#92-security)).
 
 ## 8 Service lifecycle
 
@@ -618,10 +618,10 @@ A workspace declares an optional left panel, a main area, an optional right pane
 | Workspace | Left | Main | Right | Action |
 |-----------|------|------|-------|--------|
 | Sessions | Active sessions, then History (10.7.7) | Session tabs, optionally split, with files, past sessions and Status beside them | The focused session's details | New session |
-| Dialogues (plugin) | Dialogues, for now inside the main tab; designed separately | Split: the dialogue in the left tab (the two actors side by side, view only); artifact files open in the right group | Info and the dialogue folder's files, Remove | New dialogue |
+| Dialogues (plugin) | Dialogues, in progress and finished | Split: agent A in the left group, agent B in the right, view only; artifact files open in the right group | Status, stats, artifacts, Stop and Remove | New dialogue |
 | Memory (plugin) | Search: words, CLI, since; matching sessions, then messages; Didn't find it? | A conversation per tab, opened at the hit | The session's summary and details | none |
 
-Dialogue sessions belong to the Dialogues workspace, which watches them and manages their lifecycle; they will not be listed in Sessions. How a plugin claims a session (for example an `owner` field in the registry, so the core never names the plugin) is part of the dialogue design, not built yet.
+Dialogue sessions belong to the Dialogues workspace, which watches them and manages their lifecycle; they are not listed in Sessions. A plugin claims a session by starting it with an `owner` (built 2026-11-15): the registry keeps it, the core leaves owned sessions out of the Sessions list and the active-session limit and attaches them read-only, without naming the plugin. The workspace is described in [dialogue.md section 8](dialogue.md#8-in-the-app).
 
 #### 10.7.3 The main area is always tabs
 
@@ -836,7 +836,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 | macOS host support (`LaunchdManager`) | No: the core needs it to run at all |
 | Non-git install kinds for update | No: part of core service update |
 
-The security review and retiring the old dashboard (both in [TODO.md](../TODO.md)) are core work, not plugins.
+The security review and the v2.0.0 release ([v2-plan.md section 9](v2-plan.md#9-backlog)) are core work, not plugins.
 
 ### 12.9 Dialogues as a plugin
 
@@ -1060,7 +1060,7 @@ Parity list for the old dashboard, so nothing was lost by accident:
 
 ## 15 Open decisions
 
-Each has a recommended default, which the plan assumes. D6 and D7 are decided for v2.0, and both are to be revisited in the security review in [section 9 of the plan](v2-plan.md#9-after-v20).
+Each has a recommended default, which the plan assumes. D6 and D7 are decided for v2.0, and both were revisited in the security review, finished 2026-11-15; what is left is in [section 9.2 of the plan](v2-plan.md#92-security).
 
 | # | Decision | Default | Alternative |
 |---|----------|---------|-------------|

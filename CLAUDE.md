@@ -8,7 +8,7 @@
 | Code structure | [docs/architecture.md](docs/architecture.md) |
 | Service and app setup | [docs/v2-setup.md](docs/v2-setup.md) |
 | v2 manual tests (real user and PC) | [docs/v2-manual-tests.md](docs/v2-manual-tests.md) |
-| Agreed work not started | [TODO.md](TODO.md) |
+| Agreed work not started (backlog) | [docs/v2-plan.md section 9](docs/v2-plan.md#9-backlog) |
 
 ## Key facts
 

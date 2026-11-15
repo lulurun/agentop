@@ -276,7 +276,7 @@ Status: built and packaged on a machine with no display, so **the window has nev
 
 ## 8 Phase 6: Parity and cutover
 
-The remaining cutover steps are tracked in [TODO.md](../TODO.md#retire-the-old-dashboard). Tests that need a real user and PC are in [v2-manual-tests.md](v2-manual-tests.md).
+The remaining steps are in the [backlog](#9-backlog), under the v2.0.0 release. Tests that need a real user and PC are in [v2-manual-tests.md](v2-manual-tests.md).
 
 - [x] History view: list, filter, resume through the normal start flow, delete.
 - [x] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
@@ -289,27 +289,43 @@ The remaining cutover steps are tracked in [TODO.md](../TODO.md#retire-the-old-d
 
 **Done when:** every row of the parity table works in both clients, and a full day of normal use needs no fallback to the old dashboard. Removal was planned only after that, and was brought forward by the owner on 2026-11-14.
 
-## 9 After v2.0
+## 9 Backlog
 
-### 9.1 Security review (TODO)
+Work agreed but not started, and ideas not yet scheduled. It replaces `TODO.md` (removed 2026-11-15); what was done there is recorded in the design and in git history.
 
-Tracked, with additions, in [TODO.md](../TODO.md#security-review).
+### 9.1 v2.0.0 release
 
-The v2.0 security model is deliberately simple and is to be revisited. Do this before recommending that anyone expose a service beyond loopback.
+The old dashboard was removed on 2026-11-14 without the parity walk and the day of v2-only use (manual tests J1 and J2), which stay open as checks of v2.
 
-- [x] Plain HTTP on non-loopback addresses (design D6): refused, 2026-11-14.
-- [ ] Shared token per service (design D7): decide whether to move to per-client tokens with individual revoke.
-- [ ] Review the rest of design section 7: agents running with skip-permissions. Open CORS (kept), token storage in `localStorage`, and what `/health` exposes without auth (now only `{"status": "ok"}`) were reviewed in 2026-11.
+- [ ] Walk the parity table in [design section 13](v2-design.md#13-migration) in the web app and the desktop app (J1), and use v2 alone for a day (J2).
+- [ ] Tag `v2.0.0` with release notes.
 
-### 9.2 Features
+### 9.2 Security
 
-Service-side features are built as plugins, after the plugin loader (design section 12). The design's 12.8 says which of these are plugins and which stay core or client-only.
+The security review of design section 7 was finished on 2026-11-15: TLS required off loopback, per-client expiring tokens that can be revoked, a closed `/health`, open CORS and skip-permissions agents kept on purpose. One item is left, at lower priority, because it makes signing in less convenient, which matters little on a hardened host and a lot for personal use.
 
-- File preview and diff view.
-- Grouping sessions by project.
+- [ ] Single-use pairing codes, so the service token never has to leave the machine. Discussed 2026-11-14, not built.
+  - Today the service token never expires, and signing in a browser or phone means copying it off the machine (into a chat, a password manager, a phone). Each copy can leak, and whoever has it can sign in clients until it's rotated.
+  - `agentop service pair` on the machine prints a short code, such as `K7QF-2M9X`. It is typed into the app's sign-in form instead of the service token, works once, and expires after 10 minutes, so a code that leaks later is useless. Making one needs shell access to the machine (SSH, or sitting at it).
+  - A setting turns the service token off for `POST /api/v2/auth/clients` entirely, so pairing codes are the only way in. Without it the codes add little. It can't be "refuse it except from loopback": behind a proxy such as nginx on pisces-01, every request comes from `127.0.0.1`.
+  - The CLI and the desktop app then sign in by writing a pairing code into `~/.agentop/state/` and using it, instead of sending the service token. Only something that can write to the user's home can do that, the same trust the `service.json` file gives today.
+  - Downside: every new browser or phone, and every sign-in after 12 hours unused, needs a fresh code from a shell on the machine.
+
+### 9.3 Workspaces
+
+- [ ] The workspace in the URL, a badge on a workspace that needs attention, `navigate(workspace, selection)` ([design 10.7.6](v2-design.md#1076-later)).
+
+### 9.4 Memory
+
+- [ ] Once recall misses have been noted for a while, read `plugins/memory/recall.jsonl` and decide on hybrid search with embeddings ([design 12.11.4](v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
+
+### 9.5 Features
+
+Not scheduled. Service-side features are built as plugins (design section 12); design 12.8 says which of these are plugins and which stay core or client-only.
+
+- Grouping sessions by project: the Project groups plugin ([plugins.md](plugins.md#backlog)).
 - A merged session list across services, and a separate window per service.
 - Offline app shell for the web app, so it survives its service stopping.
-- Attention indicator for agents waiting on input.
 - Desktop auto-update.
 - macOS host support through `LaunchdManager`.
 - Non-git install kinds for `agentop service update`.

@@ -14,6 +14,6 @@ Handoff is not a plugin: `agentop send` and the `handoff` skill pass a side task
 
 ## Backlog
 
-Ideas for later, lower priority than [TODO.md](../TODO.md), and not scheduled.
+Ideas for later, not scheduled. The rest of the backlog is in [v2-plan.md section 9](v2-plan.md#9-backlog).
 
 - **Project groups**: group sessions by project in the left column. The plugin stores the groups and fills a left-column view (design 12.8).
