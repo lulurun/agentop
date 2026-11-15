@@ -653,6 +653,9 @@ button.app-outdated:hover { background: var(--line); }
 .viewer-text { flex: 1; padding-left: 12px !important; padding-right: 16px !important; white-space: pre; outline: none; }
 .viewer-scroll[data-wrap] .viewer-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .viewer-modes { display: inline-flex; flex: none; }
+/* An image file, in the middle of the tab, shrunk to fit but never enlarged */
+.viewer-image { flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
+.viewer-image img { max-width: 100%; max-height: 100%; object-fit: contain; }
 
 /* A changed file's diff: old and new line numbers, then the line */
 .diff { flex: 1; min-height: 0; overflow: auto; padding: 4px 0 8px; color: var(--term-fg); font-family: var(--code); font-size: 12.5px; line-height: 1.55; tab-size: 4; outline: none; }

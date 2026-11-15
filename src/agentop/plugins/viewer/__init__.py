@@ -7,9 +7,9 @@ the prompts and replies in it, without tool calls and output.
 
 A file from the Changed list opens as its diff against HEAD, through `/diff`.
 
-A Markdown file is drawn in the browser. The images it names come through
-`/image`, as data the page puts in the <img>, since the page's requests carry
-their token in a header an <img> can't send.
+A Markdown file is drawn in the browser. The images it names, and an image
+file opened on its own, come through `/image`, as data the page puts in the
+<img>, since the page's requests carry their token in a header an <img> can't send.
 """
 
 from __future__ import annotations
@@ -118,10 +118,10 @@ def register(api):
 
     @api.router.get("/image")
     async def read_image_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
-        """An image a Markdown file shows, from the same places /file reads."""
+        """An image file, or one a Markdown file shows, from the same places /file reads."""
         row = session_row(session)
-        _, result = await located(row, source, path, read_image)
-        return {"path": path, **result}
+        target, result = await located(row, source, path, read_image)
+        return {"path": path, "absolute": str(target), **result}
 
     @api.router.get("/diff")
     async def read_diff(session: str, path: str):

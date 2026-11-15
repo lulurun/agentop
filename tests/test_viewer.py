@@ -226,12 +226,13 @@ def image(client, **params):
     return client.get("/api/v2/plugins/viewer/image", params={"session": "one", **params}, headers=AUTH)
 
 
-def test_an_image_comes_as_data_for_a_markdown_file(client):
+def test_an_image_comes_as_data(client):
     work = Path(read(client, path="src/a.py").json()["absolute"]).parent.parent
     (work / "docs").mkdir()
     (work / "docs" / "shot.PNG").write_bytes(PNG)
     body = image(client, path="docs/shot.PNG").json()
     assert body["type"] == "image/png" and body["size"] == len(PNG)
+    assert body["absolute"] == str(work / "docs" / "shot.PNG")
     import base64
 
     assert base64.b64decode(body["data"]) == PNG

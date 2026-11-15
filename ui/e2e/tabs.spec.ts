@@ -155,6 +155,32 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
   await expect(main.getByLabel("Preview of docs/other.md").getByRole("heading", { name: "Other page" })).toBeVisible();
 });
 
+test("an image file opens drawn in the middle of the tab", async ({ page }) => {
+  const s = await service("alpha");
+  const project = join(s.root, "project");
+  // A 1x1 PNG.
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg==", "base64");
+  writeFileSync(join(project, "dot.PNG"), png);
+  await page.goto(s.signedInUrl);
+  await startSession(page, "demo", project);
+
+  const details = page.locator(".details");
+  await details.getByRole("tab", { name: "All" }).click();
+  await details.getByRole("button", { name: "dot.PNG" }).click();
+
+  const main = page.locator(".main");
+  await expect(main.getByRole("tab")).toHaveText(["demo", "dot.PNG"]);
+  const image = main.getByRole("img", { name: "dot.PNG" });
+  await expect(image).toHaveAttribute("src", /^data:image\/png;base64,/);
+  expect(await image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(1);
+  // In the middle of the area below the bar.
+  const [box, area] = [await image.boundingBox(), await main.locator(".viewer-image").boundingBox()];
+  expect(Math.abs(box!.x + box!.width / 2 - (area!.x + area!.width / 2))).toBeLessThan(2);
+  expect(Math.abs(box!.y + box!.height / 2 - (area!.y + area!.height / 2))).toBeLessThan(2);
+  await expect(main.getByText(`${png.length} B`)).toBeVisible();
+  await expect(main.getByRole("button", { name: "Wrap" })).toHaveCount(0);
+});
+
 test("a file in the Changed list opens as its diff, and Open file shows its text", async ({ page }) => {
   const s = await service("alpha");
   const project = join(s.root, "project");

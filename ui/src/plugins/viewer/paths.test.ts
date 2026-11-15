@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isMarkdown, linkTarget, resolve } from "./paths";
+import { isImage, isMarkdown, linkTarget, resolve } from "./paths";
 
 describe("isMarkdown", () => {
   it("knows Markdown by its extension", () => {
@@ -7,6 +7,16 @@ describe("isMarkdown", () => {
     expect(isMarkdown("docs/Guide.MARKDOWN")).toBe(true);
     expect(isMarkdown("notes.txt")).toBe(false);
     expect(isMarkdown("md")).toBe(false);
+  });
+});
+
+describe("isImage", () => {
+  it("knows an image by its extension", () => {
+    expect(isImage("shot.png")).toBe(true);
+    expect(isImage("docs/Photo.JPEG")).toBe(true);
+    expect(isImage("logo.svg")).toBe(true);
+    expect(isImage("notes.txt")).toBe(false);
+    expect(isImage("png")).toBe(false);
   });
 });
 

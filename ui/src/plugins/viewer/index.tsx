@@ -4,7 +4,7 @@ import { useApp } from "../../store";
 import type { FileRef } from "../../tabs";
 import type { PluginContext, UiPlugin } from "../types";
 import { parseDiff, type DiffRow } from "./diff";
-import { isMarkdown } from "./paths";
+import { isImage, isMarkdown } from "./paths";
 
 // Its libraries load the first time a Markdown file is opened.
 const Markdown = lazy(() => import("./Markdown"));
@@ -232,9 +232,74 @@ function DiffViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   );
 }
 
-/** A file in a tab: its diff when opened from the Changed list, otherwise its text. */
+interface FileImage {
+  path: string;
+  absolute: string;
+  type: string;
+  size: number;
+  data: string;
+}
+
+/** An image file, drawn by the browser in the middle of the tab. */
+function ImageViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) {
+  const [result, setResult] = useState<FileImage | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    const query = new URLSearchParams({ session: file.sessionId, source: file.source, path: file.path });
+    // The page can't put its token on an <img>, so the image comes as data.
+    plugin.client.get<FileImage>(`/image?${query}`).then(
+      (value) => {
+        setResult(value);
+        setError(null);
+      },
+      (failure: unknown) => setError(message(failure)),
+    );
+  }, [file.sessionId, file.source, file.path, plugin.client]);
+  useEffect(load, [load]);
+
+  let body: ReactNode = null;
+  if (error) {
+    body = (
+      <div className="placard">
+        <h2>Can't open {file.path.split("/").pop()}</h2>
+        <p>{error}</p>
+      </div>
+    );
+  } else if (result) {
+    body = (
+      <div className="viewer-image">
+        <img src={`data:${result.type};base64,${result.data}`} alt={file.path} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="viewer">
+      <div className="viewer-bar">
+        <span className="viewer-path" title={result?.absolute ?? file.path}>
+          {file.path}
+        </span>
+        {result && <span className="viewer-meta">{formatSize(result.size)}</span>}
+        <button type="button" onClick={load}>
+          Reload
+        </button>
+        {result && (
+          <button type="button" onClick={() => void platform.copyText(result.absolute)}>
+            Copy path
+          </button>
+        )}
+      </div>
+      {body}
+    </div>
+  );
+}
+
+/** A file in a tab: its diff when opened from the Changed list, an image drawn, otherwise its text. */
 function FileViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) {
-  return file.view === "diff" ? <DiffViewer file={file} plugin={plugin} /> : <TextViewer file={file} plugin={plugin} />;
+  if (file.view === "diff") return <DiffViewer file={file} plugin={plugin} />;
+  if (isImage(file.path)) return <ImageViewer file={file} plugin={plugin} />;
+  return <TextViewer file={file} plugin={plugin} />;
 }
 
 /** A file's text with line numbers, or drawn: a transcript as its conversation, Markdown as a page. */

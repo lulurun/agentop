@@ -1,10 +1,16 @@
 /** Where a link in a Markdown file goes. Pure, so it is tested on its own. */
 
 const MARKDOWN = /\.(md|markdown|mdown|mkd|mdx)$/i;
+// The kinds the service's /image serves (IMAGE_TYPES in the viewer plugin).
+const IMAGE = /\.(png|jpe?g|gif|webp|avif|bmp|ico|svg)$/i;
 const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 export function isMarkdown(path: string): boolean {
   return MARKDOWN.test(path);
+}
+
+export function isImage(path: string): boolean {
+  return IMAGE.test(path);
 }
 
 export type LinkTarget =
