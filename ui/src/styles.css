@@ -864,6 +864,7 @@ button.app-outdated:hover { background: var(--line); }
 .sidebar-views button[aria-current] { color: inherit; font-weight: 600; }
 .sidebar-views { margin-top: auto; }
 .session-tag { color: var(--starting); }
+.attention-tag { color: var(--action); font-weight: 600; }
 
 .view { display: flex; flex-direction: column; min-height: 0; flex: 1; padding: 20px 24px; overflow: auto; }
 .view h2 { margin: 0 0 12px; font-size: 18px; font-weight: 600; }
