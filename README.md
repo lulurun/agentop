@@ -77,7 +77,7 @@ To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` 
 
 The defaults suit a service that only you reach, over loopback or a tunnel. The service token (`agentop service token`) never expires, but it only signs a client in, and the app doesn't keep it. Each browser or app gets its own token, which the app renews while it's open. After 12 hours unused, or 30 days in all, it's signed out and asks for the service token again. You can see every client, and sign any one out, in the service's Status tab or with `agentop service clients`.
 
-**What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`. Signing in a new browser or phone still means copying that token off the machine. Single-use pairing codes would remove that, but they make every sign-in need a shell on the machine, which is a poor trade for personal use. So they are a lower-priority item in the [backlog](docs/v2-plan.md#92-security).
+**What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`. Signing in a new browser or phone still means copying that token off the machine. Single-use pairing codes would remove that, but they make every sign-in need a shell on the machine, which is a poor trade for personal use. So they are a lower-priority item in the [backlog](docs/v2-plan.md#91-security).
 
 For a service reachable from the internet, such as one behind an HTTPS proxy:
 

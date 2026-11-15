@@ -371,7 +371,7 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health` and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
-- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [v2-plan.md 9.2](v2-plan.md#92-security)).
+- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [v2-plan.md 9.1](v2-plan.md#91-security)).
 
 ## 8 Service lifecycle
 
@@ -687,7 +687,7 @@ Agentop grows from here through plugins. The features that exist today are the *
 
 ### 12.1 Core and plugins
 
-**Core** is every feature that exists at v2.0. It is always loaded and has no off switch:
+**Core** is every feature that existed before plugins. It is always loaded and has no off switch:
 
 - Sessions: scan, start, stop, close, resume, rename and describe, managed and external sessions.
 - The terminal bridge and tmux integration.
@@ -821,7 +821,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 ### 12.8 First plugins
 
-The later features (plan 9.2) become plugins one at a time, where they are service features:
+The later features (plan 9.4) become plugins one at a time, where they are service features:
 
 | Feature | Plugin? |
 |---------|---------|
@@ -836,7 +836,7 @@ The later features (plan 9.2) become plugins one at a time, where they are servi
 | macOS host support (`LaunchdManager`) | No: the core needs it to run at all |
 | Non-git install kinds for update | No: part of core service update |
 
-The security review and the v2.0.0 release ([v2-plan.md section 9](v2-plan.md#9-backlog)) are core work, not plugins.
+The security items in the backlog ([v2-plan.md section 9](v2-plan.md#9-backlog)) are core work, not plugins.
 
 ### 12.9 Dialogues as a plugin
 
@@ -1060,7 +1060,7 @@ Parity list for the old dashboard, so nothing was lost by accident:
 
 ## 15 Open decisions
 
-Each has a recommended default, which the plan assumes. D6 and D7 are decided for v2.0, and both were revisited in the security review, finished 2026-11-15; what is left is in [section 9.2 of the plan](v2-plan.md#92-security).
+Each has a recommended default, which the plan assumes. D6 and D7 are decided, and both were revisited in the security review, finished 2026-11-15; what is left is in [section 9.1 of the plan](v2-plan.md#91-security).
 
 | # | Decision | Default | Alternative |
 |---|----------|---------|-------------|

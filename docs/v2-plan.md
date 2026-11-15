@@ -218,7 +218,7 @@ Status: done.
 - [x] `files.py` and routes: lazy directory listing, git branch, dirty state, and changed files. Respect `.gitignore` where the directory is a repository, and handle non-repositories.
 - [x] Files UI with Changed and All tabs, and copy-path. Refresh on open, and every 10s only while the panel is visible.
 
-File preview and diff views are deferred until after v2.0.
+File preview and diff views are deferred.
 
 **Done when:**
 
@@ -276,7 +276,7 @@ Status: built and packaged on a machine with no display, so **the window has nev
 
 ## 8 Phase 6: Parity and cutover
 
-The remaining steps are in the [backlog](#9-backlog), under the v2.0.0 release. Tests that need a real user and PC are in [v2-manual-tests.md](v2-manual-tests.md).
+Tests that need a real user and PC are in [v2-manual-tests.md](v2-manual-tests.md).
 
 - [x] History view: list, filter, resume through the normal start flow, delete.
 - [x] Dialogues view: list, detail, stop, remove. Show dialogue agents with a label in the session list.
@@ -285,7 +285,6 @@ The remaining steps are in the [backlog](#9-backlog), under the v2.0.0 release. 
 - [x] Move the web app to `/`. Delete `html/index.html` and the old `/api` routes and `/ws/sessions` endpoint (2026-11-14). `/app/…` redirects to `/`.
 - [x] Update `README.md`, `CLAUDE.md`, `docs/architecture.md`, and `docs/cli.md`; `docs/dashboard.md`, which described only the old dashboard, is removed.
 - [x] Document exposing a service safely: tunnel, proxy, or TLS, and what plain HTTP gives away ([v2-setup.md](v2-setup.md#exposing-a-service)).
-- [ ] Add a tag and release notes for `v2.0.0`.
 
 **Done when:** every row of the parity table works in both clients, and a full day of normal use needs no fallback to the old dashboard. Removal was planned only after that, and was brought forward by the owner on 2026-11-14.
 
@@ -293,14 +292,7 @@ The remaining steps are in the [backlog](#9-backlog), under the v2.0.0 release. 
 
 Work agreed but not started, and ideas not yet scheduled. It replaces `TODO.md` (removed 2026-11-15); what was done there is recorded in the design and in git history.
 
-### 9.1 v2.0.0 release
-
-The old dashboard was removed on 2026-11-14 without the parity walk and the day of v2-only use (manual tests J1 and J2), which stay open as checks of v2.
-
-- [ ] Walk the parity table in [design section 13](v2-design.md#13-migration) in the web app and the desktop app (J1), and use v2 alone for a day (J2).
-- [ ] Tag `v2.0.0` with release notes.
-
-### 9.2 Security
+### 9.1 Security
 
 The security review of design section 7 was finished on 2026-11-15: TLS required off loopback, per-client expiring tokens that can be revoked, a closed `/health`, open CORS and skip-permissions agents kept on purpose. One item is left, at lower priority, because it makes signing in less convenient, which matters little on a hardened host and a lot for personal use.
 
@@ -311,15 +303,15 @@ The security review of design section 7 was finished on 2026-11-15: TLS required
   - The CLI and the desktop app then sign in by writing a pairing code into `~/.agentop/state/` and using it, instead of sending the service token. Only something that can write to the user's home can do that, the same trust the `service.json` file gives today.
   - Downside: every new browser or phone, and every sign-in after 12 hours unused, needs a fresh code from a shell on the machine.
 
-### 9.3 Workspaces
+### 9.2 Workspaces
 
 - [ ] The workspace in the URL, a badge on a workspace that needs attention, `navigate(workspace, selection)` ([design 10.7.6](v2-design.md#1076-later)).
 
-### 9.4 Memory
+### 9.3 Memory
 
 - [ ] Once recall misses have been noted for a while, read `plugins/memory/recall.jsonl` and decide on hybrid search with embeddings ([design 12.11.4](v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)).
 
-### 9.5 Features
+### 9.4 Features
 
 Not scheduled. Service-side features are built as plugins (design section 12); design 12.8 says which of these are plugins and which stay core or client-only.
 

@@ -1,6 +1,6 @@
 # v2 Manual Tests
 
-These are the tests that need a real person at a real PC: a display, a keyboard, an input method, a browser, or a second machine. Automated tests cover the rest (pytest, vitest, Playwright, cargo). Every case is listed here whether or not it has already been seen working, so a full pass can be repeated before a release.
+These are the tests that need a real person at a real PC: a display, a keyboard, an input method, a browser, or a second machine. Automated tests cover the rest (pytest, vitest, Playwright, cargo). Every case is listed here whether or not it has already been seen working, so a full pass can be repeated after large changes.
 
 **How to use this.** Run each case and set its result to Pass, Fail, or Skip, with the date, OS, and browser or app version in the notes. A Fail needs a note saying what was seen instead.
 
@@ -133,7 +133,7 @@ The desktop window has never been opened; every case here is Not run.
 | I2 | Open and close the side panels on a phone | Panels appear as overlays; no sideways scroll | Not run |
 | I3 | Type with the phone's on-screen keyboard, including Enter, Backspace, and Japanese input | Keys arrive correctly | Not run |
 
-## J. Release checks
+## J. Parity checks
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
