@@ -470,8 +470,8 @@ agentop has releases on GitHub, in two series. Until 2026-11-16 there were none.
 
 | Tag | What it releases | Built by |
 |-----|------------------|----------|
-| `desktop-v*`, such as `desktop-v0.2.0` | The desktop wrapper: AppImage (Linux), `.app` (macOS) | `.github/workflows/desktop.yml`, on the tag |
-| `v*`, such as `v1.0.0` | The service and its UI | Not built yet |
+| `desktop-v*`, such as `desktop-v0.2.0` | The desktop wrapper: AppImage (Linux), `.app` (macOS) | `scripts/release-app.sh` tags it; `.github/workflows/desktop.yml` builds and publishes it |
+| `v*`, such as `v1.0.0` | The service and its UI, as tagged source | `scripts/release-ui.sh` tags it; `.github/workflows/release.yml` checks the UI builds and publishes the release. No service updates from it yet (below) |
 
 The wrapper has its own version (`version` in `desktop/src-tauri/tauri.conf.json`, which the tag must match), so that a service release doesn't ask anyone to reinstall the app.
 

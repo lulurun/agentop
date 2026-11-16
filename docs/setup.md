@@ -139,18 +139,31 @@ built by hand can't replace itself, so there the button opens the release page.
 those are `webkit2gtk-4.1`, `gtk3`, `libsoup3`, and `librsvg`.
 
 ```bash
-(cd desktop && npm ci && npm run build)     # binary in src-tauri/target/release/
-(cd desktop && npm run package)             # an AppImage in src-tauri/target/release/bundle/appimage/
+scripts/build-app.sh             # the UI, then the app: desktop/src-tauri/target/release/agentop-desktop
+scripts/build-app.sh --appimage  # also an AppImage in desktop/src-tauri/target/release/bundle/appimage/
 ```
+
+The app shows the UI that this computer's service serves, so `scripts/build-ui.sh` on
+its own is enough to change what the app shows: reload the window afterwards.
 
 The app keeps tokens for other services in the OS keychain, which on Linux needs a
 running secret service such as GNOME Keyring or KeePassXC.
 
-**Releasing it** (maintainers): set `version` in `desktop/src-tauri/tauri.conf.json`,
-commit, and push a matching tag, such as `desktop-v0.2.0`. The `desktop` workflow
-builds and signs it and points installed apps at it. It needs the repository secret
-`TAURI_SIGNING_PRIVATE_KEY`, the private half of the updater key whose public half
-is in `tauri.conf.json`.
+## Building and releasing
+
+| Script | Does |
+|--------|------|
+| `scripts/build-ui.sh [--clean]` | Builds the web UI into `src/agentop/service/webdist/`, which the service serves. `--clean` reinstalls `node_modules` |
+| `scripts/build-app.sh [--appimage]` | `build-ui.sh`, then the desktop app |
+| `scripts/release-ui.sh 1.0.0` | Releases the service and UI as `v1.0.0`: sets `pyproject.toml`'s version, commits, tags, and pushes after asking. The `release` workflow publishes the GitHub release |
+| `scripts/release-app.sh 0.2.0` | Releases the desktop app as `desktop-v0.2.0`: sets the version in `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. The `desktop` workflow builds, signs, and publishes it, and installed apps offer the update |
+
+The release scripts run only on `main`, clean and level with `origin/main`, and build
+first, so nothing is tagged that doesn't build. An app release doesn't include the
+UI, which ships with the service; `release-app.sh` builds it only as a check.
+
+The `desktop` workflow needs the repository secret `TAURI_SIGNING_PRIVATE_KEY`, the
+private half of the updater key whose public half is in `tauri.conf.json`.
 
 ## Exposing a service
 
