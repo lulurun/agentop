@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build --no-bundle",
-    "package": "tauri build --bundles deb"
+    "package": "tauri build --bundles appimage --config '{\"bundle\":{\"createUpdaterArtifacts\":false}}'"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2"

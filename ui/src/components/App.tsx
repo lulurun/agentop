@@ -5,7 +5,7 @@ import { currentWorkspace, useApp } from "../store";
 import { pluginOf, workspacesFor } from "../workspaces";
 import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
-import { AppOutdated, ServiceSwitcher } from "./ServiceSwitcher";
+import { AppOutdated, DesktopUpdate, ServiceSwitcher } from "./ServiceSwitcher";
 import { MainArea } from "./MainArea";
 import { NewSessionDialog } from "./NewSessionDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -88,6 +88,7 @@ export function App() {
           <ServiceSwitcher />
           {linked && <WorkspaceNav />}
           <AppOutdated />
+          <DesktopUpdate />
         </div>
         {linked && <WorkspaceAction />}
         <button type="button" className="icon" aria-label="Settings" title="Settings" onClick={() => setDialog("settings")}>

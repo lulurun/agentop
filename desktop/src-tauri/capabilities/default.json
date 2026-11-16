@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The window can call this app's own commands and write text to the clipboard, and nothing else: no shell, no file access, no clipboard reads.",
+  "description": "The start page, bundled in the app, shown until the service answers. It can read how starting went and start the service again. The page from the service gets its own capability at run time, for its exact origin (see service_capability in main.rs).",
   "windows": ["main"],
-  "permissions": ["core:default", "clipboard-manager:allow-write-text"]
+  "permissions": ["core:default", "allow-startup-status", "allow-service-start", "allow-desktop-info"]
 }

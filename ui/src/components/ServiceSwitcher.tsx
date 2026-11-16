@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchHealth } from "../api/client";
 import { appIsOutdated, connectionName, isEncrypted, isLoopback } from "../connections";
-import { platform } from "../platform";
+import { platform, type AppUpdate } from "../platform";
 import { activeConnection, useApp } from "../store";
 
 type Reach = "checking" | "reachable" | "unreachable";
@@ -113,21 +113,81 @@ export function ServiceSwitcher() {
   );
 }
 
-/** The service's /api/v2 is newer than this app. The web app reloads to get it; the desktop app needs updating. */
+/**
+ * The service's /api/v2 is newer than this UI. The web app reloads to get it. The desktop
+ * app shows the UI of this computer's service, so there it means that service is older.
+ */
 export function AppOutdated() {
   const link = useApp((s) => s.link);
   if (link.state !== "connected" && link.state !== "reconnecting") return null;
   if (!appIsOutdated(link.service)) return null;
   if (platform.kind === "desktop") {
     return (
-      <span className="app-outdated" title={`${link.service.name} runs ${link.service.version}, which this app predates. Some features may be missing.`}>
-        Update this app
+      <span className="app-outdated" title={`${link.service.name} runs ${link.service.version}, which is newer than this computer's service. Some features may be missing until this computer's service is updated.`}>
+        Update this computer's service
       </span>
     );
   }
   return (
     <button type="button" className="app-outdated" title={`${link.service.name} has a newer version of this app`} onClick={() => window.location.reload()}>
       Reload for the new version
+    </button>
+  );
+}
+
+const APP_UPDATE_POLL_MS = 6 * 60 * 60 * 1000;
+
+/** Desktop only: a new release of the app itself, which installs in place or links to its page. */
+export function DesktopUpdate() {
+  const [update, setUpdate] = useState<AppUpdate | null>(null);
+  const [installing, setInstalling] = useState(false);
+  const [failed, setFailed] = useState("");
+
+  useEffect(() => {
+    const check = platform.checkAppUpdate;
+    if (!check) return;
+    let live = true;
+    const run = () =>
+      void check()
+        .then((found) => live && setUpdate(found))
+        .catch(() => undefined);
+    run();
+    const timer = setInterval(run, APP_UPDATE_POLL_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, []);
+
+  if (!update) return null;
+  const label = installing ? "Updating the app…" : update.required ? "App update needed" : "App update";
+  const version = update.version ? ` ${update.version}` : "";
+  const title = failed
+    ? `The update failed: ${failed}. Get it from the release page instead.`
+    : update.install
+      ? `Install agentop${version} and restart the app. Sessions keep running.`
+      : `agentop${version} is out. Open the release page to download it.`;
+  return (
+    <button
+      type="button"
+      className="app-outdated"
+      title={title}
+      disabled={installing}
+      onClick={async () => {
+        if (update.install && !failed) {
+          setInstalling(true);
+          try {
+            await update.install();
+          } catch (error) {
+            setFailed(String(error));
+            setInstalling(false);
+          }
+          return;
+        }
+        await platform.openUrl?.(update.releaseUrl);
+      }}
+    >
+      {label}
     </button>
   );
 }

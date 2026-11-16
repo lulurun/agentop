@@ -56,6 +56,8 @@ function ConnectionProblem() {
   const removeConnection = useApp((s) => s.removeConnection);
   const [token, setTokenText] = useState("");
   const methods = useLoginMethods(connection.url);
+  // "", "starting", or why starting failed.
+  const [starting, setStarting] = useState("");
 
   if (link.state === "connecting") {
     return (
@@ -65,14 +67,27 @@ function ConnectionProblem() {
     );
   }
   if (link.state !== "failed") return null;
-  // The app can't start a service: a stopped one has nothing to answer it. It says how instead.
   const down = link.failure.kind === "unreachable" || link.failure.kind === "stopped";
-  // No service.json here to sign in with, and never signed in: nothing is installed.
-  const noService = down && platform.kind === "desktop" && connection.isHome && !connection.serviceToken && !connection.clientId;
-  const { title, detail } = noService
+  // A page can't start a service: a stopped one has nothing to answer it. The desktop app
+  // runs this computer's service, so it can start it again.
+  const canStart = down && connection.isHome && !!platform.startService;
+  const start = async () => {
+    setStarting("starting");
+    try {
+      await platform.startService!();
+      setStarting("");
+      retry();
+    } catch (error) {
+      setStarting(error instanceof Error ? error.message : String(error));
+    }
+  };
+  const { title, detail } = canStart
     ? {
-        title: "No service on this computer",
-        detail: "Install agentop here and run agentop serve, or add a service running on another machine.",
+        title: "The service on this computer stopped",
+        detail:
+          starting && starting !== "starting"
+            ? `It didn't start: ${starting}`
+            : "Start it again. Sessions kept running in tmux while it was stopped.",
       }
     : signInMessage(link.failure, connectionName(connection), methods.length > 0);
   const needsToken = ["no_token", "expired", "token_rejected", "rate_limited"].includes(link.failure.kind);
@@ -112,7 +127,12 @@ function ConnectionProblem() {
         </form>
       )}
       <div className="placard-actions">
-        {!needsToken && (
+        {canStart && (
+          <button type="button" className="primary" disabled={starting === "starting"} onClick={() => void start()}>
+            {starting === "starting" ? "Starting…" : "Start"}
+          </button>
+        )}
+        {!needsToken && !canStart && (
           <button type="button" onClick={() => retry()}>
             Try again
           </button>

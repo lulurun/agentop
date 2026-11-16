@@ -4,19 +4,40 @@
   "identifier": "dev.agentop.desktop",
   "version": "0.1.0",
   "build": {
-    "frontendDist": "../../src/agentop/service/webdist",
-    "beforeBuildCommand": "npm --prefix ../ui run build",
-    "beforeDevCommand": "npm --prefix ../ui run dev",
-    "devUrl": "http://localhost:5173"
+    "frontendDist": "../static"
   },
   "app": {
-    "windows": [{ "title": "agentop", "width": 1280, "height": 800, "minWidth": 640, "minHeight": 420 }],
+    "windows": [
+      {
+        "label": "main",
+        "title": "agentop",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 420
+      }
+    ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http: https: ws: wss:"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src ipc: http://ipc.localhost"
     }
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/icon.png"]
+    "createUpdaterArtifacts": true,
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENCMUI5QjVDNUYxQjMxQ0IKUldUTE1SdGZYSnNieTMydkhlNWU5VFZvVmd5eWNEWHg5M1U4YXlXeTJ0WlV1L01zRUFZMUpDV0oK",
+      "endpoints": [
+        "https://github.com/lulurun/agentop/releases/download/desktop-latest/latest.json"
+      ]
+    }
   }
 }
