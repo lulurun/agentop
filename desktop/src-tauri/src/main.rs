@@ -12,6 +12,8 @@
 //! fixed thing, writing text to the clipboard, the updater, and opening this project's
 //! GitHub pages in the browser.
 
+#[cfg(target_os = "linux")]
+mod desktop_entry;
 mod service;
 
 use serde::{Deserialize, Serialize};
@@ -202,6 +204,8 @@ fn main() {
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() && nvidia_driver_loaded() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
+    #[cfg(target_os = "linux")]
+    desktop_entry::register();
 
     let service = Arc::new(Service::new());
     let app = tauri::Builder::default()

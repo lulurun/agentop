@@ -128,6 +128,11 @@ chmod +x agentop_*_amd64.AppImage
 ./agentop_*_amd64.AppImage            # needs fuse2 (Arch: pacman -S fuse2), or add --appimage-extract-and-run
 ```
 
+Each start writes `~/.local/share/applications/agentop-desktop.desktop` and its icon
+(`~/.local/share/icons/hicolor/512x512/apps/agentop-desktop.png`), launching the copy
+last opened. On Wayland the taskbar takes the icon only from that entry, and shows a
+generic one without it. So it also puts agentop in the app launcher.
+
 **macOS.** Download the `.app` from the same release. It isn't signed yet, so open
 it the first time with right-click, Open.
 
