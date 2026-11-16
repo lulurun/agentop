@@ -1,4 +1,4 @@
-# v2 Manual Tests
+# Manual Tests
 
 These are the tests that need a real person at a real PC: a display, a keyboard, an input method, a browser, or a second machine. Automated tests cover the rest (pytest, vitest, Playwright, cargo). Every case is listed here whether or not it has already been seen working, so a full pass can be repeated after large changes.
 
@@ -112,18 +112,22 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 ## H. Desktop app
 
-The desktop window has never been opened; every case here is Not run.
+The desktop window has never been opened; every case here is Not run. Redesigned 2026-11-16: the app runs this computer's service (design 4.2).
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| H1 | Install the desktop package on the PC and open it | The window opens on the local service, signed in | Not run |
+| H1 | With no service running on the PC, open the AppImage | The start page, then the app on this computer's service, signed in. `ss -ltnp` shows it on `127.0.0.1` only | Not run |
 | H2 | Run the desktop app and the web app side by side | Same sessions, same state, same features | Not run |
-| H3 | Stop the local service, then open the app | A red dot, the service shown as stopped, and how to start it; no Start button. `agentop serve` and Try again bring it back | Not run |
-| H4 | Close the app | The service and all sessions keep running | Not run |
-| H5 | Add the devhost through `https://agentop.wolfdrawer.net`, through an `ssh -L` tunnel, and through a plain LAN address | All three connect; switching among them works | Not run |
-| H6 | With an `ssh -L` tunnel to the devhost saved, open its service panel | Start is hidden; no `systemctl` runs on the PC for it, even though its URL is loopback | Not run |
+| H3 | Close the app, then run `tmux ls` and `curl 127.0.0.1:9775/api/v2/health` | The sessions are listed; the service doesn't answer. `desktop-serve.log` ends with a clean shutdown | Not run |
+| H4 | Start `agentop serve` by hand, open the app, then close it | The app uses that service, and it keeps running after the app closes | Not run |
+| H5 | Add the devhost through `https://agentop.wolfdrawer.net`, through an `ssh -L` tunnel on another port, and through a plain LAN address | All three connect; switching among them works | Not run |
+| H6 | Stop the service from its panel | "The service on this computer stopped", with Start; Start brings it back, and the sessions are there | Not run |
 | H7 | Quit and reopen the app | Saved services and tokens are kept (OS keychain) | Not run |
 | H8 | Repeat C1 to C5 and D1 to D4 in the desktop app | Same as in the browser | Not run |
+| H9 | Rename `agentop` off the `PATH`, then open the app | The start page says agentop isn't installed and names the log; Try again works once it's back | Not run |
+| H10 | Install `desktop-v0.1.0`, then release `desktop-v0.1.1` | **App update** shows; clicking it updates and restarts the app; sessions keep running, and closing the new copy stops the service | Not run |
+| H11 | Run a copy built with `npm run build` while a newer release exists | **App update** opens the release page instead of installing | Not run |
+| H12 | Update the service from its panel in the app | The window reloads on the new UI, still signed in | Not run |
 
 ## I. Phone
 
@@ -137,5 +141,5 @@ The desktop window has never been opened; every case here is Not run.
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| J1 | Walk the parity table in [v2-design.md section 13](v2-design.md#13-migration) in both the web app and the desktop app | Every old feature has a working v2 home | Not run. The old dashboard was removed on 2026-11-14 before this ran |
-| J2 | Use v2 alone for a full day of normal work | Nothing missing that the old dashboard had | Not run |
+| J1 | Walk the parity table in [design.md section 13](design.md#13-migration) in both the web app and the desktop app | Every old feature has a working home in the app | Not run. The old dashboard was removed on 2026-11-14 before this ran |
+| J2 | Use the app alone for a full day of normal work | Nothing missing that the old dashboard had | Not run |

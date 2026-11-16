@@ -1,6 +1,6 @@
-# Running v2
+# Setup
 
-v2 is a service plus an app. Each machine that runs agents runs the service, and
+agentop is a service plus an app. Each machine that runs agents runs the service, and
 the app connects to any service it can reach. The app is served by the service
 at `/` (it was at `/app/` until 2026-11-14, which now redirects there).
 
@@ -108,22 +108,49 @@ background, logging to `serve.log`.
 
 ## Desktop app
 
-Needs everything above, plus Rust and the WebKitGTK 4.1 development files. On Arch
+On a PC, the desktop app runs this computer's service for you. It needs agentop
+installed as above (the app runs the `agentop` on your login shell's `PATH`, or
+`AGENTOP_BIN`), but no `agentop serve` and no systemd unit.
+
+- **Open it**: it starts `agentop serve` on `127.0.0.1` (port 9775, or `port` from
+  `config.toml`) and opens signed in. If a service already answers there, such as a
+  systemd unit, it uses that one instead.
+- **Close it**: it stops the service it started. Sessions keep running in tmux and
+  are there the next time. A service it didn't start keeps running.
+- The service's output goes to `~/.agentop/logs/desktop-serve.log`. If it doesn't
+  start, the app says why.
+
+**Linux.** Download `agentop_<version>_amd64.AppImage` from the newest `desktop-v*`
+release on GitHub, then:
+
+```bash
+chmod +x agentop_*_amd64.AppImage
+./agentop_*_amd64.AppImage            # needs fuse2 (Arch: pacman -S fuse2), or add --appimage-extract-and-run
+```
+
+**macOS.** Download the `.app` from the same release. It isn't signed yet, so open
+it the first time with right-click, Open.
+
+**Updates.** When a newer `desktop-v*` release is out, the header shows **App update**.
+Clicking it installs the update and restarts the app; sessions keep running. A copy
+built by hand can't replace itself, so there the button opens the release page.
+
+**Building it yourself** needs Rust and the WebKitGTK 4.1 development files. On Arch
 those are `webkit2gtk-4.1`, `gtk3`, `libsoup3`, and `librsvg`.
 
 ```bash
 (cd desktop && npm ci && npm run build)     # binary in src-tauri/target/release/
-(cd desktop && npm run package)             # a .deb in src-tauri/target/release/bundle/
+(cd desktop && npm run package)             # an AppImage in src-tauri/target/release/bundle/appimage/
 ```
 
-The app connects to this computer's service by itself, reading `service.json`, and
-keeps its tokens for other services in the OS keychain, which needs a running secret service
-such as GNOME Keyring or KeePassXC. Unlike a browser, it has no rule against reaching
-either loopback or plain HTTP addresses, so HTTPS-Only Mode and similar limits don't
-apply.
+The app keeps tokens for other services in the OS keychain, which on Linux needs a
+running secret service such as GNOME Keyring or KeePassXC.
 
-If this computer's service is stopped, the app says so and how to start it, as the web
-app does. It can't start it either.
+**Releasing it** (maintainers): set `version` in `desktop/src-tauri/tauri.conf.json`,
+commit, and push a matching tag, such as `desktop-v0.2.0`. The `desktop` workflow
+builds and signs it and points installed apps at it. It needs the repository secret
+`TAURI_SIGNING_PRIVATE_KEY`, the private half of the updater key whose public half
+is in `tauri.conf.json`.
 
 ## Exposing a service
 

@@ -1,4 +1,4 @@
-"""Plugin commands for the `agentop` CLI. See docs/v2-design.md, section 12.3.
+"""Plugin commands for the `agentop` CLI. See docs/design.md, section 12.3.
 
 A plugin adds commands by naming them in its manifest (`cli = ["recall"]`) and
 defining `register_cli(cli)` in a `cli.py` beside its `__init__.py`. The CLI

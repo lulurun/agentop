@@ -2,7 +2,7 @@
 
 Access is decided by a client's token alone, because a client may be loaded
 from anywhere. The service token only adds a client (auth.py). That is safe because nothing here relies on an ambient credential:
-without cookies, a foreign page has nothing to ride on. See docs/v2-design.md,
+without cookies, a foreign page has nothing to ride on. See docs/design.md,
 section 7.
 """
 

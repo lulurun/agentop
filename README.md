@@ -17,7 +17,7 @@ Agent CLIs are built to run in a terminal, and tmux is the natural place to keep
 - **Session.** One agent CLI running in one tmux session. Its id is the tmux session name. A session agentop started is **managed**: it can be stopped, resumed, and sent text. One agentop finds running on its own is **external**: it is listed, and can be attached if it is in tmux.
 - **Sessions outlive everything else.** Closing the app, or restarting or updating the service, leaves every agent running. tmux owns the agents; agentop only attaches to them.
 - **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API. The service token signs a browser or app in; each one then gets its own token, which runs out after 12 hours unused.
-- **App.** One UI, built as a web app (served by the service at `/`) and as a Tauri desktop app. Sessions are on the left, the agent's live terminal is in the middle, and details (token usage, changed files) are on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal.
+- **App.** One UI, served by the service at `/`, in a browser or in the Tauri desktop app, which runs this computer's service while it is open. Sessions are on the left, the agent's live terminal is in the middle, and details (token usage, changed files) are on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal.
 - **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It can also see the status of the service it is connected to, and restart or update it.
 - **History.** Past conversations of each tool, in a workspace of their own: searched, filtered by tool, sorted, and resumed as new sessions.
 - **CLI.** The `agentop` command does the same from a shell: start, stop, list, history, and service control.
@@ -31,7 +31,7 @@ Everything above is the **core**. It is always loaded and cannot be switched off
 - Plugin UI goes into fixed slots in the app, such as a badge on a session row, a workspace in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
 - **A plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
 
-The plugins that ship with agentop are Dialogues, the File viewer, and Memory. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/v2-design.md#12-plugins).
+The plugins that ship with agentop are Dialogues, the File viewer, and Memory. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/design.md#12-plugins).
 
 ## Requirements
 
@@ -50,7 +50,7 @@ agentop serve                        # http://127.0.0.1:9775
 agentop open                         # opens the app, signed in
 ```
 
-That's all agentop needs. Running it as a system service or behind a proxy is optional, and up to you. Connecting to other machines, updating, and HTTPS are in [docs/v2-setup.md](docs/v2-setup.md).
+That's all agentop needs. Running it as a system service or behind a proxy is optional, and up to you. Connecting to other machines, updating, and HTTPS are in [docs/setup.md](docs/setup.md).
 
 ## Using agentop on another machine
 
@@ -71,7 +71,7 @@ ssh -N -L 9776:127.0.0.1:9775 build-box
 
 Then, in the app on your machine, open Connect to a service from the service menu and paste the connect-info string with the port changed to the tunnel's: `http://127.0.0.1:9776#token=…`. Use a port other than 9775 if your own machine runs a service too. Add `-f` to run the tunnel in the background, or put a `LocalForward 9776 127.0.0.1:9775` line under `Host build-box` in `~/.ssh/config`.
 
-To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` in a browser. An HTTPS proxy or TLS in the service are the other options, in [docs/v2-setup.md](docs/v2-setup.md#exposing-a-service).
+To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` in a browser. An HTTPS proxy or TLS in the service are the other options, in [docs/setup.md](docs/setup.md#exposing-a-service).
 
 ## Secure setup
 
@@ -106,12 +106,12 @@ For a service reachable from the internet, such as one behind an HTTPS proxy:
 
 ## Documentation
 
-- [Setup](docs/v2-setup.md): running the service and the app
+- [Setup](docs/setup.md): running the service and the app
 - [CLI reference](docs/cli.md): every command and option
 - [Architecture](docs/architecture.md): code structure and modules
-- [Design](docs/v2-design.md): the full v2 design, including the plugin system (section 12)
+- [Design](docs/design.md): the full design, including the plugin system (section 12)
 - [Plugins](docs/plugins.md): what each plugin does
-- [Backlog](docs/v2-plan.md#9-backlog): work agreed but not started
+- [Backlog](docs/plan.md#9-backlog): work agreed but not started
 
 ## License
 

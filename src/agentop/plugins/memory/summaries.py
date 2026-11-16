@@ -1,6 +1,6 @@
 """Session summaries: a title, a few sentences, and keywords for each conversation, made by a model.
 
-See docs/v2-design.md, section 12.11.3, phase 5. Keyword search finds a message
+See docs/design.md, section 12.11.3, phase 5. Keyword search finds a message
 only by words it holds. A summary says what the session was about in ordinary
 words ("a restaurant recommendation", "the auth design"), so a search for what
 someone remembers of it finds the session even when no message has those words.

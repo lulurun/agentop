@@ -1,4 +1,4 @@
-"""Dialogues: two agents work together on one task. See docs/dialogue.md and docs/v2-design.md, section 12.9.
+"""Dialogues: two agents work together on one task. See docs/dialogue.md and docs/design.md, section 12.9.
 
 `agentop dialogue start` (cli.py) starts both agents as ordinary managed
 sessions and an orchestrator process (runner.py) that relays messages between

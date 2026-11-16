@@ -25,12 +25,12 @@ src/agentop/
   service/webdist/       The built web app (ui/), served at / (not committed)
   plugins/               attention/, dialogue/, email-code/, memory/, viewer/: one folder per plugin
 ui/                      The app: React and TypeScript, built by Vite; ui/src/plugins/ holds plugin UIs
-desktop/                 The Tauri desktop app, which bundles the same UI
+desktop/                 The Tauri desktop app: runs this computer's service, shows its UI
 ```
 
 ### Core and plugins
 
-Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. The design is in [v2-design.md section 12](v2-design.md#12-plugins). Dialogues (section 5 below) are a plugin, in `src/agentop/plugins/dialogue/`.
+Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. The design is in [design.md section 12](design.md#12-plugins). Dialogues (section 5 below) are a plugin, in `src/agentop/plugins/dialogue/`.
 
 ## 2 Agent layer
 
@@ -161,7 +161,7 @@ The orchestrator is its own process, not part of the service, so a dialogue keep
 
 `service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs a client's token; the service token only signs a client in, at `POST /auth/clients` (`service/auth.py`, design D7). `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`). With `readonly=true`, or for a session with an `owner`, it attaches with `-f read-only,ignore-size`, drops what the client sends, and takes the window's size, which it tells the client in a `{"type": "size"}` frame; the terminal then scales its font to show the whole window.
 
-### Main-area tabs (v2 app)
+### Main-area tabs
 
 The main area holds tabs in one or two groups side by side (`ui/src/tabs.ts`, pure functions over a `Layout`, kept per connection in `store.ts` and saved in `localStorage`). A tab is a container: it shows a session's terminal, or a file through the enabled `file-viewer` plugin. Clicking a session shows it in the left group (or the only one), replacing the session tab shown there; Ctrl or Cmd, the middle button, or the row's menu opens it in a new tab there or to the side. Clicking a file, in the right panel or a link in a Markdown file, opens it in the right group, made if there is only one. A session or file already open in either group is shown where it is, so a tab moved to the other group stays there. Tabs move freely between the groups afterwards. The focused group's active tab decides the session in the header and right panel. Closing a session closes its tabs.
 

@@ -5,7 +5,7 @@ description: Find something from a past conversation with an agent on this machi
 
 # Recall: search past conversations
 
-agentop's Memory plugin keeps every prompt and reply from every agent session on this machine (agentop `docs/v2-design.md` section 12.11). `agentop recall` searches it. It only reads the conversations; the one thing it writes is its own note of searches and misses (step 4).
+agentop's Memory plugin keeps every prompt and reply from every agent session on this machine (agentop `docs/design.md` section 12.11). `agentop recall` searches it. It only reads the conversations; the one thing it writes is its own note of searches and misses (step 4).
 
 ## 1. Search
 

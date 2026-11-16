@@ -90,7 +90,7 @@ Active sessions are excluded. Columns: TOOL, TITLE, LAST ACTIVE, CWD.
 
 ### 1.6 recall
 
-Search every past conversation on this machine: the prompts and replies the Memory plugin keeps ([design 12.11](v2-design.md#1211-memory-agentops-own-record-of-conversations)). It reads `~/.agentop/plugins/memory/messages.sqlite` directly, so the service needn't be running. The command is the Memory plugin's: with the plugin disabled, it says so and does nothing.
+Search every past conversation on this machine: the prompts and replies the Memory plugin keeps ([design 12.11](design.md#1211-memory-agentops-own-record-of-conversations)). It reads `~/.agentop/plugins/memory/messages.sqlite` directly, so the service needn't be running. The command is the Memory plugin's: with the plugin disabled, it says so and does nothing.
 
 ```bash
 agentop recall atama link                      # messages holding every word
@@ -106,11 +106,11 @@ Words match anywhere in a message, ignoring case (an FTS5 trigram index), so par
 
 Above the messages, **Sessions about this** lists up to five sessions whose summary matches: its title, a few sentences, and the keywords that matched. The summaries are the Memory plugin's (design 12.11.3, phase 5), so they find a session by what it was about even when no message has the words. A session gets one once it has been quiet for 30 minutes. The `recall` skill (`src/agentop/skills/recall/`) teaches a Claude session to use it.
 
-Each search is noted in `~/.agentop/plugins/memory/recall.jsonl`, with how many messages and sessions it found. `--missed` notes a miss there: what was looked for, `--wrong` when something was found but not the right thing, and the searches made from the command line in the 30 minutes before. The skill notes one at the end of a recall that failed. Misses decide whether keyword search needs embeddings beside it ([design 12.11.4](v2-design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)); the Memory workspace and Status show the count.
+Each search is noted in `~/.agentop/plugins/memory/recall.jsonl`, with how many messages and sessions it found. `--missed` notes a miss there: what was looked for, `--wrong` when something was found but not the right thing, and the searches made from the command line in the 30 minutes before. The skill notes one at the end of a recall that failed. Misses decide whether keyword search needs embeddings beside it ([design 12.11.4](design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)); the Memory workspace and Status show the count.
 
 ### 1.7 email-code
 
-Check the Email code plugin's settings, `~/.agentop/plugins/email-code/config.toml`, by sending a test mail to the address sign-in codes go to. The command is the plugin's: with the plugin off (it is off until you turn it on), it says so and does nothing. The settings are in [design 7.4](v2-design.md#74-ways-to-sign-in-2026-11-16).
+Check the Email code plugin's settings, `~/.agentop/plugins/email-code/config.toml`, by sending a test mail to the address sign-in codes go to. The command is the plugin's: with the plugin off (it is off until you turn it on), it says so and does nothing. The settings are in [design 7.4](design.md#74-ways-to-sign-in-2026-11-16).
 
 ```bash
 agentop email-code test
@@ -216,6 +216,6 @@ agentop service clients [--revoke ID | --revoke-all]  # list the clients signed 
 agentop service connect-info [--host H | --url URL]   # what to paste into Connect to a service
 ```
 
-The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`. `history_window` (default `"30d"`) is how recently a past session must have been used for the app's History to list it, and `max_active_sessions` (default `20`) is how many sessions agentop starts may be active at once; the app's History is in [v2-design.md 10.7.7](v2-design.md#1077-history-in-the-sessions-panel-2026-11-15).
+The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`. `history_window` (default `"30d"`) is how recently a past session must have been used for the app's History to list it, and `max_active_sessions` (default `20`) is how many sessions agentop starts may be active at once; the app's History is in [design.md 10.7.7](design.md#1077-history-in-the-sessions-panel-2026-11-15).
 
-The service token only signs a client in: the app, or each CLI command, gets its own token with it, which expires (design D7). Rotating the service token leaves signed-in clients alone; add `--revoke-clients` to sign them out too. `service clients` works on `~/.agentop/state/clients.json` directly, so it works while the service is stopped, and a running service notices at once. Running it as a system service or behind a proxy is in [v2-setup.md](v2-setup.md).
+The service token only signs a client in: the app, or each CLI command, gets its own token with it, which expires (design D7). Rotating the service token leaves signed-in clients alone; add `--revoke-clients` to sign them out too. `service clients` works on `~/.agentop/state/clients.json` directly, so it works while the service is stopped, and a running service notices at once. Running it as a system service or behind a proxy is in [setup.md](setup.md).

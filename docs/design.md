@@ -1,15 +1,15 @@
-# Agentop v2 Design
+# Agentop Design
 
-Status: proposed. Implementation order is in [v2-plan.md](v2-plan.md).
+Status: proposed. Implementation order is in [plan.md](plan.md).
 
 ## 1 Summary
 
-v2 turns agentop from a dashboard into an application, laid out like the Codex desktop app: a session list on the left, the agent's live terminal in the middle, session details on the right.
+This design turns agentop from a dashboard into an application, laid out like the Codex desktop app: a session list on the left, the agent's live terminal in the middle, session details on the right.
 
 The core does not change. Agentop opens an agent (Claude Code, Codex, Antigravity) in tmux, and the user works with it through that terminal. What changes is the shape around it:
 
 - A **service** owns sessions and exposes an API. It runs independently of any UI.
-- A **web app** and a **Tauri desktop app** are two shells around one UI codebase, with the same look and features.
+- A **web app** and a **Tauri desktop app** show one UI codebase, with the same look and features. Both show the UI that a service serves. The desktop app is a thin wrapper that runs this computer's service while it is open (4.2).
 - Both connect to the local service by default, can add and switch to any agentop service they can reach, and can see and control the status of the connected service.
 
 There is no agent-level streaming, chat view, or message parsing. The terminal is a real `tmux attach` client, so all interaction is whatever tmux and the terminal library already support.
@@ -25,6 +25,8 @@ There is no agent-level streaming, chat view, or message parsing. The terminal i
 - The service runs with no UI open, and sessions outlive both the UI and the service.
 - The UI can read service status and stop, start, restart, and update it.
 - The UI can add, connect to, and switch between services, on this machine or any other reachable machine.
+- On a PC, opening the desktop app is all it takes: it starts this computer's service on loopback and opens signed in. Closing it stops that service and leaves every session running in tmux (4.2).
+- Both clients show when an update is available, and the desktop app updates itself from GitHub Releases (8.5).
 
 ### 2.2 Non-goals
 
@@ -34,12 +36,12 @@ There is no agent-level streaming, chat view, or message parsing. The terminal i
 - Multi-user access. One service serves one OS user.
 - A merged session list across services. One window shows one service at a time.
 - Proxying one service through another. Clients talk directly to the service they select.
-- Desktop app auto-update. The desktop app is built locally for now. This is separate from *service* update, which is a goal.
-- Bundling the service inside the desktop app (see 4.2).
+- Bundling the service's code inside the desktop app. The app runs the installed `agentop` (4.2).
+- Changing how a service on a server runs. `agentop serve`, by hand or under systemd, works as before; only the desktop app's use changes (2026-11-16).
 
 ## 3 Current state
 
-What v2 builds on, and what was found while checking it. "Measured" means tested on this machine on 2026-11-07, with tmux 3.7c, using a private tmux socket for all tmux tests.
+What this design builds on, and what was found while checking it. "Measured" means tested on this machine on 2026-11-07, with tmux 3.7c, using a private tmux socket for all tmux tests.
 
 ### 3.1 What carries over unchanged
 
@@ -47,7 +49,7 @@ What v2 builds on, and what was found while checking it. "Measured" means tested
 
 The scan is cheap: `ops.get_sessions()` takes about 0.12s for 12 sessions (measured), so there is no need to rework it. Agent sessions already survive service restarts through `KillMode=process`.
 
-### 3.2 Problems v2 must fix
+### 3.2 Problems to fix
 
 | # | Problem | Evidence | Fixed by |
 |---|---------|----------|----------|
@@ -70,14 +72,15 @@ Smaller stale items, fixed in passing: `html/index.html` renders a git branch ba
 
 ```
  ┌──────────────┐   ┌───────────────────┐
- │   Web app    │   │  Tauri desktop    │
- │  (browser)   │   │  app              │     same ui/ codebase
+ │   Web app    │   │  Tauri desktop    │     both show the ui/ build
+ │  (browser)   │   │  wrapper          │     that the service serves
  └──────┬───────┘   └───┬───────────┬───┘
-        │ HTTP + WS     │ HTTP + WS │ Rust commands (local only):
-        │               │           │ start/stop when service is down
+        │ HTTP + WS     │ HTTP + WS │ on a PC: starts `agentop serve`
+        │               │           │ on open, SIGTERM on close
  ┌──────▼───────────────▼──┐  ┌─────▼──────────────┐
- │  agentop service        │◄─┤ systemd --user     │
- │  127.0.0.1:9775         │  │ (service manager)  │
+ │  agentop service        │◄─┤ systemd --user,    │
+ │  127.0.0.1:9775         │  │ by hand, or the    │
+ │                         │  │ desktop app        │
  │                         │  └────────────────────┘
  │  REST /api/v2           │
  │  WS   events, terminal  │
@@ -97,12 +100,31 @@ Four rules hold this together:
 
 1. **tmux owns the running state.** The service can restart at any time without touching an agent.
 2. **The service owns the API.** UIs hold no business logic and never touch tmux, the filesystem, or `~/.claude` directly.
-3. **The UI is disposable.** Closing it stops nothing.
+3. **The UI is disposable.** Closing it never stops an agent. Closing the web app stops nothing. Closing the desktop app stops the service only if the app started it (4.2), and tmux keeps every session.
 4. **A UI is not tied to a service.** The diagram shows the default local case, but either client can point at any reachable service (4.5). This applies to the web app too, even though a service happens to serve it.
 
-### 4.2 The service is not a sidecar
+### 4.2 Two ways to run a service (2026-11-16)
 
-Tauri can ship a sidecar binary, but that ties the service's lifetime and version to one UI, which contradicts "the service is the core and independent from UI". The desktop app is a client. If no service is installed, it shows setup instructions.
+A service runs in one of two ways, and the service is the same program in both.
+
+**On a server**, such as the devhost behind `agentop.wolfdrawer.net`, it is a service in its own right: `agentop serve` by hand, or a systemd unit. No UI is involved in its lifetime. This is unchanged.
+
+**On a PC** (Linux, macOS), the desktop app runs it. Until 2026-11-16 the design said the opposite: "the service is not a sidecar", and the desktop app was a client that bundled its own copy of the UI and only showed how to start a stopped service. That copy fell behind the service after every update, and opening the app did nothing useful until a service was started by hand. The desktop app had never been opened, so nothing depended on the old design.
+
+The desktop app is now a thin wrapper:
+
+1. **On open**, it checks whether a service answers `GET /api/v2/health` on the configured port (`config.toml`, default 9775).
+   - If one does (a unit, or `agentop serve` by hand), it uses it and **leaves it running** when it closes.
+   - Otherwise it starts `agentop serve --host 127.0.0.1 --port <port>` through the user's login shell (`$SHELL -ilc 'exec agentop serve …'`), because an app opened from the desktop gets a short `PATH` that may lack agentop, tmux, and the agent tools. `AGENTOP_BIN` overrides it. Output goes to `~/.agentop/logs/desktop-serve.log`. It always binds loopback, whatever `host` the config gives for `agentop serve` run by hand.
+   - The app shows a start page, bundled in the app, until the service answers. If it doesn't start, the page says why (for example, agentop isn't installed) and offers Try again.
+2. **Once the service answers**, the window opens the service's own page, `http://127.0.0.1:<port>/`. It signs in with the token from `service.json` (7.2), so the user sees the app already connected and signed in.
+3. **On close**, it sends the service it started `SIGTERM`. The service closes its terminals, which has a 5-second limit, and exits; `SIGKILL` follows after 10 seconds. tmux owns the sessions (rule 1), so they keep running, and the next open finds them.
+
+The app keeps the PID of a service it started in `~/.agentop/state/desktop-serve.pid`. A copy of the app that finds a service answering and that PID alive adopts it, and stops it on close. This covers an app that replaced itself in an update, and one that crashed.
+
+Restart and update from the service panel work as for `agentop serve` by hand (`SelfManager`, 8.2). A restart `exec`s in place, so the PID, and the app's hold on it, stay the same. Stop from the panel stops the service. The app then shows "The service on this computer stopped", with a Start button (8.3).
+
+Because the UI comes from the service, it is always the service's own version, and a service update updates the desktop UI with it. Only the wrapper, a few hundred lines of Rust, is built into the app, and it rarely changes. It updates itself (8.5).
 
 ### 4.3 Repository layout
 
@@ -127,7 +149,7 @@ src/agentop/
 ui/                 React + TypeScript + Vite; builds web and desktop frontends
   src/platform/     web.ts, tauri.ts: the only platform-specific code
   src/terminal/     TerminalView: the only code that imports xterm
-desktop/            Tauri project (src-tauri/), loads the ui/ build
+desktop/            Tauri wrapper (src-tauri/, static/ start page); runs the service, shows its page
 ```
 
 ### 4.4 Technology choices
@@ -156,7 +178,7 @@ A **connection** is a record kept by the client, never by a service:
 
 Every service has a `name` (default: hostname), set on first run and returned by `/service`. A host runs one service, so the address is the identity: whatever answers there is the service the user wants. The app pins no ID to it. If a different service now answers, for example after a reinstall or a reused tunnel port, it doesn't know this app's client token, so the app asks to sign in again. (Until 2026-11-15 the app pinned an `instance_id` from `/health`. It only guarded against mix-ups, since anyone could copy a public ID, and it put a fingerprint in an unauthenticated response.)
 
-**Defaults.** The web app always lists the service that served it, under that service's name. The desktop app lists the local service when `service.json` exists. Each client starts on its last-used connection, or on that default.
+**Defaults.** Both clients always list the service that served the page, under that service's name. For the desktop app that is this computer's service, which it signs in to with `service.json`. Each client starts on its last-used connection, or on that default.
 
 **Adding a service.** The user gives a URL and a token. `agentop service connect-info` prints both as one pasteable string, `http://host:9775#token=…`. The app accepts it in the URL field. A fragment is never sent to a server, which keeps the token out of logs. `agentop open` uses the same format, and the app stores the token and clears it from the address bar.
 
@@ -169,13 +191,13 @@ Connecting runs these checks in order, and each failure has its own message:
 | 3. Sign in with the service token, if the app has no live client token | "Enter the token", "Token rejected", or "Refused for now" |
 | 4. `GET /api/v2/service` with the token | "Signed out" |
 
-**Versions.** The path is the compatibility promise: `/api/v2` only ever gains routes and fields, and an incompatible change gets a new path, `/api/v3`. So a client never refuses a v2 service over its version. `/service` returns `api_version`, the revision of `/api/v2`, which grows with each addition. When it is higher than the revision the app was built for, the header shows that the app is out of date: the web app offers a reload, which loads the newer app from the service, and the desktop app says to update it. A client newer than its service must cope with routes the service doesn't have yet, as the `/admin` fallback in 8.3 does.
+**Versions.** The path is the compatibility promise: `/api/v2` only ever gains routes and fields, and an incompatible change gets a new path, `/api/v3`. So a client never refuses a v2 service over its version. `/service` returns `api_version`, the revision of `/api/v2`, which grows with each addition. When it is higher than the revision the app was built for, the header shows that the app is out of date: the web app offers a reload, which loads the newer app from the service. The desktop app shows this computer's service's UI, so there the message is that this computer's service is older than the one shown, and should be updated. A client newer than its service must cope with routes the service doesn't have yet, as the `/admin` fallback in 8.3 does.
 
 **Switching.** The app closes the events and terminal sockets for the old connection, shows a loading state, then runs the same checks on the new one. This only detaches clients, so every agent on the old service keeps running. Each connection remembers its selected session. All client state is keyed by `(connection id, session id)`, because session IDs are unique only within one service. Two services may both have a `general-41185`.
 
 **Tabs.** The saved list is shared across a browser's tabs. The active connection is per tab, so two tabs can show two services.
 
-**Reachability.** The desktop app has no browser page rules to satisfy, subject to Spike S2. The web app does, and which targets work depends on where the page was loaded from:
+**Reachability.** Both clients follow browser page rules, since both show a page from a service. The desktop app's page is always from `http://127.0.0.1`, the first row below, which can reach everything; Spike S2 confirms this in WebKitGTK. For the web app, which targets work depends on where the page was loaded from:
 
 | Page loaded from | Target `http://` remote | Target `https://` remote | Target loopback |
 |------------------|-------------------------|--------------------------|-----------------|
@@ -185,7 +207,7 @@ Connecting runs these checks in order, and each failure has its own message:
 
 So the page from a local service (or a tunnel to one) can reach everything, and that is the recommended way to use the web app. Spike S4 confirms this table. When a target is likely to be blocked, the Add Service form says why before the user tries.
 
-The web build has no hard-coded origin, so it can also be hosted as static files. A page served by a service still disappears when that service stops, and any other saved connection then becomes unreachable from that tab as well. The desktop app does not have this limitation.
+The web build has no hard-coded origin, so it can also be hosted as static files. A page served by a service still disappears when that service stops, and any other saved connection then becomes unreachable from that tab as well. The desktop app has the same limitation, but it can start this computer's service again.
 
 ## 5 Session model
 
@@ -336,7 +358,7 @@ The terminal socket is remote code execution as the user, with agents running in
 Because any origin must be able to connect, the origin no longer decides access; the token does. So:
 
 - **CORS is open.** `/api/v2` answers any origin, without credentials mode, and the CORS layer sits outside auth so preflights succeed. A foreign page can read `/health`, which says only that the service is up, and nothing else.
-- **There is no `Origin` or `Host` allowlist in v2.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies were the thing those checks protected, and there are none. The old `/api` routes, which have no token, keep the Phase 0 checks until they are removed.
+- **There is no `Origin` or `Host` allowlist.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies were the thing those checks protected, and there are none. The old `/api` routes, which have no token, keep the Phase 0 checks until they are removed.
 - **The web app sets a strict CSP**: `script-src 'self'` with no inline script. It stores client tokens in `localStorage`, so this is the main defence for them. A stolen one is good for at most `client_ttl` unless the thief keeps renewing it, and can be revoked on its own; the service token is never stored. `connect-src` has to stay open to user-chosen hosts.
 
 ### 7.2 How each client signs in
@@ -371,7 +393,7 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 **The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health`, `/api/v2/auth/methods`, a login plugin's public routes (7.4) and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
-- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [v2-plan.md 9.1](v2-plan.md#91-security)).
+- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [plan.md 9.1](plan.md#91-security)).
 
 ### 7.4 Ways to sign in (2026-11-16)
 
@@ -422,7 +444,7 @@ class ServiceManager(Protocol):
 
 Stop, restart, and update are admin actions on the service's own API: `POST /api/v2/admin/stop`, `/admin/restart`, and `/admin/update`. Every client calls them the same way, the web app, the desktop app, and the CLI, whether the service runs under systemd or was started with `agentop serve`. The service knows which (8.2) and runs the right command on itself.
 
-There is no start, in any client. A stopped service has no API to answer it. When a service is stopped or can't be reached, the main window shows a red dot and says how to start it on that machine: `agentop serve`, or the system service that runs it.
+A stopped service has no API to answer it, so no client can start a service through it. The desktop app is the one exception, for this computer's service only: it runs that service (4.2), so it shows Start, which asks the app to start it again. Otherwise, when a service is stopped or can't be reached, the main window shows a red dot and says how to start it on that machine: `agentop serve`, or the system service that runs it.
 
 In every case, stopping the service does not stop agents. The confirmation dialog says so and names the service being stopped, and the sessions are there on restart.
 
@@ -441,6 +463,33 @@ Update needs a git checkout, not systemd. It must outlive the service it restart
 5. On any failure: check out the recorded commit, reinstall, rebuild, restart, and record the failure.
 
 `GET /api/v2/admin/update` reports commits available and the status of the last run. Terminals drop briefly and reconnect automatically (6.1); agents are not interrupted.
+
+### 8.5 Releases and the update indicator (2026-11-16)
+
+agentop has releases on GitHub, in two series. Until 2026-11-16 there were none.
+
+| Tag | What it releases | Built by |
+|-----|------------------|----------|
+| `desktop-v*`, such as `desktop-v0.2.0` | The desktop wrapper: AppImage (Linux), `.app` (macOS) | `.github/workflows/desktop.yml`, on the tag |
+| `v*`, such as `v1.0.0` | The service and its UI | Not built yet |
+
+The wrapper has its own version (`version` in `desktop/src-tauri/tauri.conf.json`, which the tag must match), so that a service release doesn't ask anyone to reinstall the app.
+
+**The wrapper updates itself** with Tauri's updater (`tauri-plugin-updater`).
+
+- CI signs each build with the updater key and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. A lost key means every installed app has to be reinstalled by hand, so it is kept backed up.
+- Installed apps read `latest.json` from one fixed address: the `desktop-latest` release, whose `latest.json` the workflow replaces each time. Not `releases/latest`, which is whichever release is newest, often a service release.
+- The UI asks the platform layer (10.6) on load and every 6 hours. With an update, the header shows **App update**. Clicking it downloads the update, checks its signature, replaces the app, and restarts it. The new copy finds the service still running and adopts it (4.2). Sessions carry on, and the new window reconnects to them.
+- Where the app can't replace itself, the button opens the release page instead: a development build, a Linux build that isn't the AppImage, or a failed install.
+- The UI comes from the service, so it can be newer than the wrapper. The wrapper reports `native_api`, the revision of its commands (`desktop_info`). When the UI needs a higher one, the button says **App update needed**. An app from before `desktop_info` counts as revision 0.
+
+**Linux ships as an AppImage only**: a single file to download, `chmod +x`, and run, on any distribution, and the only Linux format the updater replaces in place. It needs `fuse2`, or `--appimage-extract-and-run`. It carries its own WebKitGTK, whose DMA-BUF renderer gives a blank window on some drivers, so the app sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` before opening a window. There is no `.deb` and no AUR package: a package manager and the updater would both try to own the file.
+
+**macOS** builds are unsigned for now: the first open needs right-click, Open. Updates after that work. An Apple Developer ID and notarization would remove the step.
+
+**Windows** isn't built. The service needs tmux, so a Windows app would have to run the service in WSL (plan 9.4).
+
+**Service and UI from releases (agreed, not built).** A service, and with it the UI, will be able to follow `v*` releases instead of `main`. The service checks GitHub for the newest `v*` release, and the header shows **Update** when there is one, in both clients. One click checks out the release, installs it, builds the UI, restarts the service, and reloads the page, using the steps in 8.4. A server such as the devhost keeps following `main` unless it is set to follow releases. Until this is built, update works as in 8.4, from `main`, on every install.
 
 Any client can now talk to a service of a different version, including the web app when it connects to another host. Within `/api/v2` every change is an addition, and `api_version` in `/service` tells an older client to update (4.5). `/health` stays `{"status": "ok"}`, and `/service` and `/admin/update` must stay compatible across versions, so that an older service can always be updated from a newer client. A service from before `/admin` has these actions under `/service/`, and the client falls back to them on a 404.
 
@@ -553,7 +602,7 @@ This was the layout before workspaces. Sessions keeps it; the header and the His
 | `failed` | Error, retry with the same input, and the terminal if tmux exists |
 | Reconnecting | Terminal dimmed, "Reconnecting…" |
 | External, not in tmux | Explanation that it cannot be attached |
-| Service unreachable | Disconnected view with Retry, Switch service, and Start on local desktop. Other saved services stay available |
+| Service unreachable | Disconnected view with Retry and Switch service, and, in the desktop app for this computer's service, Start. Other saved services stay available |
 | Switching | Spinner with the target service name |
 
 ### 10.3 New session
@@ -606,6 +655,9 @@ interface Platform {
   connections: ConnectionStore                // saved list; keychain or localStorage
   defaultConnection(): Promise<Connection | null>
   copyText(text: string): Promise<void>
+  checkAppUpdate?(): Promise<AppUpdate | null>   // desktop: the wrapper's own update (8.5)
+  startService?(): Promise<void>                 // desktop: this computer's service (8.3)
+  openUrl?(url: string): Promise<void>           // desktop: the release page, in the browser
 }
 ```
 
@@ -691,13 +743,16 @@ History is no longer a workspace. It lists only what is worth reopening: session
 
 ## 11 Desktop app
 
-- Tauri 2 window that loads the bundled `ui/` build, not a URL from the service. It has to render when the service is down, to say so and how to start it.
-- A small Rust command set, with no shell permission: `read_service_info`, and the keychain commands for tokens. Stop, restart, and update go through the service's API (8.3), as in the web app.
-- CSP: strict for scripts. Tauri's CSP is fixed at build time, so `connect-src` cannot list services the user adds later and has to allow `http:`, `https:`, `ws:`, and `wss:`. If S2 moves traffic through plugins, their URL scope needs the same breadth.
-- Connections are saved locally, with tokens in the OS keychain. Default: the service from `service.json`.
-- Build prerequisite on this machine: Rust is not installed. WebKitGTK 2.52.6 is.
+Rewritten on 2026-11-16, when the desktop app became the wrapper in 4.2.
 
-`tauri://localhost` reaching `ws://127.0.0.1` and plain `ws://` on a remote host has not been verified, and the available documentation does not settle it. The remote case is the harder one, since the loopback exemption from mixed-content rules does not apply. Spike S2 tests both. If it is blocked, the fallback is to route through Tauri's HTTP and WebSocket plugins inside `platform/tauri.ts`, which leaves the rest of the UI unchanged.
+- **The window shows the service's page**, `http://127.0.0.1:<port>/`, not a bundled copy of the UI. Only a start page is bundled (`desktop/static/`), shown until the service answers, or saying why it didn't.
+- **Rust commands**, each doing one fixed thing, with no shell or file permission: `read_service_info`, `desktop_info`, `startup_status`, `service_start`, and the keychain commands for tokens. Stop, restart, and update go through the service's API (8.3), as in the web app. `build.rs` declares the commands, so each gets an `allow-…` permission.
+- **Permissions.** A page from another origin than the app's own can call only what a capability grants it. The bundled start page has one for its three commands. The service's page gets one at run time, once the port is known, for that exact origin (`http://127.0.0.1:<port>/*`). It grants the commands, writing text to the clipboard, the updater, restarting the app, and opening this project's release pages in the browser. Any other page on loopback gets nothing.
+- **CSP.** The start page's is the app's (`script-src 'self'`, IPC only). The service's page has the web app's own (7.1).
+- Connections are saved in the window's storage, with tokens in the OS keychain. Default: the service that served the page, signed in from `service.json`.
+- Built and released by CI (8.5); `desktop/package.json` also builds it locally.
+
+The old open question, whether `tauri://localhost` can reach `ws://` services, no longer applies: the page is `http://127.0.0.1`, as in the web app. Spike S2 still checks that WebKitGTK treats it like a browser does.
 
 ## 12 Plugins
 
@@ -855,7 +910,7 @@ The later features (plan 9.4) become plugins one at a time, where they are servi
 | macOS host support (`LaunchdManager`) | No: the core needs it to run at all |
 | Non-git install kinds for update | No: part of core service update |
 
-The security items in the backlog ([v2-plan.md section 9](v2-plan.md#9-backlog)) are core work, not plugins.
+The security items in the backlog ([plan.md section 9](plan.md#9-backlog)) are core work, not plugins.
 
 ### 12.9 Dialogues as a plugin
 
@@ -1051,7 +1106,7 @@ Sources: [mem0 on Hermes Agent's memory](https://mem0.ai/blog/how-memory-works-i
 
 Parity list for the old dashboard, so nothing was lost by accident:
 
-| Old feature | v2 location |
+| Old feature | New location |
 |-------------|-------------|
 | Session table with metrics | Left list plus right panel |
 | In-browser terminal | Main area |
@@ -1068,7 +1123,9 @@ Parity list for the old dashboard, so nothing was lost by accident:
 |------|------------|------------|
 | Terminal is slow or glitchy in WebKitGTK | Medium | Spike S1 before UI work; `TerminalView` boundary; ghostty-web fallback. Tauri's CEF runtime exists at alpha stage and is not a dependency |
 | Japanese IME composition fails in a webview | Medium | The system locale is partly `ja_JP`, so this is tested explicitly in S1 |
-| `ws://` blocked from the Tauri origin | Medium | Spike S2, covering remote hosts; plugin fallback |
+| WebKitGTK treats the `http://127.0.0.1` page differently from a browser | Low | Spike S2; the page follows the same rules as the web app from a local service |
+| The app can't find `agentop`, tmux, or the agent tools | Medium | It starts the service through the login shell; `AGENTOP_BIN`; the start page names the log |
+| A lost updater signing key | Low | Back it up; a lost key means reinstalling by hand once |
 | Browser rules block a web app connection | Medium | Spike S4; reachability guidance in the form; recommend the page from a local service or the desktop app |
 | Tokens or terminal traffic exposed on plain HTTP | Low | The service refuses a non-loopback bind without TLS, and the app refuses plain HTTP to another machine |
 | Token stolen from `localStorage` | Low | Strict `script-src`, no third-party scripts, rotation |
@@ -1079,15 +1136,15 @@ Parity list for the old dashboard, so nothing was lost by accident:
 
 ## 15 Open decisions
 
-Each has a recommended default, which the plan assumes. D6 and D7 are decided, and both were revisited in the security review, finished 2026-11-15; what is left is in [section 9.1 of the plan](v2-plan.md#91-security).
+Each has a recommended default, which the plan assumes. D6 and D7 are decided, and both were revisited in the security review, finished 2026-11-15; what is left is in [section 9.1 of the plan](plan.md#91-security).
 
 | # | Decision | Default | Alternative |
 |---|----------|---------|-------------|
 | D1 | Token login for the web app | Required for every client, one-time per browser through `agentop open` | None. Connecting to any reachable service rules out trusting the network or the origin |
-| D2 | Web cannot start a stopped service | Accept the difference; show the command | None is possible without a separate always-on helper process |
+| D2 | Web cannot start a stopped service | Accept the difference; show the command. Since 2026-11-16 the desktop app runs this computer's service and can start it (4.2) | None is possible without a separate always-on helper process |
 | D3 | Scroll through `mouse on` per session | On for new managed sessions | Leave off, losing wheel scrollback |
 | D4 | Dialogues in the new UI | Ported in the final phase, then moved into a plugin (12.9) | Drop from the UI and keep them CLI-only |
-| D5 | Host platforms | Linux; systemd optional | Add macOS, as later work |
+| D5 | Host platforms | Linux; systemd optional. The desktop app also makes macOS a host, with the service run by the app (4.2) | `LaunchdManager`, for macOS without the app, as later work |
 | D6 | Plain HTTP on a non-loopback address | **Decided 2026-11-14:** refused. The service won't start without TLS, and the app won't add such an address. Use a tunnel or HTTPS | Allow it with a warning and a label, as before. Easier on a trusted network, but the token and terminals are readable to anyone on it |
 | D7 | One shared token per service | **Decided 2026-11-14:** the service token only signs a client in. Each client gets its own token, which expires after 12 hours unused (`client_ttl`) and 30 days at most (`client_max_age`), is renewed by the app while in use, and can be revoked on its own (section 7.1) | One shared token for everything, as before; rotation reset every client |
 | D8 | Where plugins come from (12.2) | Only folders inside the agentop install, with their UI in the app build | Also a user plugin directory, or UI code served by the service. Both let more parties run code in the service or the app, so they wait for the security review |
