@@ -29,7 +29,7 @@ node -e '
 ' "$conf" "$version"
 # desktop_info reports the Cargo version, so the two must match.
 sed -i.bak -E "0,/^version = \".*\"/s//version = \"$version\"/" desktop/src-tauri/Cargo.toml && rm desktop/src-tauri/Cargo.toml.bak
-(cd desktop/src-tauri && cargo metadata --offline --format-version 1 >/dev/null)  # updates Cargo.lock
+(cd desktop/src-tauri && cargo update -p agentop-desktop --offline -q)  # its own entry in Cargo.lock
 
 git add "$conf" desktop/src-tauri/Cargo.toml desktop/src-tauri/Cargo.lock
 git commit -q -m "Release $tag"
