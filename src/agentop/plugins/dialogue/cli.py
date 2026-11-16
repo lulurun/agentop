@@ -93,7 +93,7 @@ def start(args) -> None:
     sa, sb = result["session_a"], result["session_b"]
     watch_cmd = (
         f"tmux new-window -n 'dia-{did}' "
-        f"\"watch -n1 -t 'tmux capture-pane -t {sa} -p -S -40'\" \; "
+        f"\"watch -n1 -t 'tmux capture-pane -t {sa} -p -S -40'\" \\; "
         f"split-window -h "
         f"\"watch -n1 -t 'tmux capture-pane -t {sb} -p -S -40'\""
     )
