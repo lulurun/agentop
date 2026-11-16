@@ -25,3 +25,12 @@ magick /tmp/f.png -background none -gravity center -extent 256x256 -define icon:
 ```
 
 The `sed` line assumes the original's `width="256" height="242"`; change it with the size.
+
+The desktop app's icons, in `desktop/src-tauri/icons/`, come from a 1024 px version of the same icon:
+
+```bash
+mk 1024 72 /tmp/app-1024.png
+(cd desktop && npx tauri icon /tmp/app-1024.png -o /tmp/icons)
+cp /tmp/icons/{32x32.png,128x128.png,icon.png,icon.icns,icon.ico} desktop/src-tauri/icons/
+magick /tmp/app-1024.png -resize 512x512 desktop/src-tauri/icons/512x512.png
+```
