@@ -188,11 +188,18 @@ fn start_in_background(app: AppHandle) {
     });
 }
 
+/// NVIDIA's own kernel driver, not nouveau, which is Mesa.
+#[cfg(target_os = "linux")]
+fn nvidia_driver_loaded() -> bool {
+    std::path::Path::new("/proc/driver/nvidia/version").exists()
+}
+
 fn main() {
-    // WebKitGTK's DMA-BUF renderer shows a blank window on some drivers (NVIDIA
-    // especially), and the AppImage carries its own WebKitGTK. Set before any window exists.
+    // WebKitGTK's DMA-BUF renderer can show a blank window with NVIDIA's driver. Turning
+    // it off everywhere made the terminal visibly slow on Mesa (AMD), where it works, so
+    // only with that driver loaded. Set before any window exists; a value the user set wins.
     #[cfg(target_os = "linux")]
-    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+    if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() && nvidia_driver_loaded() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
 

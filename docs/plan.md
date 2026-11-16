@@ -265,7 +265,7 @@ Status: the wrapper is built and its tests pass, including starting and stopping
 - [x] Declare the commands in `build.rs`; grant the service's exact origin a capability at run time; nothing for any other origin.
 - [x] Start from the "stopped" view, for this computer's service only.
 - [x] Updater: `tauri-plugin-updater` with a signing key, `latest.json` from the `desktop-latest` release, **App update** in the header, release-page link where the app can't replace itself, `native_api` for a UI that needs a newer wrapper.
-- [x] Linux as an AppImage only (`npm run package`); `WEBKIT_DISABLE_DMABUF_RENDERER=1` set by the app.
+- [x] Linux as an AppImage only (`npm run package`); `WEBKIT_DISABLE_DMABUF_RENDERER=1` set by the app only with NVIDIA's driver loaded (set everywhere, it made the terminal slow on AMD).
 - [x] `.github/workflows/desktop.yml`: AppImage and macOS universal `.app` on a `desktop-v*` tag, signed, with `latest.json` copied to `desktop-latest`.
 - [ ] Add the updater's private key (`~/.tauri/agentop-desktop.key` on the machine that made it) as the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and back it up.
 - [ ] Push the first `desktop-v0.1.0` tag and check the release, and that an installed app finds `desktop-v0.1.1`.
