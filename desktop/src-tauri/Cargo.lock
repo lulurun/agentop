@@ -23,6 +23,7 @@ dependencies = [
 name = "agentop-desktop"
 version = "0.1.0"
 dependencies = [
+ "glib",
  "keyring",
  "libc",
  "serde",

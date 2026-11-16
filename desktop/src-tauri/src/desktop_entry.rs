@@ -1,47 +1,52 @@
 //! Linux: a desktop entry and icon for this app, so the taskbar shows its icon.
 //!
 //! On Wayland the compositor ignores the window's own icon: it finds the `.desktop` file
-//! named after the window's app id and shows that file's `Icon`. GTK uses the program
-//! name (the basename of argv[0], `agentop-desktop`) as the app id, so without
-//! `~/.local/share/applications/agentop-desktop.desktop` KDE shows a generic "W".
-//! A bare binary or an AppImage installs nothing, so the app writes both files itself,
-//! and rewrites them only when they change (a new icon, or the app moved).
+//! named after the window's app id and shows that file's `Icon`. GTK takes the app id from
+//! the program name, which `main` sets to the bundle identifier (`dev.agentop.desktop`),
+//! so the entry is `~/.local/share/applications/dev.agentop.desktop.desktop`. Without it
+//! KDE shows a generic "W". (Tauri's `enableGTKAppId` doesn't help: under KWin, GTK 3
+//! still sends the program name as the app id.) A bare binary or an AppImage installs nothing, so the app writes both
+//! files itself, and rewrites them only when they change (a new icon, or the app moved).
 
 use std::path::{Path, PathBuf};
 
 const ICON: &[u8] = include_bytes!("../icons/512x512.png");
 
-pub fn register() {
-    if let Err(error) = try_register() {
+/// The app id before it was the identifier: the binary's file name.
+const OLD_APP_ID: &str = "agentop-desktop";
+
+pub fn register(app_id: &str) {
+    if let Err(error) = try_register(app_id) {
         eprintln!("agentop: couldn't add the desktop entry: {error}");
     }
 }
 
-fn try_register() -> std::io::Result<()> {
+fn try_register(app_id: &str) -> std::io::Result<()> {
     let Some(data_home) = data_home() else { return Ok(()) };
-    let app_id = app_id();
     // An AppImage runs from a temporary mount; launch the AppImage itself.
     let exec = match std::env::var_os("APPIMAGE") {
         Some(path) => PathBuf::from(path),
         None => std::env::current_exe()?,
     };
 
+    write_if_changed(&icon_path(&data_home, app_id), ICON)?;
     write_if_changed(
-        &data_home.join(format!("icons/hicolor/512x512/apps/{app_id}.png")),
-        ICON,
+        &entry_path(&data_home, app_id),
+        desktop_entry(app_id, &exec).as_bytes(),
     )?;
-    write_if_changed(
-        &data_home.join(format!("applications/{app_id}.desktop")),
-        desktop_entry(&app_id, &exec).as_bytes(),
-    )
+    // Otherwise the menu lists agentop twice.
+    for old in [entry_path(&data_home, OLD_APP_ID), icon_path(&data_home, OLD_APP_ID)] {
+        let _ = std::fs::remove_file(old);
+    }
+    Ok(())
 }
 
-/// What GLib takes as the program name, and so GTK as the Wayland app id.
-fn app_id() -> String {
-    std::env::args_os()
-        .next()
-        .and_then(|arg0| Path::new(&arg0).file_name().map(|name| name.to_string_lossy().into_owned()))
-        .unwrap_or_else(|| "agentop-desktop".into())
+fn entry_path(data_home: &Path, app_id: &str) -> PathBuf {
+    data_home.join(format!("applications/{app_id}.desktop"))
+}
+
+fn icon_path(data_home: &Path, app_id: &str) -> PathBuf {
+    data_home.join(format!("icons/hicolor/512x512/apps/{app_id}.png"))
 }
 
 fn data_home() -> Option<PathBuf> {
@@ -106,9 +111,22 @@ mod tests {
 
     #[test]
     fn entry_names_the_icon_after_the_app_id() {
-        let entry = desktop_entry("agentop-desktop", Path::new("/usr/bin/agentop-desktop"));
-        assert!(entry.contains("\nIcon=agentop-desktop\n"));
-        assert!(entry.contains("\nStartupWMClass=agentop-desktop\n"));
+        let entry = desktop_entry("dev.agentop.desktop", Path::new("/usr/bin/agentop-desktop"));
+        assert!(entry.contains("\nIcon=dev.agentop.desktop\n"));
+        assert!(entry.contains("\nStartupWMClass=dev.agentop.desktop\n"));
         assert!(entry.contains("\nExec=\"/usr/bin/agentop-desktop\"\n"));
+    }
+
+    #[test]
+    fn files_are_named_after_the_app_id() {
+        let home = Path::new("/h");
+        assert_eq!(
+            entry_path(home, "dev.agentop.desktop"),
+            Path::new("/h/applications/dev.agentop.desktop.desktop")
+        );
+        assert_eq!(
+            icon_path(home, "dev.agentop.desktop"),
+            Path::new("/h/icons/hicolor/512x512/apps/dev.agentop.desktop.png")
+        );
     }
 }

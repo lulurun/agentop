@@ -204,8 +204,16 @@ fn main() {
     if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() && nvidia_driver_loaded() {
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
+
+    let context = tauri::generate_context!();
+    // Wayland's app id, which picks the taskbar icon. GTK takes it from the program name,
+    // the binary's file name unless set; the identifier keeps it the same however the app
+    // is named or launched. Set before GTK starts.
     #[cfg(target_os = "linux")]
-    desktop_entry::register();
+    {
+        glib::set_prgname(Some(context.config().identifier.as_str()));
+        desktop_entry::register(&context.config().identifier);
+    }
 
     let service = Arc::new(Service::new());
     let app = tauri::Builder::default()
@@ -228,7 +236,7 @@ fn main() {
             start_in_background(app.handle().clone());
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("failed to start agentop");
 
     app.run(move |_app, event| {
