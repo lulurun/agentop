@@ -131,6 +131,14 @@ class Session:
                 pass
 
     @staticmethod
+    def leave_mode(name: str) -> None:
+        """Take the session's pane out of copy mode (where scrolling puts it), so what is sent next reaches the program."""
+        try:
+            run("send-keys", "-t", pane_target(name), "-X", "cancel")
+        except _ERRORS:
+            pass
+
+    @staticmethod
     def kill(name: str) -> None:
         """Kill the named tmux session."""
         try:

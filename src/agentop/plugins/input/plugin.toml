@@ -1,0 +1,7 @@
+id = "input"
+name = "Input bar"
+version = "0.1.0"
+description = "A box below a session's terminal to type prompts in, for phones, with buttons for keys like Esc and the arrows. While the bar shows, the terminal is only watched; its ⌨ button switches back to typing in the terminal. Each device chooses whether to show it, touch screens by default."
+plugin_api = 1
+default_enabled = false
+ui = ["terminal-input"]

@@ -84,3 +84,14 @@ def test_a_bracketed_paste_arrives_as_real_escape_codes(tmux_server, tmp_path):
             break
         tmux.subprocess.run(["sleep", "0.05"])
     assert out.read_bytes().startswith(b"\x1b[200~one\rtwo\x1b[201~")
+
+
+def test_leave_mode_takes_the_pane_out_of_copy_mode(tmux_server):
+    _new("foo-1")
+    in_mode = lambda: tmux.run("display-message", "-p", "-t", tmux.pane_target("foo-1"), "#{pane_in_mode}", text=True).stdout.strip()
+    tmux.run("copy-mode", "-t", tmux.pane_target("foo-1"))
+    assert in_mode() == "1"
+    Session.leave_mode("foo-1")
+    assert in_mode() == "0"
+    Session.leave_mode("foo-1")  # not in a mode: nothing happens
+    assert in_mode() == "0"

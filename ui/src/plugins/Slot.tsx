@@ -1,12 +1,12 @@
-import { Component, Fragment, useMemo, type ReactNode } from "react";
+import { Component, Fragment, useEffect, useMemo, type MutableRefObject, type ReactNode } from "react";
 import type { PluginInfo, Session } from "../api/client";
 import { onPluginEvent, useActiveClient, useApp } from "../store";
 import type { FileRef } from "../tabs";
 import { pluginsFor, UI_PLUGINS } from "./registry";
-import type { PluginContext, Slot, UiPlugin } from "./types";
+import type { PluginContext, Slot, TerminalInputControl, UiPlugin } from "./types";
 
 /** A plugin component that throws hides itself. The rest of the page keeps rendering. */
-export class PluginBoundary extends Component<{ id: string; children: ReactNode }, { failed: boolean }> {
+export class PluginBoundary extends Component<{ id: string; children: ReactNode; onFail?: () => void }, { failed: boolean }> {
   state = { failed: false };
 
   static getDerivedStateFromError() {
@@ -15,6 +15,7 @@ export class PluginBoundary extends Component<{ id: string; children: ReactNode 
 
   componentDidCatch(error: unknown) {
     console.error(`Plugin ${this.props.id} failed to render`, error);
+    this.props.onFail?.();
   }
 
   render() {
@@ -43,7 +44,8 @@ function Piece({ info, ui, slot, session }: { info: PluginInfo; ui: UiPlugin; sl
     case "workspace":
     case "file-viewer":
     case "login":
-      return null; // drawn by the workspace and the tabs it shows (PluginTab, FileTab), or the sign-in screen (LoginMethods)
+    case "terminal-input":
+      return null; // drawn by the workspace and the tabs it shows (PluginTab, FileTab), the sign-in screen (LoginMethods), or below a terminal (TerminalInputs)
   }
 }
 
@@ -133,4 +135,53 @@ export function PluginSlot({ slot, session, only }: { slot: Slot; session?: Sess
       ))}
     </>
   );
+}
+
+/**
+ * Every enabled `terminal-input` piece, below a session's terminal. `onTakeInput`
+ * hears which plugins are taking the terminal's input; a piece that crashes or
+ * goes away gives it back.
+ */
+export function TerminalInputs({
+  session,
+  onTakeInput,
+  keyboard,
+}: {
+  session: Session;
+  onTakeInput: (id: string, on: boolean) => void;
+  /** The terminal's keyboard (`TerminalView`'s `keyboard`). */
+  keyboard: MutableRefObject<((data: string) => boolean) | null>;
+}) {
+  const infos = useApp((s) => s.plugins);
+  const pieces = pluginsFor("terminal-input", infos);
+  return (
+    <>
+      {pieces.map(({ info }) => (
+        <PluginBoundary key={info.id} id={info.id} onFail={() => onTakeInput(info.id, false)}>
+          <TerminalInputPiece info={info} session={session} onTakeInput={onTakeInput} keyboard={keyboard} />
+        </PluginBoundary>
+      ))}
+    </>
+  );
+}
+
+function TerminalInputPiece({
+  info,
+  session,
+  onTakeInput,
+  keyboard,
+}: {
+  info: PluginInfo;
+  session: Session;
+  onTakeInput: (id: string, on: boolean) => void;
+  keyboard: MutableRefObject<((data: string) => boolean) | null>;
+}) {
+  const plugin = usePluginContext(info);
+  const terminal = useMemo<TerminalInputControl>(
+    () => ({ takeInput: (on) => onTakeInput(info.id, on), type: (data) => keyboard.current?.(data) ?? false }),
+    [info.id, onTakeInput, keyboard],
+  );
+  useEffect(() => () => onTakeInput(info.id, false), [info.id, onTakeInput]);
+  const Input = UI_PLUGINS[info.id]?.terminalInput;
+  return Input ? <Input session={session} plugin={plugin} terminal={terminal} /> : null;
 }

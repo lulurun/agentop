@@ -3,7 +3,7 @@ import type { ClientToken, PluginInfo, Session } from "../api/client";
 import type { FileRef } from "../tabs";
 
 /** The UI slots a plugin can fill. They match `ui` in a plugin's plugin.toml. */
-export type Slot = "session-badge" | "workspace" | "right-panel" | "settings-section" | "file-viewer" | "login";
+export type Slot = "session-badge" | "workspace" | "right-panel" | "settings-section" | "file-viewer" | "login" | "terminal-input";
 
 /** Requests to the plugin's own routes, `/api/v2/plugins/{id}/…`. It can reach nothing else. */
 export interface PluginClient {
@@ -37,6 +37,22 @@ export interface LoginContext {
   client: PluginClient;
   /** Hand over the token the plugin's route returned (`api.sign_in`). The app saves it and connects. */
   signIn(token: ClientToken): void;
+}
+
+/**
+ * What a `terminal-input` piece is given to say it is taking the input. While
+ * any piece takes it, the terminal above is only watched: what is typed there is
+ * dropped, but it still takes the tab's size and scrolls. A piece that crashes
+ * or goes away gives the input back.
+ */
+export interface TerminalInputControl {
+  takeInput(on: boolean): void;
+  /**
+   * Type into the terminal as its keyboard would, through tmux's own client, so
+   * tmux's key bindings apply (its prefix, then a key). It works while the input
+   * is taken, and returns false when the terminal isn't connected.
+   */
+  type(data: string): boolean;
 }
 
 /** A view a plugin's tab shows. `viewKey` tells apart tabs of the same view, such as one per dialogue. */
@@ -82,6 +98,8 @@ export interface UiPlugin {
    * while the service lists the plugin in `GET /auth/methods`.
    */
   login?: ComponentType<{ login: LoginContext }>;
+  /** Drawn below a session's terminal, such as a box to type prompts in. */
+  terminalInput?: ComponentType<{ session: Session; plugin: PluginContext; terminal: TerminalInputControl }>;
   /**
    * Asked before Settings turns the plugin off. A message warns the user, who
    * then confirms; null turns it off at once. A failure counts as null.
@@ -96,4 +114,5 @@ export const SLOT_KEYS: Record<Slot, keyof UiPlugin> = {
   "settings-section": "settingsSection",
   "file-viewer": "fileViewer",
   login: "login",
+  "terminal-input": "terminalInput",
 };

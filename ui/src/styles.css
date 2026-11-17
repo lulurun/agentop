@@ -1195,3 +1195,41 @@ button.app-outdated:hover { background: var(--line); }
 .past-session { max-width: 760px; }
 .past-session dl { margin: 0 0 8px; }
 .past-session h3 { margin: 14px 0 6px; color: var(--quiet); }
+
+/* The Input bar plugin, below a session's terminal */
+.input-bar { flex: none; display: grid; gap: 6px; padding: 6px 8px 8px; border-top: 1px solid var(--line); background: var(--surface); }
+.input-bar[data-mode="terminal"] { display: flex; justify-content: flex-end; padding: 2px 8px; }
+.input-bar[data-mode="terminal"] .input-toggle { padding: 1px 8px; font-size: 12px; color: var(--quiet); }
+.input-keys { display: flex; gap: 4px; min-width: 0; }
+.input-key-list { flex: 1; display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.input-keys button { flex: none; min-width: 36px; padding: 4px 8px; font-family: var(--code); font-size: 13px; }
+.input-keys .input-prefix[aria-pressed="true"] { background: var(--starting); border-color: var(--starting); color: var(--action-ink); }
+.input-row { display: flex; gap: 6px; align-items: flex-end; }
+.input-row textarea {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--term-bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px; /* below 16px a phone zooms in on focus */
+  line-height: 1.35;
+}
+.input-row textarea:focus { outline: none; border-color: var(--action); }
+.input-send {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border-color: var(--action);
+  background: var(--action);
+  color: var(--action-ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+.input-error { margin: 0; color: var(--failed); font-size: 12px; }
+.terminal[data-typing="off"] .terminal-host { cursor: default; }

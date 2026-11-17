@@ -11,6 +11,7 @@ from typing import Optional
 
 from agentop.agentclis.base import AgentCli, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
+from agentop.tmux import Session
 
 _PROJECTS_DIR = Path("~/.claude/projects")
 
@@ -82,6 +83,13 @@ class ClaudeAgentCli(AgentCli):
     @property
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions --remote-control"
+
+    def send_text(self, session: str, text: str) -> None:
+        """Bracketed paste, so a line break stays in the prompt. A plain tmux paste
+        turns each one into Enter, and Claude Code sends the lines as separate
+        prompts unless the burst is long enough to look like a paste."""
+        Session.paste_text_bracketed(session, text)
+        Session.send_keys(session, "Enter")
 
     def skills_dir(self) -> Path:
         return Path.home() / ".claude" / "skills"

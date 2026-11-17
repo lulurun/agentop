@@ -23,7 +23,7 @@ src/agentop/
   service/               The service: app.py (assembly), routes.py (/api/v2), store.py (sessions),
                          plugins.py (the plugin loader), terminal.py, host.py, update.py, ...
   service/webdist/       The built web app (ui/), served at / (not committed)
-  plugins/               attention/, dialogue/, email-code/, memory/, viewer/: one folder per plugin
+  plugins/               attention/, dialogue/, email-code/, input/, memory/, viewer/: one folder per plugin
 ui/                      The app: React and TypeScript, built by Vite; ui/src/plugins/ holds plugin UIs
 desktop/                 The Tauri desktop app: runs this computer's service, shows its UI
 scripts/                 Build and release: build-ui.sh, build-app.sh, release-ui.sh, release-app.sh
@@ -58,7 +58,7 @@ The interface, with the default for each thing that differs:
 
 | File | Class | Differences |
 |------|-------|-------------|
-| `claude.py` | `ClaudeAgentCli` | Session ID by PID from `~/.claude/sessions/`; title and token usage from the session log in `~/.claude/projects/<slug>/`; accepts the trust prompt. Archives everything but Claude Code's `memory/` notes; only `<project>/<session>.jsonl` is searchable, not subagents or tool output |
+| `claude.py` | `ClaudeAgentCli` | Bracketed paste. Session ID by PID from `~/.claude/sessions/`; title and token usage from the session log in `~/.claude/projects/<slug>/`; accepts the trust prompt. Archives everything but Claude Code's `memory/` notes; only `<project>/<session>.jsonl` is searchable, not subagents or tool output |
 | `codex.py` | `CodexAgentCli` | Thread by PID from `~/.codex/logs_2.sqlite`, title from `state_5.sqlite`, tokens from the rollout; pre-trusts the folder. Bracketed paste and a settle delay; `boot_seconds = 20`. Archives `sessions/` and `archived_sessions/`, `.jsonl.zst` included |
 | `antigravity.py` | `AntigravityAgentCli` | Title from its CLI log; bracketed paste; `idle_seconds = 15`. Transcripts in `~/.gemini/antigravity-cli/brain/<id>/.system_generated/logs/transcript.jsonl`. Conversations from before the rename to Antigravity are only in its binary `conversations/` store, and are not read |
 
@@ -74,7 +74,7 @@ The interface, with the default for each thing that differs:
 
 Generic tmux send/receive. Knows nothing about the dialogue protocol or the tool.
 
-- `send(text)` — types text in with the tool's `AgentCli.send_text`. Codex and agy submit on a bare newline, so theirs use bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~) and multi-line prompts arrive intact
+- `send(text)` — types text in with the tool's `AgentCli.send_text`. Every tool's uses bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~), so multi-line prompts arrive intact: a plain tmux paste turns each line break into Enter, which submits (Claude Code too, for a short paste)
 - `receive() -> str | None` — polls the screen until stable for `idle_seconds`, returns full scrollback
 
 ### 3.2 AgentInstance (`agent_instance.py`)

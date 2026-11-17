@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } from "../connections";
 import { platform } from "../platform";
 import { LoginMethods, useLoginMethods } from "../plugins/Login";
-import { PluginPanel } from "../plugins/Slot";
+import { PluginPanel, TerminalInputs } from "../plugins/Slot";
 import { activeConnection, currentWorkspace, useActiveClient, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { pluginOf } from "../workspaces";
@@ -223,6 +223,13 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
   const activeId = useApp((s) => s.activeId);
   const settings = useApp((s) => s.settings);
   const loaded = useApp((s) => Object.keys(s.sessions).length > 0);
+  // The plugins below the terminal that are taking its input, such as the Input bar.
+  const [takers, setTakers] = useState<string[]>([]);
+  const keyboard = useRef<((data: string) => boolean) | null>(null);
+  const onTakeInput = useCallback(
+    (id: string, on: boolean) => setTakers((ids) => (on === ids.includes(id) ? ids : on ? [...ids, id] : ids.filter((other) => other !== id))),
+    [],
+  );
 
   if (!session) {
     if (!loaded) return null;
@@ -250,6 +257,8 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
           focusRequest={0}
           searchable={focused}
           locked={session.status === "exited"}
+          typing={takers.length === 0}
+          keyboard={keyboard}
           overlay={<ExitedCurtain session={session} />}
         />
       ) : session.status === "starting" ? (
@@ -260,6 +269,7 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
           <p>This agent was started outside tmux, so its terminal can't be opened here. Its details are on the right.</p>
         </div>
       ) : null}
+      {showTerminal && <TerminalInputs session={session} onTakeInput={onTakeInput} keyboard={keyboard} />}
     </>
   );
 }
