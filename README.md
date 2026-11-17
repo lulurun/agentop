@@ -1,26 +1,47 @@
 # agentop
 
-Run AI coding agents (Claude Code, Codex, Antigravity) in tmux, and work with all of them from one window.
+You run your agents in the **CLI**. You are a heavy multi-AI **subscription** user.
 
-## The idea
+You know the afternoon: Claude Code deep in a feature, Codex reviewing a change, Antigravity halfway through a deploy, and you the only index of which terminal holds which task. Then you leave the desk: an idea on the train, a prod page at dinner. The work either waits or runs on unseen, and when you come back you want the same sessions, not reconstructions of them.
 
-Agent CLIs are built to run in a terminal, and tmux is the natural place to keep them running. Agentop does not replace the terminal with a chat view, and it does not call any LLM API. It starts each agent in its own tmux session, finds the ones you started yourself, and brings them all into one app. Each agent is used the way it was built to be used, and runs on your own login and subscription.
+You know the moments, too: deep in a dev session, you want to deploy and see a quick result; in the middle of troubleshooting a problem, you want to implement a fix to test your idea. Do it in the same session and you pollute the context that makes it good: the session that knows your feature best is one pasted deploy log away from losing the thread. Start a fresh session instead and it knows nothing: you spend your first prompts rebuilding, from scratch, a context another session already holds.
+
+`agentop` is for that way of working.
+
+You run your agents in the **CLI**. You are a heavy multi-AI **subscription** user.
+
+So two things come first. agentop runs the **agent CLIs themselves** (claude, codex, agy) under tmux, unchanged, not a chat wrapper around them. And it runs on **your own subscriptions**: its core calls no LLM API and needs no API key; it uses your logged-in CLIs as they are.
+
+It gives each task its own agent and each agent its own named session, then shows them all in one window: tasks, live terminals, changed files, on this machine or another, even from a phone. And it lets you pass work between sessions so each keeps its role: when the dev session reaches a milestone, you have it hand the deploy to the deploy session and it keeps developing; when the investigation finds the fix, you have it hand that off to a dev session and it stays on the trail. No polluted context on one side, no context rebuilt from scratch on the other.
+
+## What is agentop
+
+**One agent per task, each in a session that outlives the window and your time at the desk.**
+
+## How it works
+
+My own first version of this was manual: one agent per tmux session, named after its task, found with `tmux ls`, started and stopped by hand. agentop automates that habit and hides it (you need no tmux knowledge) but keeps its one structural idea: **every agent lives in its own tmux session**. Nearly everything else follows from that.
+
+- **Sessions outlive the app and the service.** Close the app, restart or update the service, or shut your laptop while the agents run on a dev host: every agent keeps running, and you come back to the same session. Claude Code sessions agentop starts have remote control on, so the Claude app on your phone can pick one up; for any tool, the agentop web app in the phone's browser does the job.
+- **Every tool is driven the same way**: by typing into its terminal. The core calls no LLM API and never replaces the agent's terminal with a chat view; each CLI runs exactly as it was built. That is also all handoff needs, which is why it is part of the core, not a plugin: when you ask a Claude Code or Codex session to hand work over, it uses the `handoff` skill to write a self-contained prompt, and `agentop send` types it into any running session agentop started on the same machine.
+- **Dialogues** (an exploratory plugin) build on the same base: two agents, even of different tools, talk through their sessions toward a goal you set, for example one challenging the other's design the way you would.
 
 ```
-  web app ─┐                      ┌─ tmux: claude   (fix-auth-a1b2c3)
-           ├── agentop service ───┼─ tmux: codex    (review-7f3a91)
-  desktop ─┘    (one per machine) └─ tmux: agy      (eiger-c4d2e0)
+ web app ─┐                     ┌─ tmux: claude  fix-auth-a1b2c3   ◄─ Claude mobile app
+          │                     ├─ tmux: claude  dev-search-5d8e17
+          ├── agentop service ──┼─ tmux: codex   review-7f3a91     ◄─ ChatGPT mobile app
+ desktop ─┘   (one per machine) └─ tmux: agy     deploy-c4d2e0
 ```
 
 ## Core concepts
 
-- **Session.** One agent CLI running in one tmux session. Its id is the tmux session name. A session agentop started is **managed**: it can be stopped, resumed, and sent text. One agentop finds running on its own is **external**: it is listed, and can be attached if it is in tmux.
-- **Sessions outlive everything else.** Closing the app, or restarting or updating the service, leaves every agent running. tmux owns the agents; agentop only attaches to them.
-- **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API. The service token signs a browser or app in; each one then gets its own token, which runs out after 12 hours unused.
-- **App.** One UI, served by the service at `/`, in a browser or in the Tauri desktop app, which runs this computer's service while it is open. Sessions are on the left, the agent's live terminal is in the middle, and details (token usage, changed files) are on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal.
-- **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It can also see the status of the service it is connected to, and restart or update it.
+- **Session.** One agent CLI running in one tmux session; its id is the tmux session name. A session agentop started is **managed**; one agentop finds already running is **external**, listed and attachable if it is in tmux. Managed sessions can be stopped, resumed, and sent text.
+- **Ownership.** tmux owns the agents; agentop attaches to them.
+- **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API and the app at `/`. The service token signs a browser or app in; each one then gets its own token, which by default runs out after 12 hours unused and after 30 days in all; the app renews it while in use.
+- **App.** One UI, served by the service, in a browser or in the Tauri desktop app, which runs this computer's service while it is open. Sessions sit on the left, the agent's live terminal in the middle, details (token usage, changed files) on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal. The layout adapts to a phone-width screen.
+- **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It shows the connected service's status and can restart or update it.
 - **History.** Past conversations of each tool, in a workspace of their own: searched, filtered by tool, sorted, and resumed as new sessions.
-- **CLI.** The `agentop` command does the same from a shell: start, stop, list, history, and service control.
+- **CLI.** The `agentop` command does the same from a shell: start, stop, list, send, history, and service control.
 
 ## Plugins
 
@@ -31,15 +52,35 @@ Everything above is the **core**. It is always loaded and cannot be switched off
 - Plugin UI goes into fixed slots in the app, such as a badge on a session row, a workspace in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
 - **A plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
 
-The plugins that ship with agentop are Dialogues, the File viewer, and Memory. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/design.md#12-plugins).
+The plugins that ship with agentop are Dialogues, Waiting for input, the File viewer, Memory, and Email code. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/design.md#12-plugins).
 
 ## Requirements
 
-- Linux, Python 3.11+, and tmux
-- Node 20.19+ or 22.12+, to build the app
-- At least one agent CLI: `claude`, `codex`, or `agy`
+**To run**
 
-## Install
+- Service and desktop app: Linux or macOS, with tmux and Python 3.11+. On macOS the desktop app runs the service.
+- Web UI: any browser that can reach the service, a phone's included.
+- At least one agent CLI, signed in: `claude`, `codex`, or `agy`.
+
+**To build**
+
+- Service: Python 3.11+
+- UI: Node 20.19+ or 22.12+
+- Desktop app: Rust, plus the WebKitGTK 4.1 development files on Linux ([docs/setup.md](docs/setup.md))
+
+## Quick Start
+
+Let your agent set it up:
+
+```bash
+git clone git@github.com:lulurun/agentop.git
+cd agentop
+claude                               # or codex, or agy
+```
+
+Then ask it: "Please set up agentop, run it, and open the UI."
+
+Or by hand:
 
 ```bash
 git clone git@github.com:lulurun/agentop.git
