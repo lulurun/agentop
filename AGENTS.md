@@ -13,7 +13,7 @@
 
 ## Key facts
 
-- `agentop serve` runs the service at `http://127.0.0.1:9775`: the app at `/`, the API at `/api/v2`. agentop ships no systemd unit or proxy config: on the devhost, Eiger owns the `agentop-api` unit (`potential-panda/Eiger/deploy/agentop-api.service`) and the nginx setup
+- `agentop serve` runs the service at `http://127.0.0.1:9775`: the app at `/`, the API at `/api/v2`. agentop ships no systemd unit or proxy config: on the devhost, a separate ops repo owns the `agentop-api` unit and the nginx setup
 - Supported agent tools: `claude`, `codex`, `antigravity`
 - Dialogues are stored in `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`
 - Only sessions started by agentop (managed) can be stopped or sent prompts
@@ -25,10 +25,10 @@ agentop serve                              # foreground, http://127.0.0.1:9775
 agentop service status                     # or restart, stop, update
 ```
 
-On the devhost it runs as the `agentop-api` user unit, which Eiger owns:
+On the devhost it runs as the `agentop-api` user unit, which the ops repo owns:
 
 ```bash
 systemctl --user status agentop-api
 systemctl --user restart agentop-api
-tail -f /panda-infra/agentop/api.log
+journalctl --user -u agentop-api -f
 ```

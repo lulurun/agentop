@@ -136,7 +136,7 @@ Business logic layer called by both the service and `agentop/cli.py`:
 | `get_sessions()` | Merge scanner output with registry |
 | `start()` | Launch agent via `AgentCli.start_session()`, register |
 | `stop()` | Create `AgentInstance`, call `.stop()` |
-| `find_session()` | The one live session a name means, ignoring case and the `-<suffix>` (`eiger` is `Eiger-2953204`) |
+| `find_session()` | The one live session a name means, ignoring case and the `-<suffix>` (`deploy` is `Deploy-2953204`) |
 | `send()` | Type a prompt into a managed session with its tool's `send_text` (`agentop send`) |
 | `get_saved_sessions()` | Aggregate history from all agents |
 | `resume_session()` | Resume via `AgentCli.resume_session()` |

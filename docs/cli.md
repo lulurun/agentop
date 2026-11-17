@@ -68,7 +68,7 @@ agentop send <target> "<prompt>"
 agentop send <target> < prompt.txt     # no prompt: read it from stdin
 ```
 
-- `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `eiger` finds `Eiger-2953204`. With no match it says `I don't see an active session called 'eiger'`, and with several it lists them. It never starts a session
+- `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `deploy` finds `Deploy-2953204`. With no match it says `I don't see an active session called 'deploy'`, and with several it lists them. It never starts a session
 - Run from inside tmux, the prompt gets a first line `[agentop send from <this session>]`; `--no-header` leaves it off
 - Only managed sessions (started by agentop) take prompts
 - Nothing comes back by itself: switch to the target to follow it and answer it. A prompt can ask the target to reply with its own `agentop send`, which arrives as a new prompt in the sender

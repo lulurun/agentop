@@ -10,7 +10,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 |------|------------|
 | PC | The user's own computer, where the browser or desktop app runs |
 | Devhost | The Linux host running `agentop-api.service` and the agents |
-| Proxy | pisces-01, serving `https://agentop.wolfdrawer.net` and forwarding it to the devhost |
+| Proxy | proxy-host, serving `https://agentop.example.com` and forwarding it to the devhost |
 | Phone | Any mobile browser |
 
 **Results so far.** "Seen working" means the user reported it working during development in November 2026, but it has not been run against this list. Everything else is "Not run".
@@ -32,14 +32,14 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| B1 | From the PC page on `http://127.0.0.1:9775`, Connect to a service with `https://agentop.wolfdrawer.net`, test it, and add it | Test finds an agentop service; after adding, the devhost shows signed out, with its login options and the token box; after signing in, its sessions appear and it takes the devhost's name | Not run |
+| B1 | From the PC page on `http://127.0.0.1:9775`, Connect to a service with `https://agentop.example.com`, test it, and add it | Test finds an agentop service; after adding, the devhost shows signed out, with its login options and the token box; after signing in, its sessions appear and it takes the devhost's name | Not run |
 | B2 | Switch between the PC service and the devhost several times | Each switch shows the right sessions; each service remembers its selected session | Seen working |
 | B3 | Add a service, then sign in with a wrong token | "Token rejected" naming the service | Not run |
 | B4 | Paste a full connect-info string (`url#token=…`) into the Address field, test, and add | It signs in with that token on the first connect, without asking | Not run |
 | B5 | Add a plain `http://` address on another machine, from the PC page in Chrome | Works, with a "Not encrypted" warning | Not run |
 | B6 | Same as B5 with Chrome's or Firefox's HTTPS-Only Mode on | The browser upgrades or blocks the request; the error says why | Seen working (blocked, as expected) |
 | B7 | Open the app from a plain `http://` non-loopback page, and add `http://localhost:9775` | Blocked by the browser; the form warns before trying | Seen working (blocked, as expected) |
-| B8 | Open the app at `https://agentop.wolfdrawer.net/`, and add a plain `http://` service | Blocked as mixed content; the form warns before trying | Not run |
+| B8 | Open the app at `https://agentop.example.com/`, and add a plain `http://` service | Blocked as mixed content; the form warns before trying | Not run |
 | B9 | Same page as B8, add `http://127.0.0.1:9775` | Chrome asks for Local Network Access permission; after allowing, it connects | Not run |
 | B10 | Open the app through `ssh -L 9776:127.0.0.1:9775 devhost`, at `http://127.0.0.1:9776`, then add a second tunnel on another port | Both connect | Not run |
 | B11 | Repeat B1, B5, B8, and B10 in Firefox | Same results as Chrome, or differences noted | Not run |
@@ -120,7 +120,7 @@ The desktop window has never been opened; every case here is Not run. Redesigned
 | H2 | Run the desktop app and the web app side by side | Same sessions, same state, same features | Not run |
 | H3 | Close the app, then run `tmux ls` and `curl 127.0.0.1:9775/api/v2/health` | The sessions are listed; the service doesn't answer. `desktop-serve.log` ends with a clean shutdown | Not run |
 | H4 | Start `agentop serve` by hand, open the app, then close it | The app uses that service, and it keeps running after the app closes | Not run |
-| H5 | Add the devhost through `https://agentop.wolfdrawer.net`, through an `ssh -L` tunnel on another port, and through a plain LAN address | All three connect; switching among them works | Not run |
+| H5 | Add the devhost through `https://agentop.example.com`, through an `ssh -L` tunnel on another port, and through a plain LAN address | All three connect; switching among them works | Not run |
 | H6 | Stop the service from its panel | "The service on this computer stopped", with Start; Start brings it back, and the sessions are there | Not run |
 | H7 | Quit and reopen the app | Saved services and tokens are kept (OS keychain) | Not run |
 | H8 | Repeat C1 to C5 and D1 to D4 in the desktop app | Same as in the browser | Not run |
@@ -133,7 +133,7 @@ The desktop window has never been opened; every case here is Not run. Redesigned
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| I1 | Open `https://agentop.wolfdrawer.net/` on a phone, sign in, send a prompt to a session | The prompt arrives and the reply shows | Seen working |
+| I1 | Open `https://agentop.example.com/` on a phone, sign in, send a prompt to a session | The prompt arrives and the reply shows | Seen working |
 | I2 | Open and close the side panels on a phone | Panels appear as overlays; no sideways scroll | Not run |
 | I3 | Type with the phone's on-screen keyboard, including Enter, Backspace, and Japanese input | Keys arrive correctly | Not run |
 | I4 | Turn on the Input bar plugin in Status. On a phone, open a Claude session: the bar shows below the terminal. Tap the terminal; type a prompt of two lines, with Japanese, in the bar and send it | Tapping the terminal doesn't raise the keyboard; the prompt arrives as one prompt; the box empties | Not run |

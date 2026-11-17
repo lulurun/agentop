@@ -107,7 +107,7 @@ Four rules hold this together:
 
 A service runs in one of two ways, and the service is the same program in both.
 
-**On a server**, such as the devhost behind `agentop.wolfdrawer.net`, it is a service in its own right: `agentop serve` by hand, or a systemd unit. No UI is involved in its lifetime. This is unchanged.
+**On a server**, such as the devhost behind `agentop.example.com`, it is a service in its own right: `agentop serve` by hand, or a systemd unit. No UI is involved in its lifetime. This is unchanged.
 
 **On a PC** (Linux, macOS), the desktop app runs it. Until 2026-11-16 the design said the opposite: "the service is not a sidecar", and the desktop app was a client that bundled its own copy of the UI and only showed how to start a stopped service. That copy fell behind the service after every update, and opening the app did nothing useful until a service was started by hand. The desktop app had never been opened, so nothing depended on the old design.
 
@@ -215,7 +215,7 @@ The web build has no hard-coded origin, so it can also be hosted as static files
 
 **A session's `id` is its tmux session name**, chosen before tmux is called and never changed. It has the form `{slug}-{rand6}`, for example `fix-auth-a1b2c3`.
 
-The current rename exists only to put the PID in the name. Dropping it removes the need for a second identifier and solves P4: the loading row and the running session are the same object from the first moment. The human name becomes `display_name`, editable at any time without touching tmux. Existing `{name}-{pid}` sessions are valid IDs as they are, and the `general-` prefix check in Eiger's `agentop-ensure-general-session.sh` keeps working.
+The current rename exists only to put the PID in the name. Dropping it removes the need for a second identifier and solves P4: the loading row and the running session are the same object from the first moment. The human name becomes `display_name`, editable at any time without touching tmux. Existing `{name}-{pid}` sessions are valid IDs as they are, and prefix checks in existing ops scripts keep working.
 
 `name` must match `^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$`. The slug never contains `.` or `:`, which are tmux target separators.
 
@@ -390,7 +390,7 @@ The service refuses to start on a non-loopback address without TLS. The Add Serv
 
 The clipboard fallback for non-secure contexts stays, because of the following.
 
-**The current deployment is already remote.** `eiger-tunnel` forwards local port 9775 to `pisces-01:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
+**The current deployment is already remote.** An SSH tunnel forwards local port 9775 to `proxy-host:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health`, `/api/v2/auth/methods`, a login plugin's public routes (7.4) and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
 - The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [plan.md 9.1](plan.md#91-security)).
@@ -423,7 +423,7 @@ agentop service status        # or start, stop, restart, update, token
 agentop open                  # open the web app, logged in
 ```
 
-agentop provides the program, and `agentop serve` runs it. Running it as a system service, behind a proxy, or with TLS is up to the machine's owner, and nothing in agentop requires it. The devhost's systemd unit and its nginx setup live in the Eiger repo, which runs the devhost's services. A unit should set `KillMode=process`, so that stopping the service never takes tmux with it, and `TERM=xterm-256color`.
+agentop provides the program, and `agentop serve` runs it. Running it as a system service, behind a proxy, or with TLS is up to the machine's owner, and nothing in agentop requires it. The devhost's systemd unit and its nginx setup live in a separate ops repo, which runs the devhost's services. A unit should set `KillMode=process`, so that stopping the service never takes tmux with it, and `TERM=xterm-256color`.
 
 ### 8.2 ServiceManager
 
@@ -944,15 +944,15 @@ Status: built 2026-11-13 as `agentop send` and the `handoff` skill. Not a plugin
 **The workflow.** In the development session the user asks for it in plain words, from Claude Code or Codex:
 
 ```
-please tell the akimoto change and ask Eiger to deploy akimoto and watch for next fulfillment run
+please tell the myapp change and ask Deploy to deploy myapp and watch the next scheduled run
 ```
 
 1. The `handoff` skill writes a prompt that stands on its own: the task, what changed and why, the repo and commit, what counts as done, and what to ask the user before doing.
-2. It runs `agentop send eiger`, which types the prompt into the live session called Eiger and submits it ([cli.md 1.4](cli.md#14-send)). The prompt starts with `[agentop send from <sender>]`.
-3. Usually that is all. Nothing comes back to the sender, which carries on with the change. The user switches to Eiger, in the agentop app or with tmux, to watch it and answer it there.
+2. It runs `agentop send deploy`, which types the prompt into the live session called Deploy and submits it ([cli.md 1.4](cli.md#14-send)). The prompt starts with `[agentop send from <sender>]`.
+3. Usually that is all. Nothing comes back to the sender, which carries on with the change. The user switches to Deploy, in the agentop app or with tmux, to watch it and answer it there.
 4. When the sender needs a result to continue, such as a build version, and the user asked for it back, the prompt ends with a Reply line: send that result back with `agentop send <sender>`, in a line or two, and ask for nothing back. The reply arrives in the sender as a new prompt; the sender never waits for it or polls. Open-ended tasks, such as deploy and monitor, get no Reply line (2026-11-14).
 
-The target must be a live managed session. With no match, `agentop send` says `I don't see an active session called 'Eiger'`; it never starts one. A match ignores case and the `-<suffix>` agentop adds, so `eiger` finds `Eiger-2953204`.
+The target must be a live managed session. With no match, `agentop send` says `I don't see an active session called 'Deploy'`; it never starts one. A match ignores case and the `-<suffix>` agentop adds, so `deploy` finds `Deploy-2953204`.
 
 #### 12.10.1 Existing tools
 
@@ -1030,7 +1030,7 @@ Per-file state (size, modification time) is kept in `~/.agentop/plugins/memory/s
 
    | Tool | Prompts | Replies | Left out |
    |------|---------|---------|----------|
-   | `claude` | `user` records with text, not tool results; a slash command as typed (`/handoff deploy eiger`) | `assistant` text blocks | `isMeta`, `isSidechain`, compaction summaries, API errors, `<system-reminder>` blocks, local command output, interrupts, subagent and tool-result files |
+   | `claude` | `user` records with text, not tool results; a slash command as typed (`/handoff deploy myapp`) | `assistant` text blocks | `isMeta`, `isSidechain`, compaction summaries, API errors, `<system-reminder>` blocks, local command output, interrupts, subagent and tool-result files |
    | `codex` | `response_item` messages from `user` | `output_text` from `assistant`, both commentary and final answer | AGENTS.md and other whole tagged blocks Codex injects (`<environment_context>`, app events), `developer` messages, reasoning, tool calls. Older rollouts are `.jsonl.zst` and are read whole |
    | `antigravity` | `USER_INPUT`, the text inside `<USER_REQUEST>` | `PLANNER_RESPONSE` content | Tool steps (`RUN_COMMAND`, `VIEW_FILE`, …), thinking. No project folder is recorded |
 
