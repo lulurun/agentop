@@ -23,7 +23,7 @@ It gives each task its own agent and each agent its own named session, then show
 My own first version of this was manual: one agent per tmux session, named after its task, found with `tmux ls`, started and stopped by hand. agentop automates that habit and hides it (you need no tmux knowledge) but keeps its one structural idea: **every agent lives in its own tmux session**. Nearly everything else follows from that.
 
 - **Sessions outlive the app and the service.** Close the app, restart or update the service, or shut your laptop while the agents run on a dev host: every agent keeps running, and you come back to the same session. Claude Code sessions agentop starts have remote control on, so the Claude app on your phone can pick one up; for any tool, the agentop web app in the phone's browser does the job.
-- **Every tool is driven the same way**: by typing into its terminal. The core calls no LLM API and never replaces the agent's terminal with a chat view; each CLI runs exactly as it was built. That is also all handoff needs, which is why it is part of the core, not a plugin: when you ask a Claude Code or Codex session to hand work over, it uses the `handoff` skill to write a self-contained prompt, and `agentop send` types it into any running session agentop started on the same machine.
+- **Every tool is driven the same way**: by typing into its terminal, as you would. That is all handoff needs, which is why it is part of the core, not a plugin: when you ask a Claude Code or Codex session to hand work over, it uses the `handoff` skill to write a self-contained prompt, and `agentop send` types it into any running session agentop started on the same machine.
 - **Dialogues** (an exploratory plugin) build on the same base: two agents, even of different tools, talk through their sessions toward a goal you set, for example one challenging the other's design the way you would.
 
 ```
@@ -58,7 +58,7 @@ The plugins that ship with agentop are Dialogues, Waiting for input, the File vi
 
 **To run**
 
-- Service and desktop app: Linux or macOS, with tmux and Python 3.11+. On macOS the desktop app runs the service.
+- Service and desktop app: Linux or macOS, with tmux and Python 3.11+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service.
 - Web UI: any browser that can reach the service, a phone's included.
 - At least one agent CLI, signed in: `claude`, `codex`, or `agy`.
 
@@ -73,7 +73,7 @@ The plugins that ship with agentop are Dialogues, Waiting for input, the File vi
 Let your agent set it up:
 
 ```bash
-git clone git@github.com:lulurun/agentop.git
+git clone https://github.com/lulurun/agentop.git
 cd agentop
 claude                               # or codex, or agy
 ```
@@ -83,7 +83,7 @@ Then ask it: "Please set up agentop, run it, and open the UI."
 Or by hand:
 
 ```bash
-git clone git@github.com:lulurun/agentop.git
+git clone https://github.com/lulurun/agentop.git
 cd agentop
 pip install -e .
 (cd ui && npm ci && npm run build)   # the build output is not committed
@@ -130,6 +130,8 @@ smtp_password = "an app password"
 
 Then turn on **Email code** in the service's Status tab, under Plugins, and check it with `agentop email-code test`.
 
+**Ways in besides agentop's tokens.** Every Claude Code session agentop starts or resumes has remote control on, so it shows up in the Claude app and on claude.ai: whoever can sign in to your Claude account can drive it, so protect that account as you would the service token (two-factor sign-in, at least). Agents also run without asking for approval: Claude Code and Antigravity with skip-permissions, Codex with hook trust bypassed. Whoever drives a session, by either way in, can run anything you can.
+
 **What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`.
 
 For a service reachable from the internet, such as one behind an HTTPS proxy:
@@ -143,7 +145,7 @@ For a service reachable from the internet, such as one behind an HTTPS proxy:
 
 - **Rotate the service token** now and then, and at once if it was ever pasted somewhere it shouldn't be: `agentop service token --rotate`. Signed-in clients carry on. Add `--revoke-clients` to sign them all out too, if a client token may have leaked.
 - **Check who's signed in** with `agentop service clients`, and sign out anything you don't recognise with `--revoke ID`.
-- **Put something else in front** at the proxy too, such as an IP allow-list or a second factor. Tokens are the only thing in front of the agents.
+- **Put something else in front** at the proxy too, such as an IP allow-list or a second factor. Apart from your Claude account for Claude Code sessions (above), tokens are the only thing in front of the agents.
 
 ## Documentation
 
