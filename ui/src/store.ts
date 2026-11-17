@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { ApiError, ServiceClient, type ClientToken, type HistoryItem, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
 import {
   checkConnection,
+  mergeCredentials,
   credentialsFrom,
   EXPIRED,
   needsRenewal,
@@ -236,16 +237,6 @@ function persist(connections: Connection[]) {
   platform.saveConnections(
     connections.filter((c) => !c.isHome || c.token || c.clientId).map(({ serviceToken: _, ...saved }) => saved),
   );
-}
-
-const CREDENTIALS = ["token", "clientId", "issuedAt", "expiresAt", "ttl"] as const;
-
-function sameCredentials(a: Connection, b: Connection): boolean {
-  return CREDENTIALS.every((key) => a[key] === b[key]);
-}
-
-function credentialsOf(connection: Connection): Partial<Connection> {
-  return Object.fromEntries(CREDENTIALS.map((key) => [key, connection[key]]));
 }
 
 type Event =
@@ -486,18 +477,8 @@ export const useApp = create<AppState>((set, get) => {
 
   /** Take credentials another tab saved, such as a token it renewed. Changes nothing else. */
   async function syncCredentials() {
-    const saved = await platform.loadConnections();
-    const byId = new Map(saved.map((c) => [c.id, c]));
-    let changed = false;
-    const connections = get().connections.map((c) => {
-      const other = byId.get(c.id);
-      if (!other || sameCredentials(c, other)) return c;
-      // A tab that signed out, or never signed in, must not wipe one that just did.
-      if (!other.token && c.token && (c.issuedAt ?? 0) > (other.issuedAt ?? 0)) return c;
-      changed = true;
-      return { ...c, ...credentialsOf(other) };
-    });
-    if (changed) set({ connections });
+    const merged = mergeCredentials(get().connections, await platform.loadConnections());
+    if (merged !== get().connections) set({ connections: merged });
   }
 
   async function renewOne(id: string) {

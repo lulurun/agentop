@@ -70,6 +70,30 @@ export function credentialsFrom(body: ClientToken, now = Date.now()): Partial<Co
 export const EXPIRED: Partial<Connection> = { token: "", issuedAt: undefined, expiresAt: undefined, ttl: undefined };
 export const SIGNED_OUT: Partial<Connection> = { ...EXPIRED, clientId: undefined, serviceToken: undefined };
 
+const CREDENTIALS = ["token", "clientId", "issuedAt", "expiresAt", "ttl"] as const;
+
+/**
+ * Take the credentials another tab or window saved, such as a token it renewed. Returns
+ * `current` itself when nothing changed.
+ *
+ * A saved copy with no token must not wipe a token this one holds from the same sign-in or
+ * a later one: another tab that signed out cleared issuedAt, so a saved copy that kept it
+ * only lacks the token. That happens in the desktop app, which writes tokens to the keychain
+ * without waiting, so a read just after signing in can find none, or when a keychain read fails.
+ */
+export function mergeCredentials(current: Connection[], saved: Connection[]): Connection[] {
+  const byId = new Map(saved.map((c) => [c.id, c]));
+  let changed = false;
+  const merged = current.map((c) => {
+    const other = byId.get(c.id);
+    if (!other || CREDENTIALS.every((key) => c[key] === other[key])) return c;
+    if (!other.token && c.token && (c.issuedAt ?? 0) >= (other.issuedAt ?? 0)) return c;
+    changed = true;
+    return { ...c, ...Object.fromEntries(CREDENTIALS.map((key) => [key, other[key]])) };
+  });
+  return changed ? merged : current;
+}
+
 /** What the service lists this app as. */
 export function clientName(): string {
   const ua = navigator.userAgent;

@@ -4,6 +4,7 @@ import {
   appIsOutdated,
   checkConnection,
   checkReachable,
+  mergeCredentials,
   isPlainRemote,
   needsRenewal,
   newConnectionId,
@@ -115,6 +116,27 @@ describe("appIsOutdated", () => {
     expect(appIsOutdated(at(API_VERSION + 1))).toBe(true);
     expect(appIsOutdated(at(API_VERSION))).toBe(false);
     expect(appIsOutdated(at(API_VERSION - 1))).toBe(false);
+  });
+});
+
+describe("mergeCredentials", () => {
+  const signedIn: Connection = { id: "1", label: "box", url: "http://box:9775", token: "tok", clientId: "c1", issuedAt: 100, expiresAt: 200, ttl: 60 };
+  it("keeps the token when the saved copy of the same sign-in has none (keychain not written yet)", () => {
+    const current = [signedIn];
+    expect(mergeCredentials(current, [{ ...signedIn, token: "" }])).toBe(current);
+  });
+  it("keeps a newer sign-in over an older saved one without a token", () => {
+    expect(mergeCredentials([signedIn], [{ ...signedIn, token: "", issuedAt: 50 }])[0].token).toBe("tok");
+  });
+  it("takes a token another tab renewed", () => {
+    const renewed = { ...signedIn, token: "new", issuedAt: 150, expiresAt: 300 };
+    expect(mergeCredentials([signedIn], [renewed])[0]).toMatchObject({ token: "new", issuedAt: 150 });
+  });
+  it("takes a token another tab signed in with, and leaves unknown connections alone", () => {
+    const out = { ...signedIn, token: "", clientId: undefined, issuedAt: undefined, expiresAt: undefined, ttl: undefined };
+    expect(mergeCredentials([out], [signedIn])[0].token).toBe("tok");
+    const current = [signedIn];
+    expect(mergeCredentials(current, [])).toBe(current);
   });
 });
 
