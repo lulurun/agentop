@@ -168,6 +168,13 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
   await expect(main.getByLabel("Contents of docs/guide.md")).toContainText("# Guide");
   await main.getByRole("button", { name: "Preview" }).click();
 
+  // The app drawing itself again leaves the page's elements alone, so a selection being made survives.
+  await preview.getByRole("link", { name: "the other page" }).evaluate((a) => ((a as HTMLElement).dataset.kept = "yes"));
+  await page.getByRole("button", { name: "Toggle session details" }).click();
+  await page.getByRole("button", { name: "Toggle session details" }).click();
+  await expect(details).toBeVisible();
+  await expect(preview.getByRole("link", { name: "the other page" })).toHaveAttribute("data-kept", "yes");
+
   // A link to a file beside it opens that file in a tab.
   await preview.getByRole("link", { name: "the other page" }).click();
   await expect(main.getByRole("tab")).toHaveText(["demo", "guide.md", "other.md"]);
