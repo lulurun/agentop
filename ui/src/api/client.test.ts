@@ -39,3 +39,22 @@ describe("admin actions", () => {
     expect(calls).toEqual(["POST /admin/stop"]);
   });
 });
+
+describe("a token given as a function", () => {
+  it("is read on each request, so a renewed token needs no new client", async () => {
+    const sent: (string | null)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        sent.push(new Headers(init.headers).get("Authorization"));
+        return new Response("{}", { status: 200 });
+      }),
+    );
+    let token = "old";
+    const client = new ServiceClient("http://box:9775", () => token);
+    await client.service();
+    token = "new";
+    await client.service();
+    expect(sent).toEqual(["Bearer old", "Bearer new"]);
+  });
+});

@@ -1,6 +1,6 @@
 import { Component, Fragment, useMemo, type ReactNode } from "react";
 import type { PluginInfo, Session } from "../api/client";
-import { activeClient, onPluginEvent, useApp } from "../store";
+import { onPluginEvent, useActiveClient, useApp } from "../store";
 import type { FileRef } from "../tabs";
 import { pluginsFor, UI_PLUGINS } from "./registry";
 import type { PluginContext, Slot, UiPlugin } from "./types";
@@ -24,12 +24,11 @@ export class PluginBoundary extends Component<{ id: string; children: ReactNode 
 
 /** The context a plugin's components get, for the active connection. */
 export function usePluginContext(info: PluginInfo): PluginContext {
-  const connections = useApp((s) => s.connections);
-  const activeId = useApp((s) => s.activeId);
+  const service = useActiveClient();
   return useMemo(() => {
-    const client = activeClient({ connections, activeId }).plugin(info.id);
+    const client = service.plugin(info.id);
     return { id: info.id, info, client, onEvent: (listener) => onPluginEvent(info.id, listener) };
-  }, [connections, activeId, info]);
+  }, [service, info]);
 }
 
 function Piece({ info, ui, slot, session }: { info: PluginInfo; ui: UiPlugin; slot: Slot; session?: Session }) {

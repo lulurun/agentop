@@ -28,9 +28,10 @@ export function ClientsSection({ client, connection }: { client: ServiceClient; 
     [client],
   );
 
+  const signedIn = !!connection.token;
   useEffect(() => {
-    if (connection.token) void refresh();
-  }, [refresh, connection.token]);
+    if (signedIn) void refresh();
+  }, [refresh, signedIn]);
 
   async function revoke(info: ClientInfo) {
     if (info.current) {

@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import { ApiError, ServiceClient, type ClientToken, type HistoryItem, type PluginInfo, type Session, type ServiceInfo } from "./api/client";
 import {
@@ -310,6 +311,21 @@ export function activeConnection(state: Pick<AppState, "connections" | "activeId
 export function activeClient(state: Pick<AppState, "connections" | "activeId">): ServiceClient {
   const connection = activeConnection(state);
   return new ServiceClient(connection.url, connection.token);
+}
+
+/**
+ * The active service's client, kept while its address and sign-in stay the same. It reads the
+ * token on each request, so a renewed token, or any other change to the connections, reloads nothing.
+ */
+export function useActiveClient(): ServiceClient {
+  const id = useApp((s) => s.activeId);
+  const url = useApp((s) => activeConnection(s)?.url ?? "");
+  const signedIn = useApp((s) => !!activeConnection(s)?.token);
+  return useMemo(
+    () => new ServiceClient(url, () => useApp.getState().connections.find((c) => c.id === id)?.token ?? ""),
+    // signedIn: signing in or out is a different client, so what it shows loads again.
+    [id, url, signedIn],
+  );
 }
 
 const RETRY_MS = { first: 500, max: 10_000 };

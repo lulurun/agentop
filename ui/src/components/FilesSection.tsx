@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { FileEntry, FileListing, GitChanges } from "../api/client";
 import { platform } from "../platform";
 import { useFileViewer } from "../plugins/Slot";
-import { activeClient, useApp } from "../store";
+import { useActiveClient, useApp } from "../store";
 import type { FileRef } from "../tabs";
 
 const REFRESH_MS = 10_000;
@@ -15,12 +15,6 @@ const STATE_LABEL: Record<string, string> = {
   U: "Conflict",
   "?": "New file",
 };
-
-function useClient() {
-  const connections = useApp((s) => s.connections);
-  const activeId = useApp((s) => s.activeId);
-  return useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
-}
 
 /**
  * A file in a list. With a file viewer enabled it opens in a tab in the right
@@ -49,7 +43,7 @@ function FileRow({ file, absolute, children }: { file: FileRef | null; absolute:
 }
 
 function Changed({ sessionId }: { sessionId: string }) {
-  const client = useClient();
+  const client = useActiveClient();
   const [changes, setChanges] = useState<GitChanges | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -140,7 +134,7 @@ function Node({ sessionId, entry, root }: { sessionId: string; entry: FileEntry;
 }
 
 function Directory({ sessionId, path }: { sessionId: string; path: string }) {
-  const client = useClient();
+  const client = useActiveClient();
   const [listing, setListing] = useState<FileListing | null>(null);
   const [failed, setFailed] = useState(false);
 

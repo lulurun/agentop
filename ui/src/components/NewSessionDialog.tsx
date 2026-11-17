@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import type { DirListing, ToolInfo } from "../api/client";
-import { activeClient, activeCount, useApp } from "../store";
+import { activeCount, useActiveClient, useApp } from "../store";
 import { Dialog } from "./Dialog";
 
 const RECENT_KEY = "agentop.recentDirs";
@@ -22,11 +22,9 @@ function saveRecent(dir: string, recent: string[]) {
 }
 
 export function NewSessionDialog() {
-  const connections = useApp((s) => s.connections);
-  const activeId = useApp((s) => s.activeId);
   const setDialog = useApp((s) => s.setDialog);
   const select = useApp((s) => s.select);
-  const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
+  const client = useActiveClient();
 
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [tool, setTool] = useState("");

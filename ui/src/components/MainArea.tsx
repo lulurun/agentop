@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } from "../connections";
 import { platform } from "../platform";
 import { LoginMethods, useLoginMethods } from "../plugins/Login";
 import { PluginPanel } from "../plugins/Slot";
-import { activeClient, activeConnection, currentWorkspace, useApp } from "../store";
+import { activeConnection, currentWorkspace, useActiveClient, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { pluginOf } from "../workspaces";
 import { Workbench, type SessionPaneProps } from "./Workbench";
@@ -267,10 +267,8 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
 export function MainArea() {
   const session = useApp(selectedSession);
   const linkState = useApp((s) => s.link.state);
-  const connections = useApp((s) => s.connections);
-  const activeId = useApp((s) => s.activeId);
   const setDialog = useApp((s) => s.setDialog);
-  const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
+  const client = useActiveClient();
   const linked = linkState === "connected" || linkState === "reconnecting";
   const workspace = useApp(currentWorkspace);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);

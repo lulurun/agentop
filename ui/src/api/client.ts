@@ -59,20 +59,28 @@ export function publicPluginClient(baseUrl: string, id: string): PluginClient {
   return new ServiceClient(baseUrl, "").plugin(id);
 }
 
-/** One service, addressed by base URL. Nothing here is global, so services stay separate. */
+/**
+ * One service, addressed by base URL. Nothing here is global, so services stay separate.
+ * The token can be a function, read on each request, so a renewed token needs no new client.
+ */
 export class ServiceClient {
   constructor(
     readonly baseUrl: string,
-    readonly token: string,
+    private readonly tokenOf: string | (() => string),
   ) {}
+
+  get token(): string {
+    return typeof this.tokenOf === "function" ? this.tokenOf() : this.tokenOf;
+  }
 
   async request<T>(method: string, path: string, body?: unknown): Promise<T> {
     let response: Response;
+    const token = this.token;
     try {
       response = await fetch(`${this.baseUrl}/api/v2${path}`, {
         method,
         headers: {
-          ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),

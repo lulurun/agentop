@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { ServiceInfo, UpdateInfo } from "../api/client";
-import { ApiError, ServiceClient } from "../api/client";
+import { ApiError } from "../api/client";
 import { connectionName, isEncrypted, isLoopback } from "../connections";
-import { activeConnection, useApp } from "../store";
+import { activeConnection, useActiveClient, useApp } from "../store";
 import { ClientsSection } from "./ClientsSection";
 import { formatDuration } from "./format";
 import { PluginsSection } from "./PluginsSection";
@@ -79,8 +79,7 @@ export function StatusView({ onClose }: { onClose(): void }) {
   const markStopped = useApp((s) => s.markStopped);
   const updateConnection = useApp((s) => s.updateConnection);
   const removeConnection = useApp((s) => s.removeConnection);
-  const { url, token } = connection;
-  const client = useMemo(() => new ServiceClient(url, token), [url, token]);
+  const client = useActiveClient();
 
   const [info, setInfo] = useState<ServiceInfo | null>(null);
   const [update, setUpdate] = useState<UpdateInfo | null>(null);

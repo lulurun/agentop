@@ -1,5 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from "react";
-import { activeClient, useApp } from "../../store";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { useActiveClient, useApp } from "../../store";
 import { formatBytes } from "../../components/format";
 import { TerminalView } from "../../terminal/TerminalView";
 import type { PluginClient, PluginContext, UiPlugin } from "../types";
@@ -164,10 +164,9 @@ function Transcript({ plugin, d, side }: { plugin: PluginContext; d: DialogueSum
 }
 
 function LiveTerminal({ session }: { session: string }) {
-  const connections = useApp((s) => s.connections);
   const activeId = useApp((s) => s.activeId);
   const settings = useApp((s) => s.settings);
-  const client = useMemo(() => activeClient({ connections, activeId }), [connections, activeId]);
+  const client = useActiveClient();
   return (
     <TerminalView
       key={`${activeId}/${session}/${settings.theme}/${settings.renderer}/${settings.fontSize}`}
