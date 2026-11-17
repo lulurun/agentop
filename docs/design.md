@@ -180,7 +180,7 @@ Every service has a `name` (default: hostname), set on first run and returned by
 
 **Defaults.** Both clients always list the service that served the page, under that service's name. For the desktop app that is this computer's service, which it signs in to with `service.json`. Each client starts on its last-used connection, or on that default.
 
-**Adding a service.** The user gives a URL and a token. `agentop service connect-info` prints both as one pasteable string, `http://host:9775#token=…`. The app accepts it in the URL field. A fragment is never sent to a server, which keeps the token out of logs. `agentop open` uses the same format, and the app stores the token and clears it from the address bar.
+**Adding a service.** The user gives a URL. Testing it only asks `/health`, which needs no token, to check that an agentop service answers. The app then adds it signed out, so it shows the service's ways to sign in (login plugins, or the service token) like any signed-out connection. `agentop service connect-info` prints the URL and the service token as one pasteable string, `http://host:9775#token=…`. The app accepts it in the URL field and signs in with that token on the first connect. A fragment is never sent to a server, which keeps the token out of logs. `agentop open` uses the same format, and the app stores the token and clears it from the address bar.
 
 Connecting runs these checks in order, and each failure has its own message:
 

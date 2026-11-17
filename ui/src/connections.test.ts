@@ -3,6 +3,7 @@ import {
   API_VERSION,
   appIsOutdated,
   checkConnection,
+  checkReachable,
   isPlainRemote,
   needsRenewal,
   newConnectionId,
@@ -114,6 +115,19 @@ describe("appIsOutdated", () => {
     expect(appIsOutdated(at(API_VERSION + 1))).toBe(true);
     expect(appIsOutdated(at(API_VERSION))).toBe(false);
     expect(appIsOutdated(at(API_VERSION - 1))).toBe(false);
+  });
+});
+
+describe("checkReachable", () => {
+  it("needs only /health", async () => {
+    respond({ "/health": () => json(HEALTH) });
+    expect(await checkReachable(conn.url)).toEqual({ ok: true });
+  });
+  it("reports unreachable, and something else at that address", async () => {
+    respond({});
+    expect(await checkReachable(conn.url)).toEqual({ ok: false, kind: "unreachable" });
+    respond({ "/health": () => json({ hello: "world" }) });
+    expect(await checkReachable(conn.url)).toEqual({ ok: false, kind: "not_agentop" });
   });
 });
 

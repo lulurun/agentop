@@ -163,15 +163,21 @@ export function reachabilityNote(pageUrl: string, target: string): ReachabilityN
   return null;
 }
 
-/** Whatever answers at the address is the service: a host runs one, so there is no identity to check. */
-export async function checkConnection(connection: Connection): Promise<ConnectResult> {
+/** Whether an agentop service answers at the address. Needs no token. */
+export async function checkReachable(url: string): Promise<{ ok: true } | ({ ok: false } & ConnectFailure)> {
   try {
-    const health = await fetchHealth(connection.url);
-    if (health.status !== "ok") return { ok: false, kind: "not_agentop" };
+    const health = await fetchHealth(url);
+    return health.status === "ok" ? { ok: true } : { ok: false, kind: "not_agentop" };
   } catch (error) {
     if (error instanceof NetworkError) return { ok: false, kind: "unreachable" };
     return { ok: false, kind: "not_agentop" };
   }
+}
+
+/** Whatever answers at the address is the service: a host runs one, so there is no identity to check. */
+export async function checkConnection(connection: Connection): Promise<ConnectResult> {
+  const reachable = await checkReachable(connection.url);
+  if (!reachable.ok) return reachable;
   let update: Partial<Connection> | undefined;
   let token = connection.token;
   if (!hasLiveToken(connection)) {

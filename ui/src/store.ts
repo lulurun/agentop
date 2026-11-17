@@ -477,7 +477,8 @@ export const useApp = create<AppState>((set, get) => {
       return;
     }
     const { name } = result.service;
-    if (connection.isHome && connection.label !== name) get().updateConnection(connection.id, { label: name });
+    // The service's own name, shown unless the user gave one. A connection added signed out has only its host.
+    if (connection.label !== name) get().updateConnection(connection.id, { label: name });
     void openEvents(mine, result.service);
     // For the limit on active sessions, even with the left panel shut.
     void get().loadHistory();
