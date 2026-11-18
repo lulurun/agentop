@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import type { Session, TokenUsage } from "../api/client";
 import { platform } from "../platform";
 import { PluginSlot } from "../plugins/Slot";
@@ -156,7 +156,7 @@ function StopSession({ id, name }: { id: string; name: string }) {
   );
 }
 
-export function DetailsPanel() {
+export const DetailsPanel = memo(function DetailsPanel() {
   const session = useApp(selectedSession);
   const act = useApp((s) => s.act);
 
@@ -211,4 +211,4 @@ export function DetailsPanel() {
       )}
     </aside>
   );
-}
+});

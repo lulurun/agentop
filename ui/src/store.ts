@@ -282,6 +282,18 @@ export function applyEvent(sessions: Record<string, Session>, event: Event): Rec
   }
 }
 
+const idKeys = new WeakMap<Record<string, Session>, string>();
+
+/** The sessions' ids, sorted and joined: it changes only when a session comes or goes. Computed once per change. */
+export function sessionIdsKey(sessions: Record<string, Session>): string {
+  let key = idKeys.get(sessions);
+  if (key === undefined) {
+    key = Object.keys(sessions).sort().join("\n");
+    idKeys.set(sessions, key);
+  }
+  return key;
+}
+
 export function sortedSessions(sessions: Record<string, Session>): Session[] {
   return Object.values(sessions).sort(
     (a, b) => (b.created_at ?? 0) - (a.created_at ?? 0) || a.id.localeCompare(b.id),
@@ -329,6 +341,8 @@ export function useActiveClient(): ServiceClient {
 }
 
 const RETRY_MS = { first: 500, max: 10_000 };
+/** How long session events are gathered before they are applied in one store change. */
+const EVENT_BATCH_MS = 30;
 /** The service answered but its socket refused this many times: something between them is blocking it. */
 const BLOCKED_AFTER = 3;
 
@@ -395,6 +409,28 @@ export const useApp = create<AppState>((set, get) => {
     }
   }
 
+  // Session events wait here briefly and are applied together. The service sends one per
+  // changed session on each metadata tick, and one store change each re-rendered the app as often.
+  let pending: { mine: number; events: Event[] } | null = null;
+
+  function queueEvent(mine: number, event: Event) {
+    if (pending?.mine !== mine) pending = { mine, events: [] };
+    pending.events.push(event);
+    if (pending.events.length === 1) setTimeout(flushEvents, EVENT_BATCH_MS);
+  }
+
+  function flushEvents() {
+    const batch = pending;
+    pending = null;
+    if (!batch || batch.mine !== attempt) return;
+    set({ sessions: batch.events.reduce(applyEvent, get().sessions) });
+    for (const event of batch.events) {
+      if (event.type !== "session.removed") continue;
+      const workspaces = new Set<WorkspaceId>(["sessions", ...(Object.keys(get().layouts[get().activeId] ?? {}) as WorkspaceId[])]);
+      for (const workspace of workspaces) updateLayout((layout) => tabs.closeSession(layout, event.id), workspace);
+    }
+  }
+
   function closeLink() {
     attempt += 1;
     socket?.close();
@@ -437,13 +473,7 @@ export const useApp = create<AppState>((set, get) => {
       const event = JSON.parse(message.data) as Event;
       if (event.type === "plugins") void loadPlugins(mine);
       else if (event.type === "plugin") dispatchPluginEvent(event.id, event.data);
-      else {
-        set({ sessions: applyEvent(get().sessions, event) });
-        if (event.type === "session.removed") {
-          const workspaces = new Set<WorkspaceId>(["sessions", ...(Object.keys(get().layouts[get().activeId] ?? {}) as WorkspaceId[])]);
-          for (const workspace of workspaces) updateLayout((layout) => tabs.closeSession(layout, event.id), workspace);
-        }
-      }
+      else queueEvent(mine, event);
     };
     ws.onclose = () => retry(socketFailures + 1);
   }

@@ -149,9 +149,35 @@ export interface SessionPaneProps {
   session: Session | undefined;
   sessionId: string;
   tabKey: string;
+  /** Its group has focus and it is the tab shown there. */
   focused: boolean;
+  /** Shown, not kept out of sight for a quick return. */
+  visible: boolean;
   client: ServiceClient;
   onClose(): void;
+}
+
+/**
+ * How many sessions each group keeps on the page, the shown one included. Going back to one
+ * kept out of sight is instant; any other builds a new terminal and attaches it again.
+ * Each kept terminal holds a WebGL context and a socket, and a browser allows about 16 contexts.
+ */
+export const KEEP_SESSIONS = 3;
+
+/** A session kept on the page, and the tab that showed it last. */
+interface Kept {
+  sessionId: string;
+  tabId: string;
+}
+
+/** One session's pane, drawn again only when that session changes. */
+function SessionSlot({
+  sessionId,
+  renderSession,
+  ...rest
+}: Omit<SessionPaneProps, "client" | "session"> & { renderSession(props: Omit<SessionPaneProps, "client">): ReactNode }) {
+  const session = useApp((s) => s.sessions[sessionId]);
+  return <>{renderSession({ ...rest, session, sessionId })}</>;
 }
 
 /** One group: its tab bar and its active tab's contents. */
@@ -172,8 +198,21 @@ function GroupView({
 }) {
   const focusGroup = useApp((s) => s.focusGroup);
   const closeTab = useApp((s) => s.closeTab);
-  const sessions = useApp((s) => s.sessions);
   const tab = group.tabs.find((t) => t.id === group.active);
+  const shown = tab?.content.kind === "session" ? { sessionId: tab.content.sessionId, tabId: tab.id } : null;
+
+  // The sessions shown here last, most recent first. A session is in a group's tabs at most
+  // once, so it is kept by its id: a tab that switched to another session keeps the one it
+  // showed, and going back to it from the list is quick too.
+  const [recent, setRecent] = useState<Kept[]>([]);
+  if (shown && (recent[0]?.sessionId !== shown.sessionId || recent[0].tabId !== shown.tabId)) {
+    setRecent([shown, ...recent.filter((k) => k.sessionId !== shown.sessionId)].slice(0, KEEP_SESSIONS));
+  }
+  // A kept session goes once the tab that showed it is closed, or once the session is.
+  const alive = useApp((s) => recent.filter((k) => s.sessions[k.sessionId]).map((k) => k.sessionId).join("\n")).split("\n");
+  const kept = recent.filter(
+    (k) => k.sessionId === shown?.sessionId || (alive.includes(k.sessionId) && group.tabs.some((t) => t.id === k.tabId)),
+  );
 
   return (
     <section
@@ -189,14 +228,23 @@ function GroupView({
     >
       <TabBar workspace={workspace} group={group} index={index} groups={groups} />
       <div className="tab-body" role="tabpanel">
+        {kept.map((k) => {
+          const visible = k.sessionId === shown?.sessionId;
+          return (
+            <div key={k.sessionId} className="tab-pane" hidden={!visible || undefined} aria-hidden={!visible || undefined}>
+              <SessionSlot
+                sessionId={k.sessionId}
+                tabKey={k.sessionId}
+                focused={focused && visible}
+                visible={visible}
+                onClose={() => closeTab(workspace, index, k.tabId)}
+                renderSession={renderSession}
+              />
+            </div>
+          );
+        })}
         {tab?.content.kind === "session"
-          ? renderSession({
-              session: sessions[tab.content.sessionId],
-              sessionId: tab.content.sessionId,
-              tabKey: tab.id,
-              focused,
-              onClose: () => closeTab(workspace, index, tab.id),
-            })
+          ? null
           : tab?.content.kind === "file" ? <FileTab key={tab.id} file={tab.content.file} />
           : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(workspace, index, tab.id)} />
           : tab?.content.kind === "past" ? <PastSessionView key={tab.id} historyId={tab.content.historyId} onClose={() => closeTab(workspace, index, tab.id)} />

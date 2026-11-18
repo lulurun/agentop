@@ -702,6 +702,7 @@ Every workspace's main area uses the tab model of `ui/src/tabs.ts`, so the main 
 - Each tab kind says which side it opens on: sessions and **Status** on the left, files (a session's files or a dialogue's artifacts) on the right. With no split, a tab opens in the only group. A tab already open anywhere is focused instead of opened twice.
 - The core owns the `session`, `status` and `past` kinds; `file` is drawn by the file-viewer plugin; a plugin adds kinds of its own through its workspace (12.6). When a plugin is turned off, its tabs close with its workspace.
 - The Sessions tabs stay mounted while another workspace shows, hidden, so terminals keep their connection and scrollback.
+- Each group also keeps the last 3 sessions it showed on the page, hidden (`KEEP_SESSIONS` in `Workbench.tsx`), so going back to one, by its tab or from the list, shows the same terminal at once instead of building and attaching a new one. A kept session goes when the tab that showed it closes, or when the session does. Each kept terminal holds a WebGL context and a socket, and a browser allows about 16 contexts.
 - Saved tabs from before workspaces (`agentop.tabs`, one layout per connection) become the Sessions layout.
 
 #### 10.7.4 Settings and Status

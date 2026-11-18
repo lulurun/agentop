@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { useActiveClient, useApp } from "../../store";
+import { sessionIdsKey, useActiveClient, useApp } from "../../store";
 import { formatBytes } from "../../components/format";
 import { TerminalView } from "../../terminal/TerminalView";
 import type { PluginClient, PluginContext, UiPlugin } from "../types";
@@ -375,7 +375,7 @@ function Info({ plugin, id }: { plugin: PluginContext; id: string }) {
       void plugin.client.get<DialogueFile[]>(`${dialoguePath(id)}/files`).then((found) => live && setFiles(found), () => undefined);
     };
     load();
-    const timer = running ? setInterval(load, DETAIL_POLL_MS) : undefined;
+    const timer = running ? setInterval(() => document.visibilityState !== "hidden" && load(), DETAIL_POLL_MS) : undefined;
     return () => {
       live = false;
       clearInterval(timer);
@@ -475,7 +475,7 @@ function dialogueSessions(client: PluginClient, key: string): Promise<Set<string
 }
 
 function DialogueBadge({ session, plugin }: { session: { id: string }; plugin: PluginContext }) {
-  const key = useApp((s) => Object.keys(s.sessions).sort().join("\n"));
+  const key = useApp((s) => sessionIdsKey(s.sessions));
   const [inDialogue, setInDialogue] = useState(false);
   useEffect(() => {
     let live = true;

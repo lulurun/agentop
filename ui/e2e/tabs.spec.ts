@@ -28,8 +28,11 @@ async function startSession(page: Page, name: string, cwd: string) {
   await dialog.getByLabel("Name").fill(name);
   await dialog.getByRole("button", { name: "Start session" }).click();
   await expect(page.getByRole("tab", { name, selected: true })).toBeVisible();
-  await expect(page.getByTestId("terminal").first().locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
+  await expect(shownTerminals(page).first().locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
 }
+
+/** The terminals on screen, not those kept out of sight for a quick return. */
+const shownTerminals = (page: Page) => page.locator(".tab-pane:not([hidden])").getByTestId("terminal");
 
 const row = (page: Page, name: string) => page.getByRole("navigation", { name: "Sessions" }).getByRole("button", { name });
 
@@ -52,7 +55,7 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
   await row(page, "two").click({ button: "right" });
   await page.getByRole("menuitem", { name: "Open to the side" }).click();
   await expect(page.getByRole("region", { name: "Right group" }).getByRole("tab")).toHaveText(["two"]);
-  await expect(page.getByTestId("terminal")).toHaveCount(2);
+  await expect(shownTerminals(page)).toHaveCount(2);
 
   // The right panel follows the focused group.
   await page.getByRole("region", { name: "Left group" }).getByRole("tab", { name: "one" }).click();
@@ -64,6 +67,45 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
 
   await page.reload();
   await expect(page.locator(".main").getByRole("tab")).toHaveText(["two", "one"]);
+});
+
+test("a session shown before keeps its terminal, and only the last few are kept", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  const names = ["one", "two", "three", "four"];
+  for (const name of names) {
+    const cwd = join(s.root, name);
+    mkdirSync(cwd);
+    await startSession(page, name, cwd);
+  }
+  // Each start took the place of the one before it, which stays on the page out of sight.
+  await expect(page.locator(".main").getByRole("tab")).toHaveText(["four"]);
+  await expect(page.getByTestId("terminal")).toHaveCount(3);
+  await expect(shownTerminals(page)).toHaveCount(1);
+
+  // Going back to a kept session shows the same terminal, with no new one built.
+  await page.evaluate(() => {
+    const kept = [...document.querySelectorAll(".tab-pane[hidden] [data-testid=terminal]")];
+    kept.forEach((terminal) => terminal.setAttribute("data-mark", "kept"));
+  });
+  await row(page, "three").click();
+  await expect(page.getByRole("tab", { name: "three", selected: true })).toBeVisible();
+  await expect(shownTerminals(page)).toHaveAttribute("data-mark", "kept");
+  await expect(shownTerminals(page).locator(".xterm-rows")).toContainText("fake agent ready");
+  // It takes the keyboard back, with no click.
+  await page.keyboard.type("back again\n");
+  await expect(shownTerminals(page).locator(".xterm-rows")).toContainText("got: back again");
+
+  // "one" was the fourth, so it was dropped, and comes back as a new terminal.
+  await row(page, "one").click();
+  await expect(page.getByRole("tab", { name: "one", selected: true })).toBeVisible();
+  await expect(shownTerminals(page)).not.toHaveAttribute("data-mark", "kept");
+  await expect(shownTerminals(page).locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
+  await expect(page.getByTestId("terminal")).toHaveCount(3);
+
+  // Closing a kept session's tab lets it go.
+  await page.getByRole("button", { name: "Close one" }).click();
+  await expect(page.getByTestId("terminal")).toHaveCount(0);
 });
 
 test("a file from the right panel opens in the right group, beside the terminal", async ({ page }) => {

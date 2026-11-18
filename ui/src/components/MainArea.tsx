@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Session } from "../api/client";
 import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } from "../connections";
 import { platform } from "../platform";
@@ -219,7 +219,7 @@ function SessionBanner({ session }: { session: Session }) {
 }
 
 /** A session in a tab: its terminal, or why there isn't one. */
-function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
+function SessionPane({ session, focused, visible, client, onClose }: SessionPaneProps) {
   const activeId = useApp((s) => s.activeId);
   const settings = useApp((s) => s.settings);
   const loaded = useApp((s) => Object.keys(s.sessions).length > 0);
@@ -230,6 +230,14 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
     (id: string, on: boolean) => setTakers((ids) => (on === ids.includes(id) ? ids : on ? [...ids, id] : ids.filter((other) => other !== id))),
     [],
   );
+  // Shown again after being kept out of sight: its terminal takes the keyboard back, as a new one would.
+  const [focusRequest, setFocusRequest] = useState(0);
+  const wasVisible = useRef(visible);
+  // Before the screen is drawn, so keys typed right after the switch reach it.
+  useLayoutEffect(() => {
+    if (visible && !wasVisible.current && focused && takers.length === 0) setFocusRequest((n) => n + 1);
+    wasVisible.current = visible;
+  }, [visible, focused, takers.length]);
 
   if (!session) {
     if (!loaded) return null;
@@ -254,7 +262,7 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
           key={`${activeId}/${session.id}/${settings.theme}/${settings.renderer}/${settings.fontSize}`}
           client={client}
           sessionId={session.id}
-          focusRequest={0}
+          focusRequest={focusRequest}
           searchable={focused}
           locked={session.status === "exited"}
           typing={takers.length === 0}
@@ -274,17 +282,22 @@ function SessionPane({ session, focused, client, onClose }: SessionPaneProps) {
   );
 }
 
-export function MainArea() {
-  const session = useApp(selectedSession);
+export const MainArea = memo(function MainArea() {
+  // Only what this draws from the selected session, so its runtime ticking doesn't draw the main area again.
+  const status = useApp((s) => selectedSession(s)?.status);
+  const attachable = useApp((s) => !!selectedSession(s)?.attachable);
   const linkState = useApp((s) => s.link.state);
   const setDialog = useApp((s) => s.setDialog);
   const client = useActiveClient();
   const linked = linkState === "connected" || linkState === "reconnecting";
   const workspace = useApp(currentWorkspace);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
-  const showTerminal = linked && session?.attachable && session.status !== "starting";
+  const showTerminal = linked && attachable && status !== "starting";
 
-  const renderSession = (props: Omit<SessionPaneProps, "client">) => <SessionPane key={props.tabKey} {...props} client={client} />;
+  const renderSession = useCallback(
+    (props: Omit<SessionPaneProps, "client">) => <SessionPane key={props.tabKey} {...props} client={client} />,
+    [client],
+  );
 
   useEffect(() => {
     // Leaving the page would cut off the terminal.
@@ -295,7 +308,7 @@ export function MainArea() {
   }, [showTerminal]);
 
   return (
-    <main className="main" data-status={linked ? (session?.status ?? "none") : "none"}>
+    <main className="main" data-status={linked ? (status ?? "none") : "none"}>
       {socketBlocked ? (
         <div className="placard" role="alert">
           <h2>This service can't open a live connection</h2>
@@ -336,4 +349,4 @@ export function MainArea() {
       )}
     </main>
   );
-}
+});

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
 import { activeCount, layoutOf, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
@@ -28,7 +28,8 @@ export function ToolBadge({ tool }: { tool: string }) {
   );
 }
 
-function SessionRow({ session, selected }: { session: Session; selected: boolean }) {
+/** Drawn again only when its own session changes. */
+const SessionRow = memo(function SessionRow({ session, selected }: { session: Session; selected: boolean }) {
   const select = useApp((s) => s.select);
   const summary = sessionSummary(session) ?? basename(session.cwd);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -73,9 +74,9 @@ function SessionRow({ session, selected }: { session: Session; selected: boolean
     )}
     </>
   );
-}
+});
 
-export function Sidebar() {
+export const Sidebar = memo(function Sidebar() {
   const sessions = useApp((s) => s.sessions);
   const selected = useApp((s) => s.selected[s.activeId]);
   const setDialog = useApp((s) => s.setDialog);
@@ -150,7 +151,7 @@ export function Sidebar() {
       )}
     </aside>
   );
-}
+});
 
 /** One of the left panel's sections, folded shut or open by clicking its title. Remembered in this browser. */
 export function FoldSection({

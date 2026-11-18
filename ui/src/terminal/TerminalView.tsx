@@ -6,7 +6,7 @@ import { WebLinksAddon } from "@xterm/addon-web-links";
 import { WebglAddon } from "@xterm/addon-webgl";
 import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
-import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { ApiError, type ServiceClient } from "../api/client";
 import { isAppShortcut } from "../shortcuts";
 import { platform } from "../platform";
@@ -278,7 +278,7 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     };
   }, [client, sessionId, readOnly]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (focusRequest && !lockedRef.current) term.current?.focus();
   }, [focusRequest]);
 

@@ -16,10 +16,19 @@ import { ACTION_EVENT, hasPluginAction, useWorkspaces, WorkspaceAction, Workspac
 const DIGITS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9"];
 
 export function App() {
-  const state = useApp();
-  const { leftOpen, rightOpen, toggleLeft, toggleRight, setDialog, connections, activeId } = state;
+  // Each field on its own, so a change elsewhere in the store, such as a session's, doesn't draw the app again.
+  const leftOpen = useApp((s) => s.leftOpen);
+  const rightOpen = useApp((s) => s.rightOpen);
+  const toggleLeft = useApp((s) => s.toggleLeft);
+  const toggleRight = useApp((s) => s.toggleRight);
+  const setDialog = useApp((s) => s.setDialog);
+  const hasConnections = useApp((s) => s.connections.length > 0);
+  const activeId = useApp((s) => s.activeId);
+  const dialog = useApp((s) => s.dialog);
+  const error = useApp((s) => s.error);
+  const setError = useApp((s) => s.setError);
   const { current } = useWorkspaces();
-  const linked = state.link.state === "connected" || state.link.state === "reconnecting";
+  const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   // A workspace without a panel has no toggle for it either.
   const hasLeft = linked && current.left;
   const hasRight = linked && current.right;
@@ -73,7 +82,7 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
-  if (!activeId || !connections.length) return null;
+  if (!activeId || !hasConnections) return null;
   const plugin = pluginOf(current.id);
 
   return (
@@ -106,13 +115,13 @@ export function App() {
       {showRight &&
         (current.id === "sessions" ? <DetailsPanel /> : plugin && <aside className="details"><PluginPanel pluginId={plugin} side="right" /></aside>)}
       {(showLeft || showRight) && <div className="scrim" onClick={() => { if (showLeft) toggleLeft(); if (showRight) toggleRight(); }} />}
-      {state.dialog === "new-session" && <NewSessionDialog />}
-      {state.dialog === "add-service" && <AddServiceDialog />}
-      {state.dialog === "settings" && <SettingsDialog />}
-      {state.error && (
+      {dialog === "new-session" && <NewSessionDialog />}
+      {dialog === "add-service" && <AddServiceDialog />}
+      {dialog === "settings" && <SettingsDialog />}
+      {error && (
         <div className="toast" role="alert">
-          {state.error}
-          <button type="button" onClick={() => state.setError(null)} aria-label="Dismiss">
+          {error}
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss">
             Dismiss
           </button>
         </div>

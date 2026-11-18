@@ -121,7 +121,7 @@ export function useDialogueList(client: PluginClient): DialogueSummary[] | null 
     }
     watchers += 1;
     void refreshDialogues(client);
-    timer ??= setInterval(() => polled && void refreshDialogues(polled), POLL_MS);
+    timer ??= setInterval(() => polled && document.visibilityState !== "hidden" && void refreshDialogues(polled), POLL_MS);
     return () => {
       watchers -= 1;
       if (watchers === 0) {
