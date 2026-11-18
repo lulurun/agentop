@@ -2,6 +2,7 @@
   "name": "agentop-desktop",
   "private": true,
   "scripts": {
+    "icons": "tauri icon ../assets/logo/agentop.svg -o src-tauri/icons",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build --no-bundle",

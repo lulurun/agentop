@@ -1,36 +1,12 @@
 # Logo
 
-`agentop.svg` is the original logo. Its text needs the Inter font, so the app uses copies with the text turned into outlines, in `ui/public/`:
+`agentop.svg` is the only copy of the logo. To change the icon, replace this file: the builds export everything else from it, and the copies are not committed.
 
-| File | Use |
-|------|-----|
-| `logo.svg` | the logo with outlined text; the browser tab icon |
-| `favicon.ico` | browser tab icon, 16, 32 and 48 px |
-| `icon-192.png`, `icon-512.png` | home-screen icons in `manifest.webmanifest` |
-| `icon-maskable-512.png` | Android's masked icon: the logo sits inside the safe circle |
-| `apple-touch-icon.png` | iOS Add to Home Screen, 180 px |
+| Where | Made by | When |
+|-------|---------|------|
+| `ui/public/`: `logo.svg`, `favicon.ico`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png`, `icon-maskable-512.png` | `ui/scripts/icons.mjs` (`npm run icons` in `ui/`), with resvg-js | before `npm run build` and `npm run dev`, so `scripts/build-ui.sh`, a service update, and the release workflow |
+| `desktop/src-tauri/icons/` | `tauri icon` (`npm run icons` in `desktop/`) | Tauri's `beforeBuildCommand` and `beforeDevCommand`, so `scripts/build-app.sh` and the desktop workflow |
 
-The PNGs put the logo on the app's background, `#161b22`. To make them again after changing `agentop.svg` (needs `resvg`, `usvg` and ImageMagick):
+The logo should be square and draw its own background. The apple-touch and maskable icons need an opaque square, so they put the logo on the colour at the middle of its top edge; the maskable one shrinks it to 80%, inside the circle Android crops to.
 
-```bash
-usvg assets/logo/agentop.svg /tmp/outlined.svg
-sed '1s|<svg width="256" height="242"|<svg viewBox="0 0 256 242" width="256" height="242" role="img" aria-label="Agentop"|' /tmp/outlined.svg > ui/public/logo.svg
-mk() { resvg -w $(( $1 * $2 / 100 )) ui/public/logo.svg /tmp/l.png && magick -size ${1}x${1} xc:'#161b22' /tmp/l.png -gravity center -composite -strip PNG24:$3; }
-mk 512 72 ui/public/icon-512.png
-mk 192 72 ui/public/icon-192.png
-mk 180 72 ui/public/apple-touch-icon.png
-mk 512 56 ui/public/icon-maskable-512.png
-resvg -w 256 ui/public/logo.svg /tmp/f.png
-magick /tmp/f.png -background none -gravity center -extent 256x256 -define icon:auto-resize=48,32,16 ui/public/favicon.ico
-```
-
-The `sed` line assumes the original's `width="256" height="242"`; change it with the size.
-
-The desktop app's icons, in `desktop/src-tauri/icons/`, come from a 1024 px version of the same icon:
-
-```bash
-mk 1024 72 /tmp/app-1024.png
-(cd desktop && npx tauri icon /tmp/app-1024.png -o /tmp/icons)
-cp /tmp/icons/{32x32.png,128x128.png,icon.png,icon.icns,icon.ico} desktop/src-tauri/icons/
-magick /tmp/app-1024.png -resize 512x512 desktop/src-tauri/icons/512x512.png
-```
+Running `cargo` directly in `desktop/src-tauri/` (tests, `cargo check`) needs the desktop icons: run `npm run icons` in `desktop/` once first.

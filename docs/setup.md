@@ -71,8 +71,8 @@ other apps on 7700 are plain HTTP.
 The app is installable: open `https://agentop.example.com` and use Add to Home Screen
 (Safari's Share menu on iOS; the menu's Install app or Add to Home screen in Chrome on
 Android). It then opens full screen with its own icon. A phone installs only from an
-HTTPS address, so not from a plain `http://` one on the LAN. The manifest and icons
-are in `ui/public/`.
+HTTPS address, so not from a plain `http://` one on the LAN. The manifest is in
+`ui/public/`; the icons are made from `assets/logo/agentop.svg` by the build.
 
 ## Connecting from the app
 

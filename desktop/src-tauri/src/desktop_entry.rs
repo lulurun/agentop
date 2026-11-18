@@ -10,7 +10,7 @@
 
 use std::path::{Path, PathBuf};
 
-const ICON: &[u8] = include_bytes!("../icons/512x512.png");
+const ICON: &[u8] = include_bytes!("../icons/icon.png");
 
 /// The app id before it was the identifier: the binary's file name.
 const OLD_APP_ID: &str = "agentop-desktop";

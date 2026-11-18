@@ -4,6 +4,8 @@
   "identifier": "dev.agentop.desktop",
   "version": "1.0.0",
   "build": {
+    "beforeDevCommand": "npm run icons",
+    "beforeBuildCommand": "npm run icons",
     "frontendDist": "../static"
   },
   "app": {
