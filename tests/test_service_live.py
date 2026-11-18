@@ -242,9 +242,9 @@ def test_wrong_service_tokens_are_slowed_down(service):
 
 
 def test_revoking_a_client_closes_its_sockets(service, monkeypatch):
-    from agentop.service import routes
+    from agentop.service.api import sockets
 
-    monkeypatch.setattr(routes, "CLIENT_CHECK_SECONDS", 0.1)
+    monkeypatch.setattr(sockets, "CLIENT_CHECK_SECONDS", 0.1)
     other = service.sign_in("tablet")
     ticket = httpx.post(f"{service.base}/tickets", json={"purpose": "events"}, headers=other).json()["ticket"]
     tablet = next(c["id"] for c in service.http.get("/auth/clients").json() if c["name"] == "tablet")
@@ -254,7 +254,7 @@ def test_revoking_a_client_closes_its_sockets(service, monkeypatch):
         with pytest.raises(ConnectionClosed) as caught:
             while True:
                 ws.recv(timeout=5)
-    assert caught.value.rcvd.code == routes.WS_SIGNED_OUT
+    assert caught.value.rcvd.code == sockets.WS_SIGNED_OUT
 
 
 # ---------------------------------------------------------------------- the app's address

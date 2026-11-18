@@ -1326,7 +1326,7 @@
   "paths": {
     "/admin/restart": {
       "post": {
-        "operationId": "route_admin_restart_post",
+        "operationId": "restart_admin_restart_post",
         "parameters": [
           {
             "in": "header",
@@ -1367,12 +1367,12 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Route"
+        "summary": "Restart"
       }
     },
     "/admin/stop": {
       "post": {
-        "operationId": "route_admin_stop_post",
+        "operationId": "stop_admin_stop_post",
         "parameters": [
           {
             "in": "header",
@@ -1413,7 +1413,7 @@
             "description": "Validation Error"
           }
         },
-        "summary": "Route"
+        "summary": "Stop"
       }
     },
     "/admin/update": {

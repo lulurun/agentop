@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from agentop.service import manager, routes, update
+from agentop.service.api import admin
 from tests.conftest import signed_in
 
 
@@ -67,11 +68,11 @@ def api(monkeypatch):
     from agentop.service.config import Settings
     from agentop.service.identity import Identity
 
-    monkeypatch.setattr(routes, "LIFECYCLE_DELAY_SECONDS", 0)
+    monkeypatch.setattr(admin, "LIFECYCLE_DELAY_SECONDS", 0)
     ident = Identity(token="t", instance_id="i", name="box")
     ctx = routes.Context(Settings(), ident, SimpleNamespace(), clients=signed_in("t"))
     client = TestClient(routes.create_v2_app(ctx), headers={"Authorization": "Bearer t"})
-    assert Path(routes._REPO_ROOT).exists()
+    assert Path(routes.REPO_ROOT).exists()
     return client
 
 

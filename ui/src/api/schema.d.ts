@@ -13,8 +13,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Route */
-        post: operations["route_admin_restart_post"];
+        /** Restart */
+        post: operations["restart_admin_restart_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -30,8 +30,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Route */
-        post: operations["route_admin_stop_post"];
+        /** Stop */
+        post: operations["stop_admin_stop_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -919,7 +919,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    route_admin_restart_post: {
+    restart_admin_restart_post: {
         parameters: {
             query?: never;
             header?: {
@@ -950,7 +950,7 @@ export interface operations {
             };
         };
     };
-    route_admin_stop_post: {
+    stop_admin_stop_post: {
         parameters: {
             query?: never;
             header?: {

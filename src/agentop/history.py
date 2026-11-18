@@ -13,6 +13,7 @@ import re
 import time
 from datetime import datetime, timezone
 
+from agentop import registry
 from agentop.agentclis import get_agent
 
 _PID_SUFFIX = re.compile(r"-\d+$")
@@ -115,3 +116,13 @@ def list_history(
         items.append(item)
     items.sort(key=lambda i: i["last_active"], reverse=True)
     return items
+
+
+def past_sessions(rows: list[dict], window_seconds: float) -> list[dict]:
+    """History's items, given the store's live rows. Agent IDs found on the way are saved, so each is looked up once."""
+    records = registry.load()["sessions"]
+    listed = {row["id"] for row in rows}
+    for name, fields in resolve_agent_ids(records, listed).items():
+        registry.upsert_session(name, fields)
+        records[name] = {**records[name], **fields}
+    return list_history(records, listed, {row["session_id"] for row in rows if row.get("session_id")}, window_seconds)

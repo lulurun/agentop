@@ -24,7 +24,7 @@ src/agentop/
   skills/                Skills `agentop serve` installs for the agent tools
   plugin_manifest.py     What the core reads from a plugin.toml, without running the plugin
   plugin_cli.py          Plugin commands for the CLI
-  service/               The service: app.py (assembly), routes.py (/api/v2), store.py (sessions),
+  service/               The service: app.py (assembly), routes.py (/api/v2 assembly), api/ (its handlers, one module per area), store.py (sessions),
                          plugins.py (the plugin loader), terminal.py, host.py, update.py, ...
   service/webdist/       The built web app (ui/), served at / (not committed)
   plugins/               attention/, dialogue/, email-code/, input/, memory/, viewer/: one folder per plugin
@@ -168,7 +168,7 @@ The orchestrator is its own process, not part of the service, so a dialogue keep
 
 ## 6 Web layer
 
-`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs a client's token; the service token only signs a client in, at `POST /auth/clients` (`service/auth.py`, design D7). `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`). With `readonly=true`, or for a session with an `owner`, it attaches with `-f read-only,ignore-size`, drops what the client sends, and takes the window's size, which it tells the client in a `{"type": "size"}` frame; the terminal then scales its font to show the whole window.
+`service/app.py` assembles the service: the `/api/v2` API (`service/routes.py`, with a router per area in `service/api/`: clients, admin, sessions, history, sockets; each handler gets the `Context` as a FastAPI dependency), plugin routes under `/api/v2/plugins/<id>/`, and the built app (`service/webdist/`) at `/`. Requests to `/app/...`, where the app was until 2026-11-14, are redirected there with a relative address, so it also works behind a proxy's path prefix. Every `/api/v2` route except `/health` needs a client's token; the service token only signs a client in, at `POST /auth/clients` (`service/auth.py`, design D7). `service/store.py` keeps the session list, refreshed by a background scan, and pushes changes over the events WebSocket. The terminal is a `tmux attach-session` bridged over a WebSocket PTY (`service/terminal.py`). With `readonly=true`, or for a session with an `owner`, it attaches with `-f read-only,ignore-size`, drops what the client sends, and takes the window's size, which it tells the client in a `{"type": "size"}` frame; the terminal then scales its font to show the whole window.
 
 ### Main-area tabs
 
