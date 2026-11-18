@@ -480,7 +480,7 @@ The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.con
 
 **Linux ships as an AppImage only**: a single file to download, `chmod +x`, and run, on any distribution, and the only Linux format the updater replaces in place. It needs `fuse2`, or `--appimage-extract-and-run`. With NVIDIA's driver loaded, the app sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` before opening a window, because WebKitGTK's DMA-BUF renderer can give a blank window there. Only then: setting it everywhere made the terminal visibly slow on an AMD (Mesa) PC (2026-11-16), and the user's own value always wins. There is no `.deb` and no AUR package: a package manager and the updater would both try to own the file.
 
-**macOS** builds are unsigned for now: the first open needs right-click, Open. Updates after that work. An Apple Developer ID and notarization would remove the step.
+**macOS** builds are unsigned for now: the first open needs Open Anyway in System Settings, Privacy & Security (right-click, Open stopped working in macOS 15), or `xattr -dr com.apple.quarantine`. Updates after that work. An Apple Developer ID and notarization would remove the step.
 
 **Windows** isn't built. The service needs tmux, so a Windows app would have to run the service in WSL (plan 9.4).
 

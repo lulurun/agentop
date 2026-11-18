@@ -133,8 +133,16 @@ Each start writes `~/.local/share/applications/agentop-desktop.desktop` and its 
 last opened. On Wayland the taskbar takes the icon only from that entry, and shows a
 generic one without it. So it also puts agentop-desktop in the app launcher.
 
-**macOS.** Download `agentop-desktop.app` from the same release. It isn't signed yet, so open
-it the first time with right-click, Open.
+**macOS.** Download `agentop-desktop_universal.app.tar.gz` from the same release and
+unpack it to get `agentop-desktop.app`. It isn't signed or notarized yet, so the first
+launch says Apple "could not verify" it. Click Done, then in System Settings, Privacy &
+Security, click Open Anyway. Or clear the download flag once:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/agentop-desktop.app
+```
+
+Updates the app installs itself don't get the flag, so this is needed only once.
 
 **Updates.** When a newer `agentop-desktop` release is out, the header shows **App update**.
 Clicking it installs the update and restarts the app; sessions keep running. A copy
