@@ -333,7 +333,7 @@ Not scheduled. Service-side features are built as plugins (design section 12); d
 
 ### 9.5 Desktop app installs its own agentop
 
-Agreed and built 2026-11-18 (`desktop/src-tauri/src/setup.rs`, the start page in `desktop/static/`). The desktop app stays a thin wrapper and the only release artifact (`agentop-desktop`, published for each `v*` tag). On first run it sets up its own copy of agentop, then starts, stops and updates that copy. For a PC (macOS first) with nothing installed beyond the runtimes.
+Agreed and built 2026-11-18 (`desktop/src-tauri/src/setup.rs`, the start page in `desktop/static/`), released in v1.2.0, and run on macOS from a clean `~/.agentop-desktop`: tools, install, Launch. The desktop app stays a thin wrapper and the only release artifact (`agentop-desktop`, published for each `v*` tag). On first run it sets up its own copy of agentop, then starts, stops and updates that copy. For a PC (macOS first) with nothing installed beyond the runtimes.
 
 - [x] **Where things live.** `~/.agentop-desktop/` holds only the code: a git checkout at the newest `v*` tag, and a venv. Sessions, Memory and config stay in `~/.agentop/`, shared with the CLI.
 - [x] **The setup screen.** An interactive page the app shows until every step passes. Each step shows ✓ or ✗, with a one-line fix and a Check again button. A step runs only once the ones before it pass:
