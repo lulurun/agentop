@@ -35,6 +35,7 @@ def summarizer() -> AgentCli | None:
 
 def register(api):
     archive = Archive(api.data_dir)
+    api.offer_transcript_archive(archive.files_dir)
     messages = Messages(api.data_dir / "messages.sqlite", archive.files_dir)
     summaries = Summaries(messages)
     recall_log = RecallLog(api.data_dir / "recall.jsonl")

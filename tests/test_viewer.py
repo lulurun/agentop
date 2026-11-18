@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 
 from agentop import agentclis
 from agentop.agentclis.base import AgentCli
-from agentop.service import files, transcripts
+from agentop import files, transcripts
 from agentop.service.app import create_app
 from agentop.service.config import Settings
 from agentop.service.identity import Identity
@@ -87,11 +87,11 @@ def test_only_listed_files_resolve(agent):
 def test_a_transcript_the_tool_deleted_comes_from_the_archive(
     agent, tmp_path, monkeypatch
 ):
-    archive = tmp_path / "archive"
-    archive.mkdir()
+    archive = tmp_path / "archive" / "fake"  # a folder per tool
+    archive.mkdir(parents=True)
     (archive / "gone.jsonl").write_text("{}\n")
     (archive / "s1.jsonl").write_text("the archive's copy\n")
-    monkeypatch.setattr(transcripts, "archive_root", lambda tool: archive)
+    monkeypatch.setattr(transcripts, "archive_roots", lambda: [archive.parent])
     listing = transcripts.list_transcripts("fake", "gone")
     assert (listing["root"], listing["archived"]) == (str(archive), True)
     assert [f["path"] for f in listing["files"]] == ["gone.jsonl"]

@@ -2,7 +2,7 @@ import subprocess
 
 import pytest
 
-from agentop.service import files
+from agentop import files
 
 
 def git(root, *args):

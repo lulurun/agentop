@@ -32,7 +32,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
-from agentop import paths
+from agentop import paths, transcripts
 from agentop.jsonfile import move_aside, write_json_atomic
 from agentop.plugin_manifest import (  # noqa: F401 - DEFAULT_ROOT and the rest are imported from here too
     DEFAULT_ROOT,
@@ -100,6 +100,14 @@ class PluginAPI:
         self._handlers: list[tuple[str, Callable]] = []
         self._tasks: list[Callable] = []
         self._on_disable: list[Callable] = []
+        self._transcript_archive: Path | None = None
+
+    def offer_transcript_archive(self, root: Path) -> None:
+        """Offer a copy of the tools' transcripts, a folder per tool in each tool's own layout.
+
+        While the plugin is on, the app finds a transcript there when the tool has deleted its own.
+        """
+        self._transcript_archive = root
 
     def on(self, event: str, handler: Callable) -> None:
         """Call `handler(payload)` on a core event. It runs off the event loop, in isolation."""
@@ -199,6 +207,7 @@ class PluginHost:
         # Signs a client in and returns its ClientToken body. Set by attach().
         self.sign_in: Callable[[str], dict] | None = None
         self._running: set[asyncio.Task] = set()
+        transcripts.archive_roots = self.transcript_archives
         self._started = False
 
     # ------------------------------------------------------------------ lifecycle
@@ -461,6 +470,14 @@ class PluginHost:
             plugin.errors.popleft()
         if len(plugin.errors) >= MAX_HANDLER_ERRORS and plugin.state == ENABLED:
             self._fail(plugin, f"{len(plugin.errors)} event handler errors in a minute; the last: {last}")
+
+    def transcript_archives(self) -> list[Path]:
+        """The transcript archives enabled plugins offer (PluginAPI.offer_transcript_archive)."""
+        return [
+            p.api._transcript_archive
+            for p in self.plugins.values()
+            if p.state == ENABLED and p.api is not None and p.api._transcript_archive is not None
+        ]
 
     # ------------------------------------------------------------------ flags
 

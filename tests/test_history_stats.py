@@ -7,7 +7,7 @@ import json
 import pytest
 import zstandard
 
-from agentop.service import transcripts
+from agentop import transcripts
 
 
 @pytest.fixture(autouse=True)
@@ -120,9 +120,11 @@ def test_antigravity_sums_each_steps_tokens_and_skips_its_artifacts(home):
     assert stats["files"] == 2
 
 
-def test_the_memory_archive_stands_in_for_deleted_transcripts(home):
+def test_an_archive_on_offer_stands_in_for_deleted_transcripts(home, monkeypatch):
     sid = "99999999-2222-3333-4444-555555555555"
-    project = home / ".agentop/plugins/memory/archive/claude/-w"
+    archive = home / "archive"
+    monkeypatch.setattr(transcripts, "archive_roots", lambda: [archive])
+    project = archive / "claude" / "-w"
     project.mkdir(parents=True)
     (project / f"{sid}.jsonl").write_text(jsonl(claude_turn("u1", "user", "hello")))
     stats = transcripts.transcript_stats("claude", sid)

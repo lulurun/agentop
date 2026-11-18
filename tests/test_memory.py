@@ -161,6 +161,15 @@ def test_the_plugin_sweeps_at_start_and_on_request(client, tmp_path, home):
     assert status["last_sweep"]["copied"] == 1
 
 
+def test_the_plugin_offers_its_archive_while_it_is_on(client, tmp_path):
+    from agentop import transcripts
+
+    folder = tmp_path / "flags" / "plugins" / "memory" / "archive"
+    assert transcripts.archive_roots() == [folder]
+    assert client.patch("/api/v2/plugins/memory", json={"enabled": False}, headers=AUTH).status_code == 200
+    assert transcripts.archive_roots() == []
+
+
 def test_the_plugin_searches_what_it_has_recorded(client, home):
     log = home / ".claude" / "projects" / "-proj" / "s1.jsonl"
     record = {"type": "user", "uuid": "u9", "sessionId": "s1", "message": {"role": "user", "content": "the atama link"}}

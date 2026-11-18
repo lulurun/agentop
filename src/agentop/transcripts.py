@@ -3,18 +3,19 @@
 Only the files the tool reports for that session can be listed or read, so a
 request can name one of them but never reach anything else on disk.
 
-When the tool has deleted them, the Memory plugin's archive may still have
-them (design 12.11). Its copy has the tool's own layout, so the same lookup
-finds them there.
+When the tool has deleted them, a plugin's archive may still have them: the
+Memory plugin offers one (design 12.11). An archive keeps the tool's own
+layout under a folder per tool, so the same lookup finds them there.
 """
 
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 
-from agentop import conversation, paths
+from agentop import conversation
 from agentop.agentclis import get_agent
 
 MAX_FILES = 500
@@ -23,9 +24,8 @@ MAX_FILES = 500
 _SESSION_ID = re.compile(r"[A-Za-z0-9_-]{1,128}")
 
 
-def archive_root(tool: str) -> Path:
-    """Where the Memory plugin keeps its copy of a tool's transcripts."""
-    return paths.plugins_dir() / "memory" / "archive" / tool
+# The archives on offer, from enabled plugins. Set by the service's plugin host; none without one.
+archive_roots: Callable[[], list[Path]] = list
 
 
 def _files(tool: str | None, session_id: str | None) -> tuple[Path | None, list[Path], bool]:
@@ -35,7 +35,7 @@ def _files(tool: str | None, session_id: str | None) -> tuple[Path | None, list[
     agent = get_agent(tool)
     if agent is None:
         return None, [], False
-    for root, archived in ((None, False), (archive_root(tool), True)):
+    for root, archived in ((None, False), *((archive / tool, True) for archive in archive_roots())):
         if root is not None and not root.is_dir():
             continue
         base, found = agent.transcript_files(session_id, root)

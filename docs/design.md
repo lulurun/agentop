@@ -830,6 +830,7 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 | `api.on_disable(fn)` | Called, in a thread, when the user turns the plugin off, to wind down work it started: the Dialogues plugin stops running dialogues. Not called when the service stops, so work that outlives the service (a process the plugin started) keeps running then. A failure is logged; the plugin is off either way |
 | `api.store` | A JSON file at `~/.agentop/plugins/{id}/store.json` for the plugin's own data |
 | `api.data_dir` | The plugin's own folder, `~/.agentop/plugins/{id}/`, for files that don't fit in one JSON file. It is made when first written to |
+| `api.offer_transcript_archive(root)` | Offers a copy of the tools' transcripts, a folder per tool in each tool's own layout. While the plugin is on, the app finds a transcript there when the tool has deleted its own. The Memory plugin offers its archive |
 | `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
 | `api.log` | A logger named `agentop.plugins.{id}` |
 

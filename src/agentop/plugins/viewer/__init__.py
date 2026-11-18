@@ -21,9 +21,8 @@ from typing import Literal
 
 from fastapi import HTTPException
 
-from agentop import conversation
+from agentop import conversation, files, transcripts
 from agentop.agentclis import get_agent
-from agentop.service import files, transcripts
 
 MAX_BYTES = 2 * 1024 * 1024
 SNIFF_BYTES = 8192

@@ -6,10 +6,9 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException
 
-from agentop import history, ops, registry
+from agentop import history, ops, registry, transcripts
 from agentop.results import OpsError
 
-from .. import transcripts
 from ..models import HistoryListing, HistoryStats, SessionModel
 from .context import AUTHED, Context, Ctx
 

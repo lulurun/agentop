@@ -13,6 +13,8 @@ src/agentop/
   agent_instance.py      Wires AgentCli + Actor into one runtime object
   launcher.py            Starts an agent in its own tmux session, the same way for every tool
   oneshot.py             Runs a tool's one-shot command (ask), with no tmux
+  transcripts.py         A session's transcript files, from the tool or a plugin's archive, and History's stats
+  files.py               A session folder's files and git changes
   scanner.py             Process detection and session building
   ops.py                 Business logic used by both the service and the CLI
   results.py             What ops returns (StartResult, StopResult, Sent, SavedSession), and OpsError
@@ -124,9 +126,9 @@ New kinds of files go in one of these folders, not at the top.
 
 The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was removed on 2026-11-14, so an install still on the old folder starts afresh: move it by hand first (see `paths.py` in git history before that date for where each file went).
 
-### 4.1b Transcripts as conversations (`conversation.py`, `service/transcripts.py`)
+### 4.1b Transcripts as conversations (`conversation.py`, `transcripts.py`)
 
-`service/transcripts.py` lists a session's transcript files, the ones its tool reports (`AgentCli.transcript_files`). When the tool has deleted them it looks in the Memory archive, which keeps each tool's layout, so the same lookup works with the archive as its root. Each tool's `AgentCli.conversation_reader` reads one of those files as prompts and replies, with what every reader shares in `conversation.py`; the File viewer shows it and the Memory plugin's messages table is built from it. `transcript_stats` counts a past session's prompts, replies, tokens (`AgentCli.token_usage`) and bytes for History's tab.
+`transcripts.py` lists a session's transcript files, the ones its tool reports (`AgentCli.transcript_files`). When the tool has deleted them it looks in the archives enabled plugins offer (`api.offer_transcript_archive`; the Memory plugin's is one), which keep each tool's layout, so the same lookup works with the archive as its root. Each tool's `AgentCli.conversation_reader` reads one of those files as prompts and replies, with what every reader shares in `conversation.py`; the File viewer shows it and the Memory plugin's messages table is built from it. `transcript_stats` counts a past session's prompts, replies, tokens (`AgentCli.token_usage`) and bytes for History's tab.
 
 ### 4.2 Registry (`registry.py`)
 
