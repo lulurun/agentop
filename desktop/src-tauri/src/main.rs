@@ -155,7 +155,7 @@ fn start_in_background(app: AppHandle) {
         let Startup::Ready { url } = service.start() else { return };
         if !CAPABILITY_ADDED.swap(true, Ordering::SeqCst) {
             if let Err(error) = app.add_capability(service_capability(&url)) {
-                eprintln!("agentop: couldn't allow the service's page: {error}");
+                eprintln!("agentop-desktop: couldn't allow the service's page: {error}");
             }
         }
         let Some(window) = app.get_webview_window("main") else { return };
@@ -169,10 +169,10 @@ fn start_in_background(app: AppHandle) {
         match url.parse() {
             Ok(parsed) => {
                 if let Err(error) = window.navigate(parsed) {
-                    eprintln!("agentop: couldn't open {url}: {error}");
+                    eprintln!("agentop-desktop: couldn't open {url}: {error}");
                 }
             }
-            Err(error) => eprintln!("agentop: bad service address {url}: {error}"),
+            Err(error) => eprintln!("agentop-desktop: bad service address {url}: {error}"),
         }
     });
 }
@@ -194,12 +194,13 @@ fn main() {
 
     let context = tauri::generate_context!();
     // Wayland's app id, which picks the taskbar icon. GTK takes it from the program name,
-    // the binary's file name unless set; the identifier keeps it the same however the app
-    // is named or launched. Set before GTK starts.
+    // the binary's file name unless set, which an AppImage or a renamed copy changes. Set
+    // before GTK starts.
     #[cfg(target_os = "linux")]
     {
-        glib::set_prgname(Some(context.config().identifier.as_str()));
-        desktop_entry::register(&context.config().identifier);
+        let app_id = context.config().product_name.clone().unwrap_or_else(|| "agentop-desktop".into());
+        glib::set_prgname(Some(app_id.as_str()));
+        desktop_entry::register(&app_id);
     }
 
     let service = Arc::new(Service::new());
@@ -224,7 +225,7 @@ fn main() {
             Ok(())
         })
         .build(context)
-        .expect("failed to start agentop");
+        .expect("failed to start agentop-desktop");
 
     app.run(move |_app, event| {
         if let RunEvent::Exit = event {

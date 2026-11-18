@@ -67,7 +67,7 @@ jobs:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
           releaseName: "agentop-desktop ${{ github.ref_name }}"
-          releaseBody: "The desktop app. It updates itself from here; see docs/setup.md#desktop-app to install it the first time."
+          releaseBody: "agentop-desktop. It updates itself from here; see docs/setup.md#desktop-app to install it the first time."
           releaseDraft: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}

@@ -100,7 +100,7 @@ export function clientName(): string {
   const browser = /Edg\//.test(ua) ? "Edge" : /Firefox\//.test(ua) ? "Firefox" : /Chrome\//.test(ua) ? "Chrome" : /Safari\//.test(ua) ? "Safari" : "Browser";
   const os = /Android/.test(ua) ? "Android" : /iPhone|iPad/.test(ua) ? "iOS" : /Mac OS X/.test(ua) ? "macOS" : /Windows/.test(ua) ? "Windows" : /Linux/.test(ua) ? "Linux" : "";
   const desktop = "__TAURI_INTERNALS__" in window;
-  return desktop ? `agentop desktop${os ? ` on ${os}` : ""}` : `${browser}${os ? ` on ${os}` : ""}`;
+  return desktop ? `agentop-desktop${os ? ` on ${os}` : ""}` : `${browser}${os ? ` on ${os}` : ""}`;
 }
 
 export type ConnectFailure =

@@ -120,20 +120,20 @@ installed as above (the app runs the `agentop` on your login shell's `PATH`, or
 - The service's output goes to `~/.agentop/logs/desktop-serve.log`. If it doesn't
   start, the app says why.
 
-**Linux.** Download `agentop_<version>_amd64.AppImage` from the newest `agentop-desktop`
+**Linux.** Download `agentop-desktop_<version>_amd64.AppImage` from the newest `agentop-desktop`
 release on GitHub, then:
 
 ```bash
-chmod +x agentop_*_amd64.AppImage
-./agentop_*_amd64.AppImage            # needs fuse2 (Arch: pacman -S fuse2), or add --appimage-extract-and-run
+chmod +x agentop-desktop_*_amd64.AppImage
+./agentop-desktop_*_amd64.AppImage            # needs fuse2 (Arch: pacman -S fuse2), or add --appimage-extract-and-run
 ```
 
 Each start writes `~/.local/share/applications/agentop-desktop.desktop` and its icon
 (`~/.local/share/icons/hicolor/512x512/apps/agentop-desktop.png`), launching the copy
 last opened. On Wayland the taskbar takes the icon only from that entry, and shows a
-generic one without it. So it also puts agentop in the app launcher.
+generic one without it. So it also puts agentop-desktop in the app launcher.
 
-**macOS.** Download the `.app` from the same release. It isn't signed yet, so open
+**macOS.** Download `agentop-desktop.app` from the same release. It isn't signed yet, so open
 it the first time with right-click, Open.
 
 **Updates.** When a newer `agentop-desktop` release is out, the header shows **App update**.

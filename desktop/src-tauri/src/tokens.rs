@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-const KEYCHAIN_SERVICE: &str = "agentop";
+const KEYCHAIN_SERVICE: &str = "agentop-desktop";
 
 static FILE_LOCK: Mutex<()> = Mutex::new(());
 
