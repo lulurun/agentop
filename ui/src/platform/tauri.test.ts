@@ -91,7 +91,7 @@ describe("app updates", () => {
     withInfo(INFO);
     check.mockResolvedValue({ version: "0.2.0", downloadAndInstall: vi.fn() });
     const update = await (await platform()).checkAppUpdate!();
-    expect(update).toMatchObject({ version: "0.2.0", required: false, releaseUrl: "https://github.com/lulurun/agentop/releases/tag/desktop-v0.2.0" });
+    expect(update).toMatchObject({ version: "0.2.0", required: false, releaseUrl: "https://github.com/lulurun/agentop/releases/tag/v0.2.0" });
     expect(update?.install).toBeTypeOf("function");
   });
 
@@ -100,7 +100,7 @@ describe("app updates", () => {
     check.mockResolvedValue({ version: "0.2.0", downloadAndInstall: vi.fn() });
     const update = await (await platform()).checkAppUpdate!();
     expect(update?.install).toBeUndefined();
-    expect(update?.releaseUrl).toContain("desktop-v0.2.0");
+    expect(update?.releaseUrl).toContain("v0.2.0");
   });
 
   it("is required for an app from before desktop_info, even offline", async () => {

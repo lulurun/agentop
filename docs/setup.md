@@ -120,7 +120,7 @@ installed as above (the app runs the `agentop` on your login shell's `PATH`, or
 - The service's output goes to `~/.agentop/logs/desktop-serve.log`. If it doesn't
   start, the app says why.
 
-**Linux.** Download `agentop_<version>_amd64.AppImage` from the newest `desktop-v*`
+**Linux.** Download `agentop_<version>_amd64.AppImage` from the newest `agentop-desktop`
 release on GitHub, then:
 
 ```bash
@@ -136,7 +136,7 @@ generic one without it. So it also puts agentop in the app launcher.
 **macOS.** Download the `.app` from the same release. It isn't signed yet, so open
 it the first time with right-click, Open.
 
-**Updates.** When a newer `desktop-v*` release is out, the header shows **App update**.
+**Updates.** When a newer `agentop-desktop` release is out, the header shows **App update**.
 Clicking it installs the update and restarts the app; sessions keep running. A copy
 built by hand can't replace itself, so there the button opens the release page.
 
@@ -161,12 +161,11 @@ Linux with no secret service running, it keeps them in `~/.agentop/state/desktop
 |--------|------|
 | `scripts/build-ui.sh [--clean]` | Builds the web UI into `src/agentop/service/webdist/`, which the service serves. `--clean` reinstalls `node_modules` |
 | `scripts/build-app.sh [--appimage]` | `build-ui.sh`, then the desktop app |
-| `scripts/release-ui.sh 1.0.0` | Releases the service and UI as `v1.0.0`: sets `pyproject.toml`'s version, commits, tags, and pushes after asking. The `release` workflow publishes the GitHub release |
-| `scripts/release-app.sh 0.2.0` | Releases the desktop app as `desktop-v0.2.0`: sets the version in `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. The `desktop` workflow builds, signs, and publishes it, and installed apps offer the update |
+| `scripts/release.sh 1.2.0` | Releases agentop as `v1.2.0`: sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. The `desktop` workflow builds, signs, and publishes the release `agentop-desktop v1.2.0`, and installed apps offer the update |
 
-The release scripts run only on `main`, clean and level with `origin/main`, and build
-first, so nothing is tagged that doesn't build. An app release doesn't include the
-UI, which ships with the service; `release-app.sh` builds it only as a check.
+The script runs only on `main`, clean and level with `origin/main`, and builds the UI
+and the app first, so nothing is tagged that doesn't build. The tag is also what
+services set to `update_from = "release"` update to; others follow `main`.
 
 The `desktop` workflow needs the repository secret `TAURI_SIGNING_PRIVATE_KEY`, the
 private half of the updater key whose public half is in `tauri.conf.json`.

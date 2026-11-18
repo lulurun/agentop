@@ -264,11 +264,11 @@ Status: the wrapper is built and its tests pass, including starting and stopping
 - [x] Show the service's page once it answers, signed in from `service.json`; a bundled start page until then, saying why if it doesn't start.
 - [x] Declare the commands in `build.rs`; grant the service's exact origin a capability at run time; nothing for any other origin.
 - [x] Start from the "stopped" view, for this computer's service only.
-- [x] Updater: `tauri-plugin-updater` with a signing key, `latest.json` from the `desktop-latest` release, **App update** in the header, release-page link where the app can't replace itself, `native_api` for a UI that needs a newer wrapper.
+- [x] Updater: `tauri-plugin-updater` with a signing key, `latest.json` from `releases/latest`, **App update** in the header, release-page link where the app can't replace itself, `native_api` for a UI that needs a newer wrapper.
 - [x] Linux as an AppImage only (`npm run package`); `WEBKIT_DISABLE_DMABUF_RENDERER=1` set by the app only with NVIDIA's driver loaded (set everywhere, it made the terminal slow on AMD).
-- [x] `.github/workflows/desktop.yml`: AppImage and macOS universal `.app` on a `desktop-v*` tag, signed, with `latest.json` copied to `desktop-latest`.
+- [x] `.github/workflows/desktop.yml`: AppImage and macOS universal `.app` on a `v*` tag, signed, with `latest.json` on the release.
 - [ ] Add the updater's private key (`~/.tauri/agentop-desktop.key` on the machine that made it) as the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and back it up.
-- [ ] Push the first `desktop-v0.1.0` tag and check the release, and that an installed app finds `desktop-v0.1.1`.
+- [ ] Check the `v1.1.1` release, and that an installed app finds `v1.1.2`.
 - [ ] Apply the S2 outcome and the S1 renderer default, once those are known.
 
 **Done when:**
@@ -276,7 +276,7 @@ Status: the wrapper is built and its tests pass, including starting and stopping
 - Opening the app with no service running starts one and shows it signed in; closing the app stops it and every session keeps running.
 - Opening the app with a service already running (unit or by hand) uses it, and closing the app leaves it running.
 - Running both side by side, the desktop app and web app show the same state, with the same features, apart from the items in design 8.3.
-- An installed AppImage updates itself from a newer `desktop-v*` release, and the sessions survive it.
+- An installed AppImage updates itself from a newer `agentop-desktop` release, and the sessions survive it.
 - Services reached by `ssh -L`, LAN address, and HTTPS proxy all connect, and the app can switch among them.
 - The S1 tests pass in the final build, including Japanese input.
 
@@ -333,7 +333,7 @@ Not scheduled. Service-side features are built as plugins (design section 12); d
 
 ### 9.5 Desktop app installs its own agentop
 
-Agreed 2026-11-18, not built. The desktop app stays a thin wrapper and the only release artifact (`desktop-v*`); nothing is added to `v*` releases. On first run it sets up its own copy of agentop, then starts, stops and updates that copy. For a PC (macOS first) with nothing installed beyond the runtimes.
+Agreed 2026-11-18, not built. The desktop app stays a thin wrapper and the only release artifact (`agentop-desktop`, published for each `v*` tag). On first run it sets up its own copy of agentop, then starts, stops and updates that copy. For a PC (macOS first) with nothing installed beyond the runtimes.
 
 - [ ] **Where things live.** `~/.agentop-desktop/` holds only the code: a git checkout at the newest `v*` tag, and a venv. Sessions, Memory and config stay in `~/.agentop/`, shared with the CLI.
 - [ ] **The setup screen.** An interactive page the app shows until every step passes. Each step shows ✓ or ✗, with a one-line fix and a Check again button. A step runs only once the ones before it pass:
@@ -344,5 +344,5 @@ Agreed 2026-11-18, not built. The desktop app stays a thin wrapper and the only 
   5. **Build the UI.** `npm ci` and the build into `src/agentop/service/webdist/`, as `scripts/build-ui.sh` does.
   6. **All PASS.** A final message, then the app starts the service from the venv and opens it.
 - [ ] **Starting.** The app runs `~/.agentop-desktop/venv/bin/agentop serve --update-from release`, not whatever is first on PATH. If a service already answers on the port (one started by hand, or a systemd unit), the app uses it, as today, and the screen says which copy is running.
-- [ ] **Updates.** Only when a newer `v*` tag is out. The app starts its copy with `agentop serve --update-from release` (built 2026-11-18, design 8.5), so the service's own Update checks out that tag, installs, builds the UI, restarts, and goes back to the old tag if the new version doesn't come up. Following `main` stays the default for any other install, such as the devhost. The app shell needs a new `desktop-v*` release only when the wrapper itself changes.
+- [ ] **Updates.** Only when a newer `v*` tag is out. The app starts its copy with `agentop serve --update-from release` (built 2026-11-18, design 8.5), so the service's own Update checks out that tag, installs, builds the UI, restarts, and goes back to the old tag if the new version doesn't come up. Following `main` stays the default for any other install, such as the devhost. Each `v*` tag also publishes a new app build (design 8.5).
 - Not decided: whether the check from the agents' side should also ask each tool to run `agentop --version` (slow, and costs a model call).

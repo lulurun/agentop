@@ -32,8 +32,8 @@ src/agentop/
   plugins/               attention/, dialogue/, email-code/, input/, memory/, viewer/: one folder per plugin
 ui/                      The app: React and TypeScript, built by Vite; ui/src/plugins/ holds plugin UIs
 desktop/                 The Tauri desktop app: runs this computer's service, shows its UI
-scripts/                 Build and release: build-ui.sh, build-app.sh, release-ui.sh, release-app.sh
-.github/workflows/       release.yml (v* tags), desktop.yml (desktop-v* tags)
+scripts/                 Build and release: build-ui.sh, build-app.sh, release.sh
+.github/workflows/       desktop.yml (v* tags: builds and publishes agentop-desktop)
 ```
 
 ### Core and plugins

@@ -1,19 +1,17 @@
 # Builds the desktop app for Linux (AppImage) and macOS (the wrapper only: the
 # UI comes from the service; no Windows, which has no tmux to run a service), and
-# publishes it as a GitHub release when a desktop-v* tag is pushed, for example:
+# publishes it as the agentop-desktop release when scripts/release.sh pushes a v* tag.
 #
-#   git tag desktop-v0.2.0 && git push origin desktop-v0.2.0
-#
-# The tag must match "version" in desktop/src-tauri/tauri.conf.json. Each build
-# is signed with the updater key (secret TAURI_SIGNING_PRIVATE_KEY, and
-# TAURI_SIGNING_PRIVATE_KEY_PASSWORD if it has one). Installed apps read
-# latest.json from the fixed "desktop-latest" release, which the last job points
-# at this release. See docs/design.md sections 4.2 and 8.5.
+# The tag must match the version in pyproject.toml and tauri.conf.json. Each build is
+# signed with the updater key (secret TAURI_SIGNING_PRIVATE_KEY, and
+# TAURI_SIGNING_PRIVATE_KEY_PASSWORD if it has one). Installed apps read latest.json
+# from releases/latest, which is always this app: it is the only release. See
+# docs/design.md sections 4.2 and 8.5.
 name: desktop
 
 on:
   push:
-    tags: ["desktop-v*"]
+    tags: ["v*"]
 
 permissions:
   contents: write
@@ -32,11 +30,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check the tag matches the app's version
+      - name: Check the tag matches the versions
         shell: bash
         run: |
-          version=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
-          [[ "desktop-v$version" == "$GITHUB_REF_NAME" ]] || { echo "Tag $GITHUB_REF_NAME, but tauri.conf.json says $version"; exit 1; }
+          app=$(node -p "require('./desktop/src-tauri/tauri.conf.json').version")
+          service=$(sed -nE 's/^version = "(.*)"/\1/p' pyproject.toml | head -1)
+          [[ "v$app" == "$GITHUB_REF_NAME" && "v$service" == "$GITHUB_REF_NAME" ]] || { echo "Tag $GITHUB_REF_NAME, but tauri.conf.json says $app and pyproject.toml $service"; exit 1; }
 
       - name: Linux build dependencies
         if: runner.os == 'Linux'
@@ -67,26 +66,8 @@ jobs:
         with:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
-          releaseName: "agentop desktop ${{ github.ref_name }}"
+          releaseName: "agentop-desktop ${{ github.ref_name }}"
           releaseBody: "The desktop app. It updates itself from here; see docs/setup.md#desktop-app to install it the first time."
           releaseDraft: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
-
-  point-latest:
-    # Installed apps check one fixed address, which "releases/latest" can't be: the
-    # newest release may be a service release.
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Copy latest.json to the desktop-latest release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-        run: |
-          gh release download "$GITHUB_REF_NAME" --pattern latest.json
-          gh release view desktop-latest >/dev/null 2>&1 || \
-            gh release create desktop-latest --title "Desktop app: update feed" \
-              --notes "Not a release. Holds latest.json, which installed apps read to find the newest desktop-v* release." \
-              --latest=false
-          gh release upload desktop-latest latest.json --clobber

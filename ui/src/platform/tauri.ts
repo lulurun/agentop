@@ -126,7 +126,7 @@ export const tauriPlatform: Platform = {
       // No network, no release yet, or an app from before the updater.
     }
     if (!found && !required) return null;
-    const releaseUrl = found ? `${info.releases_url}/tag/desktop-v${found.version}` : info.releases_url;
+    const releaseUrl = found ? `${info.releases_url}/tag/v${found.version}` : info.releases_url;
     const update = found;
     return {
       version: found?.version ?? "",

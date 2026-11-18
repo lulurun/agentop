@@ -466,19 +466,14 @@ Update needs a git checkout, not systemd. It must outlive the service it restart
 
 ### 8.5 Releases and the update indicator (2026-11-16)
 
-agentop has releases on GitHub, in two series. Until 2026-11-16 there were none.
+agentop has one release series on GitHub: `v*` tags, such as `v1.1.1`, made by `scripts/release.sh`. A tag marks the code, and `.github/workflows/desktop.yml` publishes the desktop app built from it as the release **agentop-desktop v1.1.1**: AppImage (Linux), `.app` (macOS). The app is the only thing to download. The service has no release of its own: it updates from the tags, or from `main` (below). Before 2026-11-18 there were two series, `desktop-v*` for the app and `v*` for the service; those releases were deleted, and the `v1.0.0` and `v1.1.0` tags kept.
 
-| Tag | What it releases | Built by |
-|-----|------------------|----------|
-| `desktop-v*`, such as `desktop-v0.2.0` | The desktop wrapper: AppImage (Linux), `.app` (macOS) | `scripts/release-app.sh` tags it; `.github/workflows/desktop.yml` builds and publishes it |
-| `v*`, such as `v1.0.0` | The service and its UI, as tagged source | `scripts/release-ui.sh` tags it; `.github/workflows/release.yml` checks the UI builds and publishes the release. No service updates from it yet (below) |
-
-The wrapper has its own version (`version` in `desktop/src-tauri/tauri.conf.json`, which the tag must match), so that a service release doesn't ask anyone to reinstall the app.
+The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.conf.json` and `Cargo.toml`, which the script sets together. A release whose wrapper didn't change still ships a new app build; the updater then replaces it with an identical wrapper, which costs a restart.
 
 **The wrapper updates itself** with Tauri's updater (`tauri-plugin-updater`).
 
 - CI signs each build with the updater key and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. A lost key means every installed app has to be reinstalled by hand, so it is kept backed up.
-- Installed apps read `latest.json` from one fixed address: the `desktop-latest` release, whose `latest.json` the workflow replaces each time. Not `releases/latest`, which is whichever release is newest, often a service release.
+- Installed apps read `latest.json` from `releases/latest`, which is always the newest app, since the app is the only release. An app from before 2026-11-18 reads the deleted `desktop-latest` release instead, and has to be reinstalled by hand once.
 - The UI asks the platform layer (10.6) on load and every 6 hours. With an update, the header shows **App update**. Clicking it downloads the update, checks its signature, replaces the app, and restarts it. The new copy finds the service still running and adopts it (4.2). Sessions carry on, and the new window reconnects to them.
 - Where the app can't replace itself, the button opens the release page instead: a development build, a Linux build that isn't the AppImage, or a failed install.
 - The UI comes from the service, so it can be newer than the wrapper. The wrapper reports `native_api`, the revision of its commands (`desktop_info`). When the UI needs a higher one, the button says **App update needed**. An app from before `desktop_info` counts as revision 0.
@@ -489,7 +484,7 @@ The wrapper has its own version (`version` in `desktop/src-tauri/tauri.conf.json
 
 **Windows** isn't built. The service needs tmux, so a Windows app would have to run the service in WSL (plan 9.4).
 
-**Service and UI from releases (update built 2026-11-18; the header's Update not yet).** A service, and with it the UI, can follow `v*` releases instead of `main`: `update_from = "release"` in `config.toml`, or `agentop serve --update-from release`. Update then checks out the newest `vX.Y.Z` tag, never a pre-release such as `v2.0.0-rc1`, and only when it is newer than what runs. The service checks GitHub for the newest `v*` release, and the header shows **Update** when there is one, in both clients. One click checks out the release, installs it, builds the UI, restarts the service, and reloads the page, using the steps in 8.4. Following `main` stays the default, so a server such as the devhost needs no setting; the desktop app starts its own copy with `--update-from release` (plan 9.5). An update never goes backwards: an install already ahead of the newest tag, such as a `main` checkout switched to releases, waits for a newer one.
+**Service and UI from releases (update built 2026-11-18; the header's Update not yet).** A service, and with it the UI, can follow `v*` releases instead of `main`: `update_from = "release"` in `config.toml`, or `agentop serve --update-from release`. Update then checks out the newest `vX.Y.Z` tag, never a pre-release such as `v2.0.0-rc1`, and only when it is newer than what runs. The service fetches the tags from the git remote, and the header shows **Update** when there is one, in both clients. One click checks out the release, installs it, builds the UI, restarts the service, and reloads the page, using the steps in 8.4. Following `main` stays the default, so a server such as the devhost needs no setting; the desktop app starts its own copy with `--update-from release` (plan 9.5). An update never goes backwards: an install already ahead of the newest tag, such as a `main` checkout switched to releases, waits for a newer one.
 
 Any client can now talk to a service of a different version, including the web app when it connects to another host. Within `/api/v2` every change is an addition, and `api_version` in `/service` tells an older client to update (4.5). `/health` stays `{"status": "ok"}`, and `/service` and `/admin/update` must stay compatible across versions, so that an older service can always be updated from a newer client. A service from before `/admin` has these actions under `/service/`, and the client falls back to them on a 404.
 
