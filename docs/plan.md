@@ -327,6 +327,22 @@ Not scheduled. Service-side features are built as plugins (design section 12); d
 - Service and UI updates from `v*` GitHub releases, with one **Update** in the header of both clients (design 8.5). Agreed 2026-11-16, not built.
 - A Windows desktop app, running the service in WSL.
 - Signing and notarizing the macOS app.
-- First-run install of `agentop` from the desktop app, so a PC needs nothing installed beforehand.
+- First-run install of `agentop` from the desktop app: section 9.5.
 - macOS host support through `LaunchdManager`.
 - Non-git install kinds for `agentop service update`.
+
+### 9.5 Desktop app installs its own agentop
+
+Agreed 2026-11-18, not built. The desktop app stays a thin wrapper and the only release artifact (`desktop-v*`); nothing is added to `v*` releases. On first run it sets up its own copy of agentop, then starts, stops and updates that copy. For a PC (macOS first) with nothing installed beyond the runtimes.
+
+- [ ] **Where things live.** `~/.agentop-desktop/` holds only the code: a git checkout of `main` and a venv. Sessions, Memory and config stay in `~/.agentop/`, shared with the CLI.
+- [ ] **The setup screen.** An interactive page the app shows until every step passes. Each step shows ✓ or ✗, with a one-line fix and a Check again button. A step runs only once the ones before it pass:
+  1. **Dependencies.** Python ≥ 3.13, Node ≥ 22 with npm, git, tmux. The app doesn't install them: Homebrew, pyenv, mise, nvm and the rest are the user's choice, and some need root. Each is found through the login shell (`$SHELL -ilc`), as the app finds `agentop` today, so version managers work. The agent tools (claude, codex, agy) are listed too, as a warning only.
+  2. **Install.** `git clone` of `main` into `~/.agentop-desktop/agentop`, `python3 -m venv ~/.agentop-desktop/venv`, and `pip install` of the checkout into it. Progress goes to a log the screen can show.
+  3. **`agentop` on PATH.** A link `~/.local/bin/agentop` → `~/.agentop-desktop/venv/bin/agentop`. On macOS `~/.local/bin` isn't on PATH by default: the screen says so and offers to add it to the shell's profile (`~/.zprofile` for zsh), showing the line it adds.
+  4. **`agentop` reachable from both sides.** From the wrapper, through the login shell. From the agents, in a tmux pane started the way agentop starts sessions (the shell the agent tools inherit), so the `handoff` and `recall` skills can run `agentop send` and `agentop recall`. Both must resolve to the app's copy: another `agentop` earlier on PATH, such as a dev checkout, is reported, not silently used.
+  5. **Build the UI.** `npm ci` and the build into `src/agentop/service/webdist/`, as `scripts/build-ui.sh` does.
+  6. **All PASS.** A final message, then the app starts the service from the venv and opens it.
+- [ ] **Starting.** The app runs `~/.agentop-desktop/venv/bin/agentop serve`, not whatever is first on PATH. If a service already answers on the port (one started by hand, or a systemd unit), the app uses it, as today, and the screen says which copy is running.
+- [ ] **Updates.** The service's own Update (`agentop service update`: pull `main`, install, build, restart, and go back if the new version doesn't come up) already works for a git checkout started by `agentop serve`, so the app's copy updates that way. The app shell needs a new `desktop-v*` release only when the wrapper itself changes.
+- Not decided: whether to also offer following `v*` tags instead of `main`, and whether the check from the agents' side should also ask each tool to run `agentop --version` (slow, and costs a model call).
