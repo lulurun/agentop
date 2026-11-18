@@ -17,13 +17,13 @@ from pathlib import Path
 
 from agentop import ops as agent_ops
 from agentop.agentclis import get_agent
+from agentop.results import OpsError
 from agentop.tmux import Session
 
 from . import scenarios
 from .model import FINISHED, DialogueMeta, dialogues_dir
 from .scenarios.reader import load as load_scenario
 from .status import DialogueStatus
-
 
 OWNER = "dialogue"  # the plugin's sessions: hidden from the session list, watched read-only
 # The agents' windows keep this size whoever watches them. The orchestrator finds each
@@ -94,14 +94,18 @@ def launch_dialogue(meta: DialogueMeta) -> dict:
         return {"ok": False, "error": message, "id": meta.id}
 
     for side, tool in (("a", meta.agent_a), ("b", meta.agent_b)):
-        result = agent_ops.start(tool, cwd, short_name=f"{short}{side}", params=dialogue_params, owner=OWNER)
-        if result.get("name"):
-            started.append(result["name"])
-            Session.fix_size(result["name"], *WINDOW_SIZE)
-            if _wanted(meta, {f"session_{side}": result["name"]}) is None:
+        try:
+            name = agent_ops.start(tool, cwd, short_name=f"{short}{side}", params=dialogue_params, owner=OWNER).name
+            error = None
+        except OpsError as exc:
+            name, error = getattr(exc, "name", None), str(exc)
+        if name:
+            started.append(name)
+            Session.fix_size(name, *WINDOW_SIZE)
+            if _wanted(meta, {f"session_{side}": name}) is None:
                 return give_up("The dialogue was stopped before it started", None)
-        if not result.get("ok"):
-            return give_up(f"Failed to start agent {side.upper()} ({tool}): {result.get('error')}")
+        if error:
+            return give_up(f"Failed to start agent {side.upper()} ({tool}): {error}")
 
     # Give the tools time to start up, or the turn-1 prompt lands before the
     # input is ready and the brief is silently dropped.

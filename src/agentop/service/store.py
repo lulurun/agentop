@@ -14,10 +14,12 @@ import logging
 import os
 import re
 import time
+from dataclasses import asdict
 
 import psutil
 
 from agentop import ops, registry
+from agentop.results import OpsError
 from agentop.tmux import Session
 
 LOG = logging.getLogger(__name__)
@@ -423,22 +425,24 @@ class SessionStore:
 
         try:
             if resume_id is None:
-                result = await asyncio.to_thread(
+                await asyncio.to_thread(
                     ops.start, tool, cwd, short_name, None, session_id, on_progress
                 )
             else:
-                result = await asyncio.to_thread(
+                await asyncio.to_thread(
                     ops.resume_session, tool, resume_id, cwd, short_name, session_id, on_progress
                 )
+            error = None
+        except OpsError as exc:
+            error = str(exc) or "Failed to start"
         except Exception as exc:
             LOG.exception("Start of %s failed", session_id)
-            result = {"ok": False, "error": str(exc)}
+            error = str(exc) or "Failed to start"
 
-        if display_name and result.get("name"):
+        if display_name:
             # ops records the short name as the display name.
             await asyncio.to_thread(registry.upsert_session, session_id, {"display_name": display_name})
-        if not result.get("ok"):
-            error = result.get("error") or "Failed to start"
+        if error:
             await asyncio.to_thread(
                 registry.upsert_session, session_id, {"status": "failed", "step": None, "error": error}
             )
@@ -461,11 +465,12 @@ class SessionStore:
             raise StoreError(409, "Session is still starting")
         if row["status"] != "running":
             return await self.close(session_id)
-        result = await asyncio.to_thread(ops.stop, session_id, self.last_scan)
-        if not result.get("ok"):
-            raise StoreError(500, result.get("error") or "Failed to stop session")
+        try:
+            result = await asyncio.to_thread(ops.stop, session_id, self.last_scan)
+        except OpsError as exc:
+            raise StoreError(500, str(exc)) from exc
         await self.refresh()
-        return result
+        return {"ok": True, **asdict(result)}
 
     async def close(self, session_id: str) -> dict:
         """Dismiss a session whose agent is not running, closing its tmux session if any."""

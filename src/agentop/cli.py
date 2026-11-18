@@ -102,16 +102,18 @@ def cmd_list(args):
 def cmd_start(args):
     cwd = os.path.expanduser(args.cwd)
     print(f"Starting {args.tool} session '{args.session_name}' in {cwd} …")
-    result = _ops().start(args.tool, cwd, args.session_name)
-    if not result.get("ok"):
-        print(f"Error: {result.get('error', 'Failed to start session')}", file=sys.stderr)
-        if result.get("name"):
-            print(f"The tmux session was kept: tmux attach-session -t {result['name']}", file=sys.stderr)
+    from agentop.results import OpsError, StartFailed
+
+    try:
+        result = _ops().start(args.tool, cwd, args.session_name)
+    except OpsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        if isinstance(exc, StartFailed) and exc.name:
+            print(f"The tmux session was kept: tmux attach-session -t {exc.name}", file=sys.stderr)
         sys.exit(1)
-    name = result["name"]
+    name = result.name
     print(f"Started:  {name}")
-    if result.get("pid"):
-        print(f"  PID:    {result['pid']}")
+    print(f"  PID:    {result.pid}")
     print(f"  Tool:   {args.tool}")
     print(f"  CWD:    {cwd}")
     print(f"  Attach: tmux attach-session -t {name}")
@@ -144,18 +146,21 @@ def cmd_history(args):
 
 
 def cmd_stop(args):
-    result = _ops().stop(args.name)
-    if not result.get("ok"):
-        print(f"Error: {result['error']}", file=sys.stderr)
-        if "not found" in result["error"].lower():
+    from agentop.results import OpsError
+
+    try:
+        result = _ops().stop(args.name)
+    except OpsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        if "not found" in str(exc).lower():
             print("Run 'agentop list' to see available sessions.", file=sys.stderr)
         sys.exit(1)
     print(f"Stopping '{args.name}' …")
-    if result.get("sent_exit"):
+    if result.sent_exit:
         print("  Sent /exit to agent.")
-    if result.get("forced"):
+    if result.forced:
         print("  The agent didn't exit in time, so its tmux session was killed.")
-    elif result.get("tmux_killed"):
+    elif result.tmux_killed:
         print("  Tmux session killed.")
     print("Done.")
 
@@ -167,14 +172,17 @@ def cmd_send(args):
     sender = Session.current()
     if sender and not args.no_header:
         text = f"[agentop send from {sender}]\n{text.strip()}"
-    result = _ops().send(args.target, text)
-    if not result.get("ok"):
-        print(f"Error: {result['error']}", file=sys.stderr)
-        if not result.get("matches"):
+    from agentop.results import OpsError
+
+    try:
+        sent = _ops().send(args.target, text)
+    except OpsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        if not exc.matches:
             print("Run 'agentop list' to see the active sessions.", file=sys.stderr)
         sys.exit(1)
-    print(f"Sent to {result['name']}.")
-    print(f"  Watch:  tmux attach-session -t {result['tmux']}")
+    print(f"Sent to {sent.name}.")
+    print(f"  Watch:  tmux attach-session -t {sent.tmux}")
 
 
 # ---------------------------------------------------------------------------

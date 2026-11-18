@@ -9,6 +9,7 @@ import psutil
 
 from agentop.actor import Actor
 from agentop.agentclis.base import AgentCli
+from agentop.results import StopResult
 from agentop.tmux import Session
 
 # Ctrl-C clears what's typed in the agent's input (and interrupts a running
@@ -34,12 +35,8 @@ class AgentInstance:
         """Send a raw operational command to the agent process (e.g. /exit)."""
         Session.send_keys(self.session, text, "Enter")
 
-    def stop(self) -> dict:
-        """Ask the agent to quit, wait for it to exit, then kill the tmux session.
-
-        Returns {"sent_exit", "exited", "forced", "tmux_killed"}. "forced" means the
-        agent was still running when the session was killed.
-        """
+    def stop(self) -> StopResult:
+        """Ask the agent to quit, wait for it to exit, then kill the tmux session."""
         sent_exit = False
         exited = True
         if Session.has(self.session) and self.agent_running():
@@ -55,7 +52,7 @@ class AgentInstance:
             Session.kill(self.session)
             tmux_killed = True
 
-        return {"sent_exit": sent_exit, "exited": exited, "forced": not exited, "tmux_killed": tmux_killed}
+        return StopResult(sent_exit=sent_exit, exited=exited, forced=not exited, tmux_killed=tmux_killed)
 
     def agent_running(self) -> bool:
         """True while the shell in the session's pane still has a live child: the agent."""

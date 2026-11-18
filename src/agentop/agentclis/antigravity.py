@@ -12,6 +12,7 @@ import psutil
 
 from agentop.agentclis.base import AgentCli
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines
+from agentop.results import SavedSession, saved_session
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
 # One folder per conversation. Conversations from before the rename to
@@ -206,7 +207,7 @@ class AntigravityAgentCli(AgentCli):
             return None, []
         return folder, sorted(p for p in folder.rglob("*") if p.is_file())
 
-    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+    def get_saved_sessions(self, limit: int = 20) -> list[SavedSession]:
         """Return saved antigravity sessions from the brain transcript directory."""
         brain_dir = self.transcripts_root()
         if not brain_dir.exists():
@@ -235,15 +236,7 @@ class AntigravityAgentCli(AgentCli):
                             break
             except OSError:
                 continue
-            sessions.append(
-                {
-                    "session_id": session_id,
-                    "title": title,
-                    "cwd": cwd_map.get(session_id, ""),
-                    "tool": self.name,
-                    "last_active": transcript.stat().st_mtime,
-                }
-            )
+            sessions.append(saved_session(self.name, session_id, title, cwd_map.get(session_id), transcript.stat().st_mtime))
         sessions.sort(key=lambda x: x["last_active"], reverse=True)
         return sessions[:limit]
 

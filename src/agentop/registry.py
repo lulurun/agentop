@@ -111,19 +111,6 @@ def remove_session(name: str):
             save(data)
 
 
-def set_description(name: str, description: str | None):
-    with _exclusive():
-        data = _load_for_update()
-        if name not in data["sessions"]:
-            return False
-        if description:
-            data["sessions"][name]["description"] = description
-        else:
-            data["sessions"][name].pop("description", None)
-        save(data)
-        return True
-
-
 def mark_ended_and_prune(live_names: set[str], now: float | None = None, retention: float | None = None) -> list[str]:
     """Stamp records whose tmux session is gone, and drop those that have been gone too long.
 

@@ -31,6 +31,7 @@ from fastapi.responses import JSONResponse
 
 from agentop import agentclis, history, ops, registry
 from agentop.agentclis import AGENTS
+from agentop.results import OpsError
 from agentop.tmux import Session
 
 from . import API_VERSION, auth, files, manager, terminal, transcripts, update
@@ -447,11 +448,12 @@ def create_v2_app(ctx: Context) -> FastAPI:
     @v2.delete("/history/{history_id}", dependencies=authed)
     async def delete_history(history_id: str):
         item = await past_session(history_id)
-        result = await asyncio.to_thread(ops.delete_saved_session, item["tool"], item["session_id"])
-        if not result["ok"]:
-            raise HTTPException(400, result["error"])
+        try:
+            await asyncio.to_thread(ops.delete_saved_session, item["tool"], item["session_id"])
+        except OpsError as exc:
+            raise HTTPException(400, str(exc)) from exc
         await asyncio.to_thread(registry.remove_agent_session, item["tool"], item["session_id"])
-        return result
+        return {"ok": True}
 
     async def _reject(ws: WebSocket, code: int) -> None:
         # Accept first: a browser cannot see a close code from a refused handshake.

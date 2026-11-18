@@ -22,6 +22,7 @@ from typing import Callable, Optional
 import psutil
 
 from agentop.conversation import Reader
+from agentop.results import SavedSession, StartFailed, StartResult
 from agentop.tmux import CapturePane, Session
 
 ProgressCallback = Callable[[str], None]
@@ -212,15 +213,16 @@ class AgentCli:
         params: dict | None = None,
         name: str | None = None,
         on_progress: ProgressCallback | None = None,
-    ) -> dict:
-        """Create a tmux session, run cmd in its shell, and wait for the agent process.
+        agent_session_id: str | None = None,
+    ) -> StartResult:
+        """Create a tmux session, run cmd in its shell, and wait for the agent process. Raises StartFailed.
 
         The command is typed into the pane rather than passed to new-session
         so that it runs with the user's shell setup, which the service's
         environment does not have.
 
         On failure the tmux session is left in place when it exists, and its
-        name is in the result, so the error stays visible on its screen.
+        name is in the error, so the error stays visible on its screen.
         """
         progress = on_progress or (lambda step: None)
         if params:
@@ -229,7 +231,7 @@ class AgentCli:
 
         progress("creating")
         if not Session.new(name, cwd):
-            return {"ok": False, "error": "tmux new-session failed"}
+            raise StartFailed("tmux new-session failed")
         if self.mouse:
             Session.set_option(name, "mouse", "on")
 
@@ -246,11 +248,11 @@ class AgentCli:
             if tool_pid:
                 break
             if self._launch_failed(name, cmd):
-                return self._start_failed(name, f"{cmd.split()[0]} is not installed, or not on the shell's PATH")
+                raise StartFailed(f"{cmd.split()[0]} is not installed, or not on the shell's PATH", name)
             time.sleep(0.25)
 
         if not tool_pid:
-            return self._start_failed(name, f"{self.name} did not start within {self.start_timeout:g}s")
+            raise StartFailed(f"{self.name} did not start within {self.start_timeout:g}s", name)
 
         progress("confirming")
         self.post_start_hook(name)
@@ -259,11 +261,7 @@ class AgentCli:
             started = psutil.Process(tool_pid).create_time()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             started = None
-        return {"ok": True, "name": name, "pid": tool_pid, "agent_started": started, "tmux_session": name}
-
-    @staticmethod
-    def _start_failed(name: str, error: str) -> dict:
-        return {"ok": False, "error": error, "name": name, "tmux_session": name}
+        return StartResult(name, tool_pid, started, agent_session_id)
 
     def start_session(
         self,
@@ -272,18 +270,15 @@ class AgentCli:
         params: dict | None = None,
         name: str | None = None,
         on_progress: ProgressCallback | None = None,
-    ) -> dict:
-        """Create a tmux session and launch the agent.
+    ) -> StartResult:
+        """Create a tmux session and launch the agent. Raises StartFailed.
 
         A tool that takes a session ID at launch is given one, and the result
         has it as `agent_session_id`, so the session is known as agentop's from the start.
         """
         session_id = self.new_session_id()
         cmd = self.start_cmd(session_id) if session_id else self.launch_cmd
-        result = self._run_in_tmux(cmd, cwd, short_name, params, name, on_progress)
-        if session_id:
-            result["agent_session_id"] = session_id
-        return result
+        return self._run_in_tmux(cmd, cwd, short_name, params, name, on_progress, session_id)
 
     def resume_session(
         self,
@@ -292,13 +287,12 @@ class AgentCli:
         short_name: str = "",
         name: str | None = None,
         on_progress: ProgressCallback | None = None,
-    ) -> dict:
+    ) -> StartResult:
+        """Raises StartFailed."""
         cmd = self.get_resume_cmd(session_id)
         if not cmd:
-            return {"ok": False, "error": f"{self.name} does not support session resume"}
-        result = self._run_in_tmux(cmd, cwd, short_name, name=name, on_progress=on_progress)
-        result["agent_session_id"] = session_id
-        return result
+            raise StartFailed(f"{self.name} does not support session resume")
+        return self._run_in_tmux(cmd, cwd, short_name, name=name, on_progress=on_progress, agent_session_id=session_id)
 
     # ------------------------------------------------------------------ the tool's own session ID
 
@@ -318,7 +312,7 @@ class AgentCli:
 
     # ------------------------------------------------------------------ saved sessions
 
-    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+    def get_saved_sessions(self, limit: int = 20) -> list[SavedSession]:
         """Return a list of saved/historical sessions that can be resumed."""
         return []
 

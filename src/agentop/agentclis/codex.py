@@ -14,6 +14,7 @@ import psutil
 
 from agentop.agentclis.base import AgentCli, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
+from agentop.results import SavedSession, StartResult, saved_session
 from agentop.tmux import Session
 
 _HOME = Path("~/.codex")
@@ -146,7 +147,7 @@ class CodexAgentCli(AgentCli):
         time.sleep(_BASE_SETTLE_SECONDS + _SETTLE_SECONDS_PER_KB * (len(text) / 1024))
         Session.send_keys(session, "Enter")
 
-    def start_session(self, cwd: str, short_name: str = "", params: dict | None = None, **kwargs) -> dict:
+    def start_session(self, cwd: str, short_name: str = "", params: dict | None = None, **kwargs) -> StartResult:
         """Pre-trust cwd before launching, otherwise codex's first-run 'Do you
         trust the contents of this directory?' prompt eats whatever gets typed
         next (e.g. a dialogue orchestrator's opening prompt, sent unattended).
@@ -370,7 +371,7 @@ class CodexAgentCli(AgentCli):
             return None, []
         return (found[0].parent if len(found) == 1 else base), found
 
-    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+    def get_saved_sessions(self, limit: int = 20) -> list[SavedSession]:
         db_path = (_HOME / "state_5.sqlite").expanduser()
         if not db_path.exists():
             return []
@@ -393,15 +394,8 @@ class CodexAgentCli(AgentCli):
         for row in rows:
             title = row["title"] or row["first_user_message"] or None
             ts_ms = row["updated_at_ms"] or row["created_at_ms"] or 0
-            result.append(
-                {
-                    "session_id": row["id"],
-                    "title": title[:80] + ("…" if title and len(title) > 80 else "") if title else None,
-                    "cwd": row["cwd"] or "",
-                    "tool": self.name,
-                    "last_active": ts_ms / 1000,
-                }
-            )
+            title = title[:80] + ("…" if len(title) > 80 else "") if title else None
+            result.append(saved_session(self.name, row["id"], title, row["cwd"], ts_ms / 1000))
         return result
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:

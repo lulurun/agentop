@@ -397,7 +397,7 @@ def test_killed_tmux_session_disappears_and_tells_the_terminal(service):
 def test_session_created_outside_the_service_appears(service):
     from agentop import ops
 
-    name = ops.start("fakeagent", "/tmp", "from-cli")["name"]
+    name = ops.start("fakeagent", "/tmp", "from-cli").name
     service.wait_for(name, "running")
 
 

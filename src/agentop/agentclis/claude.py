@@ -11,6 +11,7 @@ from typing import Optional
 
 from agentop.agentclis.base import AgentCli, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
+from agentop.results import SavedSession, saved_session
 
 _PROJECTS_DIR = Path("~/.claude/projects")
 
@@ -173,7 +174,7 @@ class ClaudeAgentCli(AgentCli):
             return log.parent, [log, *extra]
         return None, []
 
-    def get_saved_sessions(self, limit: int = 20) -> list[dict]:
+    def get_saved_sessions(self, limit: int = 20) -> list[SavedSession]:
         projects_dir = self.transcripts_root()
         if not projects_dir.exists():
             return []
@@ -200,15 +201,7 @@ class ClaudeAgentCli(AgentCli):
                                 break
                 except OSError:
                     continue
-                sessions.append(
-                    {
-                        "session_id": f.stem,
-                        "title": title,
-                        "cwd": cwd or "",
-                        "tool": self.name,
-                        "last_active": f.stat().st_mtime,
-                    }
-                )
+                sessions.append(saved_session(self.name, f.stem, title, cwd, f.stat().st_mtime))
         sessions.sort(key=lambda x: x["last_active"], reverse=True)
         return sessions[:limit]
 

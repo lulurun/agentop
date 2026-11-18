@@ -167,17 +167,17 @@ def test_a_start_records_the_agent_and_any_id_it_was_given(fake_agents, tmp_path
     from agentop import ops
 
     agent = fake_agents["fakeagent"]
-    name = ops.start("fakeagent", str(tmp_path), "plain")["name"]
+    name = ops.start("fakeagent", str(tmp_path), "plain").name
     record = registry.load()["sessions"][name]
     assert record["agent_pid"] and record["agent_started"] > NOW - 10 * 365 * DAY
     assert "agent_session_id" not in record
 
     monkeypatch.setattr(agent, "new_session_id", lambda: "picked-1")
     monkeypatch.setattr(agent, "start_cmd", lambda session_id: f"fakeagent {session_id}")
-    name = ops.start("fakeagent", str(tmp_path), "given")["name"]
+    name = ops.start("fakeagent", str(tmp_path), "given").name
     assert registry.load()["sessions"][name]["agent_session_id"] == "picked-1"
 
-    name = ops.resume_session("fakeagent", "resumed-1", str(tmp_path), "again")["name"]
+    name = ops.resume_session("fakeagent", "resumed-1", str(tmp_path), "again").name
     assert registry.load()["sessions"][name]["agent_session_id"] == "resumed-1"
 
 

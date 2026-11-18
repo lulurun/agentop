@@ -2,6 +2,7 @@
 
 import time
 
+from agentop.results import StopResult
 from agentop import agent_instance
 from agentop.agent_instance import AgentInstance
 from agentop.tmux import Session
@@ -43,7 +44,7 @@ def test_a_draft_is_cleared_before_exit(tmux_server, tmp_path):
 
     result = instance.stop()
 
-    assert result == {"sent_exit": True, "exited": True, "forced": False, "tmux_killed": True}
+    assert result == StopResult(sent_exit=True, exited=True, forced=False, tmux_killed=True)
     assert (tmp_path / "polite.log").read_text().splitlines() == ["/exit"]
     assert not Session.has("polite")
 
@@ -54,7 +55,7 @@ def test_an_agent_that_wont_exit_is_forced(tmux_server, tmp_path, monkeypatch):
 
     result = instance.stop()
 
-    assert result == {"sent_exit": True, "exited": False, "forced": True, "tmux_killed": True}
+    assert result == StopResult(sent_exit=True, exited=False, forced=True, tmux_killed=True)
     assert not Session.has("stubborn")
 
 
@@ -69,10 +70,10 @@ def test_an_agent_that_quits_on_ctrl_c_is_not_sent_exit(fake_agents, tmp_path):
 
     result = instance.stop()
 
-    assert result == {"sent_exit": False, "exited": True, "forced": False, "tmux_killed": True}
+    assert result == StopResult(sent_exit=False, exited=True, forced=False, tmux_killed=True)
 
 
 def test_a_session_with_no_agent_is_just_closed(tmux_server, tmp_path):
     assert Session.new("idle", str(tmp_path))
     result = AgentInstance(FakeAgent(), "idle").stop()
-    assert result == {"sent_exit": False, "exited": True, "forced": False, "tmux_killed": True}
+    assert result == StopResult(sent_exit=False, exited=True, forced=False, tmux_killed=True)

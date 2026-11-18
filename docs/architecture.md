@@ -13,6 +13,8 @@ src/agentop/
   agent_instance.py      Wires AgentCli + Actor into one runtime object
   scanner.py             Process detection and session building
   ops.py                 Business logic used by both the service and the CLI
+  results.py             What ops returns (StartResult, StopResult, Sent, SavedSession), and OpsError
+  jsonfile.py            Atomic JSON writes; an unreadable state file is moved aside
   history.py             The app's History: past sessions agentop started, used within the window
   registry.py            Persistent managed-session registry
   tmux.py                tmux subprocess wrappers
@@ -131,7 +133,7 @@ A write never saves over a registry it can't read: one that isn't valid JSON is 
 
 ### 4.3 Ops (`ops.py`)
 
-Business logic layer called by both the service and `agentop/cli.py`:
+Business logic layer called by both the service and `agentop/cli.py`. It returns the typed results in `results.py` and raises `OpsError` (`StartFailed` for a start, with the tmux session kept to show the error) instead of returning error dicts:
 
 | Function | What it does |
 |----------|-------------|
