@@ -206,17 +206,17 @@ If the dialogue has open tmux sessions (e.g. status is `running`), they are stop
 ## 3 Service commands
 
 ```bash
-agentop serve [--host H] [--port P] [--name N] [--tls-cert F --tls-key F]   # foreground, http://127.0.0.1:9775
+agentop serve [--host H] [--port P] [--name N] [--tls-cert F --tls-key F] [--update-from main|release]   # foreground, http://127.0.0.1:9775
                                       # a non-loopback --host needs --tls-cert and --tls-key
 agentop open                          # open the app in a browser, signed in
 agentop service status                # whether the service runs, and how
 agentop service restart               # or stop; sessions keep running
-agentop service update                # pull, install, build, restart; goes back if that fails
+agentop service update                # pull, install, build, restart; goes back if that fails (follows the service's update_from)
 agentop service token [--rotate [--revoke-clients]]   # print, or replace, the service token
 agentop service clients [--revoke ID | --revoke-all]  # list the clients signed in, or sign them out
 agentop service connect-info [--host H | --url URL]   # what to paste into Connect to a service
 ```
 
-The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`. `history_window` (default `"30d"`) is how recently a past session must have been used for the app's History to list it, and `max_active_sessions` (default `20`) is how many sessions agentop starts may be active at once; the app's History is in [design.md 10.7.7](design.md#1077-history-in-the-sessions-panel-2026-11-15).
+The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`. `history_window` (default `"30d"`) is how recently a past session must have been used for the app's History to list it, and `max_active_sessions` (default `20`) is how many sessions agentop starts may be active at once. `update_from` (default `"main"`) is what Update follows: `"main"` fast-forwards the main branch, for development; `"release"` checks out the newest `vX.Y.Z` tag, only when a newer one is out, and never goes backwards. The desktop app's own copy uses `release` (plan 9.5); the app's History is in [design.md 10.7.7](design.md#1077-history-in-the-sessions-panel-2026-11-15).
 
 The service token only signs a client in: the app, or each CLI command, gets its own token with it, which expires (design D7). Rotating the service token leaves signed-in clients alone; add `--revoke-clients` to sign them out too. `service clients` works on `~/.agentop/state/clients.json` directly, so it works while the service is stopped, and a running service notices at once. Running it as a system service or behind a proxy is in [setup.md](setup.md).

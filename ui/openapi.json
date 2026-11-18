@@ -1177,6 +1177,15 @@
             "title": "Running",
             "type": "boolean"
           },
+          "update_from": {
+            "default": "main",
+            "enum": [
+              "main",
+              "release"
+            ],
+            "title": "Update From",
+            "type": "string"
+          },
           "upstream": {
             "anyOf": [
               {

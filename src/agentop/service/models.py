@@ -61,9 +61,11 @@ class UpdateRun(BaseModel):
 
 class UpdateInfo(BaseModel):
     current: str | None
+    # The release tag when following releases; else the branch's newest commit.
     upstream: str | None
     behind: int | None
     check_error: str | None
+    update_from: Literal["main", "release"] = "main"
     running: bool
     last_run: UpdateRun | None
 

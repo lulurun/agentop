@@ -21,7 +21,13 @@ const STEPS: Record<string, string> = {
   rolling_back: "Going back to the previous version",
 };
 
-function confirmation(action: Action, name: string, behind: number | null | undefined, manager: string | undefined) {
+function bringing(update: UpdateInfo | null | undefined): string {
+  if (!update?.behind) return "";
+  if (update.update_from === "release") return `This installs ${update.upstream} and restarts the service. `;
+  return `This installs ${update.behind} new commit${update.behind === 1 ? "" : "s"} and restarts the service. `;
+}
+
+function confirmation(action: Action, name: string, update: UpdateInfo | null | undefined, manager: string | undefined) {
   switch (action) {
     case "restart":
       return {
@@ -40,7 +46,7 @@ function confirmation(action: Action, name: string, behind: number | null | unde
     case "update":
       return {
         title: `Update ${name}?`,
-        detail: `${behind ? `This installs ${behind} new commit${behind === 1 ? "" : "s"} and restarts the service. ` : ""}Sessions keep running. If the new version fails, the service goes back to this one.`,
+        detail: `${bringing(update)}Sessions keep running. If the new version fails, the service goes back to this one.`,
         button: "Update service",
       };
   }
@@ -66,7 +72,8 @@ function UpdateResult({ info }: { info: UpdateInfo }) {
 function updateSummary(info: UpdateInfo | null): string {
   if (!info) return "Checking…";
   if (info.check_error) return `Couldn't check: ${info.check_error}`;
-  if (info.behind === 0) return "Up to date";
+  if (info.behind === 0) return info.update_from === "release" && info.upstream ? `Up to date (${info.upstream} or newer)` : "Up to date";
+  if (info.update_from === "release") return `${info.upstream} is out`;
   return info.behind === 1 ? "1 new commit" : `${info.behind} new commits`;
 }
 
@@ -155,7 +162,7 @@ export function StatusView({ onClose }: { onClose(): void }) {
 
   const name = connectionName(connection, info?.name);
   const can = info?.capabilities ?? {};
-  const asking = pending && confirmation(pending, name, update?.behind, info?.manager);
+  const asking = pending && confirmation(pending, name, update, info?.manager);
 
   return (
     <section className="view status-view" aria-label="Status">

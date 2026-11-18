@@ -63,6 +63,11 @@ class Install:
         self.commit(version, **extra)
         git(self.dev, "push", "origin", "main")
 
+    def release(self, tag, version=None, **extra):
+        self.publish(version or tag, **extra)
+        git(self.dev, "tag", tag)
+        git(self.dev, "push", "origin", tag)
+
     def run(self, **env):
         restart = f"test ! -f BAD_START || {{ rm -f {self.www}/health; exit 0; }}; cp VERSION {self.www}/health"
         return subprocess.run(
@@ -204,3 +209,49 @@ def test_a_replaced_script_does_not_disturb_the_run(install):
     )
     assert result.returncode == 0
     assert install.status["state"] == "done"
+
+
+def release_install(install):
+    """The install as the desktop app keeps it: on a tag, not on a branch."""
+    install.release("v1.0.0")
+    git(install.repo, "fetch", "-q", "--tags", "origin")
+    git(install.repo, "checkout", "-q", "--detach", "v1.0.0")
+    install.good = install.head
+
+
+def test_from_releases_checks_out_the_newest_tag_and_ignores_main(install):
+    release_install(install)
+    install.publish("work in progress")  # on main, not released
+    assert install.run(AGENTOP_UPDATE_FROM="release").returncode == 0
+    assert install.status["message"] == "Already up to date."
+
+    install.release("v1.1.0")
+    install.publish("after the release")
+    assert install.run(AGENTOP_UPDATE_FROM="release").returncode == 0
+    assert install.status["state"] == "done"
+    assert install.head == git(install.repo, "rev-parse", "v1.1.0^{commit}")
+    assert install.serving == "v1.1.0"
+
+
+def test_from_releases_never_goes_backwards(install):
+    install.release("v1.0.0")
+    install.publish("newer than the release")
+    git(install.repo, "pull", "-q")
+    ahead = install.head
+    assert install.run(AGENTOP_UPDATE_FROM="release").returncode == 0
+    assert "Already newer than the latest release, v1.0.0" in install.status["message"]
+    assert install.head == ahead
+
+
+def test_from_releases_a_failed_release_rolls_back_to_the_old_tag(install):
+    release_install(install)
+    install.release("v1.1.0", BAD_BUILD="x")
+    assert install.run(AGENTOP_UPDATE_FROM="release").returncode == 1
+    assert install.status["state"] == "rolled_back"
+    assert install.head == install.good
+
+
+def test_from_releases_with_none_yet_changes_nothing(install):
+    assert install.run(AGENTOP_UPDATE_FROM="release").returncode == 1
+    assert install.status["message"] == "There is no release yet."
+    assert install.head == install.good

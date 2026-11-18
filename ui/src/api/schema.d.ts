@@ -873,6 +873,12 @@ export interface components {
             last_run: components["schemas"]["UpdateRun"] | null;
             /** Running */
             running: boolean;
+            /**
+             * Update From
+             * @default main
+             * @enum {string}
+             */
+            update_from: "main" | "release";
             /** Upstream */
             upstream: string | null;
         };

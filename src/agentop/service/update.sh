@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Update the service from git, and go back to the old commit if that fails.
 #
+# AGENTOP_UPDATE_FROM picks what to follow: main (the default) fast-forwards the
+# main branch; release checks out the newest vX.Y.Z tag, and never goes backwards.
+#
 # Started by agentop.service.update, apart from the service, because it restarts
 # the service: in a transient unit under systemd, otherwise as a detached
 # process. The service passes the command that restarts it. Progress goes to
@@ -14,6 +17,7 @@ REPO=${AGENTOP_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}
 DATA=${AGENTOP_HOME:-$HOME/.agentop}
 UNIT=${AGENTOP_UNIT:-agentop-api.service}
 BRANCH=${AGENTOP_BRANCH:-main}
+FROM=${AGENTOP_UPDATE_FROM:-main}
 PYTHON=${AGENTOP_PYTHON:-python3}
 HEALTH_URL=${AGENTOP_HEALTH_URL:-http://127.0.0.1:9775/api/v2/health}
 HEALTH_TIMEOUT=${AGENTOP_HEALTH_TIMEOUT:-30}
@@ -90,11 +94,24 @@ main() {
     status running checking ""
     find_node
     OLD=$(git rev-parse HEAD)
-    [[ "$(git branch --show-current)" == "$BRANCH" ]] || refuse "The install isn't on $BRANCH."
+    [[ "$FROM" == main || "$FROM" == release ]] || refuse "Unknown update source: $FROM."
+    [[ "$FROM" == release || "$(git branch --show-current)" == "$BRANCH" ]] || refuse "The install isn't on $BRANCH."
     [[ -z "$(git status --porcelain)" ]] || refuse "The install has uncommitted changes."
     [[ -z "${AGENTOP_BUILD_CMD:-}" ]] && ! command -v npm >/dev/null && refuse "npm isn't available to the service."
-    git fetch --quiet || refuse "Could not reach the git remote."
-    NEW=$(git rev-parse '@{upstream}')
+    if [[ "$FROM" == release ]]; then
+        git fetch --quiet --tags origin || refuse "Could not reach the git remote."
+        local tag
+        tag=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1)
+        [[ -n "$tag" ]] || refuse "There is no release yet."
+        NEW=$(git rev-parse "$tag^{commit}")
+        if [[ "$OLD" != "$NEW" ]] && git merge-base --is-ancestor "$NEW" "$OLD"; then
+            status done "" "Already newer than the latest release, $tag."
+            exit 0
+        fi
+    else
+        git fetch --quiet || refuse "Could not reach the git remote."
+        NEW=$(git rev-parse '@{upstream}')
+    fi
     if [[ "$OLD" == "$NEW" ]]; then
         status done "" "Already up to date."
         exit 0
@@ -102,7 +119,11 @@ main() {
     git merge-base --is-ancestor "$OLD" "$NEW" || refuse "The install has commits that aren't on the remote."
 
     status running pulling ""
-    git merge --ff-only --quiet "$NEW" || refuse "Could not fast-forward to the new commit."
+    if [[ "$FROM" == release ]]; then
+        git checkout --quiet --detach "$NEW" || refuse "Could not check out $tag."
+    else
+        git merge --ff-only --quiet "$NEW" || refuse "Could not fast-forward to the new commit."
+    fi
     deploy || roll_back "The new version failed to install or start."
     status done "" ""
     exit 0

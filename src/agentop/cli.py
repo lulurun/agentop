@@ -194,7 +194,14 @@ def cmd_serve(args):
     from agentop.service import app, config
 
     app.serve(
-        config.load(host=args.host, port=args.port, name=args.name, tls_cert=args.tls_cert, tls_key=args.tls_key)
+        config.load(
+            host=args.host,
+            port=args.port,
+            name=args.name,
+            tls_cert=args.tls_cert,
+            tls_key=args.tls_key,
+            update_from=args.update_from,
+        )
     )
 
 
@@ -488,6 +495,11 @@ def main():
     p_serve.add_argument("--name", help="Name shown to clients (default: hostname)")
     p_serve.add_argument("--tls-cert", help="TLS certificate file")
     p_serve.add_argument("--tls-key", help="TLS private key file")
+    p_serve.add_argument(
+        "--update-from",
+        choices=["main", "release"],
+        help="What Update follows: the main branch (default), or the newest vX.Y.Z release tag",
+    )
 
     # open
     sub.add_parser("open", help="Open the web app in a browser, signed in")

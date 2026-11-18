@@ -105,7 +105,7 @@ def test_a_running_update_is_not_started_twice(api, systemctl, monkeypatch):
 
 
 def test_update_info_keeps_a_stable_shape(api, tmp_path, monkeypatch):
-    monkeypatch.setattr(update, "available", lambda repo: dict.fromkeys(("current", "upstream", "behind", "check_error")))
+    monkeypatch.setattr(update, "available", lambda repo, update_from: dict.fromkeys(("current", "upstream", "behind", "check_error")))
     monkeypatch.setattr(update, "is_running", lambda: False)
     monkeypatch.setattr(update, "read_status", lambda: {"state": "done", "to_commit": "abc1234"})
     body = api.get("/admin/update").json()
@@ -128,3 +128,36 @@ def test_available_counts_commits_behind(tmp_path):
     update._checked.clear()
     result = update.available(tmp_path / "b")
     assert result["behind"] == 1 and result["check_error"] is None
+
+
+def test_available_from_releases_names_the_newest_tag_and_never_goes_back(tmp_path):
+    import subprocess
+
+    def git(cwd, *args):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@e", *args], cwd=cwd, check=True, capture_output=True)
+
+    git(tmp_path, "init", "--bare", "-b", "main", "o.git")
+    git(tmp_path, "clone", "o.git", "a")
+    git(tmp_path / "a", "commit", "--allow-empty", "-m", "1")
+    git(tmp_path / "a", "tag", "v1.9.0")
+    git(tmp_path / "a", "commit", "--allow-empty", "-m", "2")
+    git(tmp_path / "a", "tag", "v1.10.0")  # newer than v1.9.0 by version, not by name
+    git(tmp_path / "a", "tag", "v2.0.0-rc1")  # not a release
+    git(tmp_path / "a", "push", "--tags", "origin", "main")
+    git(tmp_path, "clone", "o.git", "b")
+    git(tmp_path / "b", "checkout", "-q", "--detach", "v1.9.0")
+    update._checked.clear()
+    result = update.available(tmp_path / "b", "release")
+    assert (result["upstream"], result["behind"], result["check_error"]) == ("v1.10.0", 1, None)
+
+    git(tmp_path / "b", "checkout", "-q", "main")
+    git(tmp_path / "b", "commit", "--allow-empty", "-m", "ahead of the release")
+    update._checked.clear()
+    assert update.available(tmp_path / "b", "release")["behind"] == 0
+
+
+def test_update_from_must_be_main_or_release():
+    from agentop.service.config import Settings
+
+    with pytest.raises(ValueError, match="update_from"):
+        Settings(update_from="nightly")

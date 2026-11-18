@@ -100,10 +100,10 @@ async def stop(ctx: Ctx):
 
 
 @router.get("/admin/update", response_model=UpdateInfo, dependencies=AUTHED)
-async def update_info():
+async def update_info(ctx: Ctx):
     running = await asyncio.to_thread(update.is_running)
     return {
-        **await asyncio.to_thread(update.available, REPO_ROOT),
+        **await asyncio.to_thread(update.available, REPO_ROOT, ctx.settings.update_from),
         "running": running,
         "last_run": update.read_status(),
     }
@@ -117,7 +117,7 @@ async def start_update(ctx: Ctx):
     scheme = "https" if ctx.settings.tls else "http"
     health_url = f"{scheme}://127.0.0.1:{ctx.settings.port}/api/v2/health"
     try:
-        await asyncio.to_thread(update.launch, REPO_ROOT, health_url, current)
+        await asyncio.to_thread(update.launch, REPO_ROOT, health_url, current, ctx.settings.update_from)
     except update.UpdateError as exc:
         raise HTTPException(409, str(exc)) from exc
     return {"status": "updating"}

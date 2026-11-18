@@ -12,6 +12,7 @@ from agentop.paths import data_dir
 DEFAULT_PORT = 9775
 _UNITS = {"s": 1, "m": 60, "h": 3600, "d": 86400}
 MIN_CLIENT_TTL_SECONDS = 60
+UPDATE_SOURCES = ("main", "release")
 
 
 def parse_duration(value: str | int | float | None) -> float | None:
@@ -45,6 +46,13 @@ class Settings:
     history_window: str | int = "30d"
     # How many sessions agentop runs at once, not counting a plugin's own.
     max_active_sessions: int = 20
+    # What Update follows: "main", the branch (the default, for development), or
+    # "release", the newest vX.Y.Z tag (the desktop app's own copy).
+    update_from: str = "main"
+
+    def __post_init__(self) -> None:
+        if self.update_from not in UPDATE_SOURCES:
+            raise ValueError(f"update_from must be one of {', '.join(UPDATE_SOURCES)}, not {self.update_from!r}")
 
     @property
     def is_loopback(self) -> bool:

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,7 @@ SCRIPT = Path(__file__).with_name("update.sh")
 UPDATE_UNIT = "agentop-update"
 FETCH_TIMEOUT_SECONDS = 20
 CHECK_CACHE_SECONDS = 60
+RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
 
 _checked: dict[str, tuple[float, dict]] = {}
 
@@ -92,35 +94,63 @@ def _git(repo: Path, *args: str, timeout: int = 10) -> str:
     ).stdout.strip()
 
 
-def available(repo: Path) -> dict:
-    """What an update would bring. Cached briefly, because it asks the remote."""
-    cached = _checked.get(str(repo))
+def latest_release(repo: Path) -> str | None:
+    """The newest vX.Y.Z tag the repository has, by version order."""
+    tags = _git(repo, "tag", "-l", "v*", "--sort=-v:refname").splitlines()
+    return next((t for t in tags if RELEASE_TAG.fullmatch(t)), None)
+
+
+def _release_behind(repo: Path, tag: str) -> int:
+    """Commits from HEAD to the tag, or 0 when HEAD already has it: an update never goes backwards."""
+    if subprocess.run(["git", "merge-base", "--is-ancestor", "HEAD", tag], cwd=repo, capture_output=True, check=False).returncode:
+        return 0
+    return int(_git(repo, "rev-list", "--count", f"HEAD..{tag}"))
+
+
+def available(repo: Path, update_from: str = "main") -> dict:
+    """What an update would bring. Cached briefly, because it asks the remote.
+
+    For a release, `upstream` is the tag. For main, it is the branch's newest commit.
+    """
+    key = f"{repo}:{update_from}"
+    cached = _checked.get(key)
     if cached and time.monotonic() - cached[0] < CHECK_CACHE_SECONDS:
         return cached[1]
-    result: dict = {"current": None, "upstream": None, "behind": None, "check_error": None}
+    result: dict = {"current": None, "upstream": None, "behind": None, "check_error": None, "update_from": update_from}
     try:
         result["current"] = _git(repo, "rev-parse", "--short", "HEAD")
-        _git(repo, "fetch", "--quiet", timeout=FETCH_TIMEOUT_SECONDS)
-        result["upstream"] = _git(repo, "rev-parse", "--short", "@{upstream}")
-        result["behind"] = int(_git(repo, "rev-list", "--count", "HEAD..@{upstream}"))
+        if update_from == "release":
+            _git(repo, "fetch", "--quiet", "--tags", "origin", timeout=FETCH_TIMEOUT_SECONDS)
+            tag = latest_release(repo)
+            if tag is None:
+                result["check_error"] = "There is no release yet."
+            else:
+                result["upstream"] = tag
+                result["behind"] = _release_behind(repo, tag)
+        else:
+            _git(repo, "fetch", "--quiet", timeout=FETCH_TIMEOUT_SECONDS)
+            result["upstream"] = _git(repo, "rev-parse", "--short", "@{upstream}")
+            result["behind"] = int(_git(repo, "rev-list", "--count", "HEAD..@{upstream}"))
     except subprocess.TimeoutExpired:
         result["check_error"] = "The git remote did not answer."
     except (OSError, subprocess.CalledProcessError) as exc:
         stderr = getattr(exc, "stderr", "") or ""
         result["check_error"] = stderr.strip().splitlines()[-1] if stderr.strip() else "git failed."
-    _checked[str(repo)] = (time.monotonic(), result)
+    _checked[key] = (time.monotonic(), result)
     return result
 
 
-def launch(repo: Path, health_url: str, manager: ServiceManager) -> None:
+def launch(repo: Path, health_url: str, manager: ServiceManager, update_from: str = "main") -> None:
     """Start the update. Returns once it is running, not once it has finished."""
     if is_running():
         raise UpdateError("An update is already running.")
-    _checked.pop(str(repo), None)
+    for key in [k for k in _checked if k.startswith(f"{repo}:")]:
+        del _checked[key]
     settings = {
         "AGENTOP_REPO": str(repo),
         "AGENTOP_HOME": str(data_dir()),
         "AGENTOP_HEALTH_URL": health_url,
+        "AGENTOP_UPDATE_FROM": update_from,
         "AGENTOP_PYTHON": sys.executable,
         "AGENTOP_RESTART_CMD": manager.restart_command(),
         "PATH": os.environ.get("PATH", ""),
