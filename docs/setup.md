@@ -6,7 +6,7 @@ at `/` (it was at `/app/` until 2026-11-14, which now redirects there).
 
 ## On a machine of your own
 
-Needs Python 3.11+, tmux, and Node 20.19+ or 22.12+ to build the app.
+Needs Python 3.13+, tmux, and Node 20.19+ or 22.12+ to build the app.
 
 ```bash
 git clone <repo> agentop && cd agentop

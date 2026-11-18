@@ -58,13 +58,13 @@ The plugins that ship with agentop are Dialogues, Waiting for input, the File vi
 
 **To run**
 
-- Service and desktop app: Linux or macOS, with tmux and Python 3.11+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service.
+- Service and desktop app: Linux or macOS, with tmux and Python 3.13+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service.
 - Web UI: any browser that can reach the service, a phone's included.
 - At least one agent CLI, signed in: `claude`, `codex`, or `agy`.
 
 **To build**
 
-- Service: Python 3.11+
+- Service: Python 3.13+
 - UI: Node 20.19+ or 22.12+
 - Desktop app: Rust, plus the WebKitGTK 4.1 development files on Linux ([docs/setup.md](docs/setup.md))
 
