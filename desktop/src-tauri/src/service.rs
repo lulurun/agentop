@@ -66,6 +66,8 @@ fn pid_path() -> Option<PathBuf> {
 #[serde(tag = "state", rename_all = "snake_case")]
 pub enum Startup {
     Starting,
+    /// The app's own copy of agentop isn't installed: the start page shows setup.
+    NeedsSetup,
     Ready { url: String },
     Failed { message: String, log: Option<String> },
 }
@@ -115,6 +117,9 @@ impl Service {
             let adopted = read_pid().filter(|pid| alive(*pid));
             self.inner.lock().unwrap().owned = adopted;
             return self.set(Startup::Ready { url });
+        }
+        if std::env::var_os("AGENTOP_BIN").is_none() && !crate::setup::installed() {
+            return self.set(Startup::NeedsSetup);
         }
         {
             let mut inner = self.inner.lock().unwrap();
@@ -188,7 +193,7 @@ impl Service {
 fn exit_message(code: Option<i32>) -> String {
     match code {
         // What a shell returns for a command it can't find.
-        Some(127) => "agentop isn't installed on this computer, or isn't on the PATH of your login shell.".into(),
+        Some(127) => "The app's copy of agentop is missing. Run setup again.".into(),
         Some(code) => format!("agentop serve exited with status {code} before it answered."),
         None => "agentop serve was stopped before it answered.".into(),
     }
@@ -198,11 +203,11 @@ fn log_display() -> Option<String> {
     log_path().map(|path| path.display().to_string())
 }
 
-/// `agentop serve` on loopback, with its output in the log.
+/// The app's copy of `agentop serve` on loopback, with its output in the log.
 ///
 /// Through the user's login shell, interactive so that it reads the same files a
 /// terminal does: an app opened from the desktop gets a short PATH, which may lack
-/// agentop, tmux, and the agent tools. `exec` keeps the PID the service's own.
+/// tmux and the agent tools. `exec` keeps the PID the service's own.
 fn spawn(port: u16) -> Result<Child, String> {
     let log_file = log_path().ok_or("No home folder to keep the service's log in.")?;
     if let Some(dir) = log_file.parent() {
@@ -216,14 +221,17 @@ fn spawn(port: u16) -> Result<Child, String> {
             .map_err(|e| format!("Can't write {}: {e}", log_file.display()))
     };
     let (out, err) = (open()?, open()?);
-    let args = ["serve".to_string(), "--host".into(), "127.0.0.1".into(), "--port".into(), port.to_string()];
+    let mut args = vec!["serve".to_string(), "--host".into(), "127.0.0.1".into(), "--port".into(), port.to_string()];
 
     let mut command = if let Some(bin) = std::env::var_os("AGENTOP_BIN") {
         let mut command = Command::new(bin);
         command.args(&args);
         command
     } else {
-        login_shell_command(&args)
+        // The app's copy follows release tags; a checkout of one's own follows main.
+        args.extend(["--update-from".into(), "release".into()]);
+        let bin = crate::setup::agentop_bin().ok_or("No home folder to find agentop in.")?;
+        login_shell_command(&bin, &args)
     };
     command.stdin(Stdio::null()).stdout(out).stderr(err);
     #[cfg(unix)]
@@ -236,16 +244,17 @@ fn spawn(port: u16) -> Result<Child, String> {
 }
 
 #[cfg(unix)]
-fn login_shell_command(args: &[String]) -> Command {
+fn login_shell_command(bin: &std::path::Path, args: &[String]) -> Command {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
+    let quoted = format!("'{}'", bin.display().to_string().replace('\'', "'\\''"));
     let mut command = Command::new(shell);
-    command.arg("-ilc").arg(format!("exec agentop {}", args.join(" ")));
+    command.arg("-ilc").arg(format!("exec {quoted} {}", args.join(" ")));
     command
 }
 
 #[cfg(not(unix))]
-fn login_shell_command(args: &[String]) -> Command {
-    let mut command = Command::new("agentop");
+fn login_shell_command(bin: &std::path::Path, args: &[String]) -> Command {
+    let mut command = Command::new(bin);
     command.args(args);
     command
 }
@@ -400,12 +409,13 @@ mod tests {
 
     #[test]
     fn a_missing_command_is_explained() {
-        assert!(exit_message(Some(127)).contains("isn't installed"));
+        assert!(exit_message(Some(127)).contains("Run setup again"));
         assert!(exit_message(Some(1)).contains("status 1"));
     }
 
     /// Starts the real `agentop serve` in a throwaway home on a spare port, then stops it.
-    /// Run with `AGENTOP_BIN=$(which agentop) cargo test -- --ignored`.
+    /// Run with `AGENTOP_BIN=$(which agentop) cargo test -- --ignored`, or with HOME set
+    /// up by `setup_installs` to start the app's copy.
     #[test]
     #[ignore]
     fn starts_and_stops_a_real_service() {

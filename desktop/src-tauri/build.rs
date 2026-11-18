@@ -10,6 +10,9 @@ fn main() {
         "token_get",
         "token_set",
         "token_delete",
+        "setup_status",
+        "setup_run",
+        "setup_add_path",
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(commands)),

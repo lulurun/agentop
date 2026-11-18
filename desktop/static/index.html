@@ -10,14 +10,26 @@
     <main>
       <h1 id="title">Starting agentop…</h1>
       <p id="detail">Starting the service on this computer.</p>
-      <pre id="log" hidden></pre>
-      <div id="actions" hidden>
-        <button type="button" id="retry">Try again</button>
+
+      <div id="setup" hidden>
+        <section><h2>Tools</h2><ul id="tools"></ul></section>
+        <section><h2>Agent tools</h2><ul id="agents"></ul></section>
+        <section><h2>Install</h2><ul id="install"></ul></section>
+        <div id="path-fix" hidden>
+          <pre id="path-line"></pre>
+          <button type="button" id="add-path"></button>
+        </div>
+        <pre id="tail" hidden></pre>
+        <p id="setup-log" class="small" hidden></p>
       </div>
-      <p id="help" hidden>
-        To install agentop, see the setup guide at
-        <code>github.com/lulurun/agentop/blob/main/docs/setup.md</code>.
-      </p>
+
+      <pre id="log" hidden></pre>
+      <div id="actions">
+        <button type="button" id="check" hidden>Check again</button>
+        <button type="button" id="launch" class="primary" hidden>Launch agentop</button>
+        <button type="button" id="retry" hidden>Try again</button>
+        <button type="button" id="resetup" hidden>Run setup again</button>
+      </div>
     </main>
     <script src="start.js"></script>
   </body>

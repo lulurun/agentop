@@ -115,8 +115,8 @@ The desktop app is now a thin wrapper:
 
 1. **On open**, it checks whether a service answers `GET /api/v2/health` on the configured port (`config.toml`, default 9775).
    - If one does (a unit, or `agentop serve` by hand), it uses it and **leaves it running** when it closes.
-   - Otherwise it starts `agentop serve --host 127.0.0.1 --port <port>` through the user's login shell (`$SHELL -ilc 'exec agentop serve …'`), because an app opened from the desktop gets a short `PATH` that may lack agentop, tmux, and the agent tools. `AGENTOP_BIN` overrides it. Output goes to `~/.agentop/logs/desktop-serve.log`. It always binds loopback, whatever `host` the config gives for `agentop serve` run by hand.
-   - The app shows a start page, bundled in the app, until the service answers. If it doesn't start, the page says why (for example, agentop isn't installed) and offers Try again.
+   - Otherwise it starts its own copy, `~/.agentop-desktop/venv/bin/agentop serve --host 127.0.0.1 --port <port> --update-from release`, through the user's login shell (`$SHELL -ilc 'exec … serve …'`), because an app opened from the desktop gets a short `PATH` that may lack tmux and the agent tools. Without the copy, the start page runs first-run setup (plan 9.5). `AGENTOP_BIN` overrides it and skips setup. Output goes to `~/.agentop/logs/desktop-serve.log`. It always binds loopback, whatever `host` the config gives for `agentop serve` run by hand.
+   - The app shows a start page, bundled in the app, until the service answers. If it doesn't start, the page says why and offers Try again and Run setup again.
 2. **Once the service answers**, the window opens the service's own page, `http://127.0.0.1:<port>/`. It signs in with the token from `service.json` (7.2), so the user sees the app already connected and signed in.
 3. **On close**, it sends the service it started `SIGTERM`. The service closes its terminals, which has a 5-second limit, and exits; `SIGKILL` follows after 10 seconds. tmux owns the sessions (rule 1), so they keep running, and the next open finds them.
 
@@ -1140,7 +1140,7 @@ Parity list for the old dashboard, so nothing was lost by accident:
 | Terminal is slow or glitchy in WebKitGTK | Medium | Spike S1 before UI work; `TerminalView` boundary; ghostty-web fallback. Tauri's CEF runtime exists at alpha stage and is not a dependency |
 | Japanese IME composition fails in a webview | Medium | The system locale is partly `ja_JP`, so this is tested explicitly in S1 |
 | WebKitGTK treats the `http://127.0.0.1` page differently from a browser | Low | Spike S2; the page follows the same rules as the web app from a local service |
-| The app can't find `agentop`, tmux, or the agent tools | Medium | It starts the service through the login shell; `AGENTOP_BIN`; the start page names the log |
+| The app can't find `agentop`, tmux, or the agent tools | Medium | Setup checks each through the login shell and says how to fix a missing one; it starts the service through that shell too; `AGENTOP_BIN`; the start page names the log |
 | A lost updater signing key | Low | Back it up; a lost key means reinstalling by hand once |
 | Browser rules block a web app connection | Medium | Spike S4; reachability guidance in the form; recommend the page from a local service or the desktop app |
 | Tokens or terminal traffic exposed on plain HTTP | Low | The service refuses a non-loopback bind without TLS, and the app refuses plain HTTP to another machine |

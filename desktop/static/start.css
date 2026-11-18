@@ -4,6 +4,9 @@
   --fg: #1c1c1a;
   --muted: #6b6b66;
   --panel: #ecebe7;
+  --ok: #2f7d32;
+  --warn: #a86b00;
+  --bad: #c0392b;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -11,6 +14,9 @@
     --fg: #e8e8e3;
     --muted: #9a9a93;
     --panel: #22221f;
+    --ok: #6cc070;
+    --warn: #e0a83a;
+    --bad: #ef6f61;
   }
 }
 body {
@@ -42,4 +48,60 @@ pre {
 button {
   font: inherit;
   padding: 6px 14px;
+}
+main {
+  margin-top: 8vh;
+  padding-bottom: 48px;
+}
+h2 {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 20px 0 6px;
+}
+ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.row {
+  display: flex;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--panel);
+}
+.icon {
+  width: 1.2em;
+  text-align: center;
+  font-weight: 600;
+  flex: none;
+}
+.row.ok .icon { color: var(--ok); }
+.row.warning .icon { color: var(--warn); }
+.row.missing .icon,
+.row.failed .icon { color: var(--bad); }
+.row.pending { color: var(--muted); }
+.label { font-weight: 500; }
+.small {
+  font-size: 13px;
+  color: var(--muted);
+  word-break: break-all;
+}
+code {
+  display: inline-block;
+  margin-top: 2px;
+  font-size: 12px;
+  background: var(--panel);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+#actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+button.primary {
+  font-weight: 600;
 }

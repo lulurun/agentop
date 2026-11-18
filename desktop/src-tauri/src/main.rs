@@ -15,6 +15,7 @@
 #[cfg(target_os = "linux")]
 mod desktop_entry;
 mod service;
+mod setup;
 mod tokens;
 
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,22 @@ fn can_self_update() -> bool {
 #[tauri::command]
 fn startup_status(service: tauri::State<'_, Arc<Service>>) -> Startup {
     service.startup()
+}
+
+#[tauri::command]
+fn setup_status(setup: tauri::State<'_, Arc<setup::Setup>>) -> setup::Status {
+    setup.status()
+}
+
+/// Check the tools and install the app's copy of agentop, from the top.
+#[tauri::command]
+fn setup_run(setup: tauri::State<'_, Arc<setup::Setup>>) {
+    setup.run();
+}
+
+#[tauri::command]
+fn setup_add_path(setup: tauri::State<'_, Arc<setup::Setup>>) -> Result<(), String> {
+    setup.add_path()
 }
 
 /// Start this computer's service again, after it stopped or failed to start.
@@ -211,6 +228,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_opener::init())
         .manage(service.clone())
+        .manage(Arc::new(setup::Setup::new()))
         .invoke_handler(tauri::generate_handler![
             read_service_info,
             desktop_info,
@@ -218,7 +236,10 @@ fn main() {
             service_start,
             token_get,
             token_set,
-            token_delete
+            token_delete,
+            setup_status,
+            setup_run,
+            setup_add_path
         ])
         .setup(|app| {
             start_in_background(app.handle().clone());

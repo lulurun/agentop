@@ -108,9 +108,21 @@ background, logging to `serve.log`.
 
 ## Desktop app
 
-On a PC, the desktop app runs this computer's service for you. It needs agentop
-installed as above (the app runs the `agentop` on your login shell's `PATH`, or
-`AGENTOP_BIN`), but no `agentop serve` and no systemd unit.
+On a PC, the desktop app runs this computer's service for you, from its own copy of
+agentop. It needs only the tools: Python 3.13+, Node 20.19+ or 22.12+ with npm, git,
+tmux, and at least one agent tool (`claude`, `codex`, `agy`), found on your login
+shell's PATH. On macOS: `brew install python@3.13 node git tmux`.
+
+**First run.** The app lists each tool with ✓ or ✗ and how to fix a ✗; Check again
+looks again. With every tool there, it installs agentop in `~/.agentop-desktop/`: a git
+checkout at the newest `v*` tag, a venv, and the UI build, with the output in
+`~/.agentop-desktop/setup.log`. It links `~/.local/bin/agentop` to that copy, so agents
+can run `agentop`, and offers to add `~/.local/bin` to your shell's profile when it isn't
+on PATH. Then **Launch** starts the service. Later launches skip all this. The copy
+follows `v*` releases: the service's own Update moves it to a newer tag.
+
+Sessions, Memory and config stay in `~/.agentop/`, shared with any other install.
+`AGENTOP_BIN=/path/to/agentop` runs that one instead, and skips setup (development).
 
 - **Open it**: it starts `agentop serve` on `127.0.0.1` (port 9775, or `port` from
   `config.toml`) and opens signed in. If a service already answers there, such as a
