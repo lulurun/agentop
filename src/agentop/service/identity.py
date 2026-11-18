@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
-import os
 import secrets
 import socket
-import tempfile
 import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from agentop.jsonfile import write_json_atomic
 from agentop.paths import data_dir
 
 
@@ -26,17 +25,8 @@ def identity_path() -> Path:
 
 
 def _write(identity: Identity) -> None:
-    path = identity_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    # mkstemp creates the file 0600, so the token is never briefly world-readable.
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(asdict(identity), f, indent=2)
-        os.replace(tmp_path, path)
-    except Exception:
-        Path(tmp_path).unlink(missing_ok=True)
-        raise
+    # 0600, so the token is never readable by others.
+    write_json_atomic(identity_path(), asdict(identity))
 
 
 def load_or_create(name: str | None = None) -> Identity:

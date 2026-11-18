@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import uuid
 
 LOG = logging.getLogger(__name__)
 
@@ -37,6 +38,10 @@ def pane_target(name: str) -> str:
 
 
 _ERRORS = (subprocess.TimeoutExpired, subprocess.SubprocessError, FileNotFoundError)
+
+
+class PasteError(RuntimeError):
+    """Text could not be pasted into a session, so nothing should be submitted."""
 
 
 class CapturePane:
@@ -183,37 +188,44 @@ class Session:
             return None
 
     @staticmethod
-    def _load_and_paste(name: str, payload: bytes, bracketed: bool = False) -> bool:
-        """Load payload into the tmux buffer and paste it into the session.
+    def _load_and_paste(name: str, payload: bytes, bracketed: bool = False) -> None:
+        """Paste payload into the session through a buffer of its own. Raises PasteError.
+
+        The buffer is named and deleted after: tmux's unnamed buffer is shared, so
+        two sends at once (or a copy made in copy mode) could paste one session's
+        prompt into another.
 
         paste-buffer writes the payload into the target pane's pty and can
         block until the receiving process consumes it — slower TUIs (or any
         load on the box) can make this take much longer than a quick local
         tmux call. A short timeout here silently drops large pastes, so this
-        is generous and logs instead of swallowing failures.
+        is generous.
         """
+        buffer = f"agentop-{uuid.uuid4().hex}"
         try:
-            r1 = run("load-buffer", "-", input=payload, timeout=15)
+            r1 = run("load-buffer", "-b", buffer, "-", input=payload, timeout=15)
             if r1.returncode != 0:
-                LOG.warning("[%s] tmux load-buffer failed: %s", name, r1.stderr.decode(errors="replace"))
-                return False
-            r2 = run("paste-buffer", *(["-p"] if bracketed else []), "-t", pane_target(name), timeout=30)
+                raise PasteError(f"[{name}] tmux load-buffer failed: {r1.stderr.decode(errors='replace').strip()}")
+            r2 = run("paste-buffer", "-d", *(["-p"] if bracketed else []), "-b", buffer, "-t", pane_target(name), timeout=30)
             if r2.returncode != 0:
-                LOG.warning("[%s] tmux paste-buffer failed: %s", name, r2.stderr.decode(errors="replace"))
-                return False
-            return True
+                raise PasteError(f"[{name}] tmux paste-buffer failed: {r2.stderr.decode(errors='replace').strip()}")
         except _ERRORS as exc:
-            LOG.warning("[%s] paste of %d bytes failed: %s", name, len(payload), exc)
-            return False
+            raise PasteError(f"[{name}] paste of {len(payload)} bytes failed: {exc}") from exc
+        except PasteError:
+            try:
+                run("delete-buffer", "-b", buffer)
+            except _ERRORS:
+                pass
+            raise
 
     @staticmethod
     def paste_text(name: str, text: str) -> None:
-        """Load text into the tmux buffer and paste it into the session."""
+        """Paste text into the session. Raises PasteError."""
         Session._load_and_paste(name, text.encode())
 
     @staticmethod
     def paste_text_bracketed(name: str, text: str) -> None:
-        """Paste text as one bracketed paste, so embedded newlines are not Enter presses.
+        """Paste text as one bracketed paste, so embedded newlines are not Enter presses. Raises PasteError.
 
         tmux adds the ESC[200~ ... ESC[201~ markers itself (paste-buffer -p),
         when the application has turned bracketed paste on. Markers written into

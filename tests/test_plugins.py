@@ -491,3 +491,23 @@ def test_the_service_finds_the_built_in_plugins_and_the_extra_folders(tmp_path, 
     names = [folder.name for folder in host._folders()]
     assert {"dialogue", "memory", "viewer"} <= set(names)
     assert set(BROKEN) | set(FAILS_LATER) <= set(names)
+
+
+def test_flags_that_cannot_be_parsed_are_moved_aside(tmp_path):
+    host = PluginHost(QuietStore(), data_dir=tmp_path / "home")
+    host.flags_path.parent.mkdir(parents=True)
+    host.flags_path.write_text('{"memory": {"enabled": tr')
+    host._write_flag("viewer", True)
+    assert json.loads(host.flags_path.read_text()) == {"viewer": {"enabled": True}}
+    [aside] = host.flags_path.parent.glob("plugins.json.corrupt-*")
+    assert aside.read_text() == '{"memory": {"enabled": tr'
+
+
+def test_flags_that_cannot_be_read_are_not_written(tmp_path, monkeypatch):
+    host = PluginHost(QuietStore(), data_dir=tmp_path / "home")
+    host._write_flag("memory", False)
+    monkeypatch.setattr(Path, "read_text", lambda self, *a, **k: (_ for _ in ()).throw(PermissionError("denied")))
+    with pytest.raises(PermissionError):
+        host._write_flag("viewer", True)
+    monkeypatch.undo()
+    assert json.loads(host.flags_path.read_text()) == {"memory": {"enabled": False}}

@@ -8,6 +8,7 @@ import time
 from agentop import registry, scanner
 from agentop.agent_instance import AgentInstance
 from agentop.agentclis import AGENTS, get_agent
+from agentop.tmux import PasteError
 
 # Goes into a tmux session name, where "." and ":" separate target parts.
 _SHORT_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,31}")
@@ -27,7 +28,14 @@ def get_sessions(with_meta: bool = True) -> list[dict]:
         reg_data = reg_sessions.get(s["name"], {})
         if reg_data.get("description"):
             s["description"] = reg_data["description"]
+        if reg_data.get("owner"):
+            s["owner"] = reg_data["owner"]
     return sessions
+
+
+def accepts_prompts(row: dict) -> bool:
+    """Whether a session can be sent prompts: agentop started it, and no plugin owns it (a dialogue's agents are read-only)."""
+    return bool(row.get("managed")) and not row.get("owner")
 
 
 def _record_start(result: dict, tool: str, cwd: str, short_name: str) -> dict:
@@ -223,6 +231,8 @@ def send(target: str, text: str, sessions: list[dict] | None = None) -> dict:
     s = found["session"]
     if not s.get("managed"):
         return {"ok": False, "error": f"{s['name']} was not started by agentop, so it can't be sent prompts"}
+    if not accepts_prompts(s):
+        return {"ok": False, "error": f"{s['name']} belongs to the {s['owner']} plugin, so it can't be sent prompts"}
     agent = get_agent(s["tool"])
     if not agent:
         return {"ok": False, "error": f"Unknown tool: {s['tool']}"}
@@ -231,5 +241,8 @@ def send(target: str, text: str, sessions: list[dict] | None = None) -> dict:
         return {"ok": False, "error": f"{s['name']} has no tmux session"}
     if not text.strip():
         return {"ok": False, "error": "The prompt is empty"}
-    agent.send_text(tmux_name, text)
+    try:
+        agent.deliver(tmux_name, text)
+    except PasteError as exc:
+        return {"ok": False, "error": f"The prompt didn't reach {s['name']}: {exc}"}
     return {"ok": True, "name": s["name"], "tmux": tmux_name}

@@ -9,14 +9,16 @@ from __future__ import annotations
 
 import fcntl
 import json
-import os
-import tempfile
+import logging
 import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from agentop.jsonfile import move_aside, write_json_atomic
 from agentop.paths import state_dir
+
+LOG = logging.getLogger(__name__)
 
 # The least time an ended session's record is kept: History lists it from here.
 ENDED_RETENTION_SECONDS = 30 * 24 * 3600
@@ -41,40 +43,58 @@ def _exclusive():
         yield
 
 
+class RegistryError(RuntimeError):
+    """The registry can't be read, so it isn't written: a write would replace every record with nothing."""
+
+
+def _parse(text: str) -> dict:
+    data = json.loads(text)
+    if not isinstance(data, dict) or not isinstance(data.setdefault("sessions", {}), dict):
+        raise TypeError("not a registry")
+    return data
+
+
 def load() -> dict:
+    """The registry, to read. An unreadable one reads as empty; only a write, under the lock, moves it aside."""
     path = registry_path()
-    if not path.exists():
-        return {"sessions": {}}
     try:
-        with open(path) as f:
-            data = json.load(f)
-        if "sessions" not in data:
-            data["sessions"] = {}
-        return data
-    except (json.JSONDecodeError, OSError):
+        return _parse(path.read_text())
+    except FileNotFoundError:
         return {"sessions": {}}
+    except (OSError, ValueError, TypeError) as exc:
+        LOG.warning("%s can't be read (%s); listing no records", path, exc)
+        return {"sessions": {}}
+
+
+def _load_for_update() -> dict:
+    """The registry, to change and save. Call it holding the lock. Raises RegistryError rather than return an empty one.
+
+    A file that isn't a registry is moved aside first, so it can be recovered by
+    hand and the next write starts a new one. A read that fails (a full disk, a
+    permission) leaves the file where it is.
+    """
+    path = registry_path()
+    try:
+        text = path.read_text()
+    except FileNotFoundError:
+        return {"sessions": {}}
+    except OSError as exc:
+        raise RegistryError(f"{path} can't be read: {exc}") from exc
+    try:
+        return _parse(text)
+    except (ValueError, TypeError) as exc:
+        aside = move_aside(path, f"isn't a valid registry ({exc})")
+        raise RegistryError(f"{path} wasn't a valid registry; it was moved to {aside}") from exc
 
 
 def save(data: dict):
-    _ensure_dir()
-    path = registry_path()
-    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
-    try:
-        with os.fdopen(fd, "w") as f:
-            json.dump(data, f, indent=2)
-        os.replace(tmp_path, path)
-    except Exception:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    write_json_atomic(registry_path(), data)
 
 
 def upsert_session(name: str, fields: dict):
     """Merge fields into a record. A value of None removes that field."""
     with _exclusive():
-        data = load()
+        data = _load_for_update()
         record = data["sessions"].setdefault(name, {})
         for key, value in fields.items():
             if value is None:
@@ -86,14 +106,14 @@ def upsert_session(name: str, fields: dict):
 
 def remove_session(name: str):
     with _exclusive():
-        data = load()
+        data = _load_for_update()
         if data["sessions"].pop(name, None) is not None:
             save(data)
 
 
 def set_description(name: str, description: str | None):
     with _exclusive():
-        data = load()
+        data = _load_for_update()
         if name not in data["sessions"]:
             return False
         if description:
@@ -115,7 +135,7 @@ def mark_ended_and_prune(live_names: set[str], now: float | None = None, retenti
     retention = max(retention or 0, ENDED_RETENTION_SECONDS)
     removed = []
     with _exclusive():
-        data = load()
+        data = _load_for_update()
         changed = False
         for name, record in list(data["sessions"].items()):
             if name in live_names or record.get("status") in ("starting", "failed"):
@@ -136,7 +156,7 @@ def mark_ended_and_prune(live_names: set[str], now: float | None = None, retenti
 def remove_agent_session(tool: str, agent_session_id: str) -> list[str]:
     """Drop every record of the agent session, as when its transcript is deleted. Returns their names."""
     with _exclusive():
-        data = load()
+        data = _load_for_update()
         names = [
             name
             for name, record in data["sessions"].items()

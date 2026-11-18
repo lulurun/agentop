@@ -15,9 +15,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import os
 import secrets
-import tempfile
 import time
 import uuid
 from collections import deque
@@ -25,6 +23,7 @@ from collections.abc import Callable
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
+from agentop.jsonfile import write_json_atomic
 from agentop.paths import state_dir
 
 TICKET_TTL_SECONDS = 30.0
@@ -116,15 +115,7 @@ class ClientStore:
         self._clients = {k: c for k, c in self._clients.items() if self._live(c, now)}
         if self._path is None:
             return
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        fd, tmp = tempfile.mkstemp(dir=self._path.parent, suffix=".tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                json.dump({"clients": [asdict(c) for c in self._clients.values()]}, f, indent=2)
-            os.replace(tmp, self._path)
-        except Exception:
-            Path(tmp).unlink(missing_ok=True)
-            raise
+        write_json_atomic(self._path, {"clients": [asdict(c) for c in self._clients.values()]})
         self._mtime = self._path.stat().st_mtime_ns
 
     @staticmethod

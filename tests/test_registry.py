@@ -1,5 +1,8 @@
 import multiprocessing
 import os
+from pathlib import Path
+
+import pytest
 
 from agentop import registry
 
@@ -44,3 +47,35 @@ def test_prune_stamps_then_removes_dead_records(tmp_path, monkeypatch):
     later = 1000.0 + registry.ENDED_RETENTION_SECONDS + 1
     assert registry.mark_ended_and_prune({"live"}, now=later) == ["dead"]
     assert set(registry.load()["sessions"]) == {"live", "failed"}
+
+
+def test_a_corrupt_registry_is_moved_aside_not_saved_over(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    registry.upsert_session("a", {"managed": True})
+    registry.upsert_session("b", {"managed": True})
+    path = registry.registry_path()
+    damaged = path.read_text()[:-10]
+    path.write_text(damaged)
+
+    assert registry.load() == {"sessions": {}}  # a reader sees nothing, and changes nothing
+    assert path.read_text() == damaged
+
+    with pytest.raises(registry.RegistryError):
+        registry.upsert_session("c", {"managed": True})
+    [aside] = path.parent.glob("sessions.json.corrupt-*")
+    assert aside.read_text() == damaged
+
+    registry.upsert_session("c", {"managed": True})  # the next write starts a new registry
+    assert registry.load()["sessions"] == {"c": {"managed": True}}
+
+
+def test_a_registry_that_cannot_be_read_is_not_written(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    registry.upsert_session("a", {"managed": True})
+    monkeypatch.setattr(Path, "read_text", lambda self, *a, **k: (_ for _ in ()).throw(PermissionError("denied")))
+    with pytest.raises(registry.RegistryError):
+        registry.upsert_session("b", {"managed": True})
+    monkeypatch.undo()
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    assert registry.load()["sessions"] == {"a": {"managed": True}}
+    assert not list(registry.registry_path().parent.glob("*.corrupt-*"))

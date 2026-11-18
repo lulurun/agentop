@@ -180,3 +180,12 @@ def test_each_tool_is_archived_from_where_its_module_says(monkeypatch, tmp_path)
         "codex": tmp_path / ".codex",
         "antigravity": tmp_path / ".gemini" / "antigravity-cli" / "brain",
     }
+
+
+def test_a_corrupt_state_is_moved_aside(archive, tmp_path):
+    archive.sweep()
+    archive.state_path.write_text('{"files": {"cla')
+    again = Archive(archive.folder, archive.sources)
+    assert again.state["files"] == {}
+    [aside] = archive.folder.glob("state.json.corrupt-*")
+    assert aside.read_text() == '{"files": {"cla'

@@ -1,7 +1,7 @@
 """Input bar: prompts and keys typed in the app's bar, sent to a session's agent.
 
 A prompt goes in the way `agentop send` types it, with the tool's own
-`send_text` (a paste, bracketed for the tools that need it, then Enter), so a
+`deliver` (a paste, bracketed for the tools that need it, then Enter), so a
 prompt of several lines arrives whole. A key is one of a fixed set, sent with
 `tmux send-keys`, for what a paste can't do: answer a menu, interrupt with Esc.
 (The bar's ^B, tmux's prefix, doesn't come here: send-keys would hand it to the
@@ -18,7 +18,8 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from agentop.agentclis import get_agent
-from agentop.tmux import Session
+from agentop.ops import accepts_prompts
+from agentop.tmux import PasteError, Session
 
 # The bar's key buttons, and the tmux key each one sends.
 KEYS = {
@@ -49,7 +50,7 @@ def register(api):
         row = next((s for s in api.sessions() if s["id"] == session_id), None)
         if row is None:
             raise HTTPException(404, "Session not found")
-        if not row.get("managed") or row.get("owner"):
+        if not accepts_prompts(row):
             raise HTTPException(409, "Only a session agentop started can be sent prompts")
         tmux_name = (row.get("tmux") or {}).get("session")
         if row.get("status") != "running" or not tmux_name:
@@ -64,13 +65,16 @@ def register(api):
             raise HTTPException(409, f"Unknown tool: {row.get('tool')}")
 
         def send():
-            Session.leave_mode(tmux_name)
             if body.text.strip():
-                agent.send_text(tmux_name, body.text)
+                agent.deliver(tmux_name, body.text)
             else:
+                Session.leave_mode(tmux_name)
                 Session.send_keys(tmux_name, "Enter")
 
-        await asyncio.to_thread(send)
+        try:
+            await asyncio.to_thread(send)
+        except PasteError as exc:
+            raise HTTPException(502, f"The prompt didn't reach the session: {exc}") from exc
         return {"ok": True}
 
     @api.router.post("/sessions/{session_id}/keys")

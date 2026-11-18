@@ -7,7 +7,7 @@ import threading
 import time
 from collections.abc import Callable
 
-from agentop.tmux import CapturePane, Session
+from agentop.tmux import CapturePane
 
 LOG = logging.getLogger(__name__)
 
@@ -21,9 +21,10 @@ class Actor:
         session: str,
         name: str,
         idle_seconds: float = 5.0,
-        send_text: Callable[[str, str], None] | None = None,
+        *,
+        send_text: Callable[[str, str], None],
     ):
-        """`send_text(session, text)` types into the tool: its AgentCli.send_text, since each tool takes a paste its own way."""
+        """`send_text(session, text)` types into the tool: its AgentCli.deliver, since each tool takes a paste its own way."""
         self.session = session
         self.name = name
         self.idle_seconds = idle_seconds
@@ -35,11 +36,7 @@ class Actor:
         return self
 
     def send(self, text: str) -> None:
-        if self._send_text:
-            self._send_text(self.session, text)
-            return
-        Session.paste_text(self.session, text)
-        Session.send_keys(self.session, "Enter")
+        self._send_text(self.session, text)
 
     def receive(self) -> str | None:
         """Wait for the screen to stabilise for idle_seconds, then return the full scrollback."""

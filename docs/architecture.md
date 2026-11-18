@@ -48,7 +48,7 @@ The interface, with the default for each thing that differs:
 | Being installed | `binary` (the program `launch_cmd` runs), `skills_dir()` (where agentop installs its skills for it, or None) |
 | Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_session()`, `resume_session()`, `post_start_hook()` |
 | Its own session ID, for History | `new_session_id()` and `start_cmd(id)`, for a tool that takes an ID at launch (Claude's `--session-id`); `session_id_after(pid, started)`, the ID from the tool's own records once the process is gone (Codex's log, Antigravity's CLI log) |
-| Typing into it | `send_text(session, text)` (plain paste, then Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
+| Typing into it | `deliver(session, text)`, which every prompt goes through: it takes the pane out of copy mode, then calls `send_text(session, text)` (plain paste, then Enter; no Enter if the paste failed), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |
 | What it's doing | `get_session_meta()`: session ID, AI title (`get_ai_title()`), token usage, bridge URL |
 | One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries. Only Claude has it (`claude --print`) |
@@ -74,7 +74,7 @@ The interface, with the default for each thing that differs:
 
 Generic tmux send/receive. Knows nothing about the dialogue protocol or the tool.
 
-- `send(text)` — types text in with the tool's `AgentCli.send_text`. Every tool's uses bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~), so multi-line prompts arrive intact: a plain tmux paste turns each line break into Enter, which submits (Claude Code too, for a short paste)
+- `send(text)` — types text in with the tool's `AgentCli.deliver`. Each paste goes through a tmux buffer of its own, deleted after, so concurrent sends can't swap prompts. Every tool's `send_text` uses bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~), so multi-line prompts arrive intact: a plain tmux paste turns each line break into Enter, which submits (Claude Code too, for a short paste)
 - `receive() -> str | None` — polls the screen until stable for `idle_seconds`, returns full scrollback
 
 ### 3.2 AgentInstance (`agent_instance.py`)
@@ -125,7 +125,9 @@ The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was
 
 ### 4.2 Registry (`registry.py`)
 
-JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A start records the agent's pid and start time, and the tool's session ID when it is known at launch; the store adds the ID and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6).
+JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A start records the agent's pid and start time, and the tool's session ID when it is known at launch; the store adds the ID and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6); neither `agentop send` nor the input bar types into them (`ops.accepts_prompts`).
+
+A write never saves over a registry it can't read: one that isn't valid JSON is moved aside to `sessions.json.corrupt-<time>` and the write fails once, so the next starts a new registry; a read error fails the write and leaves the file. `plugins.json` and Memory's `state.json` are moved aside the same way. All of them are written with `jsonfile.write_json_atomic` (fsync, then rename).
 
 ### 4.3 Ops (`ops.py`)
 

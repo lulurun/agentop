@@ -1,5 +1,9 @@
-from agentop import tmux
-from agentop.tmux import CapturePane, Session
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+
+from agentop import agentclis, tmux
+from agentop.tmux import CapturePane, PasteError, Session
 
 
 def _new(name):
@@ -95,3 +99,76 @@ def test_leave_mode_takes_the_pane_out_of_copy_mode(tmux_server):
     assert in_mode() == "0"
     Session.leave_mode("foo-1")  # not in a mode: nothing happens
     assert in_mode() == "0"
+
+
+def _buffers():
+    return tmux.run("list-buffers", "-F", "#{buffer_name}", text=True).stdout.split()
+
+
+def _wait_for(name, text):
+    for _ in range(100):
+        if text in CapturePane.screen(name):
+            return True
+        tmux.subprocess.run(["sleep", "0.05"])
+    return False
+
+
+def test_a_paste_uses_a_buffer_of_its_own_and_leaves_none_behind(tmux_server):
+    # A copy made in copy mode is in tmux's shared buffer: a paste must neither send it nor use it up.
+    _new("foo-1")
+    tmux.run("set-buffer", "-b", "mine", "the user's copy")
+    Session.paste_text("foo-1", "echo pasted-text")
+    Session.send_keys("foo-1", "Enter")
+    assert _wait_for("foo-1", "pasted-text")
+    assert "the user's copy" not in CapturePane.screen("foo-1")
+    assert _buffers() == ["mine"]
+
+
+def test_a_failed_paste_raises_and_leaves_no_buffer(tmux_server):
+    with pytest.raises(PasteError):
+        Session.paste_text("no-such-session", "hello")
+    assert _buffers() == []
+
+
+def test_concurrent_pastes_each_reach_their_own_session(tmux_server):
+    names = [f"s-{i}" for i in range(6)]
+    for name in names:
+        _new(name)
+    with ThreadPoolExecutor(len(names)) as pool:
+        list(pool.map(lambda n: Session.paste_text(n, f"echo for-{n}-{'x' * 2000}"), names))
+    for name in names:
+        Session.send_keys(name, "Enter")
+    for name in names:
+        for _ in range(100):
+            if f"for-{name}-" in CapturePane.scrollback(name):
+                break
+            tmux.subprocess.run(["sleep", "0.05"])
+        screen = CapturePane.scrollback(name)
+        assert f"for-{name}-" in screen
+        assert all(f"for-{other}-" not in screen for other in names if other != name)
+
+
+def test_no_enter_is_sent_after_a_failed_paste(monkeypatch):
+    keys = []
+
+    def fail(name, text):
+        raise PasteError("paste-buffer failed")
+
+    monkeypatch.setattr(Session, "paste_text", staticmethod(fail))
+    monkeypatch.setattr(Session, "paste_text_bracketed", staticmethod(fail))
+    monkeypatch.setattr(Session, "send_keys", staticmethod(lambda name, *k: keys.append(k)))
+    monkeypatch.setattr(Session, "leave_mode", staticmethod(lambda name: None))
+    monkeypatch.setattr("agentop.agentclis.codex.time.sleep", lambda s: None)
+    for agent in agentclis.AGENTS:
+        with pytest.raises(PasteError):
+            agent.deliver("t", "hello")
+    assert keys == []
+
+
+def test_deliver_takes_the_pane_out_of_copy_mode_first(monkeypatch):
+    calls = []
+    monkeypatch.setattr(Session, "leave_mode", staticmethod(lambda name: calls.append("leave")))
+    monkeypatch.setattr(Session, "paste_text_bracketed", staticmethod(lambda name, text: calls.append("paste")))
+    monkeypatch.setattr(Session, "send_keys", staticmethod(lambda name, *k: calls.append(k)))
+    agentclis.get_agent("claude").deliver("t", "hello")
+    assert calls == ["leave", "paste", ("Enter",)]

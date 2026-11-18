@@ -3,11 +3,11 @@
 import time
 
 from agentop import ops
-from agentop.tmux import CapturePane
+from agentop.tmux import CapturePane, PasteError, Session
 
 
-def session(name, managed=True):
-    return {"name": name, "tool": "fakeagent", "managed": managed, "tmux": {"session": name}}
+def session(name, managed=True, **fields):
+    return {"name": name, "tool": "fakeagent", "managed": managed, "tmux": {"session": name}, **fields}
 
 
 def test_a_name_matches_ignoring_case_and_suffix():
@@ -49,3 +49,28 @@ def test_the_prompt_is_typed_into_the_target(fake_agents, tmp_path):
     while "got: deploy akimoto" not in CapturePane.screen(name):
         assert time.monotonic() < deadline, "the prompt never arrived"
         time.sleep(0.1)
+
+
+def test_a_session_a_plugin_owns_gets_nothing():
+    # A dialogue's agents are read-only, as in the app's input bar.
+    result = ops.send("eiger", "deploy", [session("eiger-1", owner="dialogue")])
+    assert not result["ok"] and "belongs to the dialogue plugin" in result["error"]
+
+
+def test_the_owner_comes_from_the_registry(fake_agents, tmp_path):
+    name = ops.start("fakeagent", str(tmp_path), "eiger", owner="dialogue")["name"]
+    result = ops.send("Eiger", "deploy akimoto")
+    assert not result["ok"] and "belongs to the dialogue plugin" in result["error"]
+    time.sleep(0.5)
+    assert "got: deploy akimoto" not in CapturePane.screen(name)
+
+
+def test_a_failed_paste_is_an_error(fake_agents, tmp_path, monkeypatch):
+    ops.start("fakeagent", str(tmp_path), "eiger")
+
+    def fail(name, text):
+        raise PasteError("paste-buffer failed")
+
+    monkeypatch.setattr(Session, "paste_text", staticmethod(fail))
+    result = ops.send("Eiger", "deploy akimoto")
+    assert not result["ok"] and "paste-buffer failed" in result["error"]

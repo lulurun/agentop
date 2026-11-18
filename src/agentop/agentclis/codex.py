@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import sqlite3
 import time
+import tomllib
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
@@ -15,6 +17,11 @@ from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines,
 from agentop.tmux import Session
 
 _HOME = Path("~/.codex")
+
+LOG = logging.getLogger(__name__)
+
+# A folder name with these can't be written safely into codex's config.
+_UNSAFE_PATH_CHARS = re.compile(r"[\x00-\x1f\x7f\ud800-\udfff]")
 
 # tmux paste-buffer returning only confirms the paste was queued, not that
 # codex's CLI has finished ingesting it from the pty. Sending Enter immediately
@@ -149,15 +156,31 @@ class CodexAgentCli(AgentCli):
 
     @staticmethod
     def _pretrust_dir(cwd: str) -> None:
+        """Mark cwd trusted in ~/.codex/config.toml, so codex starts without asking.
+
+        cwd is a folder name, which can hold any character: it goes in as an escaped
+        TOML string, or a name with a quote and a newline could add its own tables
+        (an MCP server command, say). The file is appended to, not rewritten, so a
+        symlinked config stays a symlink.
+        """
         config_path = (_HOME / "config.toml").expanduser()
         if not config_path.exists():
             return
-        marker = f'[projects."{cwd}"]'
-        text = config_path.read_text()
-        if marker in text:
+        if _UNSAFE_PATH_CHARS.search(cwd):
+            LOG.warning("Not pre-trusting %r for codex: the path has control or surrogate characters", cwd)
+            return
+        try:
+            text = config_path.read_text()
+            if cwd in (tomllib.loads(text).get("projects") or {}):
+                return
+            entry = f'\n[projects.{json.dumps(cwd, ensure_ascii=False)}]\ntrust_level = "trusted"\n'
+            if tomllib.loads(text + entry).get("projects", {}).get(cwd) != {"trust_level": "trusted"}:
+                raise ValueError("the entry wouldn't parse as this folder's trust setting")
+        except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError, ValueError, AttributeError) as exc:
+            LOG.warning("Not pre-trusting %s for codex: %s", cwd, exc)
             return
         with open(config_path, "a") as f:
-            f.write(f'\n{marker}\ntrust_level = "trusted"\n')
+            f.write(entry)
 
     def _logged_thread_id(self, pid: int, start: float) -> Optional[str]:
         """The thread this process last logged about, from codex's own log.

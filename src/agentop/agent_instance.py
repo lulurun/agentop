@@ -27,7 +27,7 @@ class AgentInstance:
             session=session,
             name=name,
             idle_seconds=agent.idle_seconds,
-            send_text=agent.send_text,
+            send_text=agent.deliver,
         )
 
     def send_command(self, text: str) -> None:

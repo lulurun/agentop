@@ -46,8 +46,16 @@ class AgentCli:
     # How long a dialogue waits after launch before the first prompt.
     boot_seconds: float = 8.0
 
+    def deliver(self, session: str, text: str) -> None:
+        """Submit a prompt: take the pane out of copy mode, where Enter wouldn't reach the tool, then send_text.
+
+        Every prompt goes through here. Raises PasteError, before Enter, if the paste failed.
+        """
+        Session.leave_mode(session)
+        self.send_text(session, text)
+
     def send_text(self, session: str, text: str) -> None:
-        """Type text into the tool's input and submit it."""
+        """Type text into the tool's input and submit it. Raises PasteError, and sends no Enter, if the paste failed."""
         Session.paste_text(session, text)
         Session.send_keys(session, "Enter")
 

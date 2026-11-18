@@ -22,7 +22,6 @@ import importlib.util
 import inspect
 import json
 import logging
-import os
 import sys
 import time
 from collections import deque
@@ -34,6 +33,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
 
 from agentop import paths
+from agentop.jsonfile import move_aside, write_json_atomic
 from agentop.plugin_manifest import (  # noqa: F401 - DEFAULT_ROOT and the rest are imported from here too
     DEFAULT_ROOT,
     LOGIN_SLOT,
@@ -79,10 +79,7 @@ class PluginStore:
             return None
 
     def save(self, data: Any) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(data, indent=2))
-        os.replace(tmp, self.path)
+        write_json_atomic(self.path, data)
 
 
 class PluginAPI:
@@ -475,12 +472,18 @@ class PluginHost:
         return flags
 
     def _write_flag(self, plugin_id: str, enabled: bool) -> None:
-        flags = self._read_flags()
+        # Not _read_flags: its {} for a file it can't read would be saved over every other plugin's flag.
+        try:
+            flags = json.loads(self.flags_path.read_text())
+        except FileNotFoundError:
+            flags = {}
+        except ValueError:
+            flags = None
+        if not isinstance(flags, dict):
+            move_aside(self.flags_path, "isn't valid plugin flags")
+            flags = {}
         flags[plugin_id] = {**(flags.get(plugin_id) or {}), "enabled": enabled}
-        self.flags_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.flags_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(flags, indent=2))
-        os.replace(tmp, self.flags_path)
+        write_json_atomic(self.flags_path, flags)
 
 
 def _in_loop() -> bool:

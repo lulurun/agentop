@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from agentop.agentclis import AGENTS
+from agentop.jsonfile import move_aside, write_json_atomic
 
 SAMPLE_BYTES = 4096
 MAX_ERRORS = 20
@@ -77,19 +78,22 @@ class Archive:
         self.state: dict = self._load()
 
     def _load(self) -> dict:
+        """The saved state. One that isn't valid is moved aside, not saved over; one that can't be read (OSError) raises."""
         try:
             state = json.loads(self.state_path.read_text())
-            if isinstance(state, dict) and isinstance(state.get("files"), dict):
-                return state
-        except (OSError, ValueError):
-            pass
+        except FileNotFoundError:
+            state = None
+        except ValueError:
+            state = {}
+        if state is None:
+            return {"files": {}, "last_sweep": None}
+        if isinstance(state, dict) and isinstance(state.get("files"), dict):
+            return state
+        move_aside(self.state_path, "isn't a valid archive state")
         return {"files": {}, "last_sweep": None}
 
     def _save(self) -> None:
-        self.folder.mkdir(parents=True, exist_ok=True)
-        tmp = self.state_path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(self.state))
-        os.replace(tmp, self.state_path)
+        write_json_atomic(self.state_path, self.state, indent=None)
 
     def sweep(self, stop: Callable[[], bool] = lambda: False) -> dict:
         """Bring the archive up to date. Returns what this sweep did. `stop` ends it early; the next sweep carries on."""

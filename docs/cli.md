@@ -70,7 +70,8 @@ agentop send <target> < prompt.txt     # no prompt: read it from stdin
 
 - `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `deploy` finds `Deploy-2953204`. With no match it says `I don't see an active session called 'deploy'`, and with several it lists them. It never starts a session
 - Run from inside tmux, the prompt gets a first line `[agentop send from <this session>]`; `--no-header` leaves it off
-- Only managed sessions (started by agentop) take prompts
+- Only managed sessions (started by agentop) take prompts, and not a plugin's own sessions, such as a dialogue's agents
+- If the paste fails, it says so and presses no Enter
 - Nothing comes back by itself: switch to the target to follow it and answer it. A prompt can ask the target to reply with its own `agentop send`, which arrives as a new prompt in the sender
 
 The `handoff` skill uses it to pass a side task, such as a deploy, from one session to another. When the sender needs a result, such as a build version, the prompt asks for a one-line reply.
