@@ -403,6 +403,7 @@ fn login_path() -> Result<String, String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".into());
     let mut command = Command::new(&shell);
     command.args(["-ilc", "env"]);
+    crate::service::detach(&mut command);
     let output = output_within(&mut command, PROBE_TIMEOUT).ok_or_else(|| format!("Your login shell ({shell}) didn't start."))?;
     output
         .lines()

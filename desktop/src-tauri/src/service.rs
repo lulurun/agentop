@@ -234,13 +234,27 @@ fn spawn(port: u16) -> Result<Child, String> {
         login_shell_command(&bin, &args)
     };
     command.stdin(Stdio::null()).stdout(out).stderr(err);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        // Its own process group: a Ctrl+C meant for `npm run dev` doesn't reach it.
-        command.process_group(0);
-    }
+    detach(&mut command);
     command.spawn().map_err(|e| format!("Couldn't start agentop serve: {e}"))
+}
+
+/// Its own session, with no controlling terminal. In only its own process group, an app
+/// started from a terminal made the interactive login shell a background job there, and
+/// the first rc file to touch the terminal stopped it (SIGTTOU) before it ran agentop.
+/// Also keeps a Ctrl+C meant for `npm run dev` from reaching the service.
+pub fn detach(command: &mut Command) {
+    #[cfg(unix)]
+    unsafe {
+        use std::os::unix::process::CommandExt;
+        command.pre_exec(|| {
+            if libc::setsid() == -1 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    #[cfg(not(unix))]
+    let _ = command;
 }
 
 #[cfg(unix)]

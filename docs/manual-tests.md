@@ -126,6 +126,7 @@ The desktop window has never been opened; every case here is Not run. Redesigned
 | H8 | Repeat C1 to C5 and D1 to D4 in the desktop app | Same as in the browser | Not run |
 | H9 | Remove `~/.agentop-desktop/venv`, then open the app | The setup screen lists the tools and installs again; Launch opens the app signed in | Not run |
 | H13 | On a Mac without tmux, open the app for the first time | tmux shows ✗ with `brew install tmux`, nothing installs; after installing it, Check again goes on to install, then **Ready to launch** | Not run |
+| H15 | Start the app from Terminal (`/Applications/agentop-desktop.app/Contents/MacOS/agentop-desktop`) with an rc file that sets up the prompt | The service starts; `ps` shows `agentop serve`, not a `zsh -ilc` stuck before it | Not run |
 | H14 | On a Mac where `~/.local/bin` isn't on PATH, run setup | "agentop on PATH" shows ✗ with the line for `~/.zprofile`; **Add it** adds it once and setup passes | Not run |
 | H10 | Install `agentop-desktop v1.1.1`, then release `v1.1.2` | **App update** shows; clicking it updates and restarts the app; sessions keep running, and closing the new copy stops the service | Not run |
 | H11 | Run a copy built with `npm run build` while a newer release exists | **App update** opens the release page instead of installing | Not run |
