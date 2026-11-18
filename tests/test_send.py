@@ -68,9 +68,9 @@ def test_the_owner_comes_from_the_registry(fake_agents, tmp_path):
 def test_a_failed_paste_is_an_error(fake_agents, tmp_path, monkeypatch):
     ops.start("fakeagent", str(tmp_path), "eiger")
 
-    def fail(name, text):
+    def fail(name, payload, bracketed=False):
         raise PasteError("paste-buffer failed")
 
-    monkeypatch.setattr(Session, "paste_text", staticmethod(fail))
+    monkeypatch.setattr(Session, "_load_and_paste", staticmethod(fail))
     result = ops.send("Eiger", "deploy akimoto")
     assert not result["ok"] and "paste-buffer failed" in result["error"]

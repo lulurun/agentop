@@ -55,8 +55,13 @@ class AgentCli:
         self.send_text(session, text)
 
     def send_text(self, session: str, text: str) -> None:
-        """Type text into the tool's input and submit it. Raises PasteError, and sends no Enter, if the paste failed."""
-        Session.paste_text(session, text)
+        """Paste text into the tool's input and submit it. Raises PasteError, and sends no Enter, if the paste failed.
+
+        Bracketed, so a line break stays in the prompt: a plain tmux paste turns each
+        one into Enter, which submits (Claude Code too, for a short paste). A program
+        that hasn't turned bracketed paste on gets a plain paste.
+        """
+        Session.paste_text_bracketed(session, text)
         Session.send_keys(session, "Enter")
 
     # ------------------------------------------------------------------ startup
@@ -367,15 +372,6 @@ class AgentCli:
 
     # ------------------------------------------------------------------ metadata
 
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        return None
-
-    def get_extra_meta(self, pid: int, cwd: str) -> dict:
-        return {}
-
     def get_session_meta(self, pid: int, cwd: str) -> dict:
-        meta = self.get_extra_meta(pid, cwd)
-        title = self.get_ai_title(pid, cwd)
-        if title:
-            meta["ai_title"] = title
-        return meta
+        """What the live process is doing: any of session_id, ai_title, token_usage, and the tool's own extras."""
+        return {}

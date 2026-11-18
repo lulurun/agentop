@@ -48,9 +48,9 @@ The interface, with the default for each thing that differs:
 | Being installed | `binary` (the program `launch_cmd` runs), `skills_dir()` (where agentop installs its skills for it, or None) |
 | Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_session()`, `resume_session()`, `post_start_hook()` |
 | Its own session ID, for History | `new_session_id()` and `start_cmd(id)`, for a tool that takes an ID at launch (Claude's `--session-id`); `session_id_after(pid, started)`, the ID from the tool's own records once the process is gone (Codex's log, Antigravity's CLI log) |
-| Typing into it | `deliver(session, text)`, which every prompt goes through: it takes the pane out of copy mode, then calls `send_text(session, text)` (plain paste, then Enter; no Enter if the paste failed), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
+| Typing into it | `deliver(session, text)`, which every prompt goes through: it takes the pane out of copy mode, then calls `send_text(session, text)` (bracketed paste, then Enter; no Enter if the paste failed; Codex waits a moment before Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |
-| What it's doing | `get_session_meta()`: session ID, AI title (`get_ai_title()`), token usage, bridge URL |
+| What it's doing | `get_session_meta()`: session ID, AI title, token usage, bridge URL, from one read of the tool's files |
 | One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries. Only Claude has it (`claude --print`) |
 | Its transcripts | `transcripts_root()` (the tool's own folder), `archive_files(root)` (what the Memory archive copies), `transcript_files(session_id, root)` (one session's files), `conversation_reader(path)` (how to read one as prompts and replies), `side_conversation(path)` (a subagent's, left out of History's message counts), `token_usage(path)` (the tokens one file records), `searchable(relative)` (whether it goes in the Memory search table) |
 
@@ -74,7 +74,7 @@ The interface, with the default for each thing that differs:
 
 Generic tmux send/receive. Knows nothing about the dialogue protocol or the tool.
 
-- `send(text)` — types text in with the tool's `AgentCli.deliver`. Each paste goes through a tmux buffer of its own, deleted after, so concurrent sends can't swap prompts. Every tool's `send_text` uses bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~), so multi-line prompts arrive intact: a plain tmux paste turns each line break into Enter, which submits (Claude Code too, for a short paste)
+- `send(text)` — types text in with the tool's `AgentCli.deliver`. Each paste goes through a tmux buffer of its own, deleted after, so concurrent sends can't swap prompts. `send_text` uses bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~), so multi-line prompts arrive intact: a plain tmux paste turns each line break into Enter, which submits (Claude Code too, for a short paste)
 - `receive() -> str | None` — polls the screen until stable for `idle_seconds`, returns full scrollback
 
 ### 3.2 AgentInstance (`agent_instance.py`)

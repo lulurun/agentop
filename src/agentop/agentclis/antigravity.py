@@ -12,7 +12,6 @@ import psutil
 
 from agentop.agentclis.base import AgentCli
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines
-from agentop.tmux import Session
 
 _LOG_DIR = Path("~/.gemini/antigravity-cli/log")
 # One folder per conversation. Conversations from before the rename to
@@ -81,11 +80,6 @@ class AntigravityAgentCli(AgentCli):
     @property
     def launch_cmd(self) -> str:
         return "agy --dangerously-skip-permissions"
-
-    def send_text(self, session: str, text: str) -> None:
-        """Bracketed paste, since agy submits on a bare newline."""
-        Session.paste_text_bracketed(session, text)
-        Session.send_keys(session, "Enter")
 
     def _find_log_file(self, pid: int, proc_start: Optional[float] = None) -> Optional[Path]:
         """Find the log file for this process by matching the filename timestamp to the process start time."""
@@ -259,18 +253,18 @@ class AntigravityAgentCli(AgentCli):
             raise FileNotFoundError(f"Session {session_id} not found in Antigravity brain")
         shutil.rmtree(conv_dir)
 
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Return the first user message from the session log as the title."""
+    def get_session_meta(self, pid: int, cwd: str) -> dict:
+        """The first user message in the session log, as the title."""
         log_file = self._find_log_file(pid)
         if not log_file:
-            return None
+            return {}
         try:
             with open(log_file) as f:
                 for line in f:
                     m = _USER_INPUT_RE.search(line)
                     if m:
                         text = m.group(1)
-                        return text[:80] + ("…" if len(text) > 80 else "")
+                        return {"ai_title": text[:80] + ("…" if len(text) > 80 else "")}
         except OSError:
-            return None
-        return None
+            pass
+        return {}

@@ -11,7 +11,6 @@ from typing import Optional
 
 from agentop.agentclis.base import AgentCli, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
-from agentop.tmux import Session
 
 _PROJECTS_DIR = Path("~/.claude/projects")
 
@@ -83,13 +82,6 @@ class ClaudeAgentCli(AgentCli):
     @property
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions --remote-control"
-
-    def send_text(self, session: str, text: str) -> None:
-        """Bracketed paste, so a line break stays in the prompt. A plain tmux paste
-        turns each one into Enter, and Claude Code sends the lines as separate
-        prompts unless the burst is long enough to look like a paste."""
-        Session.paste_text_bracketed(session, text)
-        Session.send_keys(session, "Enter")
 
     def skills_dir(self) -> Path:
         return Path.home() / ".claude" / "skills"
@@ -240,102 +232,73 @@ class ClaudeAgentCli(AgentCli):
                 Session.send_keys(tmux_session, "Down", "Enter")
                 return
 
-    def _get_jsonl_path(self, pid: int, cwd: str) -> Optional[Path]:
-        """Resolve the JSONL conversation file for a Claude session, or None."""
-        session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
-        if not session_file.exists():
-            return None
-        try:
-            with open(session_file) as f:
-                meta = json.load(f)
-            session_id = meta.get("sessionId")
-            if not session_id:
-                return None
-            slug = cwd.replace("/", "-")
-            jsonl_path = self.transcripts_root() / slug / f"{session_id}.jsonl"
-            return jsonl_path if jsonl_path.exists() else None
-        except (OSError, json.JSONDecodeError):
-            return None
-
     def token_usage(self, path: Path) -> Optional[dict]:
-        """The usage of each assistant message, summed. A message written in several records counts once."""
         if not TRANSCRIPT.search(path.name):
             return None
         try:
+            return _sum_usage(json_lines(path))
+        except OSError:
+            return None
+
+    def get_session_meta(self, pid: int, cwd: str) -> dict:
+        """From ~/.claude/sessions/<pid>.json (session ID, remote control) and one read of the transcript (title, usage)."""
+        try:
+            meta = json.loads(Path(f"~/.claude/sessions/{pid}.json").expanduser().read_text())
+        except (OSError, ValueError):
+            return {}
+        if not isinstance(meta, dict):
+            return {}
+        result: dict = {}
+        bridge_id = meta.get("bridgeSessionId")
+        if bridge_id:
+            hostname = socket.gethostname()
+            raw = bridge_id.replace("session_", "")
+            remote_name = f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
+            result.update(
+                {
+                    "bridge_session_id": bridge_id,
+                    "bridge_url": f"https://claude.ai/code/{bridge_id}",
+                    "remote_name": remote_name,
+                    "claude_status": meta.get("status"),
+                }
+            )
+        session_id = meta.get("sessionId")
+        if not session_id:
+            return result
+        result["session_id"] = session_id
+        path = self.transcripts_root() / cwd.replace("/", "-") / f"{session_id}.jsonl"
+        try:
             records = list(json_lines(path))
         except OSError:
-            return None
-        seen: set = set()
-        totals = {
-            "input_tokens": 0,
-            "output_tokens": 0,
-            "cache_creation_input_tokens": 0,
-            "cache_read_input_tokens": 0,
-        }
-        for obj in records:
-            if obj.get("type") != "assistant":
-                continue
-            msg = obj.get("message")
-            msg_id = msg.get("id") if isinstance(msg, dict) else None
-            if not msg_id or msg_id in seen:
-                continue
-            seen.add(msg_id)
-            usage = msg.get("usage") or {}
-            for k in totals:
-                value = usage.get(k)
-                totals[k] += value if isinstance(value, int) else 0
-        return totals if seen else None
-
-    def get_ai_title(self, pid: int, cwd: str) -> Optional[str]:
-        """Read the AI-generated title from ~/.claude/projects/{slug}/{session_id}.jsonl."""
-        jsonl_path = self._get_jsonl_path(pid, cwd)
-        if not jsonl_path:
-            return None
-        try:
-            last_title = None
-            with open(jsonl_path) as f:
-                for line in f:
-                    try:
-                        obj = json.loads(line)
-                        if obj.get("type") == "ai-title":
-                            last_title = obj.get("aiTitle")
-                    except json.JSONDecodeError:
-                        continue
-            return last_title
-        except OSError:
-            return None
-
-    def get_extra_meta(self, pid: int, cwd: str) -> dict:
-        """Read remote-control bridge info and token usage from ~/.claude/sessions/{pid}.json."""
-        session_file = Path(f"~/.claude/sessions/{pid}.json").expanduser()
-        result: dict = {}
-        if session_file.exists():
-            try:
-                with open(session_file) as f:
-                    meta = json.load(f)
-                session_id = meta.get("sessionId")
-                if session_id:
-                    result["session_id"] = session_id
-                bridge_id = meta.get("bridgeSessionId")
-                if bridge_id:
-                    hostname = socket.gethostname()
-                    raw = bridge_id.replace("session_", "")
-                    remote_name = f"{hostname}-{raw[:4]}-{raw[4:8]}" if len(raw) >= 8 else f"{hostname}-{raw}"
-                    result.update(
-                        {
-                            "bridge_session_id": bridge_id,
-                            "bridge_url": f"https://claude.ai/code/{bridge_id}",
-                            "remote_name": remote_name,
-                            "claude_status": meta.get("status"),
-                        }
-                    )
-            except (OSError, json.JSONDecodeError):
-                pass
-
-        jsonl_path = self._get_jsonl_path(pid, cwd)
-        if jsonl_path:
-            token_usage = self.token_usage(jsonl_path)
-            if token_usage:
-                result["token_usage"] = token_usage
-
+            return result
+        titles = [r.get("aiTitle") for r in records if r.get("type") == "ai-title"]
+        if titles and titles[-1]:
+            result["ai_title"] = titles[-1]
+        usage = _sum_usage(records)
+        if usage:
+            result["token_usage"] = usage
         return result
+
+
+def _sum_usage(records) -> Optional[dict]:
+    """The usage of each assistant message, summed. A message written in several records counts once."""
+    seen: set = set()
+    totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+    }
+    for obj in records:
+        if obj.get("type") != "assistant":
+            continue
+        msg = obj.get("message")
+        msg_id = msg.get("id") if isinstance(msg, dict) else None
+        if not msg_id or msg_id in seen:
+            continue
+        seen.add(msg_id)
+        usage = msg.get("usage") or {}
+        for k in totals:
+            value = usage.get(k)
+            totals[k] += value if isinstance(value, int) else 0
+    return totals if seen else None

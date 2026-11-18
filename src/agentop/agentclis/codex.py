@@ -405,7 +405,7 @@ class CodexAgentCli(AgentCli):
         return result
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:
-        """Override to query _find_thread once and derive session_id, title, and token usage."""
+        """From the one thread _find_thread finds: session_id, title, and token usage."""
         thread = self._find_thread(pid, cwd)
         meta: dict = {}
         if not thread:
