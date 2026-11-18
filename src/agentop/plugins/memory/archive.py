@@ -16,7 +16,7 @@ from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
-from agentop.agentclis import AGENTS
+from agentop import agentclis
 from agentop.jsonfile import move_aside, write_json_atomic
 
 SAMPLE_BYTES = 4096
@@ -32,7 +32,7 @@ class Source:
 
 def default_sources() -> list[Source]:
     """Each tool's transcripts root, and which of its files to keep: the tool's own module says."""
-    return [Source(a.name, root, a.archive_files) for a in AGENTS if (root := a.transcripts_root())]
+    return [Source(a.name, root, a.archive_files) for a in agentclis.AGENTS if (root := a.transcripts_root())]
 
 
 def _read_at(path: Path, offset: int, size: int) -> bytes:

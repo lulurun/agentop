@@ -11,6 +11,8 @@ src/agentop/
   conversation.py        What every transcript reader shares (Message, JSONL, .zst)
   actor.py               Sends/receives over tmux
   agent_instance.py      Wires AgentCli + Actor into one runtime object
+  launcher.py            Starts an agent in its own tmux session, the same way for every tool
+  oneshot.py             Runs a tool's one-shot command (ask), with no tmux
   scanner.py             Process detection and session building
   ops.py                 Business logic used by both the service and the CLI
   results.py             What ops returns (StartResult, StopResult, Sent, SavedSession), and OpsError
@@ -48,7 +50,8 @@ The interface, with the default for each thing that differs:
 |------|---------|
 | Spotting its process | `matches(proc_name, cmdline)` |
 | Being installed | `binary` (the program `launch_cmd` runs), `skills_dir()` (where agentop installs its skills for it, or None) |
-| Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_session()`, `resume_session()`, `post_start_hook()` |
+| Launching and resuming | `launch_cmd`, `get_resume_cmd()`, `start_timeout`, `mouse`, `post_start_hook()`; `start_session()` and `resume_session()` hand these to `launcher.launch()` |
+| Where its files are | `home` (the user's home unless one is given, as tests do): every path the tool reads is under it |
 | Its own session ID, for History | `new_session_id()` and `start_cmd(id)`, for a tool that takes an ID at launch (Claude's `--session-id`); `session_id_after(pid, started)`, the ID from the tool's own records once the process is gone (Codex's log, Antigravity's CLI log) |
 | Typing into it | `deliver(session, text)`, which every prompt goes through: it takes the pane out of copy mode, then calls `send_text(session, text)` (bracketed paste, then Enter; no Enter if the paste failed; Codex waits a moment before Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |

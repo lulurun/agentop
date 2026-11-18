@@ -14,10 +14,9 @@ from agentop.agentclis.base import AgentCli
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines
 from agentop.results import SavedSession, saved_session
 
-_LOG_DIR = Path("~/.gemini/antigravity-cli/log")
-# One folder per conversation. Conversations from before the rename to
+_TOOL_DIR = Path(".gemini") / "antigravity-cli"
+# brain/ has one folder per conversation. Conversations from before the rename to
 # Antigravity are only in its binary store, conversations/, and aren't read.
-_BRAIN_DIR = Path("~/.gemini/antigravity-cli/brain")
 _TRANSCRIPT = Path(".system_generated/logs/transcript.jsonl")
 
 _LOG_NAME_RE = re.compile(r"cli-(\d{8})_(\d{6})\.log")
@@ -84,7 +83,7 @@ class AntigravityAgentCli(AgentCli):
 
     def _find_log_file(self, pid: int, proc_start: Optional[float] = None) -> Optional[Path]:
         """Find the log file for this process by matching the filename timestamp to the process start time."""
-        log_dir = _LOG_DIR.expanduser()
+        log_dir = self.home / _TOOL_DIR / "log"
         if not log_dir.exists():
             return None
         if proc_start is None:
@@ -134,8 +133,8 @@ class AntigravityAgentCli(AgentCli):
 
     def _conv_to_cwd_map(self) -> dict[str, str]:
         """Scan log files to build a conversation_id → cwd mapping."""
-        log_dir = _LOG_DIR.expanduser()
-        projects_dir = Path("~/.gemini/config/projects").expanduser()
+        log_dir = self.home / _TOOL_DIR / "log"
+        projects_dir = self.home / ".gemini" / "config" / "projects"
         conv_to_proj: dict[str, str] = {}
         proj_to_cwd: dict[str, str] = {}
         _proj_re = re.compile(r"Conversation using project ID: (\S+)")
@@ -168,7 +167,7 @@ class AntigravityAgentCli(AgentCli):
     # ------------------------------------------------------------------ transcripts
 
     def transcripts_root(self) -> Path:
-        return _BRAIN_DIR.expanduser()
+        return self.home / _TOOL_DIR / "brain"
 
     def conversation_reader(self, path: Path) -> tuple[Reader, dict] | None:
         """`<conversation>/.system_generated/logs/transcript.jsonl`; the conversation ID is its folder's name."""

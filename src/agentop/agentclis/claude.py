@@ -13,7 +13,6 @@ from agentop.agentclis.base import AgentCli, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, saved_session
 
-_PROJECTS_DIR = Path("~/.claude/projects")
 
 # ---------------------------------------------------------------- transcripts as conversations
 
@@ -85,7 +84,7 @@ class ClaudeAgentCli(AgentCli):
         return "claude --dangerously-skip-permissions --remote-control"
 
     def skills_dir(self) -> Path:
-        return Path.home() / ".claude" / "skills"
+        return self.home / ".claude" / "skills"
 
     def matches(self, proc_name: str, cmdline: str) -> bool:
         # Print mode answers one prompt and exits: a script's, or agentop's own
@@ -135,7 +134,7 @@ class ClaudeAgentCli(AgentCli):
     # ------------------------------------------------------------------ transcripts
 
     def transcripts_root(self) -> Path:
-        return _PROJECTS_DIR.expanduser()
+        return self.home / ".claude" / "projects"
 
     def archive_files(self, root: Path) -> Iterator[Path]:
         """Every session log and the folders beside them. Not Claude Code's own memory notes."""
@@ -236,7 +235,7 @@ class ClaudeAgentCli(AgentCli):
     def get_session_meta(self, pid: int, cwd: str) -> dict:
         """From ~/.claude/sessions/<pid>.json (session ID, remote control) and one read of the transcript (title, usage)."""
         try:
-            meta = json.loads(Path(f"~/.claude/sessions/{pid}.json").expanduser().read_text())
+            meta = json.loads((self.home / ".claude" / "sessions" / f"{pid}.json").read_text())
         except (OSError, ValueError):
             return {}
         if not isinstance(meta, dict):

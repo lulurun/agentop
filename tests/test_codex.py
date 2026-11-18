@@ -110,8 +110,8 @@ def config(home):
 
 
 def test_pretrust_adds_the_folder_once(config):
-    CodexAgentCli._pretrust_dir("/w/proj")
-    CodexAgentCli._pretrust_dir("/w/proj")
+    CodexAgentCli()._pretrust_dir("/w/proj")
+    CodexAgentCli()._pretrust_dir("/w/proj")
     data = tomllib.loads(config.read_text())
     assert data["projects"] == {"/w/proj": {"trust_level": "trusted"}}
     assert config.read_text().count("/w/proj") == 1
@@ -120,20 +120,20 @@ def test_pretrust_adds_the_folder_once(config):
 def test_a_folder_name_cannot_add_its_own_settings(config):
     # A quote ends the TOML key unless escaped; this name would add an MCP server.
     cwd = '/w/x"]\ntrust_level = "trusted"\n[mcp_servers.evil]\ncommand = "sh'
-    CodexAgentCli._pretrust_dir(cwd)
+    CodexAgentCli()._pretrust_dir(cwd)
     assert "mcp_servers" not in tomllib.loads(config.read_text())
 
 
 def test_a_quote_or_backslash_in_the_name_is_escaped(config):
     cwd = '/w/a "quoted" \\ folder ü'
-    CodexAgentCli._pretrust_dir(cwd)
+    CodexAgentCli()._pretrust_dir(cwd)
     data = tomllib.loads(config.read_text())
     assert data["projects"] == {cwd: {"trust_level": "trusted"}}
 
 
 def test_a_name_with_another_entry_inside_it_is_still_added(config):
     config.write_text(config.read_text() + '\n[projects."/w/a"]\ntrust_level = "untrusted"\n')
-    CodexAgentCli._pretrust_dir("/w")
+    CodexAgentCli()._pretrust_dir("/w")
     assert tomllib.loads(config.read_text())["projects"]["/w"] == {"trust_level": "trusted"}
 
 
@@ -141,7 +141,7 @@ def test_a_symlinked_config_stays_a_symlink(config, tmp_path):
     real = tmp_path / "dotfiles-config.toml"
     config.rename(real)
     config.symlink_to(real)
-    CodexAgentCli._pretrust_dir("/w/proj")
+    CodexAgentCli()._pretrust_dir("/w/proj")
     assert config.is_symlink()
     assert "/w/proj" in tomllib.loads(real.read_text())["projects"]
 
@@ -149,11 +149,11 @@ def test_a_symlinked_config_stays_a_symlink(config, tmp_path):
 @pytest.mark.parametrize("cwd", ["/w/new\nline", "/w/tab\there", "/w/bad\udcff"])
 def test_a_name_with_control_or_surrogate_characters_is_not_written(config, cwd):
     before = config.read_text()
-    CodexAgentCli._pretrust_dir(cwd)
+    CodexAgentCli()._pretrust_dir(cwd)
     assert config.read_text() == before
 
 
 def test_a_config_that_does_not_parse_is_left_alone(config):
     config.write_text("this is = = not toml\n")
-    CodexAgentCli._pretrust_dir("/w/proj")
+    CodexAgentCli()._pretrust_dir("/w/proj")
     assert config.read_text() == "this is = = not toml\n"

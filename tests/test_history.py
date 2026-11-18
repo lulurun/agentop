@@ -219,15 +219,16 @@ def test_antigravity_finds_the_conversation_in_the_log_of_its_run(tmp_path, monk
 
     from agentop.agentclis import antigravity
 
-    monkeypatch.setattr(antigravity, "_LOG_DIR", tmp_path)
+    log_dir = tmp_path / ".gemini" / "antigravity-cli" / "log"
+    log_dir.mkdir(parents=True)
     started = datetime(2026, 11, 15, 21, 56, 1).timestamp()
     conversation = "d27f8d20-bfdb-4cdc-b297-c4e21978d562"
-    (tmp_path / "cli-20261115_215601.log").write_text(
+    (log_dir / "cli-20261115_215601.log").write_text(
         "I1115 conversation_manager.go:1] Starting new conversation (agent=false)\n"
         f"I1115 conversation_manager.go:2] Created conversation {conversation}\n"
         "I1115 server.go:3] Full redraw completed (rerenderAll) for conversation  (epoch 0, items 1)\n"
     )
-    agent = antigravity.AntigravityAgentCli()
+    agent = antigravity.AntigravityAgentCli(home=tmp_path)
     assert agent.session_id_after(1, started) == conversation
     assert agent.session_id_after(1, started + 3600) is None
 

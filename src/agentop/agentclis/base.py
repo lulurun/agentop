@@ -13,17 +13,15 @@ from __future__ import annotations
 import random
 import shutil
 import string
-import subprocess
-import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Callable, Optional
 
-import psutil
 
+from agentop import launcher, oneshot
 from agentop.conversation import Reader
 from agentop.results import SavedSession, StartFailed, StartResult
-from agentop.tmux import CapturePane, Session
+from agentop.tmux import Session
 
 ProgressCallback = Callable[[str], None]
 
@@ -40,6 +38,15 @@ class AgentCli:
     """Interface and shared implementation for every supported agent CLI tool."""
 
     name: str = ""  # "claude", "codex", "antigravity"
+    _home: Optional[Path] = None
+
+    def __init__(self, home: Optional[Path] = None) -> None:
+        self._home = home
+
+    @property
+    def home(self) -> Path:
+        """The home folder the tool keeps its files under: the one given, else the user's, looked up each time."""
+        return self._home or Path.home()
 
     # ------------------------------------------------------------------ typing into it
     # How long the screen must stay still before a reply counts as finished.
@@ -131,35 +138,7 @@ class AgentCli:
         if cmd is None:
             raise RuntimeError(f"{self.name} can't answer a one-shot prompt")
         cmd[0] = self.executable or shutil.which(cmd[0]) or cmd[0]
-        cwd.mkdir(parents=True, exist_ok=True)
-        try:
-            proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                errors="replace",
-                cwd=cwd,
-            )
-        except OSError as e:
-            raise RuntimeError(f"{self.name} did not run: {e}") from None
-        deadline = time.monotonic() + timeout
-        given: Optional[str] = prompt  # stdin is written on the first call only
-        while True:
-            try:
-                stdout, stderr = proc.communicate(given, timeout=0.5)
-                break
-            except subprocess.TimeoutExpired:
-                given = None
-                if stop() or time.monotonic() > deadline:
-                    proc.kill()
-                    proc.communicate()
-                    raise RuntimeError(f"{self.name} {'was stopped' if stop() else f'took over {timeout:g}s'}") from None
-        if proc.returncode != 0:
-            detail = (stderr or stdout).strip().splitlines()
-            raise RuntimeError(f"{self.name} failed ({proc.returncode}): {detail[-1] if detail else 'no output'}")
-        return self.ask_answer(stdout)
+        return self.ask_answer(oneshot.run(self.name, cmd, prompt, cwd, timeout, stop))
 
     def ask_answer(self, stdout: str) -> str:
         """The answer, from what ask_cmd printed."""
@@ -186,83 +165,6 @@ class AgentCli:
         rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
         return f"{base}-{rand_id}"
 
-    def _find_agent_pid(self, pane_pid: int) -> Optional[int]:
-        """Return the PID of this agent among the pane's descendants."""
-        try:
-            for child in psutil.Process(pane_pid).children(recursive=True):
-                try:
-                    if self.matches(child.name(), " ".join(child.cmdline() or [])):
-                        return child.pid
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            pass
-        return None
-
-    def _launch_failed(self, session: str, cmd: str) -> bool:
-        """Return True if the shell has already said it cannot run cmd."""
-        binary = cmd.split()[0]
-        screen = CapturePane.screen(session)
-        return "command not found" in screen or f"{binary}: not found" in screen
-
-    def _run_in_tmux(
-        self,
-        cmd: str,
-        cwd: str,
-        short_name: str = "",
-        params: dict | None = None,
-        name: str | None = None,
-        on_progress: ProgressCallback | None = None,
-        agent_session_id: str | None = None,
-    ) -> StartResult:
-        """Create a tmux session, run cmd in its shell, and wait for the agent process. Raises StartFailed.
-
-        The command is typed into the pane rather than passed to new-session
-        so that it runs with the user's shell setup, which the service's
-        environment does not have.
-
-        On failure the tmux session is left in place when it exists, and its
-        name is in the error, so the error stays visible on its screen.
-        """
-        progress = on_progress or (lambda step: None)
-        if params:
-            cmd = self._build_cmd(cmd, params)
-        name = name or self.new_session_name(short_name)
-
-        progress("creating")
-        if not Session.new(name, cwd):
-            raise StartFailed("tmux new-session failed")
-        if self.mouse:
-            Session.set_option(name, "mouse", "on")
-
-        progress("launching")
-        Session.send_keys(name, cmd, "Enter")
-
-        progress("waiting")
-        lines = Session.list_panes(name, "#{pane_pid}")
-        pane_pid = int(lines[0]) if lines and lines[0].isdigit() else None
-        tool_pid = None
-        deadline = time.monotonic() + self.start_timeout
-        while pane_pid and time.monotonic() < deadline:
-            tool_pid = self._find_agent_pid(pane_pid)
-            if tool_pid:
-                break
-            if self._launch_failed(name, cmd):
-                raise StartFailed(f"{cmd.split()[0]} is not installed, or not on the shell's PATH", name)
-            time.sleep(0.25)
-
-        if not tool_pid:
-            raise StartFailed(f"{self.name} did not start within {self.start_timeout:g}s", name)
-
-        progress("confirming")
-        self.post_start_hook(name)
-        try:
-            # With the pid, it tells this process from a later one given the same pid.
-            started = psutil.Process(tool_pid).create_time()
-        except (psutil.NoSuchProcess, psutil.AccessDenied):
-            started = None
-        return StartResult(name, tool_pid, started, agent_session_id)
-
     def start_session(
         self,
         cwd: str,
@@ -278,7 +180,7 @@ class AgentCli:
         """
         session_id = self.new_session_id()
         cmd = self.start_cmd(session_id) if session_id else self.launch_cmd
-        return self._run_in_tmux(cmd, cwd, short_name, params, name, on_progress, session_id)
+        return launcher.launch(self, cmd, cwd, short_name, params, name, on_progress, session_id)
 
     def resume_session(
         self,
@@ -292,7 +194,7 @@ class AgentCli:
         cmd = self.get_resume_cmd(session_id)
         if not cmd:
             raise StartFailed(f"{self.name} does not support session resume")
-        return self._run_in_tmux(cmd, cwd, short_name, name=name, on_progress=on_progress, agent_session_id=session_id)
+        return launcher.launch(self, cmd, cwd, short_name, None, name, on_progress, session_id)
 
     # ------------------------------------------------------------------ the tool's own session ID
 

@@ -7,7 +7,7 @@ import uuid
 
 import pytest
 
-from agentop import agentclis, ops, scanner, tmux
+from agentop import agentclis, tmux
 from agentop.agentclis.base import AgentCli
 
 
@@ -84,13 +84,8 @@ def tmux_server(tmp_path, monkeypatch):
 @pytest.fixture
 def fake_agents(tmux_server, monkeypatch):
     agents = [FakeAgent(), BrokenAgent(), SlowAgent()]
-    by_name = {a.name: a for a in agents}
     monkeypatch.setattr(agentclis, "AGENTS", agents)
-    monkeypatch.setattr(scanner, "AGENTS", agents)
-    monkeypatch.setattr(ops, "AGENTS", agents)
-    monkeypatch.setattr(scanner, "get_agent", by_name.get)
-    monkeypatch.setattr(ops, "get_agent", by_name.get)
-    return by_name
+    return {a.name: a for a in agents}
 
 
 def signed_in(token, name="test"):

@@ -30,7 +30,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from agentop import agentclis, history, ops, registry
-from agentop.agentclis import AGENTS
 from agentop.results import OpsError
 from agentop.tmux import Session
 
@@ -313,7 +312,7 @@ def create_v2_app(ctx: Context) -> FastAPI:
     @v2.get("/tools", response_model=list[ToolInfo], dependencies=authed)
     async def tools():
         if ctx.available is None:
-            found = await asyncio.to_thread(agentclis.installed, AGENTS)
+            found = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)
             ctx.available = [agent.name for agent in found]
         return [
             {
@@ -321,7 +320,7 @@ def create_v2_app(ctx: Context) -> FastAPI:
                 "installed": agent.name in ctx.available,
                 "supports_resume": agent.get_resume_cmd("x") is not None,
             }
-            for agent in AGENTS
+            for agent in agentclis.AGENTS
         ]
 
     @v2.get("/fs/dirs", response_model=DirListing, dependencies=authed)

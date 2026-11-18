@@ -9,8 +9,9 @@ from typing import Optional
 
 import psutil
 
+from agentop import agentclis
 from agentop import tmux as tmux_cli
-from agentop.agentclis import AGENTS, get_agent
+from agentop.agentclis import get_agent
 
 __all__ = [
     "build_sessions",
@@ -29,7 +30,7 @@ IGNORE_CMDLINE_PATTERNS = [
 
 
 def _detect_tool(name: str, cmdline: str) -> Optional[str]:
-    for agent in AGENTS:
+    for agent in agentclis.AGENTS:
         if agent.matches(name, cmdline):
             return agent.name
     return None
@@ -203,7 +204,7 @@ def build_sessions(managed_names: set | None = None, with_meta: bool = True) -> 
             name = tmux["session"]
         elif tmux:
             tmux_name = tmux["session"]
-            name = tmux_name if any(a.name in tmux_name.lower() for a in AGENTS) else f"{proc['tool']}-{proc['pid']}"
+            name = tmux_name if any(a.name in tmux_name.lower() for a in agentclis.AGENTS) else f"{proc['tool']}-{proc['pid']}"
         else:
             name = f"{proc['tool']}-{proc['pid']}"
 

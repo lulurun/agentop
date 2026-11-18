@@ -17,8 +17,6 @@ from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines,
 from agentop.results import SavedSession, StartResult, saved_session
 from agentop.tmux import Session
 
-_HOME = Path("~/.codex")
-
 LOG = logging.getLogger(__name__)
 
 # A folder name with these can't be written safely into codex's config.
@@ -86,7 +84,8 @@ class CodexAgentCli(AgentCli):
     _HELPERS = ("app-server", "codex-code-mode-host")
     _RESUME_RE = re.compile(r"\bresume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
 
-    def __init__(self) -> None:
+    def __init__(self, home: Optional[Path] = None) -> None:
+        super().__init__(home)
         # The last thread seen for each process, keyed by (pid, start time), since codex trims its log.
         self._threads: dict[tuple[int, float], str] = {}
 
@@ -139,7 +138,7 @@ class CodexAgentCli(AgentCli):
         return "codex --dangerously-bypass-hook-trust"
 
     def skills_dir(self) -> Path:
-        return _HOME.expanduser() / "skills"
+        return self.dir / "skills"
 
     def send_text(self, session: str, text: str) -> None:
         """Bracketed paste, since codex submits on a bare newline, then a pause for it to take the paste in."""
@@ -155,8 +154,11 @@ class CodexAgentCli(AgentCli):
         self._pretrust_dir(cwd)
         return super().start_session(cwd, short_name, params, **kwargs)
 
-    @staticmethod
-    def _pretrust_dir(cwd: str) -> None:
+    @property
+    def dir(self) -> Path:
+        return self.home / ".codex"
+
+    def _pretrust_dir(self, cwd: str) -> None:
         """Mark cwd trusted in ~/.codex/config.toml, so codex starts without asking.
 
         cwd is a folder name, which can hold any character: it goes in as an escaped
@@ -164,7 +166,7 @@ class CodexAgentCli(AgentCli):
         (an MCP server command, say). The file is appended to, not rewritten, so a
         symlinked config stays a symlink.
         """
-        config_path = (_HOME / "config.toml").expanduser()
+        config_path = (self.dir / "config.toml")
         if not config_path.exists():
             return
         if _UNSAFE_PATH_CHARS.search(cwd):
@@ -190,7 +192,7 @@ class CodexAgentCli(AgentCli):
         so this follows /new and resumes. Lines from before the process started
         belong to an earlier process that had the same pid.
         """
-        db_path = (_HOME / "logs_2.sqlite").expanduser()
+        db_path = (self.dir / "logs_2.sqlite")
         if not db_path.exists():
             return None
         prefix = f"pid:{pid}:"
@@ -231,7 +233,7 @@ class CodexAgentCli(AgentCli):
         return found
 
     def _thread_by_id(self, thread_id: str) -> Optional[dict]:
-        db_path = (_HOME / "state_5.sqlite").expanduser()
+        db_path = (self.dir / "state_5.sqlite")
         if not db_path.exists():
             return None
         try:
@@ -260,7 +262,7 @@ class CodexAgentCli(AgentCli):
         Returns a dict with title, first_user_message, tokens_used, rollout_path,
         or None if no close match is found.
         """
-        db_path = (_HOME / "state_5.sqlite").expanduser()
+        db_path = (self.dir / "state_5.sqlite")
         if not db_path.exists():
             return None
         try:
@@ -321,7 +323,7 @@ class CodexAgentCli(AgentCli):
         return f"codex resume {session_id}"
 
     def delete_session(self, session_id: str) -> None:
-        db_path = (_HOME / "state_5.sqlite").expanduser()
+        db_path = (self.dir / "state_5.sqlite")
         if not db_path.exists():
             raise FileNotFoundError("Codex database not found")
         with sqlite3.connect(str(db_path), timeout=5) as conn:
@@ -333,7 +335,7 @@ class CodexAgentCli(AgentCli):
     # ------------------------------------------------------------------ transcripts
 
     def transcripts_root(self) -> Path:
-        return _HOME.expanduser()
+        return self.dir
 
     def archive_files(self, root: Path) -> Iterator[Path]:
         """The rollouts, live and archived. Not codex's databases, logs, or config."""
@@ -372,7 +374,7 @@ class CodexAgentCli(AgentCli):
         return (found[0].parent if len(found) == 1 else base), found
 
     def get_saved_sessions(self, limit: int = 20) -> list[SavedSession]:
-        db_path = (_HOME / "state_5.sqlite").expanduser()
+        db_path = (self.dir / "state_5.sqlite")
         if not db_path.exists():
             return []
         try:

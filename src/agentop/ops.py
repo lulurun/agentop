@@ -6,9 +6,9 @@ import logging
 import re
 import time
 
-from agentop import registry, scanner
+from agentop import agentclis, registry, scanner
 from agentop.agent_instance import AgentInstance
-from agentop.agentclis import AGENTS, get_agent
+from agentop.agentclis import get_agent
 from agentop.agentclis.base import AgentCli
 from agentop.results import (
     OpsError,
@@ -140,13 +140,13 @@ def get_saved_sessions(
         if s.get("tool") and s.get("cwd") and s["tool"] not in agents_with_id
     }
 
-    agents = [get_agent(tool)] if tool else AGENTS
+    agents = [get_agent(tool)] if tool else agentclis.AGENTS
     results = []
     for agent in agents:
         if agent is None:
             continue
         try:
-            per_agent = limit if tool else max(limit // len(AGENTS), 10)
+            per_agent = limit if tool else max(limit // len(agentclis.AGENTS), 10)
             sessions = agent.get_saved_sessions(limit=per_agent)
             for s in sessions:
                 if s.get("session_id") in active_session_ids:

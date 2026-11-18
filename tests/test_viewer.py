@@ -274,7 +274,7 @@ def test_long_files_end_on_a_whole_line(tmp_path):
 def claude_client(tmp_path, monkeypatch):
     from agentop.agentclis import claude as claude_mod
 
-    projects = tmp_path / "projects"
+    projects = tmp_path / ".claude" / "projects"
     (projects / "-work").mkdir(parents=True)
     log = projects / "-work" / "c1.jsonl"
     record = {"sessionId": "c1", "cwd": "/work", "timestamp": "2026-11-01T10:00:00Z"}
@@ -313,7 +313,8 @@ def claude_client(tmp_path, monkeypatch):
         + "\n"
     )
     (projects / "-work" / "notes.txt").write_text("not a transcript")
-    monkeypatch.setattr(claude_mod, "_PROJECTS_DIR", projects)
+    claude = claude_mod.ClaudeAgentCli(home=tmp_path)
+    monkeypatch.setattr(agentclis, "AGENTS", [claude if a.name == "claude" else a for a in agentclis.AGENTS])
     root = tmp_path / "plugins"
     shutil.copytree(DEFAULT_ROOT / "viewer", root / "viewer")
     store = QuietStore()
