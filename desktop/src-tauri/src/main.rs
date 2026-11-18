@@ -15,6 +15,7 @@
 #[cfg(target_os = "linux")]
 mod desktop_entry;
 mod service;
+mod tokens;
 
 use serde::{Deserialize, Serialize};
 use service::{Service, Startup};
@@ -23,7 +24,6 @@ use std::sync::Arc;
 use tauri::ipc::CapabilityBuilder;
 use tauri::{AppHandle, Manager, RunEvent};
 
-const KEYCHAIN_SERVICE: &str = "agentop";
 /// The revision of the commands below. The UI, which comes from the service and so may be
 /// newer than this app, asks for an update when it needs a higher one.
 const NATIVE_API: u32 = 1;
@@ -100,32 +100,19 @@ fn service_start(app: AppHandle) {
     start_in_background(app);
 }
 
-fn keychain_entry(id: &str) -> Result<keyring::Entry, String> {
-    keyring::Entry::new(KEYCHAIN_SERVICE, id).map_err(|error| error.to_string())
-}
-
 #[tauri::command]
 fn token_get(id: String) -> Result<Option<String>, String> {
-    match keychain_entry(&id)?.get_password() {
-        Ok(token) => Ok(Some(token)),
-        Err(keyring::Error::NoEntry) => Ok(None),
-        Err(error) => Err(error.to_string()),
-    }
+    tokens::get(&id)
 }
 
 #[tauri::command]
 fn token_set(id: String, token: String) -> Result<(), String> {
-    keychain_entry(&id)?
-        .set_password(&token)
-        .map_err(|error| error.to_string())
+    tokens::set(&id, &token)
 }
 
 #[tauri::command]
 fn token_delete(id: String) -> Result<(), String> {
-    match keychain_entry(&id)?.delete_credential() {
-        Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-        Err(error) => Err(error.to_string()),
-    }
+    tokens::delete(&id)
 }
 
 /// What the page from the service may call. Only that exact origin: any other page on

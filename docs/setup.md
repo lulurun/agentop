@@ -151,8 +151,9 @@ scripts/build-app.sh --appimage  # also an AppImage in desktop/src-tauri/target/
 The app shows the UI that this computer's service serves, so `scripts/build-ui.sh` on
 its own is enough to change what the app shows: reload the window afterwards.
 
-The app keeps tokens for other services in the OS keychain, which on Linux needs a
-running secret service such as GNOME Keyring or KeePassXC.
+The app keeps tokens for other services in the OS keychain. Where there is none, such as
+Linux with no secret service running, it keeps them in `~/.agentop/state/desktop-tokens.json`
+(mode 0600), next to `service.json`, which holds the service token in plain text anyway.
 
 ## Building and releasing
 

@@ -368,7 +368,7 @@ Because any origin must be able to connect, the origin no longer decides access;
 | Web | `agentop open` passes it in the URL fragment, which is cleared at once. A visitor with no token sees a screen that explains this and accepts a pasted one | `localStorage` |
 | Web, other services | Pasted through Add Service | `localStorage` |
 | Desktop, local | A Rust command reads `service.json`, so it can always sign in again | OS keychain |
-| Desktop, other services | Pasted through Add Service | OS keychain |
+| Desktop, other services | Pasted through Add Service | OS keychain, else `state/desktop-tokens.json` (0600) |
 | CLI (`service status`, `stop`, `restart`, `update`) | `service.json` | Nowhere: it signs in for 60 seconds for each command |
 
 The service token is held in memory only until it has signed the app in. A connection saved before client tokens (2026-11-14) holds the service token; the app uses it once to sign in, and replaces it.
@@ -750,7 +750,7 @@ Rewritten on 2026-11-16, when the desktop app became the wrapper in 4.2.
 - **Rust commands**, each doing one fixed thing, with no shell or file permission: `read_service_info`, `desktop_info`, `startup_status`, `service_start`, and the keychain commands for tokens. Stop, restart, and update go through the service's API (8.3), as in the web app. `build.rs` declares the commands, so each gets an `allow-…` permission.
 - **Permissions.** A page from another origin than the app's own can call only what a capability grants it. The bundled start page has one for its three commands. The service's page gets one at run time, once the port is known, for that exact origin (`http://127.0.0.1:<port>/*`). It grants the commands, writing text to the clipboard, the updater, restarting the app, and opening this project's release pages in the browser. Any other page on loopback gets nothing.
 - **CSP.** The start page's is the app's (`script-src 'self'`, IPC only). The service's page has the web app's own (7.1).
-- Connections are saved in the window's storage, with tokens in the OS keychain. Default: the service that served the page, signed in from `service.json`.
+- Connections are saved in the window's storage, with tokens in the OS keychain, or a 0600 file where there is none. Default: the service that served the page, signed in from `service.json`.
 - Built and released by CI (8.5); `desktop/package.json` also builds it locally.
 
 The old open question, whether `tauri://localhost` can reach `ws://` services, no longer applies: the page is `http://127.0.0.1`, as in the web app. Spike S2 still checks that WebKitGTK treats it like a browser does.
