@@ -32,3 +32,12 @@ systemctl --user status agentop-api
 systemctl --user restart agentop-api
 journalctl --user -u agentop-api -f
 ```
+
+## Comments
+
+Minimum only. Write a comment only for a *why* the code can't show: a tool quirk, a race, a security constraint.
+
+- No comments that restate the code or the name
+- No history or dates: git and `docs/design.md` hold those
+- Never copy CLI help or docs into docstrings
+- A module docstring is at most 3 lines, and a function docstring is one line unless the contract (args, raises) isn't obvious from the signature. This applies to new and changed code; older docstrings are trimmed when their code is next changed

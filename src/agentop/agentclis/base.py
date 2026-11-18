@@ -288,7 +288,6 @@ class AgentCli:
         name: str | None = None,
         on_progress: ProgressCallback | None = None,
     ) -> dict:
-        """Resume a saved session in a new tmux window."""
         cmd = self.get_resume_cmd(session_id)
         if not cmd:
             return {"ok": False, "error": f"{self.name} does not support session resume"}

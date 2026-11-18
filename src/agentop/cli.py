@@ -1,92 +1,5 @@
 #!/usr/bin/env python3
-"""agentop — manage AI agent sessions (Claude, Codex, Gemini, Antigravity) from the command line.
-
-No dashboard server required. All commands work directly via tmux and
-the local filesystem.
-
-COMMANDS
---------
-  list [--json]
-    Show all running agent sessions detected on this machine.
-    Columns: session, tool, status, pid, runtime, mem, tokens, cwd.
-    --json outputs the full session objects as a JSON array, which
-    includes token breakdown, git info, tmux details, and bridge URL.
-
-  history [--json] [--tool <tool>] [--limit N]
-    Show saved/historical sessions that can be resumed.
-    Excludes sessions that are currently active.
-    Columns: tool, title, last active, cwd.
-
-  start <session_name> --tool <tool> [--cwd <path>]
-    Launch a new agent session inside a managed tmux session.
-    session_name must be less than 32 characters.
-    The tmux session is named  {session_name}-{pid}  automatically.
-    Supported tools: claude, codex, gemini, antigravity
-    After starting, attach with:  tmux attach-session -t <session>
-
-  send <target> [prompt]
-    Type a prompt into another managed session and submit it.
-    The target matches a session name ignoring case and the -<suffix>.
-    The prompt is read from stdin when omitted.
-
-  stop <session>
-    Gracefully stop a managed session: sends /exit to the agent,
-    waits up to 3 s for it to exit, then kills the tmux session.
-    Only sessions started by agentop can be stopped.
-
-EXAMPLES
---------
-  # List all sessions
-  agentop list
-
-  # Machine-readable output (for scripts / AI)
-  agentop list --json
-  agentop list --json | python3 -c "
-      import sys, json
-      for s in json.load(sys.stdin):
-          print(s['name'], s.get('claude_status'), s.get('cwd'))
-  "
-
-  # Start a session (cwd defaults to home directory)
-  agentop start myapp --tool claude
-  agentop start myapp --tool claude --cwd ~/projects/myapp
-
-  # Stop a session
-  agentop stop myapp-12345
-
-EXIT CODES
-----------
-  0  Success
-  1  Error (session not found, tool failed, import error, etc.)
-
-SESSION FIELDS (--json)
------------------------
-  name            Unique session identifier (also the tmux session name)
-  tool            Agent type: claude | codex | gemini
-  status          Process status (always "running" for live sessions)
-  claude_status   Claude-specific status from session file: busy | idle
-  pid             Agent process PID
-  runtime_seconds Seconds since the process started
-  memory_mb       Resident memory in MB
-  token_usage     Object with input_tokens, output_tokens,
-                  cache_creation_input_tokens, cache_read_input_tokens
-                  (Claude only, read from ~/.claude/projects/)
-  cwd             Working directory of the agent process
-  ai_title        AI-generated conversation title (from the agent)
-  managed         true if started by agentop; only managed sessions can
-                  be stopped or sent prompts
-  tmux            Object: {session, window, pane}
-  git             Object: {repo_root, branch, dirty, latest_commit}
-  bridge_url      claude.ai remote-control URL (Claude only)
-
-NOTES
------
-  * Requires psutil and tmux.
-  * The agentop package must be importable; run from the repo root or
-    install the package.
-  * Token usage is read by scanning ~/.claude/projects/<slug>/<id>.jsonl
-    and deduplicating by message ID — reflects actual API calls made.
-"""
+"""agentop: the command line. Commands are described in docs/cli.md and by `agentop <command> --help`."""
 
 import argparse
 import json
@@ -481,9 +394,9 @@ def cmd_service_connect_info(args):
 def main():
     parser = argparse.ArgumentParser(
         prog="agentop",
-        description="Manage AI agent sessions (Claude, Codex, Gemini) via tmux. No server required.",
+        description="Manage AI agent sessions (Claude, Codex, Antigravity) in tmux.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
+        epilog="Run 'agentop <command> --help' for a command's options. Exits 1 on an error.",
     )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 

@@ -45,7 +45,6 @@ def _should_ignore(cmdline: str) -> bool:
 
 
 def scan_processes() -> list[dict]:
-    """Return list of detected agent process dicts."""
     results = []
     for proc in psutil.process_iter(["pid", "ppid", "name", "cmdline", "create_time", "memory_info", "status"]):
         try:
@@ -139,7 +138,6 @@ def get_ancestor_and_child_pids(pid: int) -> set[int]:
 
 
 def scan_tmux() -> list[dict]:
-    """Return list of tmux pane dicts."""
     try:
         result = tmux_cli.run(
             "list-panes",

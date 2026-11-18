@@ -490,7 +490,6 @@ def remove_dialogue(dialogue_id: str) -> dict:
 
 
 def remove_dialogues_by_status(status: str) -> dict:
-    """Remove all dialogues with the given status."""
     candidates = list_dialogues_by_status(status)
     removed = []
     for meta in candidates:

@@ -145,7 +145,6 @@ class Session:
 
     @staticmethod
     def kill(name: str) -> None:
-        """Kill the named tmux session."""
         try:
             run("kill-session", "-t", session_target(name))
         except _ERRORS:
