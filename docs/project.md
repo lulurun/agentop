@@ -92,14 +92,14 @@ The `default` project, as Sessions is today, without Started elsewhere and with 
 
 ### 7.2 Projects (plugin `projects`)
 
-- **Left panel**: New project (a name field), the project switcher below it, then the same sections as Sessions for the chosen project.
+- **Left panel**: Create new (New project, which asks for a name), Projects (the project switcher, full width, and under it the chosen project with New session and Remove icons), then Active sessions and History for the chosen project.
 - Commands: `agentop project create <name>` and `agentop project remove <name> [--delete-folder]`. The Coordinator starts other sessions with `agentop start` (section 6).
 
 ### 7.3 Dialogues (plugin `dialogue`)
 
 A dialogue is a project with three sessions: Coordinator, and agents A and B (`readonly`, not `counted`, kept at 80×40). Its folder is the project folder, which A and B already share as their working directory, so `brief.md`, `meta.json`, `turns.jsonl` and `deliverables/` stay where they are.
 
-- **Left panel**: New dialogue instead of New project, then In progress and Finished as now. Picking a dialogue opens A and B side by side, as now.
+- **Left panel**: Create new (New dialogue), then In progress and Finished. Picking a dialogue opens A and B side by side, as now.
 - **New dialogue** (the wizard, or `agentop dialogue start`) creates the project and starts its agents and its Coordinator. To design a new dialogue, the Coordinator writes a brief and runs `agentop dialogue start`, which makes another dialogue with its own folder and Coordinator.
 - When the dialogue ends, the orchestrator sends the Coordinator a note: done, why, and where the turns and deliverables are.
 - The Coordinator can be opened from the right panel. It can be stopped, and is resumed when the dialogue is opened again, so old dialogues cost nothing.

@@ -3,6 +3,7 @@ import type { Session } from "../../api/client";
 import { sessionIdsKey, useActiveClient, useApp } from "../../store";
 import { formatBytes } from "../../components/format";
 import { Section } from "../../components/Section";
+import { CreateSection } from "../../components/Sidebar";
 import { TerminalView } from "../../terminal/TerminalView";
 import type { PluginClient, PluginContext, UiPlugin } from "../types";
 import { NewDialogue } from "./NewDialogue";
@@ -91,12 +92,8 @@ function DialogueList({ plugin }: { plugin: PluginContext }) {
   const finished = items?.filter((d) => !d.running) ?? [];
   return (
     <>
+      <CreateSection id="dialogue:create" label="New dialogue" onClick={openWizard} />
       <Section id="dialogue:running" title="In progress" extra={items && <span className="session-count">{running.length}</span>}>
-        <div className="sidebar-actions">
-          <button type="button" className="primary" onClick={openWizard}>
-            New dialogue
-          </button>
-        </div>
         <nav className="session-list" aria-label="Dialogues in progress">
           {items === null && <p className="session-empty">Loading…</p>}
           {items && running.length === 0 && <p className="session-empty">None running.</p>}

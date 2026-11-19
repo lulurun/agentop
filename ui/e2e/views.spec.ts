@@ -464,8 +464,9 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   const s = await open(page);
   await features(page).getByRole("button", { name: "Projects" }).click();
   const left = page.getByRole("complementary", { name: "Left panel" });
-  await left.getByLabel("New project's name").fill("alpha");
   await left.getByRole("button", { name: "New project" }).click();
+  await left.getByLabel("New project's name").fill("alpha");
+  await left.getByRole("button", { name: "Create", exact: true }).click();
 
   // Its Coordinator works in the project folder, with its instructions there, and opens in Projects.
   await expect(left.getByLabel("Project", { exact: true })).toHaveValue("alpha");
@@ -481,7 +482,7 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
 
   // Removing it stops its sessions and keeps its folder.
   await features(page).getByRole("button", { name: "Projects" }).click();
-  await left.getByRole("button", { name: "Remove" }).click();
+  await left.getByRole("button", { name: "Remove alpha" }).click();
   await expect(left.getByText("No projects yet.")).toBeVisible();
   expect(existsSync(join(s.root, "state/projects/alpha/AGENTS.md"))).toBe(true);
 });

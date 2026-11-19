@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent 
 import type { Session } from "../../api/client";
 import { DetailsPanel } from "../../components/DetailsPanel";
 import { Section } from "../../components/Section";
-import { SessionSections } from "../../components/Sidebar";
+import { PlusIcon, TrashIcon } from "../../components/icons";
+import { CreateSection, SessionSections } from "../../components/Sidebar";
 import { useApp } from "../../store";
 import type { PluginContext, UiPlugin } from "../types";
 
@@ -110,7 +111,7 @@ function useProjects(plugin: PluginContext) {
   return { projects, chosen: known, open, create, remove };
 }
 
-function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
+function NewProject({ onCreate, onCancel }: { onCreate(name: string): Promise<void>; onCancel?(): void }) {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -123,6 +124,7 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
     try {
       await onCreate(name.trim());
       setName("");
+      onCancel?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -138,11 +140,13 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
         placeholder="my-project"
         pattern="[a-z0-9][a-z0-9_-]*"
         title="Lowercase letters, digits, '-' and '_'"
+        autoFocus={!!onCancel}
         value={name}
         onChange={(event) => setName(event.target.value)}
+        onKeyDown={(event) => event.key === "Escape" && onCancel?.()}
       />
       <button type="submit" className="primary" disabled={busy || !name.trim()}>
-        New project
+        Create
       </button>
       {error && <p className="form-error">{error}</p>}
     </form>
@@ -151,6 +155,8 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
 
 function Left({ plugin }: { plugin: PluginContext }) {
   const { projects, chosen, open, create, remove } = useProjects(plugin);
+  const setDialog = useApp((s) => s.setDialog);
+  const [naming, setNaming] = useState(false);
 
   function removeChosen() {
     if (!chosen) return;
@@ -160,11 +166,18 @@ function Left({ plugin }: { plugin: PluginContext }) {
 
   return (
     <>
+      <CreateSection id="projects:create" label="New project" onClick={() => setNaming((n) => !n)}>
+        {naming && <NewProject onCreate={create} onCancel={() => setNaming(false)} />}
+      </CreateSection>
       <Section id="projects:projects" title="Projects" extra={projects && <span className="session-count">{projects.length}</span>}>
-        <NewProject onCreate={create} />
         {projects && projects.length > 0 && (
           <div className="sidebar-actions">
-            <select aria-label="Project" value={chosen ?? ""} onChange={(event) => event.target.value && void open(event.target.value)}>
+            <select
+              className="sidebar-select"
+              aria-label="Project"
+              value={chosen ?? ""}
+              onChange={(event) => event.target.value && void open(event.target.value)}
+            >
               {!chosen && <option value="">Pick a project</option>}
               {projects.map((p) => (
                 <option key={p.name} value={p.name}>
@@ -172,11 +185,19 @@ function Left({ plugin }: { plugin: PluginContext }) {
                 </option>
               ))}
             </select>
-            {chosen && (
-              <button type="button" onClick={removeChosen}>
-                Remove
-              </button>
-            )}
+          </div>
+        )}
+        {chosen && (
+          <div className="project-current">
+            <span className="project-current-name" title={chosen}>
+              {chosen}
+            </span>
+            <button type="button" className="icon" title={`New session in ${chosen}`} aria-label={`New session in ${chosen}`} onClick={() => setDialog("new-session", chosen)}>
+              <PlusIcon />
+            </button>
+            <button type="button" className="icon" title={`Remove ${chosen}`} aria-label={`Remove ${chosen}`} onClick={removeChosen}>
+              <TrashIcon />
+            </button>
           </div>
         )}
         {projects && projects.length === 0 && <p className="session-empty">No projects yet.</p>}

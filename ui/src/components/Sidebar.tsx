@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
 import { activeCount, layoutOf, selectedId, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
@@ -79,12 +79,29 @@ const SessionRow = memo(function SessionRow({ session, selected }: { session: Se
 
 /** Sessions' left panel: the default project's sections. */
 export const Sidebar = memo(function Sidebar() {
+  const setDialog = useApp((s) => s.setDialog);
+  const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   return (
     <div className="sidebar-scroll">
+      {linked && <CreateSection id="sessions:create" label="New session" onClick={() => setDialog("new-session")} />}
       <SessionSections project="default" />
     </div>
   );
 });
+
+/** The top section of a feature's left panel: its one New button, full width. */
+export function CreateSection({ id, label, onClick, children }: { id: string; label: string; onClick(): void; children?: ReactNode }) {
+  return (
+    <Section id={id} title="Create new">
+      <div className="sidebar-actions">
+        <button type="button" className="primary sidebar-wide" onClick={onClick}>
+          {label}
+        </button>
+      </div>
+      {children}
+    </Section>
+  );
+}
 
 /** A project's Active sessions and History, as Sessions shows them; a project's own feature shows them too. */
 export const SessionSections = memo(function SessionSections({ project }: { project: string }) {
@@ -97,15 +114,11 @@ export const SessionSections = memo(function SessionSections({ project }: { proj
     const content = focusedTab(layoutOf(s))?.content;
     return content?.kind === "past" ? content.historyId : undefined;
   });
-  const [filter, setFilter] = useState("");
-
-  const needle = filter.trim().toLowerCase();
   // Other projects' sessions, such as a dialogue's agents, are shown in their own feature.
   const managed = sortedSessions(sessions).filter(
     (s) =>
       s.managed &&
-      (s.project ?? "default") === project &&
-      (!needle || `${sessionTitle(s)} ${s.tool ?? ""} ${s.cwd}`.toLowerCase().includes(needle)),
+      (s.project ?? "default") === project,
   );
   const active = activeCount(sessions);
   // The selected session is only marked while its tab, not a past session's, has focus.
@@ -120,33 +133,16 @@ export const SessionSections = memo(function SessionSections({ project }: { proj
             hint={`At most ${maxActive} sessions started by agentop can be active at once`}
             extra={<span className="session-count" data-full={active >= maxActive || undefined}>{active}/{maxActive}</span>}
           >
-            <div className="sidebar-actions">
-              <input
-                id="session-filter"
-                type="search"
-                aria-label="Filter sessions"
-                placeholder="Filter sessions"
-                value={filter}
-                onChange={(event) => setFilter(event.target.value)}
-              />
-              <button type="button" className="primary" onClick={() => setDialog("new-session", project)}>
-                New session
-              </button>
-            </div>
             <nav className="session-list" aria-label="Sessions">
               {managed.map((s) => (
                 <SessionRow key={s.id} session={s} selected={s.id === current} />
               ))}
               {managed.length === 0 && (
                 <p className="session-empty">
-                  {needle ? "No sessions match." : (
-                    <>
-                      No sessions yet.{" "}
-                      <button type="button" className="link" onClick={() => setDialog("new-session", project)}>
-                        Start one
-                      </button>
-                    </>
-                  )}
+                  No sessions yet.{" "}
+                  <button type="button" className="link" onClick={() => setDialog("new-session", project)}>
+                    Start one
+                  </button>
                 </p>
               )}
             </nav>

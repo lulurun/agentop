@@ -195,7 +195,20 @@ input::placeholder { color: var(--quiet); }
 }
 .sidebar-actions { display: flex; gap: 6px; padding: 6px 10px 8px; }
 .sidebar-actions input { flex: 1; min-width: 0; }
-.sidebar-actions select { flex: 1; min-width: 0; }
+.sidebar-actions .sidebar-wide { flex: 1; }
+.sidebar-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+.sidebar-select:focus-visible { outline: 2px solid var(--accent, currentColor); outline-offset: 1px; }
+.project-current { display: flex; align-items: center; gap: 6px; padding: 0 10px 8px; }
+.project-current-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
 .sidebar-actions .form-error { flex-basis: 100%; margin: 0; }
 .sidebar-actions { flex-wrap: wrap; }
 .sidebar:focus, .details:focus { outline: none; }
