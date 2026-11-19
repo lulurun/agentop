@@ -51,22 +51,36 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
   await row(page, "one").click({ modifiers: ["ControlOrMeta"] });
   await expect(main.getByRole("tab")).toHaveText(["two", "one"]);
   await expect(main.getByRole("tab", { name: "one" })).toHaveAttribute("aria-selected", "true");
+  // Ctrl+Shift+A to K pick the active area's tabs by position.
+  await page.keyboard.press("Control+Shift+KeyA");
+  await expect(main.getByRole("tab", { name: "two" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+Shift+KeyS");
+  await expect(main.getByRole("tab", { name: "one" })).toHaveAttribute("aria-selected", "true");
 
   await row(page, "two").click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Open to the side" }).click();
-  await expect(page.getByRole("region", { name: "Right group" }).getByRole("tab")).toHaveText(["two"]);
+  await page.getByRole("menuitem", { name: "Open in the right area" }).click();
+  await expect(page.getByRole("region", { name: "Right area" }).getByRole("tab")).toHaveText(["two"]);
   await expect(shownTerminals(page)).toHaveCount(2);
+  // Ctrl+Shift+W and E make the left and right area active.
+  await page.keyboard.press("Control+Shift+KeyW");
+  await expect(page.getByRole("region", { name: "Left area" })).toHaveAttribute("data-focused", "true");
+  await page.keyboard.press("Control+Shift+KeyE");
+  await expect(page.getByRole("region", { name: "Right area" })).toHaveAttribute("data-focused", "true");
 
   // The right panel follows the focused group.
-  await page.getByRole("region", { name: "Left group" }).getByRole("tab", { name: "one" }).click();
+  await page.getByRole("region", { name: "Left area" }).getByRole("tab", { name: "one" }).click();
   await expect(page.locator(".details").getByRole("button", { name: "one", exact: true })).toBeVisible();
 
-  await page.getByRole("region", { name: "Right group" }).getByRole("button", { name: "Close two" }).click();
-  await expect(page.getByRole("region", { name: "Right group" })).toHaveCount(0);
+  await page.getByRole("region", { name: "Right area" }).getByRole("button", { name: "Close two" }).click();
+  await expect(page.getByRole("region", { name: "Right area" })).toHaveCount(0);
   await expect(main.getByRole("tab")).toHaveText(["two", "one"]);
 
   await page.reload();
   await expect(page.locator(".main").getByRole("tab")).toHaveText(["two", "one"]);
+  // Ctrl+Shift+L closes the active tab; the session keeps running.
+  await page.keyboard.press("Control+Shift+KeyL");
+  await expect(page.locator(".main").getByRole("tab")).toHaveCount(1);
+  await expect(row(page, "one")).toBeVisible();
 });
 
 test("a session shown before keeps its terminal, and only the last few are kept", async ({ page }) => {
@@ -122,8 +136,8 @@ test("a file from the right panel opens in the right group, beside the terminal"
   await details.getByRole("button", { name: "src" }).click();
   await details.getByRole("button", { name: "hello.py" }).click();
 
-  const left = page.getByRole("region", { name: "Left group" });
-  const right = page.getByRole("region", { name: "Right group" });
+  const left = page.getByRole("region", { name: "Left area" });
+  const right = page.getByRole("region", { name: "Right area" });
   await expect(left.getByRole("tab")).toHaveText(["demo"]);
   await expect(right.getByRole("tab")).toHaveText(["hello.py"]);
   await expect(right).toHaveAttribute("data-focused", "true");
@@ -142,7 +156,7 @@ test("a file from the right panel opens in the right group, beside the terminal"
 
   // A file can still be moved to the left.
   await right.getByRole("tab", { name: "hello.py" }).click({ button: "right" });
-  await page.getByRole("menuitem", { name: "Move to the left" }).click();
+  await page.getByRole("menuitem", { name: "Move to the left area" }).click();
   await expect(left.getByRole("tab")).toHaveText(["demo", "hello.py"]);
   await expect(right.getByRole("tab")).toHaveText(["notes.txt"]);
 });
@@ -212,8 +226,8 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
 
   // The app drawing itself again leaves the page's elements alone, so a selection being made survives.
   await preview.getByRole("link", { name: "the other page" }).evaluate((a) => ((a as HTMLElement).dataset.kept = "yes"));
-  await page.getByRole("button", { name: "Toggle session details" }).click();
-  await page.getByRole("button", { name: "Toggle session details" }).click();
+  await page.getByRole("button", { name: "Toggle right panel" }).click();
+  await page.getByRole("button", { name: "Toggle right panel" }).click();
   await expect(details).toBeVisible();
   await expect(preview.getByRole("link", { name: "the other page" })).toHaveAttribute("data-kept", "yes");
 

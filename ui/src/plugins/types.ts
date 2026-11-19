@@ -3,7 +3,7 @@ import type { ClientToken, PluginInfo, Session } from "../api/client";
 import type { FileRef } from "../tabs";
 
 /** The UI slots a plugin can fill. They match `ui` in a plugin's plugin.toml. */
-export type Slot = "session-badge" | "workspace" | "right-panel" | "settings-section" | "file-viewer" | "login" | "terminal-input";
+export type Slot = "session-badge" | "feature" | "right-panel" | "settings-section" | "file-viewer" | "login" | "terminal-input";
 
 /** Requests to the plugin's own routes, `/api/v2/plugins/{id}/…`. It can reach nothing else. */
 export interface PluginClient {
@@ -64,18 +64,16 @@ export interface PluginView {
 }
 
 /**
- * A plugin's workspace in the header (design 10.7). Its main area is tabs, like
- * every workspace's. With no tabs open it shows `empty`, as Sessions shows its placard.
+ * A plugin's feature (docs/ui.md): a button in the feature nav, its left and
+ * right panels (made of `Section`s), its background, and the views its tabs show.
  */
-export interface PluginWorkspace {
+export interface PluginFeature {
   label: string;
   views: Record<string, PluginView>;
-  /** The main area with no tabs open. */
-  empty?: ComponentType<{ plugin: PluginContext }>;
+  /** The middle panel with no areas. */
+  background?: ComponentType<{ plugin: PluginContext }>;
   left?: ComponentType<{ plugin: PluginContext }>;
   right?: ComponentType<{ plugin: PluginContext }>;
-  /** A button in the header, such as New dialogue. */
-  action?: { label: string; run(plugin: PluginContext): void };
 }
 
 /**
@@ -85,7 +83,8 @@ export interface PluginWorkspace {
  */
 export interface UiPlugin {
   sessionBadge?: ComponentType<{ session: Session; plugin: PluginContext }>;
-  workspace?: PluginWorkspace;
+  feature?: PluginFeature;
+  /** A section in Sessions' right panel, titled with the plugin's name. */
   rightPanel?: ComponentType<{ session: Session; plugin: PluginContext }>;
   settingsSection?: ComponentType<{ plugin: PluginContext }>;
   /**
@@ -109,7 +108,7 @@ export interface UiPlugin {
 
 export const SLOT_KEYS: Record<Slot, keyof UiPlugin> = {
   "session-badge": "sessionBadge",
-  workspace: "workspace",
+  feature: "feature",
   "right-panel": "rightPanel",
   "settings-section": "settingsSection",
   "file-viewer": "fileViewer",

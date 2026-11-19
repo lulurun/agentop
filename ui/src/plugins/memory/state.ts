@@ -1,15 +1,15 @@
 /**
- * The Memory workspace's shared state: the search in the left panel and its
+ * The Memory feature's shared state: the search in the left panel and its
  * results, the message each conversation tab was opened at, and the tabs.
  */
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useApp } from "../../store";
-import { focusedTab, newTabId, sameContent, type Layout, type TabContent } from "../../tabs";
+import { focusedTab, type TabContent } from "../../tabs";
 import type { PluginClient } from "../types";
 
 export const PLUGIN_ID = "memory";
-export const WORKSPACE = `plugin:${PLUGIN_ID}` as const;
+export const FEATURE = `plugin:${PLUGIN_ID}` as const;
 
 export interface SessionHit {
   tool: string;
@@ -177,51 +177,17 @@ export function conversationOf(content: TabContent | undefined): [tool: string, 
   return splitKey(content.key);
 }
 
-/**
- * Show a conversation. One already open in either group is shown where it is;
- * otherwise it takes the place of the focused group's conversation, as a
- * session replaces the session shown, or gets a tab of its own.
- */
-export function showConversation(layout: Layout, content: TabContent, newTab = false): Layout {
-  for (const [index, group] of layout.groups.entries()) {
-    const open = group.tabs.find((t) => sameContent(t.content, content));
-    if (open) {
-      const groups = layout.groups.slice();
-      groups[index] = { ...group, active: open.id };
-      return { groups, focused: index };
-    }
-  }
-  if (layout.groups.length === 0) {
-    const id = newTabId();
-    return { groups: [{ tabs: [{ id, content }], active: id }], focused: 0 };
-  }
-  const index = Math.min(layout.focused, layout.groups.length - 1);
-  const group = layout.groups[index];
-  const current = group.tabs.find((t) => t.id === group.active);
-  const groups = layout.groups.slice();
-  if (!newTab && current && isConversation(current.content)) {
-    groups[index] = { ...group, tabs: group.tabs.map((t) => (t.id === current.id ? { ...t, content } : t)) };
-  } else {
-    const id = newTabId();
-    const at = group.tabs.findIndex((t) => t.id === group.active);
-    const tabs = group.tabs.slice();
-    tabs.splice(at < 0 ? tabs.length : at + 1, 0, { id, content });
-    groups[index] = { tabs, active: id };
-  }
-  return { groups, focused: index };
-}
-
 /** Open a session's conversation, at a message when given one. */
 export function openConversation(tool: string, session: string, at?: number, newTab = false): void {
   const key = keyOf(tool, session);
   useMemory.setState((s) => ({ targets: { ...s.targets, [key]: at } }));
-  useApp.getState().editLayout(WORKSPACE, (layout) => showConversation(layout, conversationTab(tool, session), newTab));
+  useApp.getState().openTab(conversationTab(tool, session), "left", newTab ? "tab" : "replace");
 }
 
 /** The session the right panel is about: the focused tab's. */
 export function useCurrentConversation(): [tool: string, session: string] | null {
   const key = useApp((s) => {
-    const layout = s.layouts[s.activeId]?.[WORKSPACE];
+    const layout = s.layouts[s.activeId]?.[FEATURE];
     const found = layout ? conversationOf(focusedTab(layout)?.content) : null;
     return found ? keyOf(...found) : null;
   });

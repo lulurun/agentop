@@ -2,6 +2,7 @@ import { Component, Fragment, useEffect, useMemo, type MutableRefObject, type Re
 import type { PluginInfo, Session } from "../api/client";
 import { onPluginEvent, useActiveClient, useApp } from "../store";
 import type { FileRef } from "../tabs";
+import { Section } from "../components/Section";
 import { pluginsFor, UI_PLUGINS } from "./registry";
 import type { PluginContext, Slot, TerminalInputControl, UiPlugin } from "./types";
 
@@ -38,14 +39,18 @@ function Piece({ info, ui, slot, session }: { info: PluginInfo; ui: UiPlugin; sl
     case "session-badge":
       return ui.sessionBadge && session ? <ui.sessionBadge session={session} plugin={plugin} /> : null;
     case "right-panel":
-      return ui.rightPanel && session ? <ui.rightPanel session={session} plugin={plugin} /> : null;
+      return ui.rightPanel && session ? (
+        <Section id={`plugin:${info.id}`} title={info.name}>
+          <ui.rightPanel session={session} plugin={plugin} />
+        </Section>
+      ) : null;
     case "settings-section":
       return ui.settingsSection ? <ui.settingsSection plugin={plugin} /> : null;
-    case "workspace":
+    case "feature":
     case "file-viewer":
     case "login":
     case "terminal-input":
-      return null; // drawn by the workspace and the tabs it shows (PluginTab, FileTab), the sign-in screen (LoginMethods), or below a terminal (TerminalInputs)
+      return null; // drawn by the feature and the tabs it shows (PluginTab, FileTab), the sign-in screen (LoginMethods), or below a terminal (TerminalInputs)
   }
 }
 
@@ -82,7 +87,7 @@ function FileViewerPiece({ info, file }: { info: PluginInfo; file: FileRef }) {
 /** One of a plugin's views in a tab, or a note when the plugin isn't on. */
 export function PluginTab({ pluginId, view, viewKey }: { pluginId: string; view: string; viewKey?: string }) {
   const info = useApp((s) => s.plugins.find((p) => p.id === pluginId && p.state === "enabled"));
-  const View = UI_PLUGINS[pluginId]?.workspace?.views[view];
+  const View = UI_PLUGINS[pluginId]?.feature?.views[view];
   if (!info || !View) {
     return (
       <div className="placard">
@@ -98,13 +103,13 @@ export function PluginTab({ pluginId, view, viewKey }: { pluginId: string; view:
   );
 }
 
-function PluginViewPiece({ info, View, viewKey }: { info: PluginInfo; View: NonNullable<UiPlugin["workspace"]>["views"][string]["Component"]; viewKey?: string }) {
+function PluginViewPiece({ info, View, viewKey }: { info: PluginInfo; View: NonNullable<UiPlugin["feature"]>["views"][string]["Component"]; viewKey?: string }) {
   const plugin = usePluginContext(info);
   return <View plugin={plugin} viewKey={viewKey} />;
 }
 
-/** A plugin workspace's left or right panel, or its main area with no tabs open. */
-export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left" | "right" | "empty" }) {
+/** A plugin feature's left or right panel, or its background. */
+export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left" | "right" | "background" }) {
   const info = useApp((s) => s.plugins.find((p) => p.id === pluginId && p.state === "enabled"));
   if (!info) return null;
   return (
@@ -114,9 +119,9 @@ export function PluginPanel({ pluginId, side }: { pluginId: string; side: "left"
   );
 }
 
-function PluginPanelPiece({ info, side }: { info: PluginInfo; side: "left" | "right" | "empty" }) {
+function PluginPanelPiece({ info, side }: { info: PluginInfo; side: "left" | "right" | "background" }) {
   const plugin = usePluginContext(info);
-  const Panel = UI_PLUGINS[info.id]?.workspace?.[side];
+  const Panel = UI_PLUGINS[info.id]?.feature?.[side];
   return Panel ? <Panel plugin={plugin} /> : null;
 }
 

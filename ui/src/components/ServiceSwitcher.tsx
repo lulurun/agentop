@@ -57,7 +57,7 @@ export function ServiceSwitcher() {
         className="switcher-current"
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Switch service (Ctrl+Shift+S)"
+        title="Connections (Ctrl+Shift+2)"
         onClick={() => setOpen(!open)}
       >
         <span className={`link-dot link-${link.state}`} aria-hidden="true" />

@@ -26,7 +26,7 @@ DEFAULT_ROOT = Path(__file__).resolve().parent / "plugins"
 DIRS_ENV = "AGENTOP_PLUGIN_DIRS"
 MODULE_PREFIX = "agentop.plugins"
 
-UI_SLOTS = frozenset({"session-badge", "workspace", "right-panel", "settings-section", "file-viewer", "login", "terminal-input"})
+UI_SLOTS = frozenset({"session-badge", "feature", "right-panel", "settings-section", "file-viewer", "login", "terminal-input"})
 # The slot that makes a plugin a way to sign in. Only such a plugin may have public routes.
 LOGIN_SLOT = "login"
 

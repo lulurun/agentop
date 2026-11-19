@@ -3,7 +3,8 @@ import type { HistoryItem, HistoryStats } from "../api/client";
 import { activeCount, useApp } from "../store";
 import { Row, TokenRows } from "./DetailsPanel";
 import { formatBytes } from "./format";
-import { FoldSection, ToolBadge } from "./Sidebar";
+import { Section } from "./Section";
+import { ToolBadge } from "./Sidebar";
 
 function when(seconds: number | null | undefined): string {
   return seconds != null ? new Date(seconds * 1000).toLocaleString() : "Unknown";
@@ -68,11 +69,11 @@ export function HistorySection({ selected }: { selected?: string }) {
   );
 
   function open(item: HistoryItem, mode: "replace" | "tab") {
-    openTab({ kind: "past", historyId: item.id }, mode);
+    openTab({ kind: "past", historyId: item.id }, "left", mode);
   }
 
   return (
-    <FoldSection
+    <Section
       id="history"
       title="History"
       hint={history.windowSeconds ? `Sessions agentop started, used in ${days(history.windowSeconds)}` : undefined}
@@ -115,7 +116,7 @@ export function HistorySection({ selected }: { selected?: string }) {
           ))
         )}
       </nav>
-    </FoldSection>
+    </Section>
   );
 }
 

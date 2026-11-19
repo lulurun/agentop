@@ -52,7 +52,7 @@ async function openStatus(page: Page, name = "box") {
   return page.getByRole("region", { name: "Status" });
 }
 
-const workspaces = (page: Page) => page.getByRole("navigation", { name: "Workspaces" });
+const features = (page: Page) => page.getByRole("navigation", { name: "Features" });
 
 /** Past sessions agentop started, each with a transcript last written `ago` seconds back. */
 function seedHistory(s: Service, past: { id: string; name: string; tool: "claude" | "codex"; agent: string; ago: number; description?: string }[]) {
@@ -94,8 +94,8 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   await page.goto(s.signedInUrl);
   await expect(page.locator(".link-connected")).toBeVisible();
 
-  // History is no workspace of its own.
-  await expect(workspaces(page).getByRole("button", { name: "History" })).toHaveCount(0);
+  // History is no feature of its own.
+  await expect(features(page).getByRole("button", { name: "History" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("0/20");
   await expect(pastRows(page)).toHaveText(["docs", "fix-login", "scratch"]);
   const history = page.getByRole("region", { name: "History" });
@@ -176,7 +176,7 @@ test("an empty history says so", async ({ page }) => {
   await expect(page.getByRole("region", { name: "History" })).toContainText("No sessions ended in the last 30 days.");
 });
 
-test("each workspace keeps its tabs, and Sessions keeps its terminal connected", async ({ page }) => {
+test("each feature keeps its tabs, and Sessions keeps its terminal connected", async ({ page }) => {
   const s = await open(page);
   await page.getByRole("button", { name: "New session" }).first().click();
   const dialog = page.getByRole("dialog");
@@ -186,14 +186,14 @@ test("each workspace keeps its tabs, and Sessions keeps its terminal connected",
   const terminal = page.getByTestId("terminal");
   await expect(terminal.locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
 
-  await page.keyboard.press("Control+Shift+Digit2");
-  await expect(workspaces(page).getByRole("button", { name: "Dialogues" })).toHaveAttribute("aria-current", "page");
-  // Status opens in this workspace, on the left.
+  await page.keyboard.press("Control+Shift+Digit4");
+  await expect(features(page).getByRole("button", { name: "Dialogues" })).toHaveAttribute("aria-current", "page");
+  // Status opens in this feature, on the left.
   await openStatus(page);
   await expect(page.getByRole("tab", { name: "Status" })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["Status"]);
 
-  await page.keyboard.press("Control+Shift+Digit1");
+  await page.keyboard.press("Control+Shift+Digit3");
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["keeper"]);
   await terminal.click();
   await page.keyboard.type("still connected\n");
@@ -201,7 +201,7 @@ test("each workspace keeps its tabs, and Sessions keeps its terminal connected",
 
   await page.reload();
   await expect(page.locator(".link-connected")).toBeVisible();
-  await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
+  await features(page).getByRole("button", { name: "Dialogues" }).click();
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["Status"]);
 });
 
@@ -218,16 +218,17 @@ test("a finished dialogue shows each agent's messages side by side, its stats an
   mkdirSync(join(directory, "deliverables"));
   writeFileSync(join(directory, "deliverables/plan.md"), "# The plan\n\nTests first.");
 
-  await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
-  // No tabs to start with: a placard, as in Sessions, and the left panel is only the list.
+  await features(page).getByRole("button", { name: "Dialogues" }).click();
+  // No tabs to start with: a background, as in Sessions; New dialogue is in the left panel.
   await expect(page.locator(".main .placard")).toContainText("Create a new dialogue, or pick one from the list");
-  await expect(page.locator('.workbench[data-workspace="plugin:dialogue"]')).toHaveCount(0);
-  await expect(page.locator(".sidebar").getByRole("button", { name: "New dialogue" })).toHaveCount(0);
-  const list = page.locator(".sidebar").getByRole("navigation", { name: "Dialogues" });
+  await expect(page.locator('.workbench[data-feature="plugin:dialogue"]')).toHaveCount(0);
+  await expect(page.locator(".header").getByRole("button", { name: "New dialogue" })).toHaveCount(0);
+  await expect(page.locator(".sidebar").getByRole("button", { name: "New dialogue" })).toHaveCount(1);
+  const list = page.locator(".sidebar");
   await list.getByRole("button", { name: /Decide the plan/ }).click();
 
-  const left = page.getByRole("region", { name: "Left group" });
-  const right = page.getByRole("region", { name: "Right group" });
+  const left = page.getByRole("region", { name: "Left area" });
+  const right = page.getByRole("region", { name: "Right area" });
   await expect(left.locator(".dialogue-message")).toHaveCount(2);
   await expect(left.locator(".dialogue-message strong", { hasText: "ship" })).toBeVisible();
   await expect(left).toContainText("Marked the dialogue complete");
@@ -242,13 +243,13 @@ test("a finished dialogue shows each agent's messages side by side, its stats an
   await details.getByRole("button", { name: "Remove dialogue…" }).click();
   await details.getByRole("button", { name: "Remove for good" }).click();
   await expect(list).toContainText("None yet.");
-  await expect(page.getByRole("region", { name: "Right group" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Right area" })).toHaveCount(0);
 });
 
 test("the New dialogue wizard asks for every field, then starts two agents watched read-only and kept out of the session list", async ({ page }) => {
   const s = await open(page);
-  await workspaces(page).getByRole("button", { name: "Dialogues" }).click();
-  await page.locator(".header").getByRole("button", { name: "New dialogue" }).click();
+  await features(page).getByRole("button", { name: "Dialogues" }).click();
+  await page.locator(".sidebar").getByRole("button", { name: "New dialogue" }).click();
 
   const wizard = page.getByRole("region", { name: "New dialogue" });
   await wizard.getByLabel("Scenario").selectOption("shelf/pm-sde");
@@ -263,10 +264,10 @@ test("the New dialogue wizard asks for every field, then starts two agents watch
   await expect(wizard).toHaveCount(0);
   const details = page.locator(".details");
   await expect(details).toContainText("Ship the widget");
-  const left = page.getByRole("region", { name: "Left group" });
+  const left = page.getByRole("region", { name: "Left area" });
   await expect(left.locator(".viewer-meta", { hasText: "Live, read-only" })).toBeVisible({ timeout: 20_000 });
   await expect(left.getByTestId("terminal")).toContainText("fake agent ready");
-  await expect(page.getByRole("region", { name: "Right group" }).getByTestId("terminal")).toContainText("fake agent ready");
+  await expect(page.getByRole("region", { name: "Right area" }).getByTestId("terminal")).toContainText("fake agent ready");
 
   const brief = join(s.root, "state/plugins/dialogue/dialogues");
   const folder = readdirSync(brief)[0];
@@ -275,7 +276,7 @@ test("the New dialogue wizard asks for every field, then starts two agents watch
   // Both agents run, but the session list leaves them out. (It may list agents running elsewhere on this machine.)
   const agents = s.tmux("list-sessions", "-F", "#{session_name}").split("\n").filter((name) => /^dia[0-9a-f]{4}[ab]/.test(name));
   expect(agents).toHaveLength(2);
-  await workspaces(page).getByRole("button", { name: "Sessions" }).click();
+  await features(page).getByRole("button", { name: "Sessions" }).click();
   await expect(page.getByRole("navigation", { name: "Sessions", exact: true })).toBeVisible();
   await expect(page.locator(".session-row", { hasText: /dia[0-9a-f]{4}[ab]/ })).toHaveCount(0);
 });
@@ -301,7 +302,7 @@ test("turning Dialogues off while one runs asks first, then stops it", async ({ 
   const s = await open(page);
   seedDialogue(s, "debate_topic_running1", "diaabcdea-1", "running");
   const meta = join(s.root, "state/plugins/dialogue/dialogues/debate_topic_running1/meta.json");
-  const views = workspaces(page);
+  const views = features(page);
   await expect(views.getByRole("button", { name: "Dialogues" })).toBeVisible();
 
   const status = await openStatus(page);
@@ -352,7 +353,7 @@ test("Status lists the service's plugins, and switches them", async ({ page }) =
     plugin("attention", { name: "Waiting for input", state: "disabled" }),
     plugin("broken", { state: "failed", error: "RuntimeError: boom" }),
     plugin("future", { state: "incompatible", error: "Written for plugin API 2. Update this service." }),
-    plugin("screens", { ui: ["workspace"] }),
+    plugin("screens", { ui: ["feature"] }),
   ];
   const patches: unknown[] = [];
   await page.route("**/api/v2/plugins", (route) => route.fulfill({ json: plugins }));
@@ -402,7 +403,7 @@ test("a service with no plugins says so in its Status", async ({ page }) => {
   await expect(page.getByText("This service has no plugins.")).toBeVisible();
 });
 
-test("the Memory workspace searches past conversations, opens one at the hit, and notes a miss", async ({ page }) => {
+test("the Memory feature searches past conversations, opens one at the hit, and notes a miss", async ({ page }) => {
   const s = new Service("box");
   cleanup.push(() => s.dispose());
   const log = join(s.root, ".claude/projects/-work-lunch");
@@ -425,7 +426,7 @@ test("the Memory workspace searches past conversations, opens one at the hit, an
   await page.goto(s.signedInUrl);
   await expect(page.locator(".link-connected")).toBeVisible();
 
-  await workspaces(page).getByRole("button", { name: "Memory" }).click();
+  await features(page).getByRole("button", { name: "Memory" }).click();
   await expect(page.locator(".main .placard")).toContainText("Search past conversations");
   const panel = page.locator(".sidebar");
   await panel.getByRole("searchbox", { name: "Search past conversations" }).fill("sushi");
@@ -447,7 +448,7 @@ test("the Memory workspace searches past conversations, opens one at the hit, an
   await expect(page.locator(".details")).toContainText("Not summarized yet");
 
   await panel.getByRole("searchbox", { name: "Search past conversations" }).fill("ramen");
-  await panel.getByRole("button", { name: "Search" }).click();
+  await panel.locator("form[role=search]").getByRole("button", { name: "Search" }).click();
   await expect(panel).toContainText("No message has all of: ramen");
   await panel.getByRole("button", { name: "Didn't find it?" }).click();
   await panel.getByRole("textbox", { name: "What were you looking for?" }).fill("the ramen shop");

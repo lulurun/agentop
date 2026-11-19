@@ -15,8 +15,8 @@ import {
 import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import * as tabs from "./tabs";
-import type { Layout, OpenMode, TabContent } from "./tabs";
-import { isKnownWorkspace, isStaleTab, pluginOf, workspacesFor, type WorkspaceId } from "./workspaces";
+import type { Area, Layout, OpenMode, TabContent } from "./tabs";
+import { isKnownFeature, isStaleTab, pluginOf, featuresFor, type FeatureId } from "./features";
 
 export type LinkState =
   | { state: "connecting" }
@@ -46,23 +46,23 @@ export function activeCount(sessions: Record<string, Session>): number {
 interface AppState {
   connections: Connection[];
   activeId: string;
-  /** The workspace shown, per connection. */
-  workspaces: Record<string, WorkspaceId>;
+  /** The feature shown, per connection. */
+  features: Record<string, FeatureId>;
   settings: Settings;
   link: LinkState;
   sessions: Record<string, Session>;
   /** The connected service's plugins. Plugins differ by service, so this is reset on every switch. */
   plugins: PluginInfo[];
-  /** The plugin list has come in since connecting, so a missing plugin workspace is really missing. */
+  /** The plugin list has come in since connecting, so a missing plugin feature is really missing. */
   pluginsLoaded: boolean;
   history: HistoryState;
   /** Selected session per connection: the focused tab's session. Session IDs are only unique within one service. */
   selected: Record<string, string>;
-  /** The main area's tabs per connection, one layout per workspace. */
-  layouts: Record<string, Partial<Record<WorkspaceId, Layout>>>;
+  /** The main area's tabs per connection, one layout per feature. */
+  layouts: Record<string, Partial<Record<FeatureId, Layout>>>;
   leftOpen: boolean;
   rightOpen: boolean;
-  /** The left panel's sections folded shut, by ID: `active`, `elsewhere`, `history`. */
+  /** The panels' sections folded shut, by `Section` id. */
   folded: string[];
   switcherOpen: boolean;
   dialog: Dialog;
@@ -77,7 +77,7 @@ interface AppState {
   signIn(token: ClientToken): void;
   /** Sign this app out of the active service, and revoke its client there. */
   signOut(): Promise<void>;
-  setWorkspace(workspace: WorkspaceId): void;
+  setFeature(feature: FeatureId): void;
   setPluginEnabled(id: string, enabled: boolean): Promise<void>;
   updateSettings(changes: Partial<Settings>): void;
   /** The service was stopped on purpose, so don't keep trying to reach it. */
@@ -85,17 +85,21 @@ interface AppState {
   addConnection(connection: Connection): void;
   updateConnection(id: string, fields: Partial<Connection>): void;
   removeConnection(id: string): void;
-  /** Show a session in the Sessions workspace. By default it takes the place of the session shown now. */
-  select(sessionId: string, mode?: OpenMode): void;
-  /** Open a tab in the workspace shown; a session's tab always opens in Sessions. */
-  openTab(content: TabContent, mode?: OpenMode): void;
-  /** Change a workspace's tabs with a function of its layout, such as a plugin showing two tabs side by side. */
-  editLayout(workspace: WorkspaceId, change: (layout: Layout) => Layout): void;
-  activateTab(workspace: WorkspaceId, group: number, tabId: string): void;
-  closeTab(workspace: WorkspaceId, group: number, tabId: string): void;
-  splitTab(workspace: WorkspaceId): void;
-  moveTab(workspace: WorkspaceId, group: number, tabId: string): void;
-  focusGroup(workspace: WorkspaceId, group: number): void;
+  /** Show a session in Sessions, by default in the left area in place of the session shown. */
+  select(sessionId: string, mode?: OpenMode, area?: Area): void;
+  /** Open a tab in an area (docs/ui.md, Where tabs open) of the feature shown; a session's tab always opens in Sessions. */
+  openTab(content: TabContent, area: Area, mode?: OpenMode): void;
+  /** Close the tabs of a feature whose content matches. */
+  closeTabs(feature: FeatureId, matches: (content: TabContent) => boolean): void;
+  activateTab(feature: FeatureId, area: Area, tabId: string): void;
+  closeTab(feature: FeatureId, area: Area, tabId: string): void;
+  splitTab(feature: FeatureId): void;
+  moveTab(feature: FeatureId, area: Area, tabId: string): void;
+  focusArea(feature: FeatureId, area: Area): void;
+  /** The feature shown: pick the active area's tab at a position. */
+  activateTabAt(index: number): void;
+  /** The feature shown: close the active area's tab. */
+  closeActiveTab(): void;
   loadHistory(): Promise<void>;
   /** Resume a past session; its tab becomes the new session's. */
   resumeHistory(item: HistoryItem): Promise<void>;
@@ -106,7 +110,7 @@ interface AppState {
   setFolded(section: string, folded: boolean): void;
   setSwitcherOpen(open: boolean): void;
   setDialog(dialog: Dialog): void;
-  /** Open a service's Status tab in the workspace shown, switching to that service first. */
+  /** Open a service's Status tab in the feature shown, switching to that service first. */
   openStatus(id: string): void;
   setError(error: string | null): void;
   /** Run an action against the service, showing any failure instead of throwing. */
@@ -126,30 +130,30 @@ function loadFolded(): string[] {
 }
 const SELECTED_KEY = "agentop.selected";
 const TABS_KEY = "agentop.tabs";
-const WORKSPACE_KEY = "agentop.workspace";
+const FEATURE_KEY = "agentop.workspace";
 
 type Layouts = AppState["layouts"];
 
 /**
- * Saved tabs, per connection and workspace. Tabs saved before workspaces were
+ * Saved tabs, per connection and feature. Tabs saved before features were
  * one layout per connection: those become the Sessions layout.
  */
 export function parseLayouts(saved: Record<string, unknown>): Layouts {
   const result: Layouts = {};
   for (const [id, value] of Object.entries(saved ?? {})) {
     if (!value || typeof value !== "object") continue;
-    if (Array.isArray((value as Layout).groups)) {
+    if (Array.isArray((value as { groups?: unknown }).groups)) {
       const layout = tabs.parseLayout(value);
       if (layout) result[id] = { sessions: layout };
       continue;
     }
-    const byWorkspace: Partial<Record<WorkspaceId, Layout>> = {};
-    for (const [workspace, layout] of Object.entries(value as Record<string, unknown>)) {
-      if (!isKnownWorkspace(workspace)) continue;
+    const byFeature: Partial<Record<FeatureId, Layout>> = {};
+    for (const [feature, layout] of Object.entries(value as Record<string, unknown>)) {
+      if (!isKnownFeature(feature)) continue;
       const parsed = tabs.parseLayout(layout);
-      if (parsed) byWorkspace[workspace as WorkspaceId] = tabs.closeWhere(parsed, isStaleTab);
+      if (parsed) byFeature[feature as FeatureId] = tabs.closeWhere(parsed, isStaleTab);
     }
-    result[id] = byWorkspace;
+    result[id] = byFeature;
   }
   return result;
 }
@@ -162,9 +166,9 @@ function loadLayouts(): Layouts {
   }
 }
 
-function loadWorkspaces(): Record<string, WorkspaceId> {
+function loadFeatures(): Record<string, FeatureId> {
   try {
-    const saved = JSON.parse(localStorage.getItem(WORKSPACE_KEY) ?? "{}");
+    const saved = JSON.parse(localStorage.getItem(FEATURE_KEY) ?? "{}");
     return saved && typeof saved === "object" ? saved : {};
   } catch {
     return {};
@@ -172,14 +176,14 @@ function loadWorkspaces(): Record<string, WorkspaceId> {
 }
 
 /**
- * The workspace shown for the active connection. One whose plugin is off, or
+ * The feature shown for the active connection. One whose plugin is off, or
  * isn't on this service, falls back to Sessions once the plugin list is in.
  */
-export function currentWorkspace(state: Pick<AppState, "workspaces" | "activeId" | "plugins" | "pluginsLoaded">): WorkspaceId {
-  const saved = state.workspaces[state.activeId];
-  const wanted = saved && isKnownWorkspace(saved) ? saved : "sessions";
+export function currentFeature(state: Pick<AppState, "features" | "activeId" | "plugins" | "pluginsLoaded">): FeatureId {
+  const saved = state.features[state.activeId];
+  const wanted = saved && isKnownFeature(saved) ? saved : "sessions";
   if (!pluginOf(wanted) || !state.pluginsLoaded) return wanted;
-  return workspacesFor(state.plugins).some((w) => w.id === wanted) ? wanted : "sessions";
+  return featuresFor(state.plugins).some((w) => w.id === wanted) ? wanted : "sessions";
 }
 
 const EMPTY_LAYOUT = tabs.emptyLayout();
@@ -191,19 +195,19 @@ function derive(key: string, make: () => Layout): Layout {
   return derived.get(key)!;
 }
 
-type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "workspaces" | "plugins" | "pluginsLoaded">;
+type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded">;
 
 /**
- * A workspace's tabs on the active connection, by default the one shown.
+ * A feature's tabs on the active connection, by default the one shown.
  * Before it has any, Sessions gets the session selected last time.
  */
-export function layoutOf(state: LayoutState, workspace: WorkspaceId = currentWorkspace(state)): Layout {
-  const saved = state.layouts[state.activeId]?.[workspace];
+export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature(state)): Layout {
+  const saved = state.layouts[state.activeId]?.[feature];
   if (saved) return saved;
-  if (workspace !== "sessions") return EMPTY_LAYOUT;
+  if (feature !== "sessions") return EMPTY_LAYOUT;
   const selected = state.selected[state.activeId];
   if (!selected) return EMPTY_LAYOUT;
-  return derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "replace", "t0"));
+  return derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0"));
 }
 
 function loadSelected(): Record<string, string> {
@@ -365,24 +369,24 @@ export const useApp = create<AppState>((set, get) => {
     closePluginTabs(plugins);
   }
 
-  /** A plugin that is off takes its tabs with it, and its workspace starts afresh when it is back. */
+  /** A plugin that is off takes its tabs with it, and its feature starts afresh when it is back. */
   function closePluginTabs(plugins: PluginInfo[]) {
     const on = new Set(plugins.filter((p) => p.state === "enabled").map((p) => p.id));
     const state = get();
     const mine = state.layouts[state.activeId];
     if (!mine) return;
     const off = (content: TabContent) => content.kind === "plugin" && !on.has(content.plugin);
-    const next: Partial<Record<WorkspaceId, Layout>> = {};
+    const next: Partial<Record<FeatureId, Layout>> = {};
     let changed = false;
-    for (const [workspace, layout] of Object.entries(mine) as [WorkspaceId, Layout][]) {
-      const plugin = pluginOf(workspace);
+    for (const [feature, layout] of Object.entries(mine) as [FeatureId, Layout][]) {
+      const plugin = pluginOf(feature);
       if (plugin && !on.has(plugin)) {
         changed = true;
         continue;
       }
       const closed = tabs.closeWhere(layout, off);
       if (closed !== layout) changed = true;
-      next[workspace] = closed;
+      next[feature] = closed;
     }
     if (changed) saveLayouts({ ...state.layouts, [state.activeId]: next });
   }
@@ -397,13 +401,13 @@ export const useApp = create<AppState>((set, get) => {
     }
   }
 
-  function showWorkspace(workspace: WorkspaceId) {
+  function showFeature(feature: FeatureId) {
     const state = get();
-    if (state.workspaces[state.activeId] === workspace) return;
-    const workspaces = { ...state.workspaces, [state.activeId]: workspace };
-    set({ workspaces });
+    if (state.features[state.activeId] === feature) return;
+    const features = { ...state.features, [state.activeId]: feature };
+    set({ features });
     try {
-      localStorage.setItem(WORKSPACE_KEY, JSON.stringify(workspaces));
+      localStorage.setItem(FEATURE_KEY, JSON.stringify(features));
     } catch {
       // Only a convenience.
     }
@@ -426,8 +430,8 @@ export const useApp = create<AppState>((set, get) => {
     set({ sessions: batch.events.reduce(applyEvent, get().sessions) });
     for (const event of batch.events) {
       if (event.type !== "session.removed") continue;
-      const workspaces = new Set<WorkspaceId>(["sessions", ...(Object.keys(get().layouts[get().activeId] ?? {}) as WorkspaceId[])]);
-      for (const workspace of workspaces) updateLayout((layout) => tabs.closeSession(layout, event.id), workspace);
+      const features = new Set<FeatureId>(["sessions", ...(Object.keys(get().layouts[get().activeId] ?? {}) as FeatureId[])]);
+      for (const feature of features) updateLayout((layout) => tabs.closeSession(layout, event.id), feature);
     }
   }
 
@@ -479,17 +483,17 @@ export const useApp = create<AppState>((set, get) => {
   }
 
   /**
-   * Change one workspace's tabs on the active connection, by default the one shown.
+   * Change one feature's tabs on the active connection, by default the one shown.
    * In Sessions, the selected session follows the focused tab.
    */
-  function updateLayout(change: (layout: Layout) => Layout, workspace: WorkspaceId = currentWorkspace(get())) {
+  function updateLayout(change: (layout: Layout) => Layout, feature: FeatureId = currentFeature(get())) {
     const state = get();
-    const before = layoutOf(state, workspace);
+    const before = layoutOf(state, feature);
     const layout = change(before);
     if (layout === before) return;
-    const layouts = { ...state.layouts, [state.activeId]: { ...state.layouts[state.activeId], [workspace]: layout } };
+    const layouts = { ...state.layouts, [state.activeId]: { ...state.layouts[state.activeId], [feature]: layout } };
     const selected = { ...state.selected };
-    if (workspace === "sessions") {
+    if (feature === "sessions") {
       const focused = tabs.focusedTab(layout);
       const session = focused && tabs.sessionOf(focused.content);
       if (session) selected[state.activeId] = session;
@@ -575,7 +579,7 @@ export const useApp = create<AppState>((set, get) => {
 
   return {
     connections: [],
-    workspaces: loadWorkspaces(),
+    features: loadFeatures(),
     settings: loadSettings(),
     activeId: "",
     link: { state: "connecting" },
@@ -639,8 +643,8 @@ export const useApp = create<AppState>((set, get) => {
       void connect(activeConnection(get()));
     },
 
-    setWorkspace(workspace) {
-      showWorkspace(workspace);
+    setFeature(feature) {
+      showFeature(feature);
     },
 
     async setPluginEnabled(id, enabled) {
@@ -678,28 +682,30 @@ export const useApp = create<AppState>((set, get) => {
       const connections = get().connections.filter((c) => c.id !== id);
       persist(connections);
       const { [id]: _layouts, ...layouts } = get().layouts;
-      const { [id]: _workspace, ...workspaces } = get().workspaces;
-      set({ connections, workspaces });
+      const { [id]: _feature, ...features } = get().features;
+      set({ connections, features });
       saveLayouts(layouts);
       if (get().activeId === id && connections[0]) get().switchTo(connections[0].id);
     },
 
-    select(sessionId, mode = "replace") {
-      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, mode), "sessions");
-      showWorkspace("sessions");
+    select(sessionId, mode = "replace", area = "left") {
+      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, area, mode), "sessions");
+      showFeature("sessions");
     },
 
-    openTab(content, mode = "tab") {
-      const workspace = content.kind === "session" ? "sessions" : currentWorkspace(get());
-      updateLayout((layout) => tabs.open(layout, content, mode), workspace);
-      showWorkspace(workspace);
+    openTab(content, area, mode = "replace") {
+      const feature = content.kind === "session" ? "sessions" : currentFeature(get());
+      updateLayout((layout) => tabs.open(layout, content, area, mode), feature);
+      showFeature(feature);
     },
-    editLayout: (workspace, change) => updateLayout(change, workspace),
-    activateTab: (workspace, group, tabId) => updateLayout((layout) => tabs.activate(layout, group, tabId), workspace),
-    closeTab: (workspace, group, tabId) => updateLayout((layout) => tabs.close(layout, group, tabId), workspace),
-    splitTab: (workspace) => updateLayout((layout) => tabs.split(layout), workspace),
-    moveTab: (workspace, group, tabId) => updateLayout((layout) => tabs.moveToOther(layout, group, tabId), workspace),
-    focusGroup: (workspace, group) => updateLayout((layout) => tabs.focusGroup(layout, group), workspace),
+    closeTabs: (feature, matches) => updateLayout((layout) => tabs.closeWhere(layout, matches), feature),
+    activateTab: (feature, area, tabId) => updateLayout((layout) => tabs.activate(layout, area, tabId), feature),
+    closeTab: (feature, area, tabId) => updateLayout((layout) => tabs.close(layout, area, tabId), feature),
+    splitTab: (feature) => updateLayout((layout) => tabs.split(layout), feature),
+    moveTab: (feature, area, tabId) => updateLayout((layout) => tabs.moveToOther(layout, area, tabId), feature),
+    focusArea: (feature, area) => updateLayout((layout) => tabs.focusArea(layout, area), feature),
+    activateTabAt: (index) => updateLayout((layout) => tabs.activateAt(layout, index)),
+    closeActiveTab: () => updateLayout((layout) => tabs.closeActive(layout)),
 
     async loadHistory() {
       const listing = await get().act((client) => client.history());
@@ -712,14 +718,8 @@ export const useApp = create<AppState>((set, get) => {
       if (!created) return;
       const past = (content: TabContent) => content.kind === "past" && content.historyId === item.id;
       const session: TabContent = { kind: "session", sessionId: created.id };
-      updateLayout((layout) => {
-        const swapped = {
-          ...layout,
-          groups: layout.groups.map((g) => ({ ...g, tabs: g.tabs.map((t) => (past(t.content) ? { ...t, content: session } : t)) })),
-        };
-        return tabs.open(swapped, session, "replace");
-      }, "sessions");
-      showWorkspace("sessions");
+      updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), "sessions");
+      showFeature("sessions");
       void get().loadHistory();
     },
 

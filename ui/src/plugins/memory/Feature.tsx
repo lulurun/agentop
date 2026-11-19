@@ -1,11 +1,12 @@
 /**
- * The Memory workspace (design 12.11.3, phase 6): search every past conversation on the
+ * The Memory feature (design 12.11.3, phase 6): search every past conversation on the
  * service, read the one around a hit, and see its session's summary. A
  * search that didn't find what was wanted can be noted as a miss.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { platform } from "../../platform";
 import type { PluginContext } from "../types";
+import { Section } from "../../components/Section";
 import {
   keyOf,
   openConversation,
@@ -260,7 +261,8 @@ export function SearchPanel({ plugin }: { plugin: PluginContext }) {
   }
 
   return (
-    <div className="memory-search">
+    <>
+      <Section id="memory:search" title="Search">
       <form className="memory-search-form" role="search" onSubmit={submit}>
         <div className="memory-search-row">
           <input
@@ -293,13 +295,12 @@ export function SearchPanel({ plugin }: { plugin: PluginContext }) {
           </select>
         </div>
       </form>
-      <div className="memory-results" aria-busy={searching}>
         {error && <p className="form-error memory-pad">{error}</p>}
-        {!results ? (
-          <p className="session-empty">Every word must match, anywhere in a message, ignoring case. Quotes keep a phrase together.</p>
-        ) : (
+        {!results && <p className="session-empty">Every word must match, anywhere in a message, ignoring case. Quotes keep a phrase together.</p>}
+      </Section>
+        {results && (
           <>
-            <h3 className="session-group">Sessions about this</h3>
+            <Section id="memory:sessions" title="Sessions about this" extra={<span className="session-count">{results.sessions.length}</span>}>
             {results.sessions.length === 0 ? (
               <p className="session-empty">No session summary matches.</p>
             ) : (
@@ -314,7 +315,8 @@ export function SearchPanel({ plugin }: { plugin: PluginContext }) {
                 ))}
               </ul>
             )}
-            <h3 className="session-group">Messages</h3>
+            </Section>
+            <Section id="memory:messages" title="Messages" extra={<span className="session-count">{results.messages.length}</span>}>
             {results.messages.length === 0 ? (
               <p className="session-empty">No message has all of: {terms.join(" ")}</p>
             ) : (
@@ -327,10 +329,10 @@ export function SearchPanel({ plugin }: { plugin: PluginContext }) {
             <div className="memory-pad">
               <MissForm plugin={plugin} />
             </div>
+            </Section>
           </>
         )}
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -342,7 +344,7 @@ interface Counts {
   recall: { searches: number; misses: number };
 }
 
-export function EmptyView({ plugin }: { plugin: PluginContext }) {
+export function Background({ plugin }: { plugin: PluginContext }) {
   const [counts, setCounts] = useState<Counts | null>(null);
   useEffect(() => {
     let live = true;
@@ -511,11 +513,17 @@ function SessionDetails({ plugin, tool, session }: { plugin: PluginContext; tool
   }, [plugin.client, tool, session]);
 
   if (info === undefined) return null;
-  if (info === null) return <p className="detail-empty">Nothing of this session is recorded.</p>;
+  if (info === null) {
+    return (
+      <Section id="memory:session" title="Session">
+        <p className="detail-empty">Nothing of this session is recorded.</p>
+      </Section>
+    );
+  }
   const summary = info.summary;
   return (
     <div className="memory-details">
-      <h3>Summary</h3>
+      <Section id="memory:summary" title="Summary">
       {summary ? (
         <>
           <p className="memory-summary-title">{summary.title}</p>
@@ -536,7 +544,8 @@ function SessionDetails({ plugin, tool, session }: { plugin: PluginContext; tool
       ) : (
         <p className="detail-empty">Not summarized yet. A session gets a summary once it has been quiet for 30 minutes.</p>
       )}
-      <h3>Session</h3>
+      </Section>
+      <Section id="memory:session" title="Session">
       <dl>
         <Row label="Tool">{info.tool}</Row>
         {info.project && (
@@ -551,13 +560,20 @@ function SessionDetails({ plugin, tool, session }: { plugin: PluginContext; tool
         <Row label="Last">{when(info.last_at)}</Row>
         <Row label="Messages">{info.messages.toLocaleString()}</Row>
       </dl>
+      </Section>
     </div>
   );
 }
 
 export function DetailsPanel({ plugin }: { plugin: PluginContext }) {
   const current = useCurrentConversation();
-  if (!current) return <p className="detail-empty">Open a search result to see its session.</p>;
+  if (!current) {
+    return (
+      <Section id="memory:session" title="Session">
+        <p className="detail-empty">Open a search result to see its session.</p>
+      </Section>
+    );
+  }
   const [tool, session] = current;
   return <SessionDetails key={keyOf(tool, session)} plugin={plugin} tool={tool} session={session} />;
 }

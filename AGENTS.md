@@ -6,6 +6,7 @@
 | Dialogues (a plugin) | [docs/dialogue.md](docs/dialogue.md) |
 | Plugins | [docs/plugins.md](docs/plugins.md) |
 | Code structure | [docs/architecture.md](docs/architecture.md) |
+| UI layout: names of its parts, where tabs open, keys | [docs/ui.md](docs/ui.md) |
 | Service and app setup | [docs/setup.md](docs/setup.md) |
 | Build and release (UI, desktop app) | [docs/setup.md](docs/setup.md#building-and-releasing), `scripts/` |
 | Manual tests (real user and PC) | [docs/manual-tests.md](docs/manual-tests.md) |

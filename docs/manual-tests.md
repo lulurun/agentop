@@ -22,8 +22,8 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | A1 | On the PC, run `agentop service connect-info`, open `http://127.0.0.1:9775/`, paste the token if asked | Shows the app and this service's sessions (`/app/` redirects to `/` since 2026-11-14) | Seen working (at `/app/`) |
 | A2 | Run `agentop open` on the PC | Browser opens the app signed in; the token is gone from the address bar | Not run |
 | A3 | Reload the page after a service update | The new version loads without a hard reload (no stale cache) | Not run |
-| A4 | Collapse and reopen the left and right columns, with buttons and with Ctrl+Shift+[ and Ctrl+Shift+] | Columns toggle; the terminal refits | Not run |
-| A5 | Ctrl+Shift+N, Ctrl+Shift+K, Ctrl+Shift+S, Ctrl+Shift+F | New session, filter focus, service switcher, terminal search | Not run |
+| A4 | Collapse and reopen the left and right panels, with buttons and with Ctrl+Shift+1 and Ctrl+Shift+0 | Panels toggle; the terminal refits | Not run |
+| A5 | In the desktop app, with the terminal focused: Ctrl+Shift+2, 3 to 5, 9; Q, W, E, R; A to K; L ([ui.md](ui.md#keys)) | Connection manager, features, Settings; focus moves to each panel and area; tabs switch; the tab closes and its session keeps running | Not run |
 | A6 | With a terminal open, press Ctrl+W or close the tab | The browser asks before leaving | Not run |
 | A7 | Settings: switch theme, renderer, and font size, then reload | Each applies at once and is kept after reload | Not run |
 | A8 | Set the OS to light, then dark, with theme on System | The app follows the OS | Not run |
@@ -60,7 +60,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | C6 | Compare the WebGL and DOM renderers on the PC, and pick the default | A renderer choice written into the plan | Not run |
 | C7 | Ctrl+B followed by a tmux command (for example `Ctrl+B d`) | Reaches tmux; detach shows "Detached" with Attach again | Not run |
 | C8 | Select text and press Ctrl+Shift+C | Copied to the clipboard | Not run |
-| C9 | Ctrl+Shift+F, search for text on screen, Escape | Matches are highlighted; Escape returns focus to the terminal | Not run |
+| C9 | Ctrl+Shift+/, search for text on screen, Escape | Matches are highlighted; Escape returns focus to the terminal | Not run |
 | C10 | Click a URL printed in the terminal | Opens in a new tab | Not run |
 | C11 | Restart the service while a terminal is open | "Reconnecting…", then the terminal comes back by itself | Not run |
 | C12 | Leave a terminal open while the PC sleeps, then wake it | The terminal reconnects | Not run |

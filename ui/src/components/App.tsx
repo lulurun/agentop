@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { PluginPanel } from "../plugins/Slot";
-import { isAppShortcut } from "../shortcuts";
-import { currentWorkspace, useApp } from "../store";
-import { pluginOf, workspacesFor } from "../workspaces";
+import { layoutAction, type PanelOrArea } from "../hotkeys";
+import { currentFeature, layoutOf, useApp } from "../store";
+import { pluginOf, featuresFor } from "../features";
 import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
 import { AppOutdated, DesktopUpdate, ServiceSwitcher } from "./ServiceSwitcher";
@@ -11,9 +11,82 @@ import { NewSessionDialog } from "./NewSessionDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { GearIcon, ToolbarIcon } from "./icons";
-import { ACTION_EVENT, hasPluginAction, useWorkspaces, WorkspaceAction, WorkspaceNav } from "./WorkspaceNav";
+import { useFeatures, FeatureNav } from "./FeatureNav";
 
-const DIGITS = ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8", "Digit9"];
+const FOCUSABLE = 'textarea:not([disabled]), input:not([disabled]), select:not([disabled]), button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+
+/** Give the keyboard to a panel or area: a terminal's input if it shows one, else its first control. */
+function focusInside(target: PanelOrArea) {
+  const root =
+    target === "left-panel" ? document.querySelector<HTMLElement>(".sidebar")
+    : target === "right-panel" ? document.querySelector<HTMLElement>(".details")
+    : document.querySelector<HTMLElement>(`.workbench:not([hidden]) .tab-group[data-area="${target === "left-area" ? "left" : "right"}"] .tab-body`);
+  if (!root) return;
+  const visible = (el: HTMLElement) => !el.closest("[hidden]") && el.getClientRects().length > 0;
+  const terminal = [...root.querySelectorAll<HTMLElement>(".xterm-helper-textarea")].find(visible);
+  const first = terminal ?? [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].find(visible);
+  (first ?? root).focus();
+}
+
+/** After the store's change is drawn. */
+const afterDraw = (run: () => void) => requestAnimationFrame(() => requestAnimationFrame(run));
+
+function runLayoutKey(event: KeyboardEvent) {
+  const action = layoutAction(event);
+  if (!action) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const app = useApp.getState();
+  const linked = app.link.state === "connected" || app.link.state === "reconnecting";
+  const features = featuresFor(app.plugins);
+  const feature = currentFeature(app);
+  const here = features.find((f) => f.id === feature);
+  const layout = layoutOf(app);
+  switch (action.do) {
+    case "connections":
+      app.setSwitcherOpen(!app.switcherOpen);
+      return;
+    case "settings":
+      app.setDialog(app.dialog === "settings" ? null : "settings");
+      return;
+  }
+  if (!linked) return;
+  switch (action.do) {
+    case "toggle-left":
+      if (here?.left) app.toggleLeft();
+      break;
+    case "toggle-right":
+      if (here?.right) app.toggleRight();
+      break;
+    case "feature": {
+      const target = features[action.index];
+      if (target) app.setFeature(target.id);
+      break;
+    }
+    case "focus": {
+      const { target } = action;
+      if (target === "left-panel" || target === "right-panel") {
+        const left = target === "left-panel";
+        if (!(left ? here?.left : here?.right)) break;
+        if (!(left ? app.leftOpen : app.rightOpen)) (left ? app.toggleLeft : app.toggleRight)();
+      } else {
+        const area = target === "left-area" ? "left" : "right";
+        if (!layout[area]) break;
+        app.focusArea(feature, area);
+      }
+      afterDraw(() => focusInside(target));
+      break;
+    }
+    case "tab":
+      if (!layout[layout.focused]?.tabs[action.index]) break;
+      app.activateTabAt(action.index);
+      afterDraw(() => focusInside(layout.focused === "left" ? "left-area" : "right-area"));
+      break;
+    case "close-tab":
+      app.closeActiveTab();
+      break;
+  }
+}
 
 export function App() {
   // Each field on its own, so a change elsewhere in the store, such as a session's, doesn't draw the app again.
@@ -27,9 +100,9 @@ export function App() {
   const dialog = useApp((s) => s.dialog);
   const error = useApp((s) => s.error);
   const setError = useApp((s) => s.setError);
-  const { current } = useWorkspaces();
+  const { current } = useFeatures();
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
-  // A workspace without a panel has no toggle for it either.
+  // A feature without a panel has no toggle for it either.
   const hasLeft = linked && current.left;
   const hasRight = linked && current.right;
   const showLeft = hasLeft && leftOpen;
@@ -40,80 +113,48 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (!isAppShortcut(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      const app = useApp.getState();
-      const workspace = currentWorkspace(app);
-      const here = workspacesFor(app.plugins).find((w) => w.id === workspace);
-      const digit = DIGITS.indexOf(event.code);
-      if (digit >= 0) {
-        const target = workspacesFor(app.plugins)[digit];
-        if (target) app.setWorkspace(target.id);
-        return;
-      }
-      switch (event.code) {
-        case "BracketLeft":
-          if (here?.left) app.toggleLeft();
-          break;
-        case "BracketRight":
-          if (here?.right) app.toggleRight();
-          break;
-        case "KeyN":
-          if (hasPluginAction(workspace)) window.dispatchEvent(new Event(ACTION_EVENT));
-          else app.setDialog("new-session");
-          break;
-        case "KeyS":
-          app.setSwitcherOpen(!app.switcherOpen);
-          break;
-        case "KeyK":
-          app.setWorkspace("sessions");
-          if (!app.leftOpen) app.toggleLeft();
-          app.setFolded("active", false);
-          requestAnimationFrame(() => document.getElementById("session-filter")?.focus());
-          break;
-        case "KeyF":
-          window.dispatchEvent(new Event("agentop:terminal-search"));
-          break;
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
+    // Capture, so the layout's keys come before the terminal and anything else on the page.
+    window.addEventListener("keydown", runLayoutKey, true);
+    return () => window.removeEventListener("keydown", runLayoutKey, true);
   }, []);
 
   if (!activeId || !hasConnections) return null;
   const plugin = pluginOf(current.id);
 
   return (
-    <div className="app" data-left={showLeft} data-right={showRight} data-workspace={current.id}>
+    <div className="app" data-left={showLeft} data-right={showRight} data-feature={current.id}>
       <header className="header">
         {hasLeft && (
-          <button type="button" className="icon" aria-label={current.id === "sessions" ? "Toggle session list" : "Toggle left panel"} aria-pressed={leftOpen} title="Toggle left panel (Ctrl+Shift+[)" onClick={toggleLeft}>
+          <button type="button" className="icon" aria-label="Toggle left panel" aria-pressed={leftOpen} title="Toggle left panel (Ctrl+Shift+1)" onClick={toggleLeft}>
             <ToolbarIcon side="left" filled={leftOpen} />
           </button>
         )}
         <div className="header-title">
           <ServiceSwitcher />
-          {linked && <WorkspaceNav />}
+          {linked && <FeatureNav />}
           <AppOutdated />
           <DesktopUpdate />
         </div>
-        {linked && <WorkspaceAction />}
-        <button type="button" className="icon" aria-label="Settings" title="Settings" onClick={() => setDialog("settings")}>
+        <button type="button" className="icon" aria-label="Settings" title="Settings (Ctrl+Shift+9)" onClick={() => setDialog("settings")}>
           <GearIcon />
         </button>
         {hasRight && (
-          <button type="button" className="icon" aria-label={current.id === "sessions" ? "Toggle session details" : "Toggle right panel"} aria-pressed={rightOpen} title="Toggle right panel (Ctrl+Shift+])" onClick={toggleRight}>
+          <button type="button" className="icon" aria-label="Toggle right panel" aria-pressed={rightOpen} title="Toggle right panel (Ctrl+Shift+0)" onClick={toggleRight}>
             <ToolbarIcon side="right" filled={rightOpen} />
           </button>
         )}
       </header>
-      {showLeft &&
-        (current.id === "sessions" ? <Sidebar /> : plugin && <aside className="sidebar"><PluginPanel pluginId={plugin} side="left" /></aside>)}
+      {showLeft && (
+        <aside className="sidebar" aria-label="Left panel" tabIndex={-1}>
+          {current.id === "sessions" ? <Sidebar /> : plugin && <div className="sidebar-scroll"><PluginPanel pluginId={plugin} side="left" /></div>}
+        </aside>
+      )}
       <MainArea />
-      {showRight &&
-        (current.id === "sessions" ? <DetailsPanel /> : plugin && <aside className="details"><PluginPanel pluginId={plugin} side="right" /></aside>)}
+      {showRight && (
+        <aside className="details" aria-label="Right panel" tabIndex={-1}>
+          {current.id === "sessions" ? <DetailsPanel /> : plugin && <PluginPanel pluginId={plugin} side="right" />}
+        </aside>
+      )}
       {(showLeft || showRight) && <div className="scrim" onClick={() => { if (showLeft) toggleLeft(); if (showRight) toggleRight(); }} />}
       {dialog === "new-session" && <NewSessionDialog />}
       {dialog === "add-service" && <AddServiceDialog />}

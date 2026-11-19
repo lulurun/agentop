@@ -8,7 +8,7 @@ import { Terminal, type ITheme } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { ApiError, type ServiceClient } from "../api/client";
-import { isAppShortcut } from "../shortcuts";
+import { layoutAction } from "../hotkeys";
 import { platform } from "../platform";
 import { loadSettings } from "../settings";
 import { terminalClipboard } from "./clipboard";
@@ -84,7 +84,7 @@ interface Props {
   /** Shown but not typed into: input is dropped and the overlay covers the screen. */
   locked?: boolean;
   overlay?: ReactNode;
-  /** Whether the search shortcut opens this terminal's search, and the terminal takes the keyboard when it opens. Off for a terminal in a group without focus. */
+  /** Whether the terminal takes the keyboard when it opens. Off for a terminal in an area that isn't active. */
   searchable?: boolean;
   /** Watched only: nothing typed is sent, it never takes the keyboard, and tmux keeps the window's size. Fixed for the terminal's life. */
   readOnly?: boolean;
@@ -162,7 +162,12 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     if (!lockedRef.current && typingRef.current && searchableRef.current) terminal.focus();
 
     terminal.attachCustomKeyEventHandler((event) => {
-      if (isAppShortcut(event)) return false;
+      if (layoutAction(event)) return false;
+      if (event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "Slash") {
+        event.preventDefault();
+        setSearching(true);
+        return false;
+      }
       const copy = event.type === "keydown" && event.ctrlKey && event.shiftKey && event.code === "KeyC";
       if (copy && terminal.hasSelection()) {
         event.preventDefault();
@@ -300,13 +305,6 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
     keyboardFor(terminal, typing);
     if (!typing) terminal.blur();
   }, [typing]);
-
-  useEffect(() => {
-    if (!searchable) return;
-    const open = () => setSearching(true);
-    window.addEventListener("agentop:terminal-search", open);
-    return () => window.removeEventListener("agentop:terminal-search", open);
-  }, [searchable]);
 
   return (
     <div className="terminal" data-status={status} data-locked={locked || undefined} data-readonly={readOnly || undefined} data-typing={typing ? undefined : "off"}>

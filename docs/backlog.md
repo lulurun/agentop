@@ -32,7 +32,7 @@ Two places signal a PID read from a file, with no check that it is still the pro
 
 ### An app-level error boundary
 
-*Read in code.* There is none (`ui/src/main.tsx`). A plugin's `tabLabel` and `action.run` run outside any boundary (`components/Workbench.tsx`, `components/WorkspaceNav.tsx`), and `PluginBoundary` renders nothing and never resets (`plugins/Slot.tsx:9`). One render error blanks the one window everything runs in.
+*Read in code.* There is none (`ui/src/main.tsx`). A plugin's `tabLabel` runs outside any boundary (`components/Workbench.tsx`), and `PluginBoundary` renders nothing and never resets (`plugins/Slot.tsx:9`). One render error blanks the one window everything runs in.
 
 - Fix: a top-level boundary with a reload button; a reset key on `PluginBoundary`; wrap plugin calls.
 
@@ -80,13 +80,13 @@ Each *read in code*; each rare, each small.
 
 - Fix: call it "fault isolation" in the docstring and design 12, or run plugin tasks off the loop.
 
-### Workspaces and Memory navigation
+### Features and Memory navigation
 
 From design 10.7.6 and 12.11.3:
 
-- The workspace in the URL (`/sessions`, `/dialogues/<id>`), for the back button, deep links and reloading in place.
-- A badge on a workspace in the header when something there needs attention.
-- One call, `navigate(workspace, selection)`, for jumps between workspaces; with it, Resume from a Memory conversation, and jumping from a Sessions or History row to its conversation.
+- The feature in the URL (`/sessions`, `/dialogues/<id>`), for the back button, deep links and reloading in place.
+- A badge on a feature in the feature nav when something there needs attention.
+- One call, `navigate(feature, selection)`, for jumps between features; with it, Resume from a Memory conversation, and jumping from a Sessions or History row to its conversation.
 
 ## P3
 
@@ -99,7 +99,7 @@ From design 10.7.6 and 12.11.3:
 
 ### Features
 
-- **Project groups** plugin: group sessions by project in the left column; the plugin stores the groups and fills a left-column view (design 12.8).
+- **Project groups** plugin: group sessions by project in the left panel; the plugin stores the groups and fills a section of Sessions' left panel (a slot the core doesn't have yet, [ui.md](ui.md#rules-for-plugins)) (design 12.8).
 - A merged session list across services, and a window per service (client-only; a non-goal in design 2.2 for now).
 - An offline app shell for the web app, so it survives its service stopping.
 - Colour in the File viewer's diff view.

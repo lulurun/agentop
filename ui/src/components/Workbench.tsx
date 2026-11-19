@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import type { ServiceClient, Session } from "../api/client";
 import { UI_PLUGINS } from "../plugins/registry";
 import { FileTab, PluginTab } from "../plugins/Slot";
 import { activeConnection, layoutOf, sessionTitle, useApp } from "../store";
-import { canSplit, MAX_GROUPS, sessionOf, type Group, type Tab } from "../tabs";
-import type { WorkspaceId } from "../workspaces";
+import { areasOf, canSplit, other, sessionOf, type Area, type Group, type Tab } from "../tabs";
+import type { FeatureId } from "../features";
 import { connectionName } from "../connections";
 import { PastSessionView } from "./HistoryView";
 import { StatusView } from "./StatusView";
@@ -23,7 +23,7 @@ function useTabLabel(tab: Tab): { label: string; title: string; status?: string 
   if (content.kind === "status") return { label: "Status", title: `Status of ${service}` };
   if (content.kind === "past") return { label: past?.name ?? "Past session", title: past ? `Past session in ${past.cwd}` : "Past session" };
   if (content.kind === "plugin") {
-    const view = UI_PLUGINS[content.plugin]?.workspace?.views[content.view];
+    const view = UI_PLUGINS[content.plugin]?.feature?.views[content.view];
     const label = view?.label ?? content.view;
     if (!content.key) return { label, title: label };
     const named = view?.tabLabel?.(content.key);
@@ -75,7 +75,7 @@ export function Menu({ x, y, items, onClose }: { x: number; y: number; items: [s
   );
 }
 
-function TabButton({ workspace, tab, group, active, canMove }: { workspace: WorkspaceId; tab: Tab; group: number; active: boolean; canMove: boolean }) {
+function TabButton({ feature, tab, area, active }: { feature: FeatureId; tab: Tab; area: Area; active: boolean }) {
   const { label, title, status } = useTabLabel(tab);
   const activateTab = useApp((s) => s.activateTab);
   const closeTab = useApp((s) => s.closeTab);
@@ -91,9 +91,9 @@ function TabButton({ workspace, tab, group, active, canMove }: { workspace: Work
         aria-selected={active}
         title={title}
         data-status={status}
-        onClick={() => activateTab(workspace, group, tab.id)}
+        onClick={() => activateTab(feature, area, tab.id)}
         onAuxClick={(event) => {
-          if (event.button === 1) closeTab(workspace, group, tab.id);
+          if (event.button === 1) closeTab(feature, area, tab.id);
         }}
         onContextMenu={(event) => {
           event.preventDefault();
@@ -103,7 +103,7 @@ function TabButton({ workspace, tab, group, active, canMove }: { workspace: Work
         {label}
       </button>
       {!tab.pinned && (
-        <button type="button" className="tab-close" aria-label={`Close ${label}`} title="Close" onClick={() => closeTab(workspace, group, tab.id)}>
+        <button type="button" className="tab-close" aria-label={`Close ${label}`} title="Close" onClick={() => closeTab(feature, area, tab.id)}>
           ×
         </button>
       )}
@@ -113,8 +113,8 @@ function TabButton({ workspace, tab, group, active, canMove }: { workspace: Work
           y={menu.y}
           onClose={() => setMenu(null)}
           items={[
-            ...(tab.pinned ? [] : ([["Close", () => closeTab(workspace, group, tab.id)]] as [string, () => void][])),
-            ...(canMove ? ([[group === 0 ? "Move to the right" : "Move to the left", () => moveTab(workspace, group, tab.id)]] as [string, () => void][]) : []),
+            ...(tab.pinned ? [] : ([["Close", () => closeTab(feature, area, tab.id)]] as [string, () => void][])),
+            [area === "left" ? "Move to the right area" : "Move to the left area", () => moveTab(feature, area, tab.id)],
           ]}
         />
       )}
@@ -122,19 +122,19 @@ function TabButton({ workspace, tab, group, active, canMove }: { workspace: Work
   );
 }
 
-function TabBar({ workspace, group, index, groups }: { workspace: WorkspaceId; group: Group; index: number; groups: number }) {
+function TabBar({ feature, group, area, alone }: { feature: FeatureId; group: Group; area: Area; alone: boolean }) {
   const splitTab = useApp((s) => s.splitTab);
-  const canMove = groups > 1 || group.tabs.length > 1;
   const active = group.tabs.find((t) => t.id === group.active);
+  const to = other(area);
   return (
     <div className="tab-bar">
-      <div className="tab-list" role="tablist" aria-label={groups > 1 ? (index === 0 ? "Left tabs" : "Right tabs") : "Tabs"}>
+      <div className="tab-list" role="tablist" aria-label={area === "left" ? "Left area tabs" : "Right area tabs"}>
         {group.tabs.map((tab) => (
-          <TabButton key={tab.id} workspace={workspace} tab={tab} group={index} active={tab.id === group.active} canMove={canMove} />
+          <TabButton key={tab.id} feature={feature} tab={tab} area={area} active={tab.id === group.active} />
         ))}
       </div>
-      {groups < MAX_GROUPS && active && canSplit(active.content) && (
-        <button type="button" className="icon tab-split" aria-label="Split to the right" title="Split to the right" onClick={() => splitTab(workspace)}>
+      {alone && active && canSplit(active.content) && (
+        <button type="button" className="icon tab-split" aria-label={`Show in the ${to} area too`} title={`Show in the ${to} area too`} onClick={() => splitTab(feature)}>
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" />
             <line x1="8" y1="2.5" x2="8" y2="13.5" stroke="currentColor" />
@@ -143,6 +143,13 @@ function TabBar({ workspace, group, index, groups }: { workspace: WorkspaceId; g
       )}
     </div>
   );
+}
+
+const AreaContext = createContext<Area>("left");
+
+/** The area of the buffer this is drawn in, for an action inside it to open its tab there. */
+export function useArea(): Area {
+  return useContext(AreaContext);
 }
 
 export interface SessionPaneProps {
@@ -182,21 +189,22 @@ function SessionSlot({
 
 /** One group: its tab bar and its active tab's contents. */
 function GroupView({
-  workspace,
+  feature,
   group,
-  index,
-  groups,
+  area,
+  alone,
   focused,
   renderSession,
 }: {
-  workspace: WorkspaceId;
+  feature: FeatureId;
   group: Group;
-  index: number;
-  groups: number;
+  area: Area;
+  /** The only area in the middle panel. */
+  alone: boolean;
   focused: boolean;
   renderSession(props: Omit<SessionPaneProps, "client">): ReactNode;
 }) {
-  const focusGroup = useApp((s) => s.focusGroup);
+  const focusArea = useApp((s) => s.focusArea);
   const closeTab = useApp((s) => s.closeTab);
   const tab = group.tabs.find((t) => t.id === group.active);
   const shown = tab?.content.kind === "session" ? { sessionId: tab.content.sessionId, tabId: tab.id } : null;
@@ -217,16 +225,18 @@ function GroupView({
   return (
     <section
       className="tab-group"
+      data-area={area}
       data-focused={focused || undefined}
-      aria-label={groups > 1 ? (index === 0 ? "Left group" : "Right group") : undefined}
+      aria-label={area === "left" ? "Left area" : "Right area"}
       onPointerDownCapture={() => {
-        if (!focused) focusGroup(workspace, index);
+        if (!focused) focusArea(feature, area);
       }}
       onFocusCapture={() => {
-        if (!focused) focusGroup(workspace, index);
+        if (!focused) focusArea(feature, area);
       }}
     >
-      <TabBar workspace={workspace} group={group} index={index} groups={groups} />
+      <TabBar feature={feature} group={group} area={area} alone={alone} />
+      <AreaContext.Provider value={area}>
       <div className="tab-body" role="tabpanel">
         {kept.map((k) => {
           const visible = k.sessionId === shown?.sessionId;
@@ -237,7 +247,7 @@ function GroupView({
                 tabKey={k.sessionId}
                 focused={focused && visible}
                 visible={visible}
-                onClose={() => closeTab(workspace, index, k.tabId)}
+                onClose={() => closeTab(feature, area, k.tabId)}
                 renderSession={renderSession}
               />
             </div>
@@ -246,40 +256,42 @@ function GroupView({
         {tab?.content.kind === "session"
           ? null
           : tab?.content.kind === "file" ? <FileTab key={tab.id} file={tab.content.file} />
-          : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(workspace, index, tab.id)} />
-          : tab?.content.kind === "past" ? <PastSessionView key={tab.id} historyId={tab.content.historyId} onClose={() => closeTab(workspace, index, tab.id)} />
+          : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(feature, area, tab.id)} />
+          : tab?.content.kind === "past" ? <PastSessionView key={tab.id} historyId={tab.content.historyId} onClose={() => closeTab(feature, area, tab.id)} />
           : tab?.content.kind === "plugin" ? <PluginTab key={tab.id} pluginId={tab.content.plugin} view={tab.content.view} viewKey={tab.content.key} />
           : null}
       </div>
+      </AreaContext.Provider>
     </section>
   );
 }
 
-/** A workspace's tab groups. With no tabs at all, `empty` shows instead. */
+/** The middle panel of a feature: its areas, or with neither, its `background`. */
 export function Workbench({
-  workspace,
-  empty,
+  feature,
+  background,
   renderSession,
   hidden = false,
 }: {
-  workspace: WorkspaceId;
-  empty: ReactNode;
+  feature: FeatureId;
+  background: ReactNode;
   renderSession(props: Omit<SessionPaneProps, "client">): ReactNode;
   /** Kept on the page but out of sight, so its terminals stay connected (design 10.7.3). */
   hidden?: boolean;
 }) {
-  const layout = useApp((s) => layoutOf(s, workspace));
-  if (layout.groups.length === 0) return hidden ? null : <>{empty}</>;
+  const layout = useApp((s) => layoutOf(s, feature));
+  const areas = areasOf(layout);
+  if (areas.length === 0) return hidden ? null : <>{background}</>;
   return (
-    <div className="workbench" data-groups={layout.groups.length} data-workspace={workspace} hidden={hidden || undefined} aria-hidden={hidden || undefined}>
-      {layout.groups.map((group, index) => (
+    <div className="workbench" data-areas={areas.length} data-feature={feature} hidden={hidden || undefined} aria-hidden={hidden || undefined}>
+      {areas.map(([area, group]) => (
         <GroupView
-          key={index}
-          workspace={workspace}
+          key={area}
+          feature={feature}
           group={group}
-          index={index}
-          groups={layout.groups.length}
-          focused={!hidden && index === layout.focused}
+          area={area}
+          alone={areas.length === 1}
+          focused={!hidden && area === layout.focused}
           renderSession={renderSession}
         />
       ))}

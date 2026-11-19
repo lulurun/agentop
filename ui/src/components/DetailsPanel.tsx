@@ -4,6 +4,7 @@ import { platform } from "../platform";
 import { PluginSlot } from "../plugins/Slot";
 import { useApp } from "../store";
 import { FilesSection } from "./FilesSection";
+import { Section } from "./Section";
 import { formatDuration, formatTokens } from "./format";
 import { selectedSession } from "./MainArea";
 
@@ -160,13 +161,18 @@ export const DetailsPanel = memo(function DetailsPanel() {
   const session = useApp(selectedSession);
   const act = useApp((s) => s.act);
 
-  if (!session) return <aside className="details"><p className="detail-empty">Select a session to see its details.</p></aside>;
+  if (!session) {
+    return (
+      <Section id="details" title="Details">
+        <p className="detail-empty">Select a session to see its details.</p>
+      </Section>
+    );
+  }
   const attach = session.tmux ? `tmux attach-session -t '=${session.tmux.session}'` : null;
 
   return (
-    <aside className="details">
-      <section>
-        <h3>Details</h3>
+    <>
+      <Section id="details" title="Details">
         <dl>
           {session.managed ? (
             <>
@@ -199,16 +205,15 @@ export const DetailsPanel = memo(function DetailsPanel() {
           {session.runtime_seconds != null && <Row label="Running for" value={formatDuration(session.runtime_seconds)} />}
           {session.memory_mb != null && <Row label="Memory" value={`${Math.round(session.memory_mb)} MB`} />}
         </dl>
-      </section>
-      <section>
-        <h3>Token usage</h3>
+        {session.managed && session.status === "running" && (
+          <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />
+        )}
+      </Section>
+      <Section id="usage" title="Token usage">
         <Usage session={session} />
-      </section>
+      </Section>
       {session.cwd && <FilesSection key={`files/${session.id}`} sessionId={session.id} tool={session.tool ?? null} />}
       <PluginSlot slot="right-panel" session={session} />
-      {session.managed && session.status === "running" && (
-        <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />
-      )}
-    </aside>
+    </>
   );
 });

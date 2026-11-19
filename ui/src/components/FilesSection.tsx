@@ -3,6 +3,7 @@ import type { FileEntry, FileListing, GitChanges } from "../api/client";
 import { platform } from "../platform";
 import { useFileViewer } from "../plugins/Slot";
 import { useActiveClient, useApp } from "../store";
+import { Section } from "./Section";
 import type { FileRef } from "../tabs";
 
 const REFRESH_MS = 10_000;
@@ -182,8 +183,7 @@ export function FilesSection({ sessionId, tool }: { sessionId: string; tool: str
   const hasMemory = useHasMemory(sessionId);
   const shown = tab === "memory" && !hasMemory ? "changed" : tab;
   return (
-    <section>
-      <h3>Files</h3>
+    <Section id="files" title="Files">
       <div className="file-tabs" role="tablist" aria-label="Files">
         <button type="button" role="tab" aria-selected={shown === "changed"} onClick={() => setTab("changed")}>Changed</button>
         <button type="button" role="tab" aria-selected={shown === "all"} onClick={() => setTab("all")}>All</button>
@@ -202,6 +202,6 @@ export function FilesSection({ sessionId, tool }: { sessionId: string; tool: str
       {shown === "changed" && <Changed sessionId={sessionId} />}
       {shown === "all" && <Directory sessionId={sessionId} tree="workdir" path="" />}
       {shown === "memory" && <Directory sessionId={sessionId} tree="memory" path="" />}
-    </section>
+    </Section>
   );
 }

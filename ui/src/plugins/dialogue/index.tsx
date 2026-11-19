@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { sessionIdsKey, useActiveClient, useApp } from "../../store";
 import { formatBytes } from "../../components/format";
+import { Section } from "../../components/Section";
 import { TerminalView } from "../../terminal/TerminalView";
 import type { PluginClient, PluginContext, UiPlugin } from "../types";
 import { NewDialogue } from "./NewDialogue";
@@ -85,27 +86,37 @@ function DialogueRow({ d, current }: { d: DialogueSummary; current: boolean }) {
 function DialogueList({ plugin }: { plugin: PluginContext }) {
   const items = useDialogueList(plugin.client);
   const current = useCurrentDialogue();
-  if (items === null) return <p className="session-empty">Loading…</p>;
-  const running = items.filter((d) => d.running);
-  const finished = items.filter((d) => !d.running);
+  const running = items?.filter((d) => d.running) ?? [];
+  const finished = items?.filter((d) => !d.running) ?? [];
   return (
-    <nav className="session-list" aria-label="Dialogues">
-      <h3 className="session-group">In progress</h3>
-      {running.length === 0 && <p className="session-empty">None running.</p>}
-      {running.map((d) => (
-        <DialogueRow key={d.id} d={d} current={d.id === current} />
-      ))}
-      <h3 className="session-group">Finished</h3>
-      {finished.length === 0 && <p className="session-empty">None yet.</p>}
-      {finished.map((d) => (
-        <DialogueRow key={d.id} d={d} current={d.id === current} />
-      ))}
-    </nav>
+    <>
+      <Section id="dialogue:running" title="In progress" extra={items && <span className="session-count">{running.length}</span>}>
+        <div className="sidebar-actions">
+          <button type="button" className="primary" onClick={openWizard}>
+            New dialogue
+          </button>
+        </div>
+        <nav className="session-list" aria-label="Dialogues in progress">
+          {items === null && <p className="session-empty">Loading…</p>}
+          {items && running.length === 0 && <p className="session-empty">None running.</p>}
+          {running.map((d) => (
+            <DialogueRow key={d.id} d={d} current={d.id === current} />
+          ))}
+        </nav>
+      </Section>
+      <Section id="dialogue:finished" title="Finished" extra={items && <span className="session-count">{finished.length}</span>}>
+        <nav className="session-list" aria-label="Finished dialogues">
+          {items && finished.length === 0 && <p className="session-empty">None yet.</p>}
+          {finished.map((d) => (
+            <DialogueRow key={d.id} d={d} current={d.id === current} />
+          ))}
+        </nav>
+      </Section>
+    </>
   );
 }
 
-/** What the workspace shows with no tabs open, as the Sessions workspace does. */
-function EmptyView() {
+function Background() {
   return (
     <div className="placard">
       <h2>Create a new dialogue, or pick one from the list</h2>
@@ -383,7 +394,13 @@ function Info({ plugin, id }: { plugin: PluginContext; id: string }) {
   }, [plugin.client, id, changed, running]);
 
   if (summary === undefined) return null;
-  if (summary === null || !detail || detail.id !== id) return summary === null ? <p className="detail-empty">This dialogue was removed.</p> : null;
+  if (summary === null || !detail || detail.id !== id) {
+    return summary === null ? (
+      <Section id="dialogue:info" title="Dialogue">
+        <p className="detail-empty">This dialogue was removed.</p>
+      </Section>
+    ) : null;
+  }
 
   const d = detail;
   const s = d.stats;
@@ -392,7 +409,7 @@ function Info({ plugin, id }: { plugin: PluginContext; id: string }) {
 
   return (
     <div className="dialogue-info">
-      <h3>Dialogue</h3>
+      <Section id="dialogue:info" title="Dialogue">
       <p className="dialogue-title">{d.title}</p>
       <dl>
         <Row label="Status">
@@ -415,8 +432,10 @@ function Info({ plugin, id }: { plugin: PluginContext; id: string }) {
         </Row>
       </dl>
       {d.error && <p className="form-error">{d.error}</p>}
+      <Actions plugin={plugin} d={d} />
+      </Section>
 
-      <h3>{d.running ? "So far" : "Stats"}</h3>
+      <Section id="dialogue:stats" title={d.running ? "So far" : "Stats"}>
       <dl>
         <Row label="Turns">
           {s.turns} of {d.max_turns}
@@ -431,17 +450,16 @@ function Info({ plugin, id }: { plugin: PluginContext; id: string }) {
         {!d.running && <Row label="Ended by">{s.completed_by ? `${s.completed_by} marked it complete` : d.status === "completed" ? "Reached max turns" : statusLabel(d.status)}</Row>}
         {s.retries > 0 && <Row label="Retries">{s.retries} replies missed the format and were asked again</Row>}
       </dl>
+      </Section>
 
-      <h3>Artifacts</h3>
-      {artifacts.length ? <FileLinks id={id} files={artifacts} /> : <p className="detail-empty">{d.running ? "None yet." : "The agents saved no files."}</p>}
+      <Section id="dialogue:artifacts" title="Artifacts">
+        {artifacts.length ? <FileLinks id={id} files={artifacts} /> : <p className="detail-empty">{d.running ? "None yet." : "The agents saved no files."}</p>}
+      </Section>
       {own.length > 0 && (
-        <>
-          <h3>Brief and progress</h3>
+        <Section id="dialogue:brief" title="Brief and progress">
           <FileLinks id={id} files={own} />
-        </>
+        </Section>
       )}
-
-      <Actions plugin={plugin} d={d} />
     </div>
   );
 }
@@ -449,7 +467,13 @@ function Info({ plugin, id }: { plugin: PluginContext; id: string }) {
 function RightPanel({ plugin }: { plugin: PluginContext }) {
   const id = useCurrentDialogue();
   useDialogueList(plugin.client);
-  if (!id) return <p className="detail-empty">Pick a dialogue to see its details.</p>;
+  if (!id) {
+    return (
+      <Section id="dialogue:info" title="Dialogue">
+        <p className="detail-empty">Pick a dialogue to see its details.</p>
+      </Section>
+    );
+  }
   return <Info key={id} plugin={plugin} id={id} />;
 }
 
@@ -507,17 +531,16 @@ function fileLabel(viewKey: string): string {
 }
 
 export const plugin: UiPlugin = {
-  workspace: {
+  feature: {
     label: "Dialogues",
     views: {
       new: { label: "New dialogue", Component: NewDialogue },
       agent: { label: "Agent", Component: AgentView, tabLabel: agentLabel },
       file: { label: "File", Component: FileView, tabLabel: fileLabel },
     },
-    empty: EmptyView,
+    background: Background,
     left: DialogueList,
     right: RightPanel,
-    action: { label: "New dialogue", run: openWizard },
   },
   sessionBadge: DialogueBadge,
   beforeDisable,

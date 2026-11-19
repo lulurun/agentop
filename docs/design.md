@@ -608,6 +608,8 @@ A modal with Tool (only installed tools enabled), Working directory (picker, rec
 
 ### 10.4 Keyboard
 
+Replaced by the layout keys of 10.8 and [ui.md](ui.md#keys) on 2026-11-19.
+
 Terminal focus means keys belong to the terminal. Ctrl+B is the tmux prefix, so it must not be the sidebar shortcut that apps commonly use. App shortcuts avoid anything a TUI needs:
 
 | Shortcut | Action |
@@ -666,6 +668,8 @@ Agreed on 2026-11-15, replacing the single sessions layout of 10.1. Each connect
 
 #### 10.7.1 The header
 
+Since 10.8 a feature's action (New session, New dialogue) is in its left panel, not the header.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────────────┐
 │ [◧] ● build-box ▾  Sessions  Dialogues  Memory       fix-auth  [New session] [⚙] [◨] │
@@ -712,6 +716,8 @@ The old Settings dialog mixed two things: how this app looks, and the plugins of
 
 #### 10.7.5 Keyboard
 
+Replaced by 10.8 on 2026-11-19.
+
 | Shortcut | Action |
 |----------|--------|
 | Ctrl+Shift+1 to 9 | Switch to the first to ninth workspace |
@@ -720,7 +726,7 @@ The old Settings dialog mixed two things: how this app looks, and the plugins of
 
 #### 10.7.6 Later
 
-In the [backlog](backlog.md#workspaces-and-memory-navigation):
+In the [backlog](backlog.md#features-and-memory-navigation):
 
 - The workspace in the URL (`/sessions`, `/dialogues/<id>`), for the back button, deep links, and reloading in place. Until then the workspace is remembered per connection in this browser.
 - A badge on a workspace in the header when something there needs attention, such as a session waiting for input while Memory shows.
@@ -740,6 +746,17 @@ History is no longer a workspace. It lists only what is worth reopening: session
 - **The active-session limit.** At most `max_active_sessions` (`config.toml`, default 20) sessions agentop started are active at once, counting every one in the list (starting, running, exited or failed until closed), not plugins' own. The service refuses a start or resume past it (409). The app disables Resume, saying "Active sessions are at the limit. Close a session to resume this one.", and Start session in New session.
 - **A resumed session's name** is the original name and when it was last used, `fix-auth 2026-11-03 09:05`, in the service's time zone. Resuming it again replaces the date rather than adding another. Its tab becomes the new session's terminal.
 - `agentop history` (the CLI) still lists every saved session of every tool; only the app narrowed.
+
+### 10.8 The standard layout (2026-11-19)
+
+Agreed on 2026-11-19: one fixed layout, with a name for each part, so plugins fill it rather than add to it. [ui.md](ui.md) is the definition; this records what changed.
+
+- **Names.** Workspaces are **features**, in a **feature nav**; the service switcher is the **connection manager**; the main area is the **middle panel**, its placard the **background**, its tab groups the **left area** and **right area**; what a tab shows is a **buffer**; a panel is made of foldable **sections**. The code took the same names (`features.ts`, `FeatureNav.tsx`, `Section.tsx`, `Layout.left` and `.right`, a plugin's `feature` with `background`, and the `feature` UI slot in `plugin.toml`).
+- **Areas are named, not numbered.** A tab opens in the area its action came from (left panel, left area; right panel, right area; a buffer, its own), made if missing. With one area, it is the left or the right one and fills the middle panel; before, a lone group was both. A lone tab can now move to the other area.
+- **The header** holds only the toggles, the connection manager, the feature nav and Settings. A plugin's `action` is gone: New dialogue is in Dialogues' left panel, as New session is in Sessions'.
+- **Plugins** open tabs with `openTab(content, area)` and close them with `closeTabs`; `editLayout` is gone, so a plugin can't place tabs its own way.
+- **Keys.** Every earlier key was dropped (Ctrl+Shift+[ ] N K S F and 1 to 9). The new set reaches every part of the layout by position: 1 to 0 across the header, Q W E R the panels and areas, A to K the active area's tabs, L to close. Terminal search moved to Ctrl+Shift+/, the terminal's own key.
+- **Left open:** a browser keeps Ctrl+Shift+Q and W for itself, so in the web app those two never reach the page; the desktop app has them.
 
 ## 11 Desktop app
 

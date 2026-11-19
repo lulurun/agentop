@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PluginContext, UiPlugin } from "../types";
-import { ConversationView, DetailsPanel, EmptyView, SearchPanel, tabLabel } from "./Workspace";
+import { ConversationView, DetailsPanel, Background, SearchPanel, tabLabel } from "./Feature";
 
 interface Status {
   folder: string;
@@ -137,12 +137,12 @@ function ArchiveStatus({ plugin }: { plugin: PluginContext }) {
 }
 
 export const plugin: UiPlugin = {
-  workspace: {
+  feature: {
     label: "Memory",
     views: {
       conversation: { label: "Conversation", Component: ConversationView, tabLabel },
     },
-    empty: EmptyView,
+    background: Background,
     left: SearchPanel,
     right: DetailsPanel,
   },

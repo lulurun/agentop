@@ -1,16 +1,16 @@
 /**
- * The Dialogues workspace's shared state: the list of dialogues on the service,
- * polled while any of the workspace's pieces is on screen, and the dialogue
+ * The Dialogues feature's shared state: the list of dialogues on the service,
+ * polled while any of the feature's pieces is on screen, and the dialogue
  * picked last. Also the tabs it opens, and how picking a dialogue lays them out.
  */
 import { useEffect } from "react";
 import { create } from "zustand";
 import { useApp } from "../../store";
-import { closeWhere, focusedTab, newTabId, sameContent, type Group, type Layout, type TabContent } from "../../tabs";
+import { focusArea, focusedTab, open, type Layout, type TabContent } from "../../tabs";
 import type { PluginClient } from "../types";
 
 export const PLUGIN_ID = "dialogue";
-export const WORKSPACE = `plugin:${PLUGIN_ID}` as const;
+export const FEATURE = `plugin:${PLUGIN_ID}` as const;
 const POLL_MS = 3_000;
 
 export type Side = "a" | "b";
@@ -159,77 +159,49 @@ function isView(content: TabContent, view: string): boolean {
   return content.kind === "plugin" && content.plugin === PLUGIN_ID && content.view === view;
 }
 
-/** The dialogue a tab of this workspace belongs to, if any. */
+/** The dialogue a tab of this feature belongs to, if any. */
 export function dialogueOf(content: TabContent | undefined): string | null {
   if (!content || content.kind !== "plugin" || content.plugin !== PLUGIN_ID || !content.key) return null;
   return splitKey(content.key)[0];
 }
 
-/**
- * Show `content` in group `index` (made if needed). Content already open in
- * either group is shown where it is; otherwise it takes the place of the
- * group's tab of the same view, as a session replaces the session shown, or
- * gets a tab of its own.
- */
-function placeIn(layout: Layout, index: number, content: TabContent): Layout {
-  for (const [at, group] of layout.groups.entries()) {
-    const open = group.tabs.find((t) => sameContent(t.content, content));
-    if (open) {
-      const groups = layout.groups.slice();
-      groups[at] = { ...group, active: open.id };
-      return { ...layout, groups };
-    }
-  }
-  const groups: Group[] = layout.groups.slice();
-  while (groups.length <= index) groups.push({ tabs: [], active: null });
-  const group = groups[index];
-  const slot = group.tabs.find((t) => content.kind === "plugin" && isView(t.content, content.view));
-  if (slot) {
-    groups[index] = { tabs: group.tabs.map((t) => (t.id === slot.id ? { ...t, content } : t)), active: slot.id };
-  } else {
-    const id = newTabId();
-    const at = group.tabs.findIndex((t) => t.id === group.active);
-    const tabs = group.tabs.slice();
-    tabs.splice(at < 0 ? tabs.length : at + 1, 0, { id, content });
-    groups[index] = { tabs, active: id };
-  }
-  return { ...layout, groups };
-}
-
-/** A dialogue's two agents, side by side: A in the left group and B in the right one. */
+/** A dialogue's two agents, side by side: A in the left area and B in the right one. */
 export function showAgents(layout: Layout, id: string): Layout {
-  return { ...placeIn(placeIn(layout, 0, agentTab(id, "a")), 1, agentTab(id, "b")), focused: 0 };
+  return focusArea(open(open(layout, agentTab(id, "a"), "left"), agentTab(id, "b"), "right"), "left");
 }
 
 export function selectDialogue(id: string): void {
   useDialogues.setState({ selected: id });
-  useApp.getState().editLayout(WORKSPACE, (layout) => showAgents(layout, id));
+  const app = useApp.getState();
+  app.openTab(agentTab(id, "a"), "left");
+  app.openTab(agentTab(id, "b"), "right");
+  app.focusArea(FEATURE, "left");
 }
 
 export function openFile(id: string, path: string): void {
   useDialogues.setState({ selected: id });
-  useApp.getState().openTab(fileTab(id, path), "right");
+  useApp.getState().openTab(fileTab(id, path), "right", "tab");
 }
 
 export function openWizard(): void {
-  useApp.getState().setWorkspace(WORKSPACE);
+  useApp.getState().setFeature(FEATURE);
   useApp.getState().openTab(wizardTab, "left");
 }
 
 export function closeWizard(): void {
-  useApp.getState().editLayout(WORKSPACE, (layout) => closeWhere(layout, (c) => isView(c, "new")));
+  useApp.getState().closeTabs(FEATURE, (c) => isView(c, "new"));
 }
 
 /** Close every tab of a removed dialogue. */
 export function forgetDialogue(id: string): void {
   if (useDialogues.getState().selected === id) useDialogues.setState({ selected: null });
-  useApp.getState().editLayout(WORKSPACE, (layout) => closeWhere(layout, (c) => dialogueOf(c) === id));
+  useApp.getState().closeTabs(FEATURE, (c) => dialogueOf(c) === id);
 }
 
 /** The dialogue the right panel is about: the focused tab's, or the one picked last. */
 export function useCurrentDialogue(): string | null {
   const focused = useApp((s) => {
-    const layout = s.layouts[s.activeId]?.[WORKSPACE];
+    const layout = s.layouts[s.activeId]?.[FEATURE];
     return layout ? dialogueOf(focusedTab(layout)?.content) : null;
   });
   const selected = useDialogues((s) => s.selected);

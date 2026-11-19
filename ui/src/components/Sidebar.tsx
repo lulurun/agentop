@@ -1,10 +1,11 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useState } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
 import { activeCount, layoutOf, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { focusedTab } from "../tabs";
 import { HistorySection } from "./HistoryView";
 import { StatusMark } from "./icons";
+import { Section } from "./Section";
 import { Menu } from "./Workbench";
 
 const STATUS_TEXT: Record<string, string> = {
@@ -68,7 +69,7 @@ const SessionRow = memo(function SessionRow({ session, selected }: { session: Se
         items={[
           ["Open", () => select(session.id, "replace")],
           ["Open in new tab", () => select(session.id, "tab")],
-          ["Open to the side", () => select(session.id, "side")],
+          ["Open in the right area", () => select(session.id, "also", "right")],
         ]}
       />
     )}
@@ -89,7 +90,7 @@ export const Sidebar = memo(function Sidebar() {
   const [filter, setFilter] = useState("");
 
   const needle = filter.trim().toLowerCase();
-  // A plugin's own sessions, such as a dialogue's agents, are shown in its workspace instead.
+  // A plugin's own sessions, such as a dialogue's agents, are shown in its feature instead.
   const rows = sortedSessions(sessions).filter(
     (s) => !s.owner && (!needle || `${sessionTitle(s)} ${s.tool ?? ""} ${s.cwd}`.toLowerCase().includes(needle)),
   );
@@ -99,11 +100,10 @@ export const Sidebar = memo(function Sidebar() {
   // The selected session is only marked while its tab, not a past session's, has focus.
   const current = pastOpen ? undefined : selected;
 
+  if (!linked) return null;
   return (
-    <aside className="sidebar">
-      {linked && (
         <div className="sidebar-scroll">
-          <FoldSection
+          <Section
             id="active"
             title="Active sessions"
             hint={`At most ${maxActive} sessions started by agentop can be active at once`}
@@ -118,6 +118,9 @@ export const Sidebar = memo(function Sidebar() {
                 value={filter}
                 onChange={(event) => setFilter(event.target.value)}
               />
+              <button type="button" className="primary" onClick={() => setDialog("new-session")}>
+                New session
+              </button>
             </div>
             <nav className="session-list" aria-label="Sessions">
               {managed.map((s) => (
@@ -136,52 +139,17 @@ export const Sidebar = memo(function Sidebar() {
                 </p>
               )}
             </nav>
-          </FoldSection>
+          </Section>
           {external.length > 0 && (
-            <FoldSection id="elsewhere" title="Started elsewhere" extra={<span className="session-count">{external.length}</span>}>
+            <Section id="elsewhere" title="Started elsewhere" extra={<span className="session-count">{external.length}</span>}>
               <nav className="session-list" aria-label="Started elsewhere">
                 {external.map((s) => (
                   <SessionRow key={s.id} session={s} selected={s.id === current} />
                 ))}
               </nav>
-            </FoldSection>
+            </Section>
           )}
           <HistorySection selected={pastOpen} />
         </div>
-      )}
-    </aside>
   );
 });
-
-/** One of the left panel's sections, folded shut or open by clicking its title. Remembered in this browser. */
-export function FoldSection({
-  id,
-  title,
-  hint,
-  extra,
-  children,
-}: {
-  id: string;
-  title: string;
-  hint?: string;
-  extra?: ReactNode;
-  children: ReactNode;
-}) {
-  const folded = useApp((s) => s.folded.includes(id));
-  const setFolded = useApp((s) => s.setFolded);
-  const body = `section-${id}`;
-  return (
-    <section className="sidebar-section" aria-label={title} data-folded={folded || undefined}>
-      <h3 className="session-group">
-        <button type="button" className="fold-toggle" aria-expanded={!folded} aria-controls={body} title={hint} onClick={() => setFolded(id, !folded)}>
-          <span className="fold-chevron" aria-hidden="true" />
-          <span className="fold-title">{title}</span>
-          {extra}
-        </button>
-      </h3>
-      <div id={body} hidden={folded}>
-        {children}
-      </div>
-    </section>
-  );
-}

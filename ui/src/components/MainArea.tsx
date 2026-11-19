@@ -4,9 +4,9 @@ import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } f
 import { platform } from "../platform";
 import { LoginMethods, useLoginMethods } from "../plugins/Login";
 import { PluginPanel, TerminalInputs } from "../plugins/Slot";
-import { activeConnection, currentWorkspace, useActiveClient, useApp } from "../store";
+import { activeConnection, currentFeature, useActiveClient, useApp } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
-import { pluginOf } from "../workspaces";
+import { pluginOf } from "../features";
 import { Workbench, type SessionPaneProps } from "./Workbench";
 
 type Selection = { sessions: Record<string, Session>; selected: Record<string, string>; activeId: string };
@@ -290,7 +290,7 @@ export const MainArea = memo(function MainArea() {
   const setDialog = useApp((s) => s.setDialog);
   const client = useActiveClient();
   const linked = linkState === "connected" || linkState === "reconnecting";
-  const workspace = useApp(currentWorkspace);
+  const feature = useApp(currentFeature);
   const socketBlocked = useApp((s) => s.link.state === "reconnecting" && s.link.socketBlocked);
   const showTerminal = linked && attachable && status !== "starting";
 
@@ -320,12 +320,12 @@ export const MainArea = memo(function MainArea() {
         </div>
       ) : linked ? (
         <>
-          {/* Sessions stays on the page under the other workspaces, so its terminals keep their connection. */}
+          {/* Sessions stays on the page under the other features, so its terminals keep their connection. */}
           <Workbench
-            workspace="sessions"
-            hidden={workspace !== "sessions"}
+            feature="sessions"
+            hidden={feature !== "sessions"}
             renderSession={renderSession}
-            empty={
+            background={
               <div className="placard">
                 <h2>Start a session, or pick one from the list</h2>
                 <div className="placard-actions">
@@ -336,11 +336,11 @@ export const MainArea = memo(function MainArea() {
               </div>
             }
           />
-          {workspace !== "sessions" && (
+          {feature !== "sessions" && (
             <Workbench
-              workspace={workspace}
+              feature={feature}
               renderSession={renderSession}
-              empty={pluginOf(workspace) ? <PluginPanel pluginId={pluginOf(workspace)!} side="empty" /> : null}
+              background={pluginOf(feature) ? <PluginPanel pluginId={pluginOf(feature)!} side="background" /> : null}
             />
           )}
         </>

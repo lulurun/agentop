@@ -1,16 +1,6 @@
 /**
- * The main area's tabs. A tab is a container: it shows an agent session's
- * terminal, a file through whichever file-viewer plugin is enabled, a
- * service's Status, a past session from History, or a view of a plugin's workspace.
- * Every workspace's main area is tabs (design 10.7.3), each with a layout of its own.
- *
- * Tabs live in groups. There are one or two groups, shown side by side, and
- * one of them has focus: its active tab decides which session the header and
- * right panel show. Clicking a session opens it in the left group (the only
- * one, when there is one), and clicking a file opens it in the right group,
- * made if needed. Tabs can then be moved between the groups freely.
- *
- * Everything here is a pure function of a Layout, so it is tested on its own.
+ * The middle panel's tabs (docs/ui.md): a left and a right area, each a tab
+ * bar showing one buffer at a time. Pure functions of a Layout, tested on their own.
  */
 
 /** `workdir` is the session's working directory, `memory` the notes the agent tool keeps for its project, `transcript` one of the tool's log files for it. */
@@ -31,7 +21,7 @@ export type TabContent =
   | { kind: "status" }
   /** A past session from the History list, by its ID there (`HistoryItem.id`), to resume or delete. */
   | { kind: "past"; historyId: string }
-  /** One of a plugin's views, named by the plugin's workspace (`UiPlugin.workspace.views`). */
+  /** One of a plugin's views, named by the plugin's feature (`UiPlugin.feature.views`). */
   | { kind: "plugin"; plugin: string; view: string; key?: string };
 
 export type TabKind = TabContent["kind"];
@@ -39,7 +29,7 @@ export type TabKind = TabContent["kind"];
 export interface Tab {
   id: string;
   content: TabContent;
-  /** A workspace's default tab: it can be moved, but not closed. */
+  /** A feature's default tab: it can be moved, but not closed. */
   pinned?: boolean;
 }
 
@@ -48,25 +38,28 @@ export interface Group {
   active: string | null;
 }
 
+export type Area = "left" | "right";
+export const AREAS: readonly Area[] = ["left", "right"];
+
+/** The middle panel: a left area, a right area, either, or neither (the background shows). */
 export interface Layout {
-  groups: Group[];
-  focused: number;
+  left: Group | null;
+  right: Group | null;
+  /** The active area, which tab keys act on. */
+  focused: Area;
 }
 
 /**
- * - `left`: what opening Status does. The tab is shown if it is open in either
- *   group; otherwise it gets a new tab in the left group.
- * - `replace`: what clicking a session or a past session does. It is shown if it
- *   is open in either group; otherwise the left group's active tab of the same
- *   kind switches to it.
- * - `tab`: a new tab in the left group, unless one there already shows it.
- * - `right`: what clicking a file does. The file is shown if it is open in
- *   either group; otherwise it gets a new tab in the right group, made if needed.
- * - `side`: the group other than the focused one, made if there is only one.
+ * - `replace`: take the place of the area's tab of the same kind, as clicking a session does.
+ * - `tab`: a new tab after the area's active one.
+ * - `also`: in this area even when it is open in the other, as asked for by name ("Open in the
+ *   right area"); only a session or a file, which make sense twice.
+ *
+ * Otherwise content already open in either area is shown where it is.
  */
-export type OpenMode = "replace" | "tab" | "left" | "right" | "side";
+export type OpenMode = "replace" | "tab" | "also";
 
-export const MAX_GROUPS = 2;
+export const other = (area: Area): Area => (area === "left" ? "right" : "left");
 
 let counter = 0;
 export function newTabId(): string {
@@ -75,7 +68,12 @@ export function newTabId(): string {
 }
 
 export function emptyLayout(): Layout {
-  return { groups: [], focused: 0 };
+  return { left: null, right: null, focused: "left" };
+}
+
+/** The areas that are there, left first. */
+export function areasOf(layout: Layout): [Area, Group][] {
+  return AREAS.flatMap((area) => (layout[area] ? [[area, layout[area]!] as [Area, Group]] : []));
 }
 
 export function sameContent(a: TabContent, b: TabContent): boolean {
@@ -110,24 +108,22 @@ export function canSplit(content: TabContent): boolean {
   return content.kind === "session" || content.kind === "file";
 }
 
-/** A layout of one pinned tab, the default of a workspace that opens with one. */
+/** A layout of one pinned tab, the default of a feature that opens with one. */
 export function pinnedLayout(content: TabContent, id = "home"): Layout {
-  return { groups: [{ tabs: [{ id, content, pinned: true }], active: id }], focused: 0 };
+  return { left: { tabs: [{ id, content, pinned: true }], active: id }, right: null, focused: "left" };
 }
 
-export function activeTab(group: Group | undefined): Tab | undefined {
+export function activeTab(group: Group | null | undefined): Tab | undefined {
   return group?.tabs.find((t) => t.id === group.active);
 }
 
-/** The focused group's active tab. */
+/** The active area's active tab. */
 export function focusedTab(layout: Layout): Tab | undefined {
-  return activeTab(layout.groups[layout.focused]);
+  return activeTab(layout[layout.focused]);
 }
 
-function withGroup(layout: Layout, index: number, group: Group): Layout {
-  const groups = layout.groups.slice();
-  groups[index] = group;
-  return { ...layout, groups };
+function withArea(layout: Layout, area: Area, group: Group | null): Layout {
+  return { ...layout, [area]: group };
 }
 
 function insertAfterActive(group: Group, tab: Tab): Group {
@@ -137,63 +133,81 @@ function insertAfterActive(group: Group, tab: Tab): Group {
   return { tabs, active: tab.id };
 }
 
-export function open(layout: Layout, content: TabContent, mode: OpenMode = "replace", id = newTabId()): Layout {
-  if (layout.groups.length === 0) {
-    return { groups: [{ tabs: [{ id, content }], active: id }], focused: 0 };
-  }
-  if (mode === "replace" || mode === "right" || mode === "left") {
-    for (const [index, group] of layout.groups.entries()) {
-      const existing = group.tabs.find((t) => sameContent(t.content, content));
-      if (existing) return withGroup({ ...layout, focused: index }, index, { ...group, active: existing.id });
-    }
-  }
-  if (mode === "side" || mode === "right") {
-    const target = mode === "right" ? 1 : 1 - layout.focused;
-    if (layout.groups.length < MAX_GROUPS) {
-      return { groups: [...layout.groups, { tabs: [{ id, content }], active: id }], focused: layout.groups.length };
-    }
-    const group = layout.groups[target];
-    const existing = group.tabs.find((t) => sameContent(t.content, content));
-    return withGroup({ ...layout, focused: target }, target, existing ? { ...group, active: existing.id } : insertAfterActive(group, { id, content }));
-  }
-
-  const group = layout.groups[0];
-  const existing = group.tabs.find((t) => sameContent(t.content, content));
-  if (existing) return withGroup({ ...layout, focused: 0 }, 0, { ...group, active: existing.id });
-
-  const current = activeTab(group);
-  if (mode === "replace" && (content.kind === "session" || content.kind === "past") && current?.content.kind === content.kind) {
-    const tabs = group.tabs.map((t) => (t.id === current.id ? { ...t, content } : t));
-    return withGroup({ ...layout, focused: 0 }, 0, { ...group, tabs });
-  }
-  return withGroup({ ...layout, focused: 0 }, 0, insertAfterActive(group, { id, content }));
+/** What a tab of this content can take the place of with `replace`, or null for always a new tab. */
+function slotOf(content: TabContent): string | null {
+  if (content.kind === "session" || content.kind === "past") return content.kind;
+  if (content.kind === "plugin") return `plugin:${content.plugin}:${content.view}`;
+  return null;
 }
 
-export function activate(layout: Layout, groupIndex: number, tabId: string): Layout {
-  const group = layout.groups[groupIndex];
+function findOpen(layout: Layout, content: TabContent): [Area, Tab] | undefined {
+  for (const [area, group] of areasOf(layout)) {
+    const tab = group.tabs.find((t) => sameContent(t.content, content));
+    if (tab) return [area, tab];
+  }
+  return undefined;
+}
+
+export function open(layout: Layout, content: TabContent, area: Area, mode: OpenMode = "replace", id = newTabId()): Layout {
+  const also = mode === "also" && canSplit(content);
+  const found = also ? findOpen({ ...layout, [other(area)]: null }, content) : findOpen(layout, content);
+  if (found) return activate(layout, found[0], found[1].id);
+  const group = layout[area];
+  if (!group) return { ...withArea(layout, area, { tabs: [{ id, content }], active: id }), focused: area };
+  const slot = slotOf(content);
+  if (mode !== "tab" && slot) {
+    // The active tab of the same kind; for a plugin's view, any tab of it in the area.
+    const current = activeTab(group);
+    const target =
+      current && slotOf(current.content) === slot ? current
+      : content.kind === "plugin" ? group.tabs.find((t) => slotOf(t.content) === slot)
+      : undefined;
+    if (target) {
+      const tabs = group.tabs.map((t) => (t.id === target.id ? { ...t, content } : t));
+      return { ...withArea(layout, area, { tabs, active: target.id }), focused: area };
+    }
+  }
+  return { ...withArea(layout, area, insertAfterActive(group, { id, content })), focused: area };
+}
+
+export function activate(layout: Layout, area: Area, tabId: string): Layout {
+  const group = layout[area];
   if (!group?.tabs.some((t) => t.id === tabId)) return layout;
-  return withGroup({ ...layout, focused: groupIndex }, groupIndex, { ...group, active: tabId });
+  return { ...withArea(layout, area, { ...group, active: tabId }), focused: area };
 }
 
-export function focusGroup(layout: Layout, groupIndex: number): Layout {
-  return groupIndex < layout.groups.length ? { ...layout, focused: groupIndex } : layout;
+/** The active area's tab at `index`, made active. */
+export function activateAt(layout: Layout, index: number): Layout {
+  const tab = layout[layout.focused]?.tabs[index];
+  return tab ? activate(layout, layout.focused, tab.id) : layout;
 }
 
-/** Drop empty groups, keeping focus on the same group where it survives. */
+export function focusArea(layout: Layout, area: Area): Layout {
+  return layout[area] && layout.focused !== area ? { ...layout, focused: area } : layout;
+}
+
+/** Drop an empty area; the active area moves to the other one if it went. */
 function compact(layout: Layout): Layout {
-  const kept = layout.groups.map((g, i) => [g, i] as const).filter(([g]) => g.tabs.length > 0);
-  const focusedAt = kept.findIndex(([, i]) => i === layout.focused);
-  return { groups: kept.map(([g]) => g), focused: Math.max(0, focusedAt < 0 ? kept.length - 1 : focusedAt) };
+  const left = layout.left?.tabs.length ? layout.left : null;
+  const right = layout.right?.tabs.length ? layout.right : null;
+  const focused = (layout.focused === "left" ? left : right) ? layout.focused : left ? "left" : right ? "right" : "left";
+  return { left, right, focused };
 }
 
-export function close(layout: Layout, groupIndex: number, tabId: string): Layout {
-  const group = layout.groups[groupIndex];
+export function close(layout: Layout, area: Area, tabId: string): Layout {
+  const group = layout[area];
   const at = group?.tabs.findIndex((t) => t.id === tabId) ?? -1;
-  if (at < 0 || group.tabs[at].pinned) return layout;
+  if (!group || at < 0 || group.tabs[at].pinned) return layout;
   const tabs = group.tabs.filter((t) => t.id !== tabId);
   // Closing the active tab shows its right neighbour, or else its left one.
   const active = group.active === tabId ? (tabs[Math.min(at, tabs.length - 1)]?.id ?? null) : group.active;
-  return compact(withGroup(layout, groupIndex, { tabs, active }));
+  return compact(withArea(layout, area, { tabs, active }));
+}
+
+/** Close the active area's tab. */
+export function closeActive(layout: Layout): Layout {
+  const tab = focusedTab(layout);
+  return tab ? close(layout, layout.focused, tab.id) : layout;
 }
 
 /** Close every tab that belongs to a session, as when the session is closed. */
@@ -204,51 +218,44 @@ export function closeSession(layout: Layout, sessionId: string): Layout {
 /** Close every tab whose content matches, pinned ones too, as when a plugin is turned off. */
 export function closeWhere(layout: Layout, matches: (content: TabContent) => boolean): Layout {
   let next = layout;
-  for (const tab of layout.groups.flatMap((g) => g.tabs)) {
-    if (!matches(tab.content)) continue;
-    const index = findGroup(next, tab.id);
-    if (index === undefined) continue;
-    next = close(unpin(next, index, tab.id), index, tab.id);
+  for (const [area, group] of areasOf(layout)) {
+    for (const tab of group.tabs) {
+      if (!matches(tab.content)) continue;
+      const now = next[area];
+      if (!now) continue;
+      next = close(withArea(next, area, { ...now, tabs: now.tabs.map((t) => (t.id === tab.id ? { ...t, pinned: false } : t)) }), area, tab.id);
+    }
   }
   return next;
 }
 
-function unpin(layout: Layout, groupIndex: number, tabId: string): Layout {
-  const group = layout.groups[groupIndex];
-  return withGroup(layout, groupIndex, { ...group, tabs: group.tabs.map((t) => (t.id === tabId ? { ...t, pinned: false } : t)) });
+/** Replace every tab's content that matches, as when a resumed past session becomes a session. */
+export function mapContent(layout: Layout, change: (content: TabContent) => TabContent): Layout {
+  const map = (group: Group | null) => group && { ...group, tabs: group.tabs.map((t) => ({ ...t, content: change(t.content) })) };
+  return { ...layout, left: map(layout.left), right: map(layout.right) };
 }
 
-function findGroup(layout: Layout, tabId: string): number | undefined {
-  const index = layout.groups.findIndex((g) => g.tabs.some((t) => t.id === tabId));
-  return index < 0 ? undefined : index;
-}
-
-/** Show the focused tab in a second group beside it too. */
+/** Show the active tab in the other area too, when there is no other area yet. */
 export function split(layout: Layout, id = newTabId()): Layout {
   const tab = focusedTab(layout);
-  if (!tab || !canSplit(tab.content) || layout.groups.length >= MAX_GROUPS) return layout;
-  return open(layout, tab.content, "side", id);
+  const to = other(layout.focused);
+  if (!tab || !canSplit(tab.content) || layout[to]) return layout;
+  return { ...withArea(layout, to, { tabs: [{ ...tab, id }], active: id }), focused: to };
 }
 
-/** Move a tab to the other group, making it if there is only one. */
-export function moveToOther(layout: Layout, groupIndex: number, tabId: string): Layout {
-  const tab = layout.groups[groupIndex]?.tabs.find((t) => t.id === tabId);
-  if (!tab) return layout;
-  // A lone tab has nowhere to move from.
-  if (layout.groups.length === 1 && layout.groups[0].tabs.length === 1) return layout;
-  const target = layout.groups.length === 1 ? 1 : 1 - groupIndex;
-  const source = layout.groups[groupIndex];
+/** Move a tab to the other area, making it if it isn't there. */
+export function moveToOther(layout: Layout, area: Area, tabId: string): Layout {
+  const source = layout[area];
+  const tab = source?.tabs.find((t) => t.id === tabId);
+  if (!source || !tab) return layout;
+  const to = other(area);
   const at = source.tabs.findIndex((t) => t.id === tabId);
-  const left = source.tabs.filter((t) => t.id !== tabId);
-  const groups = layout.groups.slice();
-  groups[groupIndex] = {
-    tabs: left,
-    active: source.active === tabId ? (left[Math.min(at, left.length - 1)]?.id ?? null) : source.active,
-  };
-  const destination = groups[target] ?? { tabs: [], active: null };
+  const rest = source.tabs.filter((t) => t.id !== tabId);
+  const from = { tabs: rest, active: source.active === tabId ? (rest[Math.min(at, rest.length - 1)]?.id ?? null) : source.active };
+  const destination = layout[to] ?? { tabs: [], active: null };
   const existing = destination.tabs.find((t) => sameContent(t.content, tab.content));
-  groups[target] = existing ? { ...destination, active: existing.id } : insertAfterActive(destination, tab);
-  return compact({ groups, focused: target });
+  const moved = existing ? { ...destination, active: existing.id } : insertAfterActive(destination, tab);
+  return compact({ ...withArea(withArea(layout, area, from), to, moved), focused: to });
 }
 
 function validContent(content: unknown): boolean {
@@ -270,14 +277,21 @@ function validContent(content: unknown): boolean {
   }
 }
 
-/** A saved layout from storage, or null if it isn't one. */
+function validGroup(g: unknown): g is Group {
+  const group = g as Group;
+  return !!group && Array.isArray(group.tabs) && group.tabs.every((t) => typeof t?.id === "string" && validContent(t.content));
+}
+
+/** A saved layout from storage, or null if it isn't one. Reads the older `{groups, focused}` too. */
 export function parseLayout(value: unknown): Layout | null {
   if (!value || typeof value !== "object") return null;
-  const { groups, focused } = value as Layout;
-  if (!Array.isArray(groups) || typeof focused !== "number") return null;
-  const valid = groups.every(
-    (g) => g && Array.isArray(g.tabs) && g.tabs.every((t) => typeof t?.id === "string" && validContent(t.content)),
-  );
-  if (!valid) return null;
-  return compact({ groups: groups.slice(0, MAX_GROUPS), focused: Math.min(focused, MAX_GROUPS - 1) });
+  const saved = value as Record<string, unknown>;
+  if (Array.isArray(saved.groups)) {
+    const groups = saved.groups as unknown[];
+    if (!groups.every(validGroup)) return null;
+    return compact({ left: (groups[0] as Group) ?? null, right: (groups[1] as Group) ?? null, focused: saved.focused === 1 ? "right" : "left" });
+  }
+  const { left, right, focused } = saved;
+  if ((left !== null && !validGroup(left)) || (right !== null && !validGroup(right)) || (focused !== "left" && focused !== "right")) return null;
+  return compact({ left: left as Group | null, right: right as Group | null, focused });
 }

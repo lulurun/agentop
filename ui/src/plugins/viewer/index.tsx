@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { platform } from "../../platform";
 import { useApp } from "../../store";
 import type { FileRef } from "../../tabs";
+import { useArea } from "../../components/Workbench";
 import type { PluginContext, UiPlugin } from "../types";
 import { parseDiff, type DiffRow } from "./diff";
 import { isImage, isMarkdown, languageFor } from "./paths";
@@ -146,6 +147,7 @@ function DiffViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   const [error, setError] = useState<string | null>(null);
   const [wrap, setWrap] = useState(false);
   const openTab = useApp((s) => s.openTab);
+  const area = useArea();
 
   const load = useCallback(() => {
     const query = new URLSearchParams({ session: file.sessionId, path: file.path });
@@ -214,7 +216,7 @@ function DiffViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
           <button
             type="button"
             title="Open the file as it is now"
-            onClick={() => openTab({ kind: "file", file: { ...file, view: undefined } }, "right")}
+            onClick={() => openTab({ kind: "file", file: { ...file, view: undefined } }, area)}
           >
             Open file
           </button>
@@ -312,6 +314,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   // null until a mode is picked: the first of the file's modes.
   const [mode, setMode] = useState<Mode | null>(null);
   const openTab = useApp((s) => s.openTab);
+  const area = useArea();
 
   const load = useCallback(() => {
     const query = new URLSearchParams({ session: file.sessionId, source: file.source, path: file.path });
@@ -337,8 +340,8 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   }, [result, file.path]);
   const showing: Mode = mode && modes.includes(mode) ? mode : modes[0];
   const openLinked = useCallback(
-    (path: string) => openTab({ kind: "file", file: { sessionId: file.sessionId, source: file.source, path } }, "right"),
-    [file, openTab],
+    (path: string) => openTab({ kind: "file", file: { sessionId: file.sessionId, source: file.source, path } }, area),
+    [file, openTab, area],
   );
   const language = languageFor(file.path);
   const lines = useMemo(() => {

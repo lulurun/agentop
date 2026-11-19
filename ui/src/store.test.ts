@@ -22,26 +22,28 @@ describe("sessionSummary", () => {
 });
 
 describe("saved tabs", () => {
-  const layout = { groups: [{ tabs: [{ id: "t", content: { kind: "session", sessionId: "a" } }], active: "t" }], focused: 0 };
+  const group = { tabs: [{ id: "t", content: { kind: "session", sessionId: "a" } }], active: "t" };
+  const old = { groups: [group], focused: 0 };
+  const layout = { left: group, right: null, focused: "left" };
 
-  it("tabs saved before workspaces become the Sessions tabs", () => {
-    expect(parseLayouts({ home: layout })).toEqual({ home: { sessions: layout } });
+  it("tabs saved before features become the Sessions tabs", () => {
+    expect(parseLayouts({ home: old })).toEqual({ home: { sessions: layout } });
   });
 
-  it("reads tabs per workspace, and drops what isn't a layout", () => {
+  it("reads tabs per feature, and drops what isn't a layout", () => {
     expect(parseLayouts({ home: { sessions: layout, "plugin:x": { groups: "no" } } })).toEqual({ home: { sessions: layout } });
   });
 
-  it("drops the History workspace's tabs: History is in Sessions' left panel now", () => {
-    const old = { groups: [{ tabs: [{ id: "home", pinned: true, content: { kind: "history" } }], active: "home" }], focused: 0 };
-    expect(parseLayouts({ home: { sessions: layout, history: old } })).toEqual({ home: { sessions: layout } });
+  it("drops the History feature's tabs: History is in Sessions' left panel now", () => {
+    const history = { groups: [{ tabs: [{ id: "home", pinned: true, content: { kind: "history" } }], active: "home" }], focused: 0 };
+    expect(parseLayouts({ home: { sessions: old, history } })).toEqual({ home: { sessions: layout } });
   });
 
   it("drops a plugin tab whose view is gone, such as the old pinned Dialogues tab", () => {
     const agent = { id: "a", content: { kind: "plugin", plugin: "dialogue", view: "agent", key: "d1:a" } };
     const old = { id: "home", pinned: true, content: { kind: "plugin", plugin: "dialogue", view: "dialogues" } };
     const saved = { groups: [{ tabs: [old, agent], active: "home" }], focused: 0 };
-    const tabs = parseLayouts({ home: { "plugin:dialogue": saved } }).home["plugin:dialogue"]!.groups.flatMap((g) => g.tabs);
+    const tabs = parseLayouts({ home: { "plugin:dialogue": saved } }).home["plugin:dialogue"]!.left!.tabs;
     expect(tabs.map((t) => t.id)).toEqual(["a"]);
   });
 });

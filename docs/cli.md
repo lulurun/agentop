@@ -107,7 +107,7 @@ Words match anywhere in a message, ignoring case (an FTS5 trigram index), so par
 
 Above the messages, **Sessions about this** lists up to five sessions whose summary matches: its title, a few sentences, and the keywords that matched. The summaries are the Memory plugin's (design 12.11.3, phase 5), so they find a session by what it was about even when no message has the words. A session gets one once it has been quiet for 30 minutes. The `recall` skill (`src/agentop/skills/recall/`) teaches a Claude session to use it.
 
-Each search is noted in `~/.agentop/plugins/memory/recall.jsonl`, with how many messages and sessions it found. `--missed` notes a miss there: what was looked for, `--wrong` when something was found but not the right thing, and the searches made from the command line in the 30 minutes before. The skill notes one at the end of a recall that failed. Misses decide whether keyword search needs embeddings beside it ([design 12.11.4](design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)); the Memory workspace and Status show the count.
+Each search is noted in `~/.agentop/plugins/memory/recall.jsonl`, with how many messages and sessions it found. `--missed` notes a miss there: what was looked for, `--wrong` when something was found but not the right thing, and the searches made from the command line in the 30 minutes before. The skill notes one at the end of a recall that failed. Misses decide whether keyword search needs embeddings beside it ([design 12.11.4](design.md#12114-how-other-agents-remember-and-whether-keyword-search-is-enough-2026-11-12)); the Memory feature and Status show the count.
 
 ### 1.7 email-code
 

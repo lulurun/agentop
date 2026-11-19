@@ -6,7 +6,7 @@ The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dia
 
 Dialogue data is persisted to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`.
 
-The app has a Dialogues workspace (section 8): a wizard starts one, and each one's two agents are shown side by side, live while it runs and as transcripts once it ends. Turning the plugin off in Status → Plugins (Status on the service switcher) stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
+The app has a Dialogues feature (section 8): a wizard starts one, and each one's two agents are shown side by side, live while it runs and as transcripts once it ends. Turning the plugin off in Status → Plugins (Status on the service switcher) stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
 
 ## 2 How it works
 
@@ -198,10 +198,10 @@ This is handled transparently: the `Actor` types with its tool's `AgentCli.send_
 
 ## 8 In the app
 
-The Dialogues workspace (`ui/src/plugins/dialogue/`):
+The Dialogues feature (`ui/src/plugins/dialogue/`), laid out as [ui.md](ui.md) says:
 
-- **New dialogue** (in the header, and on the placard shown while no tab is open) opens the wizard in a tab: pick a scenario, fill in its brief's fields, pick each agent's tool and the maximum turns. Starting returns at once; the agents boot in the background, and the dialogue shows as Starting until its orchestrator runs.
-- **The left panel** is only the list: dialogues In progress and Finished. Picking one shows agent A in the left tab group and agent B in the right one, replacing the dialogue shown before.
+- **New dialogue** (in the left panel's In progress section, and on the background shown while no tab is open) opens the wizard in a tab: pick a scenario, fill in its brief's fields, pick each agent's tool and the maximum turns. Starting returns at once; the agents boot in the background, and the dialogue shows as Starting until its orchestrator runs.
+- **The left panel** has two sections, In progress and Finished. Picking a dialogue shows agent A in the left area and agent B in the right one, replacing the dialogue shown before.
 - **An agent's tab** shows its tmux session live and read-only while the dialogue runs (the service attaches with `tmux attach -f read-only,ignore-size` and drops anything typed, and the terminal scales its font to show the whole window). Once the dialogue has ended it shows the agent's messages from `turns.jsonl`, drawn as Markdown.
 - **The right panel** shows the dialogue's status, scenario, agents, times and folder; its stats (turns, messages and words per agent, how long it took, what ended it, format retries); its artifacts (the files under `deliverables/`) and its brief and progress, each opening in a tab; and Stop and Remove. Remove asks first, then stops the agents if they run and deletes the folder.
 

@@ -209,11 +209,11 @@ test("collapsing a column refits the terminal", async ({ page }) => {
   const session = s.tmux("list-sessions", "-F", "#S").split("\n").find((n) => n.startsWith("demo-"))!;
   const width = () => Number(s.tmux("display", "-p", "-t", `=${session}:`, "#{window_width}").trim());
   const before = width();
-  await page.keyboard.press("Control+Shift+BracketRight");
+  await page.keyboard.press("Control+Shift+Digit0");
   await expect.poll(width).toBeGreaterThan(before + 20);
-  await page.keyboard.press("Control+Shift+BracketLeft");
+  await page.keyboard.press("Control+Shift+Digit1");
   await expect.poll(width).toBeGreaterThan(before + 50);
-  await page.keyboard.press("Control+Shift+BracketRight");
+  await page.keyboard.press("Control+Shift+Digit0");
   await expect.poll(width).toBeLessThan(before + 50);
 });
 
@@ -434,9 +434,9 @@ test("the right panel shows details, changes, and files, and follows the selecti
   await details.getByRole("button", { name: "src" }).click();
   await expect(details.getByRole("button", { name: "inner.txt" })).toBeVisible();
 
-  await page.keyboard.press("Control+Shift+BracketRight");
+  await page.keyboard.press("Control+Shift+Digit0");
   await expect(details).toBeHidden();
-  await page.keyboard.press("Control+Shift+BracketRight");
+  await page.keyboard.press("Control+Shift+Digit0");
   await expect(details).toBeVisible();
 });
 
@@ -485,7 +485,7 @@ test("the layout fits a phone, with panels as overlays", async ({ page }) => {
   await expect(page.locator(".placard")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
   await expect(page.locator(".sidebar")).toBeHidden();
-  await page.getByRole("button", { name: "Toggle session list" }).click();
+  await page.getByRole("button", { name: "Toggle left panel" }).click();
   await expect(page.locator(".sidebar")).toBeVisible();
 });
 

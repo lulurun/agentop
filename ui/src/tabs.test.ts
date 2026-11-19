@@ -1,200 +1,212 @@
 import { describe, expect, it } from "vitest";
 import * as tabs from "./tabs";
-import type { Layout, TabContent } from "./tabs";
+import type { Area, Layout, TabContent } from "./tabs";
 
 const session = (sessionId: string): TabContent => ({ kind: "session", sessionId });
 const file = (path: string, sessionId = "a"): TabContent => ({ kind: "file", file: { sessionId, source: "workdir", path } });
 
-/** What each group shows, with the active tab in brackets, and which group has focus. */
+/** Each area's tabs, the active one in brackets, `-` for an area that isn't there, and the active area. */
 function show(layout: Layout): string {
-  const groups = layout.groups.map((g) =>
-    g.tabs
+  const area = (a: Area) => {
+    const g = layout[a];
+    if (!g) return "-";
+    return g.tabs
       .map((t) => {
         const c = t.content;
         const name = c.kind === "session" ? c.sessionId : c.kind === "file" ? c.file.path : c.kind === "plugin" ? `${c.plugin}:${c.view}` : c.kind === "past" ? `past:${c.historyId}` : c.kind;
         return t.id === g.active ? `[${name}]` : name;
       })
-      .join(" "),
-  );
-  return `${groups.join(" | ")} @${layout.focused}`;
+      .join(" ");
+  };
+  return `${area("left")} | ${area("right")} @${layout.focused}`;
 }
 
 let n = 0;
 const id = () => `x${++n}`;
 
-function build(...steps: [TabContent, tabs.OpenMode][]): Layout {
-  return steps.reduce((layout, [content, mode]) => tabs.open(layout, content, mode, id()), tabs.emptyLayout());
+function build(...steps: [TabContent, Area, tabs.OpenMode?][]): Layout {
+  return steps.reduce((layout, [content, area, mode]) => tabs.open(layout, content, area, mode ?? "replace", id()), tabs.emptyLayout());
 }
+
+const tabId = (layout: Layout, area: Area, index: number) => layout[area]!.tabs[index].id;
 
 describe("opening", () => {
   it("clicking a session switches the session tab instead of adding one", () => {
-    expect(show(build([session("a"), "replace"], [session("b"), "replace"]))).toBe("[b] @0");
+    expect(show(build([session("a"), "left"], [session("b"), "left"]))).toBe("[b] | - @left");
   });
 
   it("a new tab sits after the active one", () => {
-    const layout = build([session("a"), "replace"], [session("b"), "tab"], [session("c"), "tab"]);
-    expect(show(layout)).toBe("a b [c] @0");
-    const back = tabs.activate(layout, 0, layout.groups[0].tabs[0].id);
-    expect(show(tabs.open(back, session("d"), "tab", id()))).toBe("a [d] b c @0");
+    const layout = build([session("a"), "left"], [session("b"), "left", "tab"], [session("c"), "left", "tab"]);
+    expect(show(layout)).toBe("a b [c] | - @left");
+    const back = tabs.activate(layout, "left", tabId(layout, "left", 0));
+    expect(show(tabs.open(back, session("d"), "left", "tab", id()))).toBe("a [d] b c | - @left");
   });
 
-  it("a session or file already open is shown, not opened twice", () => {
-    const layout = build([session("a"), "replace"], [file("x.txt"), "right"], [session("a"), "replace"], [file("x.txt"), "right"]);
-    expect(show(layout)).toBe("[a] | [x.txt] @1");
+  it("a tab already open in either area is shown, not opened twice", () => {
+    const layout = build([session("a"), "left"], [file("x.txt"), "right"], [session("a"), "left"], [file("x.txt"), "right"]);
+    expect(show(layout)).toBe("[a] | [x.txt] @right");
+    expect(show(tabs.open(layout, file("x.txt"), "left", "replace", id()))).toBe("[a] | [x.txt] @right");
   });
 
   it("clicking a session while a file is active opens a tab for it", () => {
-    expect(show(build([file("x.txt"), "right"], [session("b"), "replace"]))).toBe("x.txt [b] @0");
+    expect(show(build([file("x.txt"), "left"], [session("b"), "left"]))).toBe("x.txt [b] | - @left");
   });
 
-  it("to the side makes a second group, then uses it", () => {
-    const layout = build([session("a"), "replace"], [session("b"), "side"]);
-    expect(show(layout)).toBe("[a] | [b] @1");
-    expect(show(tabs.open(tabs.focusGroup(layout, 0), session("c"), "side", id()))).toBe("[a] | b [c] @1");
+  it("files always get a tab of their own", () => {
+    expect(show(build([session("a"), "left"], [file("x.txt"), "right"], [file("y.txt"), "right"]))).toBe("[a] | x.txt [y.txt] @right");
   });
 });
 
-describe("sessions open on the left, files on the right", () => {
-  it("a file makes the right group, and more files join it", () => {
-    const layout = build([session("a"), "replace"], [file("x.txt"), "right"], [file("y.txt"), "right"]);
-    expect(show(layout)).toBe("[a] | x.txt [y.txt] @1");
+describe("the target area", () => {
+  it("asked for by name, shows a session open in the other area there too", () => {
+    const layout = build([session("a"), "left"], [session("b"), "left", "tab"]);
+    expect(show(tabs.open(layout, session("b"), "right", "also", id()))).toBe("a [b] | [b] @right");
+    expect(show(tabs.open(layout, { kind: "status" }, "right", "also", id()))).toBe("a [b] | [status] @right");
   });
 
-  it("a file opens on the right even while the left group has focus", () => {
-    const layout = tabs.focusGroup(build([session("a"), "replace"], [file("x.txt"), "right"]), 0);
-    expect(show(tabs.open(layout, file("y.txt"), "right", id()))).toBe("[a] | x.txt [y.txt] @1");
+  it("is made when it isn't there, and stays on its own side", () => {
+    expect(show(build([file("x.txt"), "right"]))).toBe("- | [x.txt] @right");
+    expect(show(build([file("x.txt"), "right"], [session("a"), "left"]))).toBe("[a] | [x.txt] @left");
   });
 
-  it("clicking a session lands in the left group, even while the right has focus", () => {
-    const layout = build([session("a"), "replace"], [file("x.txt"), "right"]);
-    expect(show(tabs.open(layout, session("c"), "replace", id()))).toBe("[c] | [x.txt] @0");
-    expect(show(tabs.open(layout, session("c"), "tab", id()))).toBe("a [c] | [x.txt] @0");
+  it("a left action lands on the left even while the right area is active", () => {
+    const layout = build([session("a"), "left"], [file("x.txt"), "right"]);
+    expect(show(tabs.open(layout, session("c"), "left", "replace", id()))).toBe("[c] | [x.txt] @left");
+    expect(show(tabs.open(layout, session("c"), "left", "tab", id()))).toBe("a [c] | [x.txt] @left");
   });
 
-  it("a tab moved to the other group is shown there when clicked again", () => {
-    const opened = build([session("a"), "replace"], [file("x.txt"), "right"], [file("y.txt"), "right"]);
-    const moved = tabs.moveToOther(opened, 1, opened.groups[1].tabs[0].id);
-    expect(show(moved)).toBe("a [x.txt] | [y.txt] @0");
-    expect(show(tabs.open(tabs.focusGroup(moved, 1), file("x.txt"), "right", id()))).toBe("a [x.txt] | [y.txt] @0");
-    const sessionMoved = tabs.moveToOther(moved, 0, moved.groups[0].tabs[0].id);
-    expect(show(tabs.open(tabs.focusGroup(sessionMoved, 0), session("a"), "replace", id()))).toBe("[x.txt] | y.txt [a] @1");
-  });
-
-  it("a file alone fills the main area", () => {
-    expect(show(build([file("x.txt"), "right"]))).toBe("[x.txt] @0");
+  it("a plugin's view replaces a tab of the same view in the area, active or not", () => {
+    const agent = (key: string): TabContent => ({ kind: "plugin", plugin: "dialogue", view: "agent", key });
+    const wizard: TabContent = { kind: "plugin", plugin: "dialogue", view: "new" };
+    const layout = build([agent("d1:a"), "left"], [wizard, "left", "tab"]);
+    expect(show(tabs.open(layout, agent("d2:a"), "left", "replace", id()))).toBe("[dialogue:agent] dialogue:new | - @left");
   });
 });
 
 describe("closing", () => {
   it("shows the right neighbour, or else the left one", () => {
-    const layout = build([session("a"), "replace"], [session("b"), "tab"], [session("c"), "tab"]);
-    const middle = tabs.activate(layout, 0, layout.groups[0].tabs[1].id);
-    expect(show(tabs.close(middle, 0, layout.groups[0].tabs[1].id))).toBe("a [c] @0");
-    expect(show(tabs.close(layout, 0, layout.groups[0].tabs[2].id))).toBe("a [b] @0");
+    const layout = build([session("a"), "left"], [session("b"), "left", "tab"], [session("c"), "left", "tab"]);
+    const middle = tabs.activate(layout, "left", tabId(layout, "left", 1));
+    expect(show(tabs.close(middle, "left", tabId(layout, "left", 1)))).toBe("a [c] | - @left");
+    expect(show(tabs.close(layout, "left", tabId(layout, "left", 2)))).toBe("a [b] | - @left");
   });
 
-  it("an emptied group goes away and the other takes focus", () => {
-    const layout = build([session("a"), "replace"], [session("b"), "side"]);
-    expect(show(tabs.close(layout, 0, layout.groups[0].tabs[0].id))).toBe("[b] @0");
-    expect(show(tabs.close(layout, 1, layout.groups[1].tabs[0].id))).toBe("[a] @0");
+  it("an emptied area goes and the other becomes active; with neither, the background shows", () => {
+    const layout = build([session("a"), "left"], [session("b"), "right"]);
+    expect(show(tabs.close(layout, "left", tabId(layout, "left", 0)))).toBe("- | [b] @right");
+    const one = tabs.close(layout, "right", tabId(layout, "right", 0));
+    expect(show(one)).toBe("[a] | - @left");
+    expect(show(tabs.closeActive(one))).toBe("- | - @left");
   });
 
   it("closing a session closes its tabs and its files' tabs everywhere", () => {
-    const layout = build([session("a"), "replace"], [file("x.txt", "a"), "tab"], [session("b"), "side"], [session("a"), "tab"]);
-    expect(show(tabs.closeSession(layout, "a"))).toBe("[b] @0");
+    const layout = build([session("a"), "left"], [file("x.txt", "a"), "left", "tab"], [session("b"), "right"]);
+    expect(show(tabs.closeSession(layout, "a"))).toBe("- | [b] @right");
+  });
+});
+
+describe("tab keys", () => {
+  it("pick a tab of the active area by position", () => {
+    const layout = build([session("a"), "left"], [session("b"), "left", "tab"], [file("x.txt"), "right"]);
+    expect(show(tabs.activateAt(tabs.focusArea(layout, "left"), 0))).toBe("[a] b | [x.txt] @left");
+    expect(tabs.activateAt(layout, 5)).toBe(layout);
+  });
+
+  it("focusing an area that isn't there does nothing", () => {
+    const layout = build([session("a"), "left"]);
+    expect(tabs.focusArea(layout, "right")).toBe(layout);
   });
 });
 
 describe("splitting and moving", () => {
-  it("split shows the focused tab in a second group", () => {
-    expect(show(tabs.split(build([session("a"), "replace"]), id()))).toBe("[a] | [a] @1");
+  it("split shows the active tab in the other area", () => {
+    expect(show(tabs.split(build([session("a"), "left"]), id()))).toBe("[a] | [a] @right");
+    expect(show(tabs.split(build([file("x"), "right"]), id()))).toBe("[x] | [x] @left");
   });
 
-  it("there are never more than two groups", () => {
-    const two = tabs.split(build([session("a"), "replace"]), id());
+  it("only while the other area isn't there", () => {
+    const two = tabs.split(build([session("a"), "left"]), id());
     expect(tabs.split(two, id())).toBe(two);
   });
 
-  it("moving a tab takes it to the other group", () => {
-    const layout = build([session("a"), "replace"], [session("b"), "tab"]);
-    expect(show(tabs.moveToOther(layout, 0, layout.groups[0].tabs[1].id))).toBe("[a] | [b] @1");
+  it("moving a tab takes it to the other area", () => {
+    const layout = build([session("a"), "left"], [session("b"), "left", "tab"]);
+    expect(show(tabs.moveToOther(layout, "left", tabId(layout, "left", 1)))).toBe("[a] | [b] @right");
   });
 
-  it("moving the last tab of a group removes the group", () => {
-    const layout = build([session("a"), "replace"], [session("b"), "side"]);
-    expect(show(tabs.moveToOther(layout, 1, layout.groups[1].tabs[0].id))).toBe("a [b] @0");
-  });
-
-  it("a lone tab stays where it is", () => {
-    const layout = build([session("a"), "replace"]);
-    expect(tabs.moveToOther(layout, 0, layout.groups[0].tabs[0].id)).toBe(layout);
+  it("moving an area's last tab removes the area", () => {
+    const layout = build([session("a"), "left"], [session("b"), "right"]);
+    expect(show(tabs.moveToOther(layout, "right", tabId(layout, "right", 0)))).toBe("a [b] | - @left");
+    const lone = build([session("a"), "left"]);
+    expect(show(tabs.moveToOther(lone, "left", tabId(lone, "left", 0)))).toBe("- | [a] @right");
   });
 });
 
 describe("saved layouts", () => {
   it("reads back what it saved", () => {
-    const layout = build([session("a"), "replace"], [file("x.txt"), "side"]);
+    const layout = build([session("a"), "left"], [file("x.txt"), "right"]);
     expect(tabs.parseLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
+  });
+
+  it("reads the older groups, the first as the left area", () => {
+    const t = (tid: string, content: TabContent) => ({ id: tid, content });
+    const old = { groups: [{ tabs: [t("a", session("a"))], active: "a" }, { tabs: [t("b", file("x"))], active: "b" }], focused: 1 };
+    expect(show(tabs.parseLayout(old)!)).toBe("[a] | [x] @right");
+    expect(show(tabs.parseLayout({ groups: [], focused: 0 })!)).toBe("- | - @left");
   });
 
   it("refuses anything else", () => {
     expect(tabs.parseLayout(null)).toBeNull();
     expect(tabs.parseLayout({ groups: "no", focused: 0 })).toBeNull();
-    expect(tabs.parseLayout({ groups: [{ tabs: [{ id: "t", content: { kind: "web" } }] }], focused: 0 })).toBeNull();
+    expect(tabs.parseLayout({ left: { tabs: [{ id: "t", content: { kind: "web" } }], active: "t" }, right: null, focused: "left" })).toBeNull();
+    expect(tabs.parseLayout({ left: null, right: null, focused: 0 })).toBeNull();
   });
 });
 
-describe("every workspace's tabs", () => {
+describe("every feature's tabs", () => {
   const status: TabContent = { kind: "status" };
-  const history: TabContent = { kind: "plugin", plugin: "memory", view: "search" };
+  const search: TabContent = { kind: "plugin", plugin: "memory", view: "search" };
   const past = (historyId: string): TabContent => ({ kind: "past", historyId });
   const dialogue: TabContent = { kind: "plugin", plugin: "dialogue", view: "dialogues" };
 
   it("a pinned tab can't be closed", () => {
-    const layout = tabs.pinnedLayout(history);
-    expect(tabs.close(layout, 0, "home")).toBe(layout);
+    const layout = tabs.pinnedLayout(search);
+    expect(tabs.close(layout, "left", "home")).toBe(layout);
   });
 
-  it("Status opens in the left group, and only once", () => {
-    const two = build([session("a"), "replace"], [file("x.txt"), "right"]);
-    const opened = tabs.open(two, status, "left", id());
-    expect(show(opened)).toBe("a [status] | [x.txt] @0");
-    const focusedRight = tabs.focusGroup(opened, 1);
-    expect(show(tabs.open(focusedRight, status, "left", id()))).toBe("a [status] | [x.txt] @0");
-  });
-
-  it("Status beside a pinned tab, with no split, joins the only group", () => {
-    expect(show(tabs.open(tabs.pinnedLayout(history), status, "left", id()))).toBe("memory:search [status] @0");
+  it("Status opens in the left area, and only once", () => {
+    const opened = tabs.open(build([session("a"), "left"], [file("x.txt"), "right"]), status, "left", "replace", id());
+    expect(show(opened)).toBe("a [status] | [x.txt] @left");
+    expect(show(tabs.open(tabs.focusArea(opened, "right"), status, "left", "replace", id()))).toBe("a [status] | [x.txt] @left");
   });
 
   it("only sessions and files split", () => {
-    const layout = tabs.pinnedLayout(history);
+    const layout = tabs.pinnedLayout(search);
     expect(tabs.split(layout, id())).toBe(layout);
     expect(tabs.canSplit(dialogue)).toBe(false);
   });
 
   it("a plugin's tabs close with it, pinned ones too", () => {
-    const layout = tabs.open(tabs.pinnedLayout(dialogue), status, "left", id());
-    expect(show(tabs.closeWhere(layout, (c) => c.kind === "plugin"))).toBe("[status] @0");
+    const layout = tabs.open(tabs.pinnedLayout(dialogue), status, "left", "replace", id());
+    expect(show(tabs.closeWhere(layout, (c) => c.kind === "plugin"))).toBe("[status] | - @left");
   });
 
   it("plugin tabs are told apart by view and key", () => {
     expect(tabs.sameContent(dialogue, { ...dialogue })).toBe(true);
     expect(tabs.sameContent(dialogue, { ...dialogue, key: "abc" })).toBe(false);
-    expect(tabs.sameContent(status, history)).toBe(false);
+    expect(tabs.sameContent(status, search)).toBe(false);
   });
 
   it("a past session takes the place of the past session shown, not of a session", () => {
-    const one = tabs.open(build([session("a"), "replace"]), past("h1"), "replace", id());
-    expect(show(one)).toBe("a [past:h1] @0");
-    expect(show(tabs.open(one, past("h2"), "replace", id()))).toBe("a [past:h2] @0");
-    expect(show(tabs.open(one, past("h2"), "tab", id()))).toBe("a past:h1 [past:h2] @0");
-    expect(tabs.sameContent(past("h1"), past("h1"))).toBe(true);
+    const one = tabs.open(build([session("a"), "left"]), past("h1"), "left", "replace", id());
+    expect(show(one)).toBe("a [past:h1] | - @left");
+    expect(show(tabs.open(one, past("h2"), "left", "replace", id()))).toBe("a [past:h2] | - @left");
+    expect(show(tabs.open(one, past("h2"), "left", "tab", id()))).toBe("a past:h1 [past:h2] | - @left");
     expect(tabs.canSplit(past("h1"))).toBe(false);
   });
 
   it("saved layouts keep every kind and the pin", () => {
-    const layout = tabs.open(tabs.pinnedLayout(dialogue), status, "left", id());
+    const layout = tabs.open(tabs.pinnedLayout(dialogue), status, "left", "replace", id());
     expect(tabs.parseLayout(JSON.parse(JSON.stringify(layout)))).toEqual(layout);
   });
 });

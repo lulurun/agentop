@@ -1,5 +1,5 @@
 /**
- * The New dialogue wizard, in a tab of the Dialogues workspace. Pick a
+ * The New dialogue wizard, in a tab of the Dialogues feature. Pick a
  * scenario, fill in each field of its brief's template, pick the two agents,
  * and the service makes the dialogue's folder, saves the brief, and starts it.
  */
