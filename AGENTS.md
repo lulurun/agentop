@@ -9,7 +9,7 @@
 | Service and app setup | [docs/setup.md](docs/setup.md) |
 | Build and release (UI, desktop app) | [docs/setup.md](docs/setup.md#building-and-releasing), `scripts/` |
 | Manual tests (real user and PC) | [docs/manual-tests.md](docs/manual-tests.md) |
-| Agreed work not started (backlog) | [docs/plan.md section 9](docs/plan.md#9-backlog) |
+| Backlog: everything not done yet, by priority | [docs/backlog.md](docs/backlog.md) |
 
 ## Key facts
 

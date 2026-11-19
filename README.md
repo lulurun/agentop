@@ -54,13 +54,13 @@ Everything above is the **core**. It is always loaded and cannot be switched off
 - Plugin UI goes into fixed slots in the app, such as a badge on a session row, a workspace in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
 - **A plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
 
-The plugins that ship with agentop are Dialogues, Waiting for input, the File viewer, Memory, and Email code. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/design.md#12-plugins).
+The plugins that ship with agentop are Dialogues, Waiting for input, the File viewer, Memory, Email code, and the Input bar. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/design.md#12-plugins).
 
 ## Requirements
 
 **To run**
 
-- Service and desktop app: Linux or macOS, with tmux and Python 3.13+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service.
+- Service and desktop app: Linux or macOS, with tmux and Python 3.13+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service (with `KillMode=process`, so stopping it leaves tmux running: [docs/setup.md](docs/setup.md)).
 - Web UI: any browser that can reach the service, a phone's included.
 - At least one agent CLI, signed in: `claude`, `codex`, or `agy`.
 
@@ -156,7 +156,9 @@ For a service reachable from the internet, such as one behind an HTTPS proxy:
 - [Architecture](docs/architecture.md): code structure and modules
 - [Design](docs/design.md): the full design, including the plugin system (section 12)
 - [Plugins](docs/plugins.md): what each plugin does
-- [Backlog](docs/plan.md#9-backlog): work agreed but not started
+- [Dialogues](docs/dialogue.md): the Dialogues plugin in detail
+- [Manual tests](docs/manual-tests.md): checks that need a real PC
+- [Backlog](docs/backlog.md): everything not done yet, by priority
 
 ## License
 

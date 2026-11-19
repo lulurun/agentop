@@ -65,7 +65,7 @@ Type a prompt into another live session and submit it, as if the user had typed 
 
 ```bash
 agentop send <target> "<prompt>"
-agentop send <target> < prompt.txt     # no prompt: read it from stdin
+agentop send <target> < prompt.txt     # no prompt, or -: read it from stdin
 ```
 
 - `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `deploy` finds `Deploy-2953204`. With no match it says `I don't see an active session called 'deploy'`, and with several it lists them. It never starts a session
@@ -83,7 +83,7 @@ Show saved/historical sessions that can be resumed.
 ```bash
 agentop history
 agentop history --tool claude
-agentop history --limit 20
+agentop history --limit 20             # default 50
 agentop history --json
 ```
 
@@ -139,11 +139,11 @@ agentop dialogue start \
 | `--brief` | required | Markdown file describing the task/goal |
 | `--agent-a` | `claude` | Tool for agent A |
 | `--agent-b` | `claude` | Tool for agent B |
-| `--scenario` | built-in `pm-sde` | Path to a scenario TOML file |
-| `--max-turns` | from scenario | Maximum relay turns |
+| `--scenario` | built-in `implementation-requirements` | Path to a scenario TOML file |
+| `--max-turns` | the scenario's, or 20 | Maximum relay turns |
 
 Both agents always run with cwd set to the dialogue's own directory at
-`~/.agentop/plugins/dialogue/dialogues/<id>/` — there is no way to override this. Any
+`~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/` — there is no way to override this. Any
 `deliverables/` folder a scenario asks the agents to create ends up there,
 alongside `brief.md`, `scenario.toml`, and `dialogue.log`. Agents can still
 read or write files elsewhere by using absolute paths.
@@ -155,7 +155,7 @@ agentop dialogue start \
   --agent-a codex \
   --agent-b codex \
   --brief briefs/investment-plan.md \
-  --scenario src/agentop/plugins/dialogue/scenarios/strategist-challenger.toml
+  --scenario src/agentop/plugins/dialogue/scenarios/shelf/strategist-challenger.toml
 ```
 
 ### 2.2 dialogue list
@@ -217,6 +217,6 @@ agentop service clients [--revoke ID | --revoke-all]  # list the clients signed 
 agentop service connect-info [--host H | --url URL]   # what to paste into Connect to a service
 ```
 
-The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`. `history_window` (default `"30d"`) is how recently a past session must have been used for the app's History to list it, and `max_active_sessions` (default `20`) is how many sessions agentop starts may be active at once. `update_from` (default `"main"`) is what Update follows: `"main"` fast-forwards the main branch, for development; `"release"` checks out the newest `vX.Y.Z` tag, only when a newer one is out, and never goes backwards. The desktop app's own copy uses `release` (plan 9.5); the app's History is in [design.md 10.7.7](design.md#1077-history-in-the-sessions-panel-2026-11-15).
+The service serves the app at `/` and the API at `/api/v2`. Settings in `~/.agentop/config.toml` (`host`, `port`, `name`, `tls_cert`, `tls_key`) are the defaults for `serve`. `client_ttl` (default `"12h"`) is how long a client stays signed in without renewing, at least `60s`, and `client_max_age` (default `"30d"`, `"none"` for no limit) is how long it stays signed in at most. Both take seconds, or `30m`, `12h`, `30d`. `history_window` (default `"30d"`) is how recently a past session must have been used for the app's History to list it, and `max_active_sessions` (default `20`) is how many sessions agentop starts may be active at once. `update_from` (default `"main"`) is what Update follows: `"main"` fast-forwards the main branch, for development; `"release"` checks out the newest `vX.Y.Z` tag, only when a newer one is out, and never goes backwards. The desktop app's own copy uses `release` ([setup.md](setup.md#desktop-app)); the app's History is in [design.md 10.7.7](design.md#1077-history-in-the-sessions-panel-2026-11-15).
 
 The service token only signs a client in: the app, or each CLI command, gets its own token with it, which expires (design D7). Rotating the service token leaves signed-in clients alone; add `--revoke-clients` to sign them out too. `service clients` works on `~/.agentop/state/clients.json` directly, so it works while the service is stopped, and a running service notices at once. Running it as a system service or behind a proxy is in [setup.md](setup.md).

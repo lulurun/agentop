@@ -46,7 +46,7 @@ If no valid delimiter block is found, the orchestrator sends a recovery prompt (
 
 ### 3.3 Parser
 
-`dialogue/parser.py` scans scrollback bottom-up using `in` matching (not `startswith`) so a leading `●` prefix from Claude Code's renderer does not break detection.
+`plugins/dialogue/parser.py` scans scrollback bottom-up using `in` matching (not `startswith`) so a leading `●` prefix from Claude Code's renderer does not break detection.
 
 ## 4 Scenarios
 
@@ -137,10 +137,23 @@ The four scenarios at the top of `scenarios/` have descriptions; the ones under 
 
 ### 4.3 Built-in scenarios
 
+In `scenarios/`, each with a brief template (4.1a); `scenarios/README.md` describes them:
+
+| File | Roles | Purpose |
+|------|-------|---------|
+| `product-direction.toml` | ProductStrategist / ProductCritic | Product direction, scope and non-goals |
+| `implementation-requirements.toml` *(default)* | ProductOwner / TechnicalArchitect | Turn a direction into implementation requirements |
+| `implementation-handoff.toml` | ImplementationLead / CodeReviewer | A handoff for a single code agent, audited |
+| `explorer-critic.toml` | Explorer / Critic | Research from the brief's sources, verified by reading them again |
+
+Older or domain-specific ones, in `scenarios/shelf/`:
+
 | File | Roles | Purpose |
 |------|-------|---------|
 | `pm-sde.toml` | PM / SDE | Product manager drives, engineer implements |
 | `strategist-challenger.toml` | Strategist / Challenger | One proposes, one stress-tests |
+| `strategy-discovery.toml` | StrategyExplorer / WorkflowCritic | Strategy discovery |
+| `investment-product-strategy.toml` | ProductStrategist / InvestmentSkeptic | Investment product strategy |
 | `architect-implementer.toml` | Architect / Implementer | Design then build |
 | `builder-reviewer.toml` | Builder / Reviewer | Build then review |
 | `researcher-skeptic.toml` | Researcher / Skeptic | Research under scrutiny |

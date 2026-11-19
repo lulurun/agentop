@@ -10,12 +10,10 @@ Optional features built on the agentop core. How plugins work (manifest, loader,
 | Memory (`memory`) | Keeps agentop's own copy of every agent transcript on the host, never deleted, then builds a searchable record of prompts and replies from it, with a model's summary of each session. The Memory workspace searches it, opens a conversation at the hit, and shows the session's summary; searches and misses are noted to decide on embeddings | Built: archive, messages table, conversation view, recall (`agentop recall`, the `recall` skill), summaries (Claude Code or Codex), the Memory workspace, recall misses | [design 12.11](design.md#1211-memory-agentops-own-record-of-conversations) |
 | Email code (`email-code`) | A way to sign in without the service token. The sign-in screen gets "Send me a sign-in code"; the service mails a 6-digit code to the one address in `~/.agentop/plugins/email-code/config.toml`, and answers only "Code sent". A code works for 10 minutes, once, and only with the request ID the asking browser got back; 5 wrong tries end it, and codes are sent at most once a minute and 5 times an hour. Signing in adds an ordinary client. Off by default; `agentop email-code test` checks the settings | Built 2026-11-16 | [design 7.4](design.md#74-ways-to-sign-in-2026-11-16), [README](../README.md#secure-setup) |
 | Input bar (`input`) | A box below a session's terminal to type prompts in, for phones, with buttons for Esc, the arrows, Enter, Tab, Shift-Tab and 1–3, and ^B for tmux's prefix (^B then `c` makes a window). While it shows, the terminal is only watched (it still scrolls and fits the screen). A prompt is typed in the way `agentop send` does it. Each device chooses whether the bar shows (touch screens by default), and its ⌨ button switches back to typing in the terminal. Only for running sessions agentop started. Off by default | Built 2026-11-17 | [design 12.12](design.md#1212-input-bar-type-prompts-in-a-box-for-phones) |
-| Project groups | Group sessions by project in the left column | Backlog (below) | [design 12.8](design.md#128-first-plugins) |
+| Project groups | Group sessions by project in the left column | [Backlog](backlog.md#features) | [design 12.8](design.md#128-first-plugins) |
 
 Handoff is not a plugin: `agentop send` and the `handoff` skill pass a side task to another session ([design 12.10](design.md#1210-handoff-pass-a-side-task-to-another-session)).
 
-## Backlog
+## Not built yet
 
-Ideas for later, not scheduled. The rest of the backlog is in [plan.md section 9](plan.md#9-backlog).
-
-- **Project groups**: group sessions by project in the left column. The plugin stores the groups and fills a left-column view (design 12.8).
+Plugins not built yet, such as Project groups, are in [backlog.md](backlog.md).

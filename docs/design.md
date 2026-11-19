@@ -1,6 +1,6 @@
 # Agentop Design
 
-Status: proposed. Implementation order is in [plan.md](plan.md).
+Status: built. What is not built yet is in [backlog.md](backlog.md); how it was built is in git history (the implementation plan, `plan.md`, was removed on 2026-11-19).
 
 ## 1 Summary
 
@@ -115,7 +115,7 @@ The desktop app is now a thin wrapper:
 
 1. **On open**, it checks whether a service answers `GET /api/v2/health` on the configured port (`config.toml`, default 9775).
    - If one does (a unit, or `agentop serve` by hand), it uses it and **leaves it running** when it closes.
-   - Otherwise it starts its own copy, `~/.agentop-desktop/venv/bin/agentop serve --host 127.0.0.1 --port <port> --update-from release`, through the user's login shell (`$SHELL -ilc 'exec … serve …'`), because an app opened from the desktop gets a short `PATH` that may lack tmux and the agent tools. Without the copy, the start page runs first-run setup (plan 9.5). `AGENTOP_BIN` overrides it and skips setup. Output goes to `~/.agentop/logs/desktop-serve.log`. It always binds loopback, whatever `host` the config gives for `agentop serve` run by hand.
+   - Otherwise it starts its own copy, `~/.agentop-desktop/venv/bin/agentop serve --host 127.0.0.1 --port <port> --update-from release`, through the user's login shell (`$SHELL -ilc 'exec … serve …'`), because an app opened from the desktop gets a short `PATH` that may lack tmux and the agent tools. Without the copy, the start page runs first-run setup ([setup.md](setup.md#desktop-app)). `AGENTOP_BIN` overrides it and skips setup. Output goes to `~/.agentop/logs/desktop-serve.log`. It always binds loopback, whatever `host` the config gives for `agentop serve` run by hand.
    - The app shows a start page, bundled in the app, until the service answers. If it doesn't start, the page says why and offers Try again and Run setup again.
 2. **Once the service answers**, the window opens the service's own page, `http://127.0.0.1:<port>/`. It signs in with the token from `service.json` (7.2), so the user sees the app already connected and signed in.
 3. **On close**, it sends the service it started `SIGTERM`. The service closes its terminals, which has a 5-second limit, and exits; `SIGKILL` follows after 10 seconds. tmux owns the sessions (rule 1), so they keep running, and the next open finds them.
@@ -205,7 +205,7 @@ Connecting runs these checks in order, and each failure has its own message:
 | `https://` host | Blocked as mixed content | Works | Chrome asks for Local Network Access permission; Safari has been reported to block it |
 | `http://` non-loopback host | Works | Works | Blocked or unreliable: the permission can only be requested from a secure context |
 
-So the page from a local service (or a tunnel to one) can reach everything, and that is the recommended way to use the web app. Spike S4 confirms this table. When a target is likely to be blocked, the Add Service form says why before the user tries.
+So the page from a local service (or a tunnel to one) can reach everything, and that is the recommended way to use the web app. Check S4 ([backlog](backlog.md#to-check-by-hand)) confirms this table. When a target is likely to be blocked, the Add Service form says why before the user tries.
 
 The web build has no hard-coded origin, so it can also be hosted as static files. A page served by a service still disappears when that service stops, and any other saved connection then becomes unreachable from that tab as well. The desktop app has the same limitation, but it can start this computer's service again.
 
@@ -327,7 +327,7 @@ Two consequences of xterm 6 matter here:
 - **The canvas renderer is gone.** `@xterm/addon-canvas` peers on xterm 5, so the only fallback from WebGL is DOM.
 - **WebKitGTK is the weak spot.** Tauri's Linux graphics documentation warns that WebGL can silently land on a slow path, that the real GPU cannot be detected, and it recommends a non-WebGL fallback on Linux.
 
-So all terminal code sits behind one `TerminalView` component with a `renderer: auto | webgl | dom` setting, and Spike S1 in the plan decides the Linux desktop default. If neither xterm renderer is acceptable there, `TerminalView` makes ghostty-web a contained swap. Browsers are the lower risk, since Chromium's WebGL path is what VS Code ships on.
+So all terminal code sits behind one `TerminalView` component with a `renderer: auto | webgl | dom` setting, and check S1 ([backlog](backlog.md#to-check-by-hand)) decides the Linux desktop default. If neither xterm renderer is acceptable there, `TerminalView` makes ghostty-web a contained swap. Browsers are the lower risk, since Chromium's WebGL path is what VS Code ships on.
 
 ### 6.3 tmux integration
 
@@ -358,7 +358,7 @@ The terminal socket is remote code execution as the user, with agents running in
 Because any origin must be able to connect, the origin no longer decides access; the token does. So:
 
 - **CORS is open.** `/api/v2` answers any origin, without credentials mode, and the CORS layer sits outside auth so preflights succeed. A foreign page can read `/health`, which says only that the service is up, and nothing else.
-- **There is no `Origin` or `Host` allowlist.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies were the thing those checks protected, and there are none. The old `/api` routes, which have no token, keep the Phase 0 checks until they are removed.
+- **There is no `Origin` or `Host` allowlist.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies were the thing those checks protected, and there are none. The old `/api` routes, which had no token, were removed on 2026-11-14.
 - **The web app sets a strict CSP**: `script-src 'self'` with no inline script. It stores client tokens in `localStorage`, so this is the main defence for them. A stolen one is good for at most `client_ttl` unless the thief keeps renewing it, and can be revoked on its own; the service token is never stored. `connect-src` has to stay open to user-chosen hosts.
 
 ### 7.2 How each client signs in
@@ -393,7 +393,9 @@ The clipboard fallback for non-secure contexts stays, because of the following.
 **The current deployment is already remote.** An SSH tunnel forwards local port 9775 to `proxy-host:7775`, and the access log shows requests from a public address. So the service is loopback-bound and still reachable from outside. This has two consequences:
 
 - A loopback bind does not prove a route is private. Every route must carry its own protection. Since the old dashboard was removed (2026-11-14), every route but `/api/v2/health`, `/api/v2/auth/methods`, a login plugin's public routes (7.4) and the app's static files needs the token, so there is nothing a proxy can expose by mistake.
-- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [plan.md 9.1](plan.md#91-security)).
+- The proxy has no authentication of its own, so the service token and the clients' tokens are the only things in front of the agents (security review, design section 7; what is left is in [backlog.md](backlog.md#sign-in-and-security)).
+
+**Claude remote control is a way in outside agentop.** Every Claude Code session agentop starts or resumes runs with `--remote-control` and `--dangerously-skip-permissions` (`agentclis/claude.py`), so it shows up in the Claude mobile app and on claude.ai, and its bridge URL is in the details panel. Whoever can sign in to the user's Claude account can drive it, with no approval step and no agentop token. This is deliberate: it is what lets a phone pick up a Claude session without agentop. Codex and Antigravity sessions have no such flag. Making it a per-session option is in the [backlog](backlog.md#sign-in-and-security).
 
 ### 7.4 Ways to sign in (2026-11-16)
 
@@ -450,14 +452,14 @@ In every case, stopping the service does not stop agents. The confirmation dialo
 
 ### 8.4 Update
 
-The current install is an editable git checkout, so v2 implements that install kind. `GET /api/v2/service` reports `install_kind`; other kinds report update as unsupported.
+An install is an editable git checkout, the only install kind update supports. `GET /api/v2/service` reports `install_kind`; other kinds report update as unsupported.
 
 Update needs a git checkout, not systemd. It must outlive the service it restarts, so it runs apart from it: in a transient unit under systemd (`systemd-run --user --unit=agentop-update --collect`), since stopping a unit can take its children with it, and otherwise as a detached process whose PID is kept in `update.pid`. The service passes it the command that restarts it: `systemctl --user restart` for a unit, or a signal for a service started by hand. That command waits until the old process stops answering, and if the process is gone because the new version failed to start, starts it again in the background with the same command line, logging to `serve.log`.
 
 `src/agentop/service/update.sh` writes progress to `~/.agentop/state/update-status.json`:
 
-1. Refuse if the tree is dirty or not on `main`.
-2. Record the current commit, then `git pull --ff-only`.
+1. Refuse if the tree is dirty, or, following `main`, not on `main`.
+2. Record the current commit, then `git pull --ff-only`; or, following releases (8.5), fetch the tags and check out the newest `vX.Y.Z`, only if it is newer.
 3. `pip install -e .`, then build the web app.
 4. Restart the service, then poll `/api/v2/health` for 30s.
 5. On any failure: check out the recorded commit, reinstall, rebuild, restart, and record the failure.
@@ -482,15 +484,15 @@ The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.con
 
 **macOS** builds are unsigned for now: the first open needs Open Anyway in System Settings, Privacy & Security (right-click, Open stopped working in macOS 15), or `xattr -dr com.apple.quarantine`. Updates after that work. An Apple Developer ID and notarization would remove the step.
 
-**Windows** isn't built. The service needs tmux, so a Windows app would have to run the service in WSL (plan 9.4).
+**Windows** isn't built. The service needs tmux, so a Windows app would have to run the service in WSL ([backlog](backlog.md#platforms-and-install)).
 
-**Service and UI from releases (update built 2026-11-18; the header's Update not yet).** A service, and with it the UI, can follow `v*` releases instead of `main`: `update_from = "release"` in `config.toml`, or `agentop serve --update-from release`. Update then checks out the newest `vX.Y.Z` tag, never a pre-release such as `v2.0.0-rc1`, and only when it is newer than what runs. The service fetches the tags from the git remote, and the header shows **Update** when there is one, in both clients. One click checks out the release, installs it, builds the UI, restarts the service, and reloads the page, using the steps in 8.4. Following `main` stays the default, so a server such as the devhost needs no setting; the desktop app starts its own copy with `--update-from release` (plan 9.5). An update never goes backwards: an install already ahead of the newest tag, such as a `main` checkout switched to releases, waits for a newer one.
+**Service and UI from releases (update built 2026-11-18; the header's Update not yet).** A service, and with it the UI, can follow `v*` releases instead of `main`: `update_from = "release"` in `config.toml`, or `agentop serve --update-from release`. Update then checks out the newest `vX.Y.Z` tag, never a pre-release such as `v2.0.0-rc1`, and only when it is newer than what runs. The service fetches the tags from the git remote, and the header shows **Update** when there is one, in both clients. One click checks out the release, installs it, builds the UI, restarts the service, and reloads the page, using the steps in 8.4. Following `main` stays the default, so a server such as the devhost needs no setting; the desktop app starts its own copy with `--update-from release` ([setup.md](setup.md#desktop-app)). An update never goes backwards: an install already ahead of the newest tag, such as a `main` checkout switched to releases, waits for a newer one.
 
 Any client can now talk to a service of a different version, including the web app when it connects to another host. Within `/api/v2` every change is an addition, and `api_version` in `/service` tells an older client to update (4.5). `/health` stays `{"status": "ok"}`, and `/service` and `/admin/update` must stay compatible across versions, so that an older service can always be updated from a newer client. A service from before `/admin` has these actions under `/service/`, and the client falls back to them on a 404.
 
 ## 9 API
 
-All routes are under `/api/v2`. The existing `/api` routes stay until cutover, so the current dashboard keeps working during development.
+All routes are under `/api/v2`. The old `/api` routes and the dashboard that used them were removed on 2026-11-14.
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -718,6 +720,8 @@ The old Settings dialog mixed two things: how this app looks, and the plugins of
 
 #### 10.7.6 Later
 
+In the [backlog](backlog.md#workspaces-and-memory-navigation):
+
 - The workspace in the URL (`/sessions`, `/dialogues/<id>`), for the back button, deep links, and reloading in place. Until then the workspace is remembered per connection in this browser.
 - A badge on a workspace in the header when something there needs attention, such as a session waiting for input while Memory shows.
 - One navigation call, `navigate(workspace, selection)`, for jumps between workspaces, such as a Memory search hit opening its conversation.
@@ -748,7 +752,7 @@ Rewritten on 2026-11-16, when the desktop app became the wrapper in 4.2.
 - Connections are saved in the window's storage, with tokens in the OS keychain, or a 0600 file where there is none. Default: the service that served the page, signed in from `service.json`.
 - Built and released by CI (8.5); `desktop/package.json` also builds it locally.
 
-The old open question, whether `tauri://localhost` can reach `ws://` services, no longer applies: the page is `http://127.0.0.1`, as in the web app. Spike S2 still checks that WebKitGTK treats it like a browser does.
+The old open question, whether `tauri://localhost` can reach `ws://` services, no longer applies: the page is `http://127.0.0.1`, as in the web app. Check S2 ([backlog](backlog.md#to-check-by-hand)) still confirms that WebKitGTK treats it like a browser does.
 
 ## 12 Plugins
 
@@ -892,7 +896,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 ### 12.8 First plugins
 
-The later features (plan 9.4) become plugins one at a time, where they are service features:
+The later features ([backlog](backlog.md)) become plugins one at a time, where they are service features:
 
 | Feature | Plugin? |
 |---------|---------|
@@ -903,11 +907,11 @@ The later features (plan 9.4) become plugins one at a time, where they are servi
 | Grouping sessions by project | Yes: stores groups, a left-column view |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |
 | Offline app shell for the web app | No: client-only |
-| Desktop auto-update | No: desktop-only, and a non-goal (2.2) |
+| Desktop auto-update | No: desktop-only. Built with the wrapper (8.5) |
 | macOS host support (`LaunchdManager`) | No: the core needs it to run at all |
 | Non-git install kinds for update | No: part of core service update |
 
-The security items in the backlog ([plan.md section 9](plan.md#9-backlog)) are core work, not plugins.
+The security items in the [backlog](backlog.md#sign-in-and-security) are core work, not plugins.
 
 ### 12.9 Dialogues as a plugin
 
@@ -958,7 +962,7 @@ The target must be a live managed session. With no match, `agentop send` says `I
 
 #### 12.10.2 Transport: tmux only
 
-The prompt is typed into the target's terminal through tmux, the way each tool takes a paste (`AgentCli.send_text`), like every other message agentop sends. Agentop does not call any LLM API, and does not run agents headless (`claude -p`, `codex exec`).
+The prompt is typed into the target's terminal through tmux, the way each tool takes a paste (`AgentCli.send_text`), like every other message agentop sends. Agentop does not call any LLM API, and does not run a handoff headless (`claude -p`, `codex exec`). The one headless use is the Memory plugin's summaries (12.11.3), which run `claude --print` or `codex exec` and so are billed as headless use (below).
 
 Why:
 
@@ -1137,22 +1141,22 @@ Parity list for the old dashboard, so nothing was lost by accident:
 
 | Risk | Likelihood | Mitigation |
 |------|------------|------------|
-| Terminal is slow or glitchy in WebKitGTK | Medium | Spike S1 before UI work; `TerminalView` boundary; ghostty-web fallback. Tauri's CEF runtime exists at alpha stage and is not a dependency |
+| Terminal is slow or glitchy in WebKitGTK | Medium | Check S1; `TerminalView` boundary; ghostty-web fallback. Tauri's CEF runtime exists at alpha stage and is not a dependency |
 | Japanese IME composition fails in a webview | Medium | The system locale is partly `ja_JP`, so this is tested explicitly in S1 |
-| WebKitGTK treats the `http://127.0.0.1` page differently from a browser | Low | Spike S2; the page follows the same rules as the web app from a local service |
+| WebKitGTK treats the `http://127.0.0.1` page differently from a browser | Low | Check S2; the page follows the same rules as the web app from a local service |
 | The app can't find `agentop`, tmux, or the agent tools | Medium | Setup checks each through the login shell and says how to fix a missing one; it starts the service through that shell too; `AGENTOP_BIN`; the start page names the log |
 | A lost updater signing key | Low | Back it up; a lost key means reinstalling by hand once |
-| Browser rules block a web app connection | Medium | Spike S4; reachability guidance in the form; recommend the page from a local service or the desktop app |
+| Browser rules block a web app connection | Medium | Check S4; reachability guidance in the form; recommend the page from a local service or the desktop app |
 | Tokens or terminal traffic exposed on plain HTTP | Low | The service refuses a non-loopback bind without TLS, and the app refuses plain HTTP to another machine |
 | Token stolen from `localStorage` | Low | Strict `script-src`, no third-party scripts, rotation |
 | Acting on the wrong machine after a switch | Medium | Service name always visible; stop and update confirmations name the service; the desktop app finds the local service from `service.json` |
-| Mouse mode makes copy awkward | Medium | Spike S3; `mouse` is a config option if it proves worse than the scroll benefit |
+| Mouse mode makes copy awkward | Medium | Check S3; `mouse` is a config option if it proves worse than the scroll benefit |
 | A bad update leaves the service down | Low | Pre-checks, health poll, automatic rollback; agents unaffected |
 | Ready-marker detection breaks when agents change their TUI | Medium | The timeout fallback means only slower starts, never failed ones |
 
 ## 15 Open decisions
 
-Each has a recommended default, which the plan assumes. D6 and D7 are decided, and both were revisited in the security review, finished 2026-11-15; what is left is in [section 9.1 of the plan](plan.md#91-security).
+Each has a recommended default, which is what was built. D6 and D7 are decided, and both were revisited in the security review, finished 2026-11-15; what is left is in the [backlog](backlog.md#sign-in-and-security).
 
 | # | Decision | Default | Alternative |
 |---|----------|---------|-------------|

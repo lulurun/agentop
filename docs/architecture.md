@@ -2,7 +2,7 @@
 
 ## 1 Overview
 
-agentop has two parts: the core, which detects and manages agent sessions and serves the app and its API, and plugins, which add features on top (dialogues, the File viewer, Memory).
+agentop has two parts: the core, which detects and manages agent sessions and serves the app and its API, and plugins, which add features on top (Dialogues, Waiting for input, the File viewer, Memory, Email code, the Input bar).
 
 ```
 src/agentop/
@@ -58,7 +58,7 @@ The interface, with the default for each thing that differs:
 | Typing into it | `deliver(session, text)`, which every prompt goes through: it takes the pane out of copy mode, then calls `send_text(session, text)` (bracketed paste, then Enter; no Enter if the paste failed; Codex waits a moment before Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |
 | What it's doing | `get_session_meta()`: session ID, AI title, token usage, bridge URL, from one read of the tool's files |
-| One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries. Only Claude has it (`claude --print`) |
+| One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries. Claude (`claude --print`) and Codex (`codex exec`) have it |
 | Its transcripts | `transcripts_root()` (the tool's own folder), `archive_files(root)` (what the Memory archive copies), `transcript_files(session_id, root)` (one session's files), `conversation_reader(path)` (how to read one as prompts and replies), `side_conversation(path)` (a subagent's, left out of History's message counts), `token_usage(path)` (the tokens one file records), `searchable(relative)` (whether it goes in the Memory search table) |
 
 ### 2.2 The tools

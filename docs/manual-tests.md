@@ -88,7 +88,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | E8 | From E7, click Resume | A new session resumes the same conversation; the old one is closed | Not run |
 | E9 | From E7, click Close session | The tmux session is gone and the row is removed | Not run |
 | E10 | Rename a session and edit its description in the right panel | Saved, and shown in the list | Not run |
-| E11 | Right panel for a running session | Details, token usage, changed files and all files are correct | Not run |
+| E11 | Right panel for a running session | Details, token usage, changed files and all files are correct; for Claude Code, a third tab lists the project's memory notes and opens them | Not run |
 | E12 | Copy the tmux attach command from the right panel and run it in a real terminal on the devhost | Attaches to the same session | Not run |
 | E13 | A session started outside agentop (in a plain terminal) | Listed under "Started elsewhere"; read-only where it can't be attached | Not run |
 
@@ -112,11 +112,11 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 ## H. Desktop app
 
-The desktop window has never been opened; every case here is Not run. Redesigned 2026-11-16: the app runs this computer's service (design 4.2).
+The app runs this computer's service (design 4.2), from its own copy of agentop in `~/.agentop-desktop`. v1.2.0 was run on macOS from a clean `~/.agentop-desktop` on 2026-11-18: setup listed the tools, installed, and Launch opened the app.
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| H1 | With no service running on the PC, open the AppImage | The start page, then the app on this computer's service, signed in. `ss -ltnp` shows it on `127.0.0.1` only | Not run |
+| H1 | With no service running on the PC, open the app (AppImage, or the `.app` on macOS) | The start page, then the app on this computer's service, signed in. `ss -ltnp` (Linux) or `lsof -iTCP -sTCP:LISTEN` (macOS) shows it on `127.0.0.1` only | Seen working (macOS, v1.2.0) |
 | H2 | Run the desktop app and the web app side by side | Same sessions, same state, same features | Not run |
 | H3 | Close the app, then run `tmux ls` and `curl 127.0.0.1:9775/api/v2/health` | The sessions are listed; the service doesn't answer. `desktop-serve.log` ends with a clean shutdown | Not run |
 | H4 | Start `agentop serve` by hand, open the app, then close it | The app uses that service, and it keeps running after the app closes | Not run |
@@ -124,13 +124,13 @@ The desktop window has never been opened; every case here is Not run. Redesigned
 | H6 | Stop the service from its panel | "The service on this computer stopped", with Start; Start brings it back, and the sessions are there | Not run |
 | H7 | Quit and reopen the app | Saved services and tokens are kept (OS keychain) | Not run |
 | H8 | Repeat C1 to C5 and D1 to D4 in the desktop app | Same as in the browser | Not run |
-| H9 | Remove `~/.agentop-desktop/venv`, then open the app | The setup screen lists the tools and installs again; Launch opens the app signed in | Not run |
-| H13 | On a Mac without tmux, open the app for the first time | tmux shows ✗ with `brew install tmux`, nothing installs; after installing it, Check again goes on to install, then **Ready to launch** | Not run |
-| H15 | Start the app from Terminal (`/Applications/agentop-desktop.app/Contents/MacOS/agentop-desktop`) with an rc file that sets up the prompt | The service starts; `ps` shows `agentop serve`, not a `zsh -ilc` stuck before it | Not run |
-| H14 | On a Mac where `~/.local/bin` isn't on PATH, run setup | "agentop on PATH" shows ✗ with the line for `~/.zprofile`; **Add it** adds it once and setup passes | Not run |
-| H10 | Install `agentop-desktop v1.1.1`, then release `v1.1.2` | **App update** shows; clicking it updates and restarts the app; sessions keep running, and closing the new copy stops the service | Not run |
+| H9 | Remove `~/.agentop-desktop/venv`, then open the app | The setup screen lists the tools and installs again; Launch opens the app signed in | Seen working (macOS, v1.2.0, from a clean `~/.agentop-desktop`) |
+| H10 | Install the newest `agentop-desktop` release, then release a newer `v*` | **App update** shows; clicking it updates and restarts the app; sessions keep running, and closing the new copy stops the service | Not run |
 | H11 | Run a copy built with `npm run build` while a newer release exists | **App update** opens the release page instead of installing | Not run |
 | H12 | Update the service from its panel in the app | The window reloads on the new UI, still signed in | Not run |
+| H13 | On a Mac without tmux, open the app for the first time | tmux shows ✗ with `brew install tmux`, nothing installs; after installing it, Check again goes on to install, then **Ready to launch** | Not run |
+| H14 | On a Mac where `~/.local/bin` isn't on PATH, run setup | "agentop on PATH" shows ✗ with the line for `~/.zprofile`; **Add it** adds it once and setup passes | Not run |
+| H15 | Start the app from Terminal (`/Applications/agentop-desktop.app/Contents/MacOS/agentop-desktop`) with an rc file that sets up the prompt | The service starts; `ps` shows `agentop serve`, not a `zsh -ilc` stuck before it | Not run |
 
 ## I. Phone
 
@@ -145,9 +145,8 @@ The desktop window has never been opened; every case here is Not run. Redesigned
 | I7 | Press ⌨ in the bar, type in the terminal, press ⌨ Input bar again; reload | Typing works in the terminal while the bar is off; the choice survives the reload. On a PC with the plugin on, the bar starts off | Not run |
 | I8 | With the bar, press ^B, type `c`, send; then ^B and the `1` button | A new tmux window opens; then window 1 shows again | Not run |
 
-## J. Parity checks
+## J. Daily use
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| J1 | Walk the parity table in [design.md section 13](design.md#13-migration) in both the web app and the desktop app | Every old feature has a working home in the app | Not run. The old dashboard was removed on 2026-11-14 before this ran |
-| J2 | Use the app alone for a full day of normal work | Nothing missing that the old dashboard had | Not run |
+| J1 | Use the app alone for a full day of normal work | Nothing sends you back to a plain terminal or tmux | Not run |
