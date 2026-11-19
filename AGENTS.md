@@ -33,6 +33,10 @@ systemctl --user restart agentop-api
 journalctl --user -u agentop-api -f
 ```
 
+## README
+
+The top of `README.md`, from the title through "What is agentop" (the intro video link included), is written and managed by hand. Leave it alone unless asked to change it specifically: no edits, rewording, or fixes there as part of other work.
+
 ## Comments
 
 Minimum only. Write a comment only for a *why* the code can't show: a tool quirk, a race, a security constraint.
