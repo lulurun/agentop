@@ -22,7 +22,7 @@ Projects are kept apart: a session sees, and sends to, the sessions of its own p
 - The folder holds everything of the project's that isn't in a git repo: briefs, requirements, plans, decisions, notes, hand-over files, a dialogue's turns and deliverables. Code stays in its repos.
 - agentop's own record of it is in `<project>/.project/`: `project.json` (owner, created, the welcome message) and `sessions.json` (its sessions, section 3). Agents don't edit these; they read them through `agentop project show`.
 - **Creating** a project, whoever asks for it, always does the same: make the folder and `.project/`, write the Coordinator's `AGENTS.md` and `CLAUDE.md` (section 4), start the Coordinator, and send it the welcome prompt. Creating doesn't open it in the app.
-- `default` is created this way the first time `agentop serve` starts, if it isn't there. On every later start, a Coordinator that has stopped (after a reboot) is resumed.
+- `default` is created this way the first time `agentop serve` starts, if it isn't there. On every later start, a Coordinator that has stopped (after a reboot) is resumed. `start_coordinator = false` in `config.toml` turns that off (the e2e tests do).
 - **Removing** a project stops its sessions and forgets it; its folder is kept unless "Delete the folder too" is ticked. `default` can't be removed.
 - A plugin lists and changes only the projects it owns. No plugin changes `default`.
 
