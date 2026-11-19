@@ -77,7 +77,7 @@ A feature after the sixth, a tab after the eighth, and a panel the feature doesn
 
 Everything inside a section or a buffer belongs to whoever draws it, the core or a plugin, and may have keys of its own, as long as they aren't the keys above. The terminal's: Ctrl+Shift+C copies the selection, Ctrl+Shift+/ searches its scrollback.
 
-In a browser, Ctrl+Shift+Q and Ctrl+Shift+W (and Ctrl+Shift+J in Chrome) belong to the browser and never reach the page; the desktop app has all of them.
+Some of these are browser shortcuts too (Ctrl+Shift+Q and W quit or close a window), but the page takes them first: in Chrome, Q, W, E, R and J all reach the app (checked 2026-11-19). Other browsers are unchecked.
 
 ## Rules for plugins
 

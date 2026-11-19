@@ -756,7 +756,7 @@ Agreed on 2026-11-19: one fixed layout, with a name for each part, so plugins fi
 - **The header** holds only the toggles, the connection manager, the feature nav and Settings. A plugin's `action` is gone: New dialogue is in Dialogues' left panel, as New session is in Sessions'.
 - **Plugins** open tabs with `openTab(content, area)` and close them with `closeTabs`; `editLayout` is gone, so a plugin can't place tabs its own way.
 - **Keys.** Every earlier key was dropped (Ctrl+Shift+[ ] N K S F and 1 to 9). The new set reaches every part of the layout by position: 1 to 0 across the header, Q W E R the panels and areas, A to K the active area's tabs, L to close. Terminal search moved to Ctrl+Shift+/, the terminal's own key.
-- **Left open:** a browser keeps Ctrl+Shift+Q and W for itself, so in the web app those two never reach the page; the desktop app has them.
+- **Browser shortcuts.** Some of the keys are browser shortcuts too (Ctrl+Shift+Q, W, J). In Chrome the page takes them first, so they work in the web app as well (checked 2026-11-19).
 
 ## 11 Desktop app
 
