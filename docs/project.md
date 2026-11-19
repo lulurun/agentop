@@ -50,13 +50,13 @@ A dialogue's agents A and B are `readonly` and not `counted`; every Coordinator 
 - Named `Coordinator` in every project. It works in the project folder, with Codex if installed, else Claude, else the first other installed tool.
 - It always exists: made with its project, resumed (same conversation) when it has stopped, never started afresh.
 - Its instructions are files in the project folder, written when the project is created: `AGENTS.md` (read by Codex and Antigravity) and `CLAUDE.md` (`@AGENTS.md`). They say it is this project's Coordinator, what the folder is for, how sessions reach each other (section 5), and its owner's part (below). The owner and the Coordinator may edit them afterwards; agentop doesn't overwrite them.
-- **Welcome.** Its first prompt asks it to introduce itself to the owner in a short welcome: who it is and "you can ask me to …". The owner of the project supplies both the instructions' own part and the welcome; the core's are for `default`:
+- **Welcome.** Its first prompt asks it to greet the owner, from the owner's side, and list what they can ask it as bullets. In `default` it says "Hi, I'm the Coordinator." and doesn't mention projects or folders; in any other project, "Hi, I'm the Coordinator of this project." The owner of the project supplies the list and the instructions' own part; the core's are for `default`:
 
-| Project | "You can ask me to …" |
+| Project | "You can ask me to:" |
 |---------|------------------------|
-| `default` | open a new session for a task, look at what the sessions are doing, fix agentop, update it, restart it |
-| A project | talk through requirements and a plan, start sessions to design, write docs, develop, deploy, route work to them and sum up where things are |
-| A dialogue | design the dialogue (scenario, brief, agents, turns), start it, stop it, and collect what it made into this folder |
+| `default` | start a session for a task; ask a session to do something and bring back its answer; tell you what the sessions are doing; fix a problem with agentop; update and restart agentop; show you how to use agentop |
+| A project | discuss the direction and requirements; work out an execution plan; design; create a new repo; start sessions and assign or schedule tasks to them; sum up where things are. Its last line: you can also talk to each session directly |
+| A dialogue | design a dialogue (scenario, brief, agents); start it; stop it; collect what it made and sum it up |
 
 ### 4.1 Other sessions know the project folder
 

@@ -12,8 +12,9 @@ PREFERRED = ("codex", "claude")
 _REPO = Path(__file__).resolve().parents[2]
 
 DEFAULT_WELCOME = (
-    "open a new session for a task, look at what the sessions are doing, "
-    "fix agentop, update it, and restart it"
+    "start a session for a task; ask a session to do something and bring back its answer; "
+    "tell you what the sessions are doing; fix a problem with agentop; update and restart agentop; "
+    "show you how to use agentop"
 )
 
 
@@ -24,7 +25,8 @@ def _default_part() -> str:
         "- Open a new session for a task, in the repo it is about, and give it the task.\n"
         "- Look at what the sessions are doing (`agentop list`, `agentop project show`) and sum it up.\n"
         f"- Fix agentop itself.{repo}\n"
-        "- Update it (`agentop service update`) and restart it (`agentop service restart`). Sessions keep running across both."
+        "- Update it (`agentop service update`) and restart it (`agentop service restart`). Sessions keep running across both.\n"
+        "- Show the owner how to use agentop: `agentop --help`, and the docs in its repo."
     )
 
 
@@ -72,12 +74,19 @@ def write_instructions(project: dict) -> None:
 
 
 def welcome_prompt(project: dict) -> str:
-    welcome = project.get("welcome") or (DEFAULT_WELCOME if project["name"] == projects.DEFAULT else "")
-    asks = f" Say what they can ask you, as \"You can ask me to …\": {welcome}." if welcome else ""
+    """One line: a prompt with newlines would be sent in parts."""
+    default = project["name"] == projects.DEFAULT
+    welcome = project.get("welcome") or (DEFAULT_WELCOME if default else "")
+    hello = "Hi, I'm the Coordinator." if default else "Hi, I'm the Coordinator of this project."
+    unsaid = (
+        "Don't mention projects, folders or how agentop works inside; speak from the owner's side."
+        if default
+        else "Don't name the project or explain its folder; the owner knows what a project is."
+    )
+    asks = f" Then \"You can ask me to:\" and a bulleted list, one short line each, of: {welcome}" if welcome else ""
     return (
-        f"You have just been started as the Coordinator of the agentop project `{project['name']}`; "
-        "AGENTS.md in this folder says what that means. Write the owner a short welcome, a few lines: "
-        f"who you are and what this project's folder is for.{asks} Then wait for their request."
+        "You have just been started as a Coordinator in agentop; AGENTS.md in this folder says what that means. "
+        f"Write the owner a short welcome. Start with \"{hello}\"{asks}. {unsaid} Then wait for their request."
     )
 
 

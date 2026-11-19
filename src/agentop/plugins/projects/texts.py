@@ -1,8 +1,9 @@
 """What a project's Coordinator is told about its part, and what its welcome offers."""
 
 WELCOME = (
-    "talk through the requirements and a plan, start sessions to design, write docs, develop and deploy, "
-    "route work to them, and sum up where things are"
+    "discuss the direction and the requirements; work out an execution plan; design; create a new repo; "
+    "start sessions and assign or schedule tasks to them; sum up where things are; "
+    "and, as the list's last line, that the owner can also talk to each session directly"
 )
 
 INSTRUCTIONS = """You run this project for the owner:

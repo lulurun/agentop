@@ -1,8 +1,8 @@
 """What a dialogue's Coordinator is told about its part, and what its welcome offers."""
 
 WELCOME = (
-    "design the dialogue (its scenario, brief, agents and turns), start it, stop it, "
-    "and collect what it made into this folder"
+    "design a dialogue (its scenario, brief and agents); start it; stop it; "
+    "collect what it made and sum it up"
 )
 
 INSTRUCTIONS = """This project is one dialogue: two agents, A and B, work on a brief, and an orchestrator passes their messages between them. A and B are read-only: don't send them prompts.

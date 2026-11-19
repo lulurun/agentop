@@ -54,19 +54,19 @@ export function HistorySection({ selected, project = "default" }: { selected?: s
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionIds, loadHistory]);
 
-  const tools = useMemo(() => [...new Set((history.items ?? []).map((i) => i.tool))].sort(), [history.items]);
+  const own = useMemo(() => history.items?.filter((i) => (i.project ?? "default") === project) ?? null, [history.items, project]);
+  const tools = useMemo(() => [...new Set((own ?? []).map((i) => i.tool))].sort(), [own]);
   const needle = search.trim().toLowerCase();
   const rows = useMemo(
     () =>
-      (history.items ?? [])
+      (own ?? [])
         .filter(
           (i) =>
-            (i.project ?? "default") === project &&
             (!tool || i.tool === tool) &&
             (!needle || `${i.name} ${i.title ?? ""} ${i.description} ${i.cwd}`.toLowerCase().includes(needle)),
         )
         .sort((a, b) => b.last_active - a.last_active),
-    [history.items, tool, needle, project],
+    [own, tool, needle],
   );
 
   function open(item: HistoryItem, mode: "replace" | "tab") {
@@ -78,7 +78,7 @@ export function HistorySection({ selected, project = "default" }: { selected?: s
       id="history"
       title="History"
       hint={history.windowSeconds ? `Sessions agentop started, used in ${days(history.windowSeconds)}` : undefined}
-      extra={history.items && <span className="session-count">{history.items.length}</span>}
+      extra={own && <span className="session-count">{own.length}</span>}
     >
       <div className="sidebar-actions history-tools">
         <input type="search" aria-label="Filter history" placeholder="Filter history" value={search} onChange={(event) => setSearch(event.target.value)} />

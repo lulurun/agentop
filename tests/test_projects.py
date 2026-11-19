@@ -73,7 +73,7 @@ def test_the_coordinator_starts_once_with_its_welcome_and_is_resumed_after(fake_
         assert (row["display_name"], row["project"]) == ("Coordinator", "default")
         assert row["cwd"] == str(projects.folder("default"))
         service.wait_for(row["id"], "running")
-        wait_for_screen(row["id"], "got: You have just been started as the Coordinator")
+        wait_for_screen(row["id"], "got: You have just been started as a Coordinator")
         assert (projects.folder("default") / "AGENTS.md").is_file()
         # Already running: the same one.
         assert service.http.post("/projects/default/coordinator").json()["id"] == row["id"]
