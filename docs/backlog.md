@@ -99,7 +99,7 @@ From design 10.7.6 and 12.11.3:
 
 ### Features
 
-- **Project groups** plugin: group sessions by project in the left panel; the plugin stores the groups and fills a section of Sessions' left panel (a slot the core doesn't have yet, [ui.md](ui.md#rules-for-plugins)) (design 12.8).
+- **Projects** in the core, replacing the Project groups idea: every session belongs to a project (a group of sessions and a shared folder, with a Coordinator session); projects are kept apart, each with its own Active sessions and History. Sessions becomes the `default` project, the `projects` plugin adds the owner's own projects, and each dialogue becomes a project. Started elsewhere and the session `owner` field go. Spec in [project.md](project.md).
 - A merged session list across services, and a window per service (client-only; a non-goal in design 2.2 for now).
 - An offline app shell for the web app, so it survives its service stopping.
 - Colour in the File viewer's diff view.

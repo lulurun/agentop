@@ -4,6 +4,7 @@
 |------|---------------|
 | CLI commands | [docs/cli.md](docs/cli.md) |
 | Dialogues (a plugin) | [docs/dialogue.md](docs/dialogue.md) |
+| Projects: groups of sessions with a shared folder and a Coordinator; Sessions, the Projects plugin and Dialogues build on them (not built) | [docs/project.md](docs/project.md) |
 | Plugins | [docs/plugins.md](docs/plugins.md) |
 | Code structure | [docs/architecture.md](docs/architecture.md) |
 | UI layout: names of its parts, where tabs open, keys | [docs/ui.md](docs/ui.md) |

@@ -6,6 +6,8 @@ The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dia
 
 Dialogue data is persisted to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`.
 
+Planned: each dialogue becomes a project, with a Coordinator to design, start, stop and collect it, and its folder moves to `~/.agentop/projects/` ([project.md](project.md#73-dialogues-plugin-dialogue)).
+
 The app has a Dialogues feature (section 8): a wizard starts one, and each one's two agents are shown side by side, live while it runs and as transcripts once it ends. Turning the plugin off in Status → Plugins (Status on the service switcher) stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
 
 ## 2 How it works
