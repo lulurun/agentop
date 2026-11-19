@@ -69,6 +69,16 @@ def resolve_transcript(tool: str | None, session_id: str | None, relative: str) 
     raise FileNotFoundError(relative)
 
 
+def memory_folder(tool: str | None, session_id: str | None, cwd: str | None) -> Path | None:
+    """The folder of notes the session's tool keeps for its project, or None."""
+    agent = get_agent(tool) if tool else None
+    if agent is None:
+        return None
+    if session_id and not _SESSION_ID.fullmatch(session_id):
+        session_id = None
+    return agent.memory_folder(session_id, cwd)
+
+
 TOKEN_FIELDS = ("input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
 
 

@@ -363,3 +363,41 @@ def test_only_a_listed_transcript_reads_as_a_conversation(claude_client):
             headers=AUTH,
         )
         assert response.status_code == 404
+
+
+def test_claudes_memory_folder_is_listed_and_read(claude_client, tmp_path):
+    memory = tmp_path / ".claude" / "projects" / "-work" / "memory"
+    memory.mkdir()
+    (memory / "MEMORY.md").write_text("- a note\n")
+    listing = claude_client.get("/api/v2/sessions/one/memory", headers=AUTH).json()
+    assert listing["root"] == str(memory)
+    assert [e["name"] for e in listing["entries"]] == ["MEMORY.md"]
+    read = lambda path: claude_client.get(
+        "/api/v2/plugins/viewer/file", params={"session": "one", "path": path, "source": "memory"}, headers=AUTH
+    )
+    assert read("MEMORY.md").json()["text"] == "- a note\n"
+    # The logs beside it are not the notes.
+    assert read("../c1.jsonl").status_code == 403
+
+
+def test_claudes_memory_folder_before_the_first_log_is_in_the_one_named_after_cwd(tmp_path):
+    from agentop.agentclis.claude import ClaudeAgentCli
+
+    claude = ClaudeAgentCli(home=tmp_path)
+    project = tmp_path / ".claude" / "projects" / "-home-me-my-app-v1-2"
+    project.mkdir(parents=True)
+    assert claude.memory_folder(None, "/home/me/my_app.v1.2") is None
+    (project / "memory").mkdir()
+    assert claude.memory_folder("unknown", "/home/me/my_app.v1.2") == project / "memory"
+
+
+def test_a_tool_without_a_memory_folder_has_none(client):
+    assert client.get("/api/v2/sessions/one/memory", headers=AUTH).status_code == 404
+    response = client.get(
+        "/api/v2/plugins/viewer/file", params={"session": "one", "path": "s1.jsonl", "source": "memory"}, headers=AUTH
+    )
+    assert response.status_code == 404
+
+
+def test_a_claude_project_without_notes_has_no_memory_folder(claude_client):
+    assert claude_client.get("/api/v2/sessions/one/memory", headers=AUTH).status_code == 404

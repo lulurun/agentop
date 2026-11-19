@@ -242,6 +242,10 @@ class AgentCli:
         """
         return None, []
 
+    def memory_folder(self, session_id: str | None, cwd: str | None) -> Optional[Path]:
+        """The folder of notes the tool keeps for the session's project, for a person to read, or None if it keeps none."""
+        return None
+
     def conversation_reader(self, path: Path) -> tuple[Reader, dict] | None:
         """How to read a transcript file as a conversation, and the context to start from, or None.
 

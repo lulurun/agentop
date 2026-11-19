@@ -1,15 +1,6 @@
-"""File viewer: serves a file's text for the viewer tab.
+"""File viewer: a session's file as text, a diff, an image, or a transcript read as a conversation.
 
-Two sources, both confined: `workdir` is the session's working directory (the
-same rule as the Files list), and `transcript` is one of the files the agent
-tool reports for the session. A transcript can also be read as a conversation:
-the prompts and replies in it, without tool calls and output.
-
-A file from the Changed list opens as its diff against HEAD, through `/diff`.
-
-A Markdown file is drawn in the browser. The images it names, and an image
-file opened on its own, come through `/image`, as data the page puts in the
-<img>, since the page's requests carry their token in a header an <img> can't send.
+Sources are confined: the working directory, the agent tool's memory folder, or a listed transcript.
 """
 
 from __future__ import annotations
@@ -23,6 +14,8 @@ from fastapi import HTTPException
 
 from agentop import conversation, files, transcripts
 from agentop.agentclis import get_agent
+
+Source = Literal["workdir", "memory", "transcript"]
 
 MAX_BYTES = 2 * 1024 * 1024
 SNIFF_BYTES = 8192
@@ -79,9 +72,13 @@ def register(api):
     def locate(row: dict, source: str, path: str) -> Path:
         if source == "transcript":
             return transcripts.resolve_transcript(row.get("tool"), row.get("session_id"), path)
-        if not row.get("cwd"):
+        if source == "memory":
+            root = transcripts.memory_folder(row.get("tool"), row.get("session_id"), row.get("cwd"))
+        else:
+            root = row.get("cwd")
+        if not root:
             raise FileNotFoundError(path)
-        _, target = files.resolve_inside(row["cwd"], path)
+        _, target = files.resolve_inside(str(root), path)
         return target
 
     def readable(row: dict, source: str, target: Path) -> bool:
@@ -104,7 +101,7 @@ def register(api):
             raise HTTPException(415, str(exc)) from None
 
     @api.router.get("/file")
-    async def read_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
+    async def read_file(session: str, path: str, source: Source = "workdir"):
         row = session_row(session)
         target, result = await located(row, source, path, read_text)
         return {
@@ -115,8 +112,9 @@ def register(api):
             **result,
         }
 
+    # As data for the page to put in the <img>: an <img> request can't carry the token header.
     @api.router.get("/image")
-    async def read_image_file(session: str, path: str, source: Literal["workdir", "transcript"] = "workdir"):
+    async def read_image_file(session: str, path: str, source: Source = "workdir"):
         """An image file, or one a Markdown file shows, from the same places /file reads."""
         row = session_row(session)
         target, result = await located(row, source, path, read_image)

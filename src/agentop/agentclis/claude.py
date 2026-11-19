@@ -173,6 +173,18 @@ class ClaudeAgentCli(AgentCli):
             return log.parent, [log, *extra]
         return None, []
 
+    def memory_folder(self, session_id: str | None, cwd: str | None) -> Optional[Path]:
+        """`memory/` in the project folder holding the session's log, else in the one named after cwd."""
+        project = None
+        if session_id:
+            project, _ = self.transcript_files(session_id)
+        if project is None and cwd:
+            # Claude Code's own naming, which is only a guess before the first log
+            # exists: the log's folder is the one it really uses.
+            project = self.transcripts_root() / re.sub(r"[^A-Za-z0-9]", "-", cwd)
+        folder = project / "memory" if project else None
+        return folder if folder and folder.is_dir() else None
+
     def get_saved_sessions(self, limit: int = 20) -> list[SavedSession]:
         projects_dir = self.transcripts_root()
         if not projects_dir.exists():

@@ -204,7 +204,7 @@ export const DetailsPanel = memo(function DetailsPanel() {
         <h3>Token usage</h3>
         <Usage session={session} />
       </section>
-      {session.cwd && <FilesSection key={`files/${session.id}`} sessionId={session.id} />}
+      {session.cwd && <FilesSection key={`files/${session.id}`} sessionId={session.id} tool={session.tool ?? null} />}
       <PluginSlot slot="right-panel" session={session} />
       {session.managed && session.status === "running" && (
         <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />

@@ -13,13 +13,13 @@
  * Everything here is a pure function of a Layout, so it is tested on its own.
  */
 
-/** `workdir` is the session's working directory. `transcript` is one of the agent tool's log files for it. */
-export type FileSource = "workdir" | "transcript";
+/** `workdir` is the session's working directory, `memory` the notes the agent tool keeps for its project, `transcript` one of the tool's log files for it. */
+export type FileSource = "workdir" | "memory" | "transcript";
 
 export interface FileRef {
   sessionId: string;
   source: FileSource;
-  /** Relative to the working directory, or to the transcript folder. */
+  /** Relative to the source's folder. */
   path: string;
   /** `diff` shows the file's changes against HEAD instead of its text, as a file from the Changed list does. */
   view?: "diff";

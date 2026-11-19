@@ -109,13 +109,15 @@ function Changed({ sessionId }: { sessionId: string }) {
   );
 }
 
-function Node({ sessionId, entry, root }: { sessionId: string; entry: FileEntry; root: string }) {
+type Tree = "workdir" | "memory";
+
+function Node({ sessionId, tree, entry, root }: { sessionId: string; tree: Tree; entry: FileEntry; root: string }) {
   const [open, setOpen] = useState(false);
 
   if (!entry.is_dir) {
     return (
       <li>
-        <FileRow absolute={`${root}/${entry.path}`} file={{ sessionId, source: "workdir", path: entry.path }}>
+        <FileRow absolute={`${root}/${entry.path}`} file={{ sessionId, source: tree, path: entry.path }}>
           <span className="file-glyph" aria-hidden="true" />
           <span>{entry.name}</span>
         </FileRow>
@@ -128,44 +130,78 @@ function Node({ sessionId, entry, root }: { sessionId: string; entry: FileEntry;
         <span className="file-glyph" aria-hidden="true">{open ? "−" : "+"}</span>
         <span>{entry.name}</span>
       </button>
-      {open && <Directory sessionId={sessionId} path={entry.path} />}
+      {open && <Directory sessionId={sessionId} tree={tree} path={entry.path} />}
     </li>
   );
 }
 
-function Directory({ sessionId, path }: { sessionId: string; path: string }) {
+function Directory({ sessionId, tree, path }: { sessionId: string; tree: Tree; path: string }) {
   const client = useActiveClient();
   const [listing, setListing] = useState<FileListing | null>(null);
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(() => {
-    client.files(sessionId, path).then(setListing, () => setFailed(true));
-  }, [client, sessionId, path]);
+    const list = tree === "memory" ? client.memoryFiles : client.files;
+    list(sessionId, path).then(setListing, () => setFailed(true));
+  }, [client, sessionId, tree, path]);
   useEffect(load, [load]);
 
   if (failed) return <p className="file-note">Could not read this folder.</p>;
   if (!listing) return null;
   return (
     <ul className={path ? undefined : "file-list"}>
+      {!path && tree === "memory" && <li className="file-note">{listing.root}</li>}
       {listing.entries.length === 0 && !path && <li className="file-note">This directory is empty.</li>}
       {listing.entries.map((entry) => (
-        <Node key={entry.path} sessionId={sessionId} entry={entry} root={listing.root} />
+        <Node key={entry.path} sessionId={sessionId} tree={tree} entry={entry} root={listing.root} />
       ))}
       {listing.truncated && <li className="file-note">Showing the first {listing.entries.length} items.</li>}
     </ul>
   );
 }
 
-export function FilesSection({ sessionId }: { sessionId: string }) {
-  const [tab, setTab] = useState<"changed" | "all">("changed");
+/** Whether the session's agent tool keeps a memory folder, which only Claude Code does. */
+function useHasMemory(sessionId: string): boolean {
+  const client = useActiveClient();
+  const [has, setHas] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    client.memoryFiles(sessionId).then(
+      () => !cancelled && setHas(true),
+      () => !cancelled && setHas(false),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client, sessionId]);
+  return has;
+}
+
+export function FilesSection({ sessionId, tool }: { sessionId: string; tool: string | null }) {
+  const [tab, setTab] = useState<"changed" | "all" | "memory">("changed");
+  const hasMemory = useHasMemory(sessionId);
+  const shown = tab === "memory" && !hasMemory ? "changed" : tab;
   return (
     <section>
       <h3>Files</h3>
       <div className="file-tabs" role="tablist" aria-label="Files">
-        <button type="button" role="tab" aria-selected={tab === "changed"} onClick={() => setTab("changed")}>Changed</button>
-        <button type="button" role="tab" aria-selected={tab === "all"} onClick={() => setTab("all")}>All</button>
+        <button type="button" role="tab" aria-selected={shown === "changed"} onClick={() => setTab("changed")}>Changed</button>
+        <button type="button" role="tab" aria-selected={shown === "all"} onClick={() => setTab("all")}>All</button>
+        {hasMemory && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={shown === "memory"}
+            title="The notes the agent tool keeps for this project"
+            onClick={() => setTab("memory")}
+          >
+            {tool ? `${tool[0].toUpperCase()}${tool.slice(1)} memory` : "Memory"}
+          </button>
+        )}
       </div>
-      {tab === "changed" ? <Changed sessionId={sessionId} /> : <Directory sessionId={sessionId} path="" />}
+      {shown === "changed" && <Changed sessionId={sessionId} />}
+      {shown === "all" && <Directory sessionId={sessionId} tree="workdir" path="" />}
+      {shown === "memory" && <Directory sessionId={sessionId} tree="memory" path="" />}
     </section>
   );
 }

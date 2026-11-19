@@ -124,6 +124,8 @@ export class ServiceClient {
     this.get<DirListing>(`/fs/dirs?path=${encodeURIComponent(path)}&hidden=${hidden}`);
   files = (id: string, path = "") =>
     this.get<FileListing>(`/sessions/${encodeURIComponent(id)}/files?path=${encodeURIComponent(path)}`);
+  memoryFiles = (id: string, path = "") =>
+    this.get<FileListing>(`/sessions/${encodeURIComponent(id)}/memory?path=${encodeURIComponent(path)}`);
   changes = (id: string) => this.get<GitChanges>(`/sessions/${encodeURIComponent(id)}/changes`);
   history = () => this.get<HistoryListing>("/history");
   historyStats = (id: string) => this.get<HistoryStats>(`/history/${encodeURIComponent(id)}/stats`);

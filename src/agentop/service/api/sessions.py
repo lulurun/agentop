@@ -64,16 +64,32 @@ def _working_directory(ctx: Context, session_id: str) -> str:
     return row["cwd"]
 
 
-@router.get("/sessions/{session_id}/files", response_model=FileListing)
-async def session_files(session_id: str, ctx: Ctx, path: str = ""):
+async def _listing(root: str, path: str) -> dict:
     try:
-        return await asyncio.to_thread(files.list_directory, _working_directory(ctx, session_id), path)
+        return await asyncio.to_thread(files.list_directory, root, path)
     except files.OutsideRoot:
         raise HTTPException(403, "That path is outside the session's directory") from None
     except (FileNotFoundError, NotADirectoryError):
         raise HTTPException(404, "No such directory") from None
     except PermissionError:
         raise HTTPException(403, "Permission denied") from None
+
+
+@router.get("/sessions/{session_id}/files", response_model=FileListing)
+async def session_files(session_id: str, ctx: Ctx, path: str = ""):
+    return await _listing(_working_directory(ctx, session_id), path)
+
+
+@router.get("/sessions/{session_id}/memory", response_model=FileListing)
+async def session_memory(session_id: str, ctx: Ctx, path: str = ""):
+    """The notes the agent tool keeps for this session's project, such as Claude Code's memory folder."""
+    row = ctx.store.get(session_id)
+    if row is None:
+        raise HTTPException(404, "Session not found")
+    root = await asyncio.to_thread(transcripts.memory_folder, row.get("tool"), row.get("session_id"), row.get("cwd"))
+    if root is None:
+        raise HTTPException(404, "This session's tool keeps no memory folder")
+    return await _listing(str(root), path)
 
 
 @router.get("/sessions/{session_id}/changes", response_model=GitChanges)
