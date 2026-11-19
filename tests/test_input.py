@@ -61,7 +61,7 @@ def client(tmp_path, calls):
             {
                 "one": row("one"),
                 "outside": row("outside", managed=False),
-                "dialogue": row("dialogue", owner="dialogue"),
+                "dialogue": row("dialogue", readonly=True),
                 "gone": row("gone", status="exited", tmux=None),
             }
         )

@@ -403,7 +403,7 @@ def test_session_created_outside_the_service_appears(service):
 
 def test_stop_only_acts_on_its_target(service):
     one = service.create(name="foo")
-    two = service.create(name="foo")
+    two = service.create(name="bar")
     service.wait_for(one["id"], "running")
     service.wait_for(two["id"], "running")
     assert service.http.post(f"/sessions/{one['id']}/stop").status_code == 200

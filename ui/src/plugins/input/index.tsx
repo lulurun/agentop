@@ -16,7 +16,7 @@ const keepFocus = (event: PointerEvent) => event.preventDefault();
 function InputBar({ session, plugin, terminal }: { session: Session; plugin: PluginContext; terminal: TerminalInputControl }) {
   const mode = useSyncExternalStore(modeStore.subscribe, modeStore.snapshot);
   // Only a running session agentop started takes prompts. Any other is typed into as before.
-  const usable = session.managed && !session.owner && session.status === "running";
+  const usable = session.managed && !session.readonly && session.status === "running";
   const active = usable && mode === "bar";
   const [text, setText] = useState(() => loadDraft(session.id));
   const [busy, setBusy] = useState(false);

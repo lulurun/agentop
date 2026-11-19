@@ -93,19 +93,34 @@ def cmd_list(args):
         mem = f"{s['memory_mb']}MB" if s.get("memory_mb") else "—"
         tokens = _fmt_tokens(s.get("token_usage"))
         cwd = _shorten(s.get("cwd"))
-        name = s["name"] if s.get("managed") else f"[external] {s['name']}"
+        name = f"{s['project']}/{s['display_name']}" if s.get("managed") else f"[external] {s['name']}"
         print(col.format(name, s.get("tool", "?"), status, pid, runtime, mem, tokens, cwd))
         if s.get("ai_title"):
             print(f"  └─ {s['ai_title']}")
 
 
+def _own_project(args) -> str:
+    """--project, or else the project of the session this runs in, or else the default one."""
+    if args.project:
+        return args.project
+    here = _ops().current_session()
+    return here[1] if here else "default"
+
+
 def cmd_start(args):
     cwd = os.path.expanduser(args.cwd)
-    print(f"Starting {args.tool} session '{args.session_name}' in {cwd} …")
+    project = _own_project(args)
+    print(f"Starting {args.tool} session '{args.session_name}' in {cwd}, project {project} …")
     from agentop.results import OpsError, StartFailed
 
     try:
-        result = _ops().start(args.tool, cwd, args.session_name)
+        taken = [
+            s for s in _ops().get_sessions(with_meta=False)
+            if s.get("project") == project and s.get("display_name", "").lower() == args.session_name.lower()
+        ]
+        if taken:
+            raise OpsError(f"A session called {args.session_name} is already in {project}. Pick another name")
+        result = _ops().start(args.tool, cwd, args.session_name, project=project)
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if isinstance(exc, StartFailed) and exc.name:
@@ -169,13 +184,14 @@ def cmd_send(args):
     text = sys.stdin.read() if args.prompt in (None, "-") else args.prompt
     from agentop.tmux import Session
 
-    sender = Session.current()
+    here = _ops().current_session()
+    sender = f"{here[1]}/{here[2]}" if here else Session.current()
     if sender and not args.no_header:
         text = f"[agentop send from {sender}]\n{text.strip()}"
     from agentop.results import OpsError
 
     try:
-        sent = _ops().send(args.target, text)
+        sent = _ops().send(args.target, text, project=_own_project(args))
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if not exc.matches:
@@ -183,6 +199,54 @@ def cmd_send(args):
         sys.exit(1)
     print(f"Sent to {sent.name}.")
     print(f"  Watch:  tmux attach-session -t {sent.tmux}")
+
+
+def cmd_project_list(args):
+    from agentop import projects
+
+    found = projects.list_projects()
+    if args.json:
+        print(json.dumps(found, indent=2))
+        return
+    live = _ops().get_sessions(with_meta=False)
+    col = "{:<40} {:<10} {:<9} {}"
+    print(col.format("PROJECT", "OWNER", "SESSIONS", "FOLDER"))
+    for p in found:
+        count = sum(1 for s in live if s.get("project") == p["name"])
+        print(col.format(p["name"], p.get("owner") or "—", count, _shorten(p["folder"])))
+
+
+def cmd_project_show(args):
+    from agentop import projects, registry
+
+    name = args.name or (_ops().current_session() or (None, "default"))[1]
+    found = projects.get(name)
+    if found is None:
+        print(f"Error: no project called {name}", file=sys.stderr)
+        sys.exit(1)
+    live = {s["name"]: s for s in _ops().get_sessions(with_meta=False)}
+    records = {k: v for k, v in registry.load()["sessions"].items() if v.get("project") == name}
+    sessions = [
+        {
+            "name": r.get("display_name") or k,
+            "tmux": k,
+            "tool": r.get("tool"),
+            "cwd": r.get("cwd") or "",
+            "running": k in live,
+            "readonly": bool(r.get("readonly")),
+        }
+        for k, r in records.items()
+        if k in live or not r.get("ended_at")
+    ]
+    if args.json:
+        print(json.dumps({**found, "sessions": sessions}, indent=2))
+        return
+    print(f"Project: {name} ({found.get('owner')})")
+    print(f"Folder:  {found['folder']}")
+    for s in sessions:
+        state = "running" if s["running"] else "stopped"
+        extra = ", read-only" if s["readonly"] else ""
+        print(f"  {s['name']:<24} {s['tool'] or '?':<12} {state}{extra}  {_shorten(s['cwd'])}")
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +511,7 @@ def main():
     p_start.add_argument("session_name", type=_session_name_type, help="Session name (max 31 chars)")
     p_start.add_argument("--tool", required=True, choices=agentclis.names())
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
+    p_start.add_argument("--project", help="The project to start it in (default: this session's, else default)")
 
     # history
     p_history = sub.add_parser(
@@ -479,14 +544,24 @@ def main():
         help="Type a prompt into another session and submit it",
         description=(
             "Type a prompt into a live managed session, as if the user typed it, and submit it.\n"
-            "The target is a session name from 'agentop list', ignoring case and the -<suffix>:\n"
-            "'eiger' finds Eiger-2953204. Nothing comes back: switch to that session to follow it.\n"
+            "The target is a session's name in the sender's project, ignoring case, or <project>/<name>\n"
+            "for another project's. Nothing comes back: switch to that session to follow it.\n"
             "Run from inside tmux, the prompt starts with a line naming the sending session."
         ),
     )
-    p_send.add_argument("target", help="Session name, e.g. eiger or Eiger-2953204")
+    p_send.add_argument("target", help="Session name in this project, e.g. dev, or <project>/<name> for another")
+    p_send.add_argument("--project", help="The project to look the name up in (default: this session's, else default)")
     p_send.add_argument("prompt", nargs="?", help="The prompt; '-' or none reads it from stdin")
     p_send.add_argument("--no-header", action="store_true", help="Don't add the [agentop send from …] line")
+
+    # project
+    p_project = sub.add_parser("project", help="List projects, or show one's folder and sessions")
+    project_sub = p_project.add_subparsers(dest="project_command", metavar="<subcommand>")
+    p_plist = project_sub.add_parser("list", help="Every project, with its owner and folder")
+    p_plist.add_argument("--json", action="store_true")
+    p_pshow = project_sub.add_parser("show", help="A project's folder and sessions (default: this session's)")
+    p_pshow.add_argument("name", nargs="?")
+    p_pshow.add_argument("--json", action="store_true")
 
     # serve
     p_serve = sub.add_parser("serve", help="Run the service in the foreground")
@@ -533,6 +608,13 @@ def main():
 
     if args.command in plugin_commands:
         plugin_commands[args.command](args)
+        return
+
+    if args.command == "project":
+        if not args.project_command:
+            p_project.print_help()
+            sys.exit(0)
+        {"list": cmd_project_list, "show": cmd_project_show}[args.project_command](args)
         return
 
     if args.command == "service":

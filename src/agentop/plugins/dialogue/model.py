@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agentop import paths
+from agentop import paths, projects, registry
 from agentop.agent_instance import AgentInstance
 from agentop.agentclis import get_agent
 
@@ -33,9 +33,52 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+OWNER = "dialogue"
+
+
 def dialogues_dir() -> Path:
-    """Where saved dialogues are: the plugin's own folder, ~/.agentop/plugins/dialogue/dialogues/."""
+    """Where dialogues are: each is a project of the plugin's, ~/.agentop/projects/<scenario>_<brief>_<id>/."""
+    return paths.projects_dir()
+
+
+def _legacy_dir() -> Path:
     return paths.plugins_dir() / "dialogue" / "dialogues"
+
+
+def _migrate() -> None:
+    """Move dialogues from the plugin's own folder, from before projects, into projects of their own."""
+    legacy = _legacy_dir()
+    if not legacy.is_dir():
+        return
+    for old in sorted(legacy.iterdir()):
+        name = old.name
+        if not (old / "meta.json").is_file() or not projects.is_valid_name(name) or projects.folder(name).exists():
+            LOG.warning("Dialogue %s left in %s: it can't be a project's folder", name, legacy)
+            continue
+        projects.folder(name).parent.mkdir(parents=True, exist_ok=True)
+        old.rename(projects.folder(name))
+        projects.adopt(name, OWNER)
+        try:
+            data = json.loads((projects.folder(name) / "meta.json").read_text())
+        except (OSError, ValueError):
+            data = {}
+        for session in (data.get("session_a"), data.get("session_b")):
+            if session:
+                registry.move_session(session, name)
+    if not any(legacy.iterdir()):
+        legacy.rmdir()
+
+
+def dialogue_names() -> list[str]:
+    """Every dialogue's folder name, newest first."""
+    _migrate()
+    found = [p for p in projects.list_projects(OWNER) if (Path(p["folder"]) / "meta.json").is_file()]
+    return [p["name"] for p in sorted(found, key=lambda p: (Path(p["folder"]) / "meta.json").stat().st_mtime, reverse=True)]
+
+
+def is_dialogue(name: str) -> bool:
+    found = projects.get(name)
+    return bool(found and found.get("owner") == OWNER and (projects.folder(name) / "meta.json").is_file())
 
 
 @dataclass
@@ -137,14 +180,15 @@ class DialogueMeta:
 
     @classmethod
     def load(cls, dialogue_id: str) -> DialogueMeta | None:
-        # Try exact match first (full folder name or legacy ID-only folder)
-        p = dialogues_dir() / dialogue_id / "meta.json"
-        if not p.exists():
-            # Fall back to searching for any folder ending with the ID
-            matches = list(dialogues_dir().glob(f"*{dialogue_id}/meta.json"))
-            if not matches:
+        if is_dialogue(dialogue_id):
+            name = dialogue_id
+        else:
+            # The end of a name is enough on the command line, when only one dialogue has it.
+            matches = [n for n in dialogue_names() if n.endswith(dialogue_id)]
+            if len(matches) != 1:
                 return None
-            p = matches[0]
+            name = matches[0]
+        p = dialogues_dir() / name / "meta.json"
         try:
             data = json.loads(p.read_text())
             return cls(

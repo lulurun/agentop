@@ -1,6 +1,6 @@
 # Projects
 
-Status: designed 2026-11-19, not built. It replaces the "Project groups" idea in the backlog.
+Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only. Not yet: the Coordinator, the Projects plugin. It replaces the "Project groups" idea in the backlog.
 
 ## 1 What it is
 
@@ -28,7 +28,7 @@ Projects are kept apart: a session sees, and sends to, the sessions of its own p
 
 ## 3 Sessions in a project
 
-- A session's name is unique within its project only, so every project can have `dev`, `deploy` and `docs`. Its tmux name keeps agentop's random suffix (`dev-k3x9q2`) so it is unique on the machine; the project's `sessions.json` maps one to the other. The app and the API call a session `<project>/<name>`.
+- A session's name is unique within its project only, so every project can have `dev`, `deploy` and `docs`. Its tmux name keeps agentop's random suffix (`dev-k3x9q2`) so it is unique on the machine; the project's `sessions.json` maps one to the other. The CLI and `agentop send` call a session `<project>/<name>`; the API keeps the tmux name as a session's ID.
 - `sessions.json` replaces `~/.agentop/state/sessions.json`, with the same `flock`.
 - Each project has its own Active sessions and History. Starting, resuming and stopping a session act in its project.
 - **Resuming keeps the name.** A session from History comes back as it was, the same record in `sessions.json` under the same name; agentop no longer adds the date it was last used (`history.resume_name`). If a running session in the project has taken the name meanwhile, Resume says so and asks for another name.
@@ -110,7 +110,7 @@ Its feature, commands and routes go away. Its projects' sessions are stopped, af
 
 ## 9 Moving existing data
 
-- Every session and history entry in `~/.agentop/state/sessions.json` goes into `default`. A name with the date an earlier resume added (`fix-auth 2026-11-01 10:00`) loses it (`history.base_name`), and the newest of any that then share a name keeps it; the others keep their date.
+- Every session and history entry in `~/.agentop/state/sessions.json` goes into `default`. A name with the date an earlier resume added (`fix-auth 2026-11-01 10:00`) loses it. Names only have to be unique among running sessions, so ended ones may share one.
 - Each folder in `~/.agentop/plugins/dialogue/dialogues/` moves to `~/.agentop/projects/<its name>/`, owned by `dialogue`. Its Coordinator is created when it is first opened.
 
 ## 10 Open questions

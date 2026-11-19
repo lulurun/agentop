@@ -103,7 +103,7 @@ async def session_terminal(
         return
     await ws.accept()
     # A plugin's session, such as a dialogue's agent, is only ever watched: typing would break what drives it.
-    read_only = readonly or bool((ctx.store.get(session_id) or {}).get("owner"))
+    read_only = readonly or bool((ctx.store.get(session_id) or {}).get("readonly"))
 
     async def bridge():
         try:

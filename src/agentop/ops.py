@@ -6,7 +6,7 @@ import logging
 import re
 import time
 
-from agentop import agentclis, registry, scanner
+from agentop import agentclis, projects, registry, scanner
 from agentop.agent_instance import AgentInstance
 from agentop.agentclis import get_agent
 from agentop.agentclis.base import AgentCli
@@ -40,9 +40,24 @@ def get_sessions(with_meta: bool = True) -> list[dict]:
         reg_data = reg_sessions.get(s["name"], {})
         if reg_data.get("description"):
             s["description"] = reg_data["description"]
-        if reg_data.get("owner"):
-            s["owner"] = reg_data["owner"]
+        if s.get("managed"):
+            s["project"] = reg_data.get("project") or projects.DEFAULT
+            s["display_name"] = reg_data.get("display_name") or _bare(s["name"])
+            s["readonly"] = bool(reg_data.get("readonly"))
     return sessions
+
+
+def current_session() -> tuple[str, str, str] | None:
+    """The agentop session this process runs in, as (tmux name, project, name), or None outside one."""
+    from agentop.tmux import Session
+
+    tmux_name = Session.current()
+    if not tmux_name:
+        return None
+    record = registry.load()["sessions"].get(tmux_name)
+    if not record or not record.get("managed"):
+        return None
+    return tmux_name, record.get("project") or projects.DEFAULT, record.get("display_name") or _bare(tmux_name)
 
 
 def _agent(tool: str) -> AgentCli:
@@ -53,8 +68,18 @@ def _agent(tool: str) -> AgentCli:
 
 
 def accepts_prompts(row: dict) -> bool:
-    """Whether a session can be sent prompts: agentop started it, and no plugin owns it (a dialogue's agents are read-only)."""
-    return bool(row.get("managed")) and not row.get("owner")
+    """Whether a session can be sent prompts: agentop started it, and its plugin didn't make it read-only (a dialogue's agents)."""
+    return bool(row.get("managed")) and not row.get("readonly")
+
+
+def _place(agent: AgentCli, name: str | None, short_name: str, project: str, readonly: bool, counted: bool) -> str:
+    """Record the session's project and flags before it starts, so it is never listed without them."""
+    if not projects.exists(project) and project != projects.DEFAULT:
+        raise OpsError(f"No project called {project}")
+    name = name or agent.new_session_name(short_name)
+    flags = {"readonly": True if readonly else None, "counted": False if not counted else None}
+    registry.upsert_session(name, {"project": project, **flags})
+    return name
 
 
 def _record_start(tool: str, cwd: str, short_name: str, run) -> StartResult:
@@ -92,17 +117,16 @@ def start(
     params: dict | None = None,
     name: str | None = None,
     on_progress=None,
-    owner: str | None = None,
+    project: str = projects.DEFAULT,
+    readonly: bool = False,
+    counted: bool = True,
 ) -> StartResult:
     """Launch a new managed agent session. Raises OpsError, or StartFailed with the tmux session's name if one was left behind.
 
-    `owner` names the plugin the session is for (see SessionModel.owner). It is
-    recorded before the agent starts, so the session is never listed without it.
+    `readonly` and `counted` are the starting plugin's (SessionModel): a dialogue's agents are read-only and not counted.
     """
     agent = _agent(tool)
-    if owner:
-        name = name or agent.new_session_name(short_name)
-        registry.upsert_session(name, {"owner": owner})
+    name = _place(agent, name, short_name, project, readonly, counted)
     return _record_start(tool, cwd, short_name, lambda: agent.start_session(cwd, short_name, params, name=name, on_progress=on_progress))
 
 
@@ -170,9 +194,11 @@ def resume_session(
     short_name: str = "",
     name: str | None = None,
     on_progress=None,
+    project: str = projects.DEFAULT,
 ) -> StartResult:
     """Resume a saved agent session in a new tmux window. Raises as start does."""
     agent = _agent(tool)
+    name = _place(agent, name, short_name, project, False, True)
     return _record_start(
         tool, cwd, short_name, lambda: agent.resume_session(session_id, cwd, short_name, name=name, on_progress=on_progress)
     )
@@ -192,31 +218,42 @@ def _bare(name: str) -> str:
     return head if sep and head else name
 
 
-def find_session(target: str, sessions: list[dict] | None = None) -> dict:
-    """The one live session called target, ignoring case and the -<suffix> agentop adds. Raises OpsError, with the matches when several."""
+def find_session(target: str, sessions: list[dict] | None = None, project: str | None = None) -> dict:
+    """The one live session called target, ignoring case. Raises OpsError, with the matches when several.
+
+    A name is looked up in `project` (`other/dev` names another). A tmux session's
+    own name is found in any project, and without the -<suffix> agentop adds in `project`.
+    """
     if sessions is None:
         sessions = get_sessions(with_meta=False)
-    wanted = target.strip().lstrip("#").lower()
-    exact = [s for s in sessions if s["name"].lower() == wanted]
-    found = exact or [s for s in sessions if _bare(s["name"]).lower() == wanted]
+    named_project, bare_target = projects.split_target(target.strip().lstrip("#"))
+    project = named_project or project
+    wanted = bare_target.lower()
+    in_project = [s for s in sessions if s.get("managed") and (project is None or s.get("project") == project)]
+    found = [s for s in in_project if (s.get("display_name") or "").lower() == wanted]
+    if not found and named_project is None:
+        exact = [s for s in sessions if s["name"].lower() == wanted]
+        pool = in_project if project else sessions
+        found = exact or [s for s in pool if _bare(s["name"]).lower() == wanted]
     if len(found) == 1:
         return found[0]
     if not found:
-        raise OpsError(f"I don't see an active session called '{target}'")
+        where = f" in {project}" if project else ""
+        raise OpsError(f"I don't see an active session called '{target}'{where}")
     names = [s["name"] for s in found]
     raise OpsError(f"Several active sessions are called '{target}': {', '.join(names)}", matches=names)
 
 
-def send(target: str, text: str, sessions: list[dict] | None = None) -> Sent:
+def send(target: str, text: str, sessions: list[dict] | None = None, project: str | None = None) -> Sent:
     """Type a prompt into a live managed session and submit it, the way its tool takes a paste. Raises OpsError.
 
-    target is matched by find_session.
+    target is matched by find_session, in `project`.
     """
-    s = find_session(target, sessions)
+    s = find_session(target, sessions, project)
     if not s.get("managed"):
         raise OpsError(f"{s['name']} was not started by agentop, so it can't be sent prompts")
     if not accepts_prompts(s):
-        raise OpsError(f"{s['name']} belongs to the {s['owner']} plugin, so it can't be sent prompts")
+        raise OpsError(f"{s['name']} is read-only, so it can't be sent prompts")
     agent = _agent(s["tool"])
     tmux_name = (s.get("tmux") or {}).get("session")
     if not tmux_name:

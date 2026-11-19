@@ -52,15 +52,27 @@ def test_the_prompt_is_typed_into_the_target(fake_agents, tmp_path):
         time.sleep(0.1)
 
 
-def test_a_session_a_plugin_owns_gets_nothing():
+def test_a_read_only_session_gets_nothing():
     # A dialogue's agents are read-only, as in the app's input bar.
-    with pytest.raises(OpsError, match="belongs to the dialogue plugin"):
-        ops.send("eiger", "deploy", [session("eiger-1", owner="dialogue")])
+    with pytest.raises(OpsError, match="is read-only"):
+        ops.send("eiger", "deploy", [session("eiger-1", readonly=True)])
 
 
-def test_the_owner_comes_from_the_registry(fake_agents, tmp_path):
-    name = ops.start("fakeagent", str(tmp_path), "eiger", owner="dialogue").name
-    with pytest.raises(OpsError, match="belongs to the dialogue plugin"):
+def test_a_name_is_looked_up_in_the_senders_project():
+    sessions = [
+        session("dev-a1", project="alpha", display_name="dev"),
+        session("dev-b2", project="beta", display_name="dev"),
+    ]
+    assert ops.find_session("dev", sessions, "alpha")["name"] == "dev-a1"
+    assert ops.find_session("Dev", sessions, "beta")["name"] == "dev-b2"
+    assert ops.find_session("beta/dev", sessions, "alpha")["name"] == "dev-b2"
+    with pytest.raises(OpsError, match="in gamma"):
+        ops.find_session("dev", sessions, "gamma")
+
+
+def test_read_only_comes_from_the_registry(fake_agents, tmp_path):
+    name = ops.start("fakeagent", str(tmp_path), "eiger", readonly=True, counted=False).name
+    with pytest.raises(OpsError, match="is read-only"):
         ops.send("Eiger", "deploy akimoto")
     time.sleep(0.5)
     assert "got: deploy akimoto" not in CapturePane.screen(name)

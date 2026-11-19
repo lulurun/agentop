@@ -4,8 +4,10 @@ Everything agentop writes lives under one folder, ~/.agentop:
 
     config.toml        settings you edit
     service.json       this service's name and token (mode 0600)
-    state/             what agentop rewrites as it runs: sessions.json and its
-                       lock, plugins.json, update-status.json, update.pid
+    state/             what agentop rewrites as it runs: the sessions lock,
+                       plugins.json, update-status.json, update.pid
+    projects/<name>/   each project's folder; .project/ in it holds
+                       project.json and its sessions.json
     logs/              serve.log, update.log
     plugins/<id>/      each plugin's own files: store.json from `api.store`,
                        and anything else under `api.data_dir`
@@ -33,6 +35,10 @@ def state_dir() -> Path:
 
 def logs_dir() -> Path:
     return data_dir() / "logs"
+
+
+def projects_dir() -> Path:
+    return data_dir() / "projects"
 
 
 def plugins_dir() -> Path:

@@ -153,6 +153,17 @@
             ],
             "title": "Name"
           },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
           "resume": {
             "anyOf": [
               {
@@ -393,6 +404,11 @@
           },
           "name": {
             "title": "Name",
+            "type": "string"
+          },
+          "project": {
+            "default": "default",
+            "title": "Project",
             "type": "string"
           },
           "session_id": {
@@ -778,6 +794,11 @@
             ],
             "title": "Bridge Url"
           },
+          "counted": {
+            "default": true,
+            "title": "Counted",
+            "type": "boolean"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -831,17 +852,6 @@
             ],
             "title": "Memory Mb"
           },
-          "owner": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Owner"
-          },
           "pid": {
             "anyOf": [
               {
@@ -852,6 +862,22 @@
               }
             ],
             "title": "Pid"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "readonly": {
+            "default": false,
+            "title": "Readonly",
+            "type": "boolean"
           },
           "runtime_seconds": {
             "anyOf": [

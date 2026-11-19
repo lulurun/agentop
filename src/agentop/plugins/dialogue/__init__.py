@@ -24,7 +24,7 @@ def register(api) -> None:
     from pydantic import BaseModel, Field
 
     from . import ops
-    from .model import dialogues_dir
+    from .model import is_dialogue
 
     class NewDialogue(BaseModel):
         scenario: str
@@ -39,9 +39,7 @@ def register(api) -> None:
         DialogueMeta.load also accepts the end of a name, which is handy on the
         command line, but over the API it could remove the wrong dialogue.
         """
-        known = re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]*", dialogue_id) and (
-            dialogues_dir() / dialogue_id / "meta.json"
-        ).is_file()
+        known = re.fullmatch(r"[A-Za-z0-9_-][A-Za-z0-9._-]*", dialogue_id) and is_dialogue(dialogue_id)
         if not known:
             raise HTTPException(404, "No such dialogue")
         return dialogue_id

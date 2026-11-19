@@ -47,8 +47,9 @@ async def resume_history(history_id: str, ctx: Ctx):
     item = await _past_session(ctx, history_id)
     if not item["cwd"]:
         raise HTTPException(400, "This session's directory isn't known")
-    name = history.resume_name(item)
-    return await ctx.store.create(item["tool"], item["cwd"], None, item["session_id"], display_name=name)
+    return await ctx.store.create(
+        item["tool"], item["cwd"], None, item["session_id"], display_name=item["name"], project=item["project"]
+    )
 
 
 @router.delete("/history/{history_id}")

@@ -118,9 +118,10 @@ Everything agentop writes is under `~/.agentop` (`AGENTOP_HOME` moves it):
 | `config.toml` | Settings you edit |
 | `service.json` | The service's name and service token, mode `0600` |
 | `state/clients.json` | The signed-in clients, with a hash of each one's token, mode `0600` |
-| `state/` | What agentop rewrites as it runs: `sessions.json` and its lock, `plugins.json`, `update-status.json`, `update.pid` |
+| `state/` | What agentop rewrites as it runs: the sessions lock, `plugins.json`, `update-status.json`, `update.pid` |
+| `projects/{name}/` | Each project's folder ([project.md](project.md)), with agentop's record of it in `.project/`: `project.json` and the project's `sessions.json`. `default` is the Sessions feature's; each dialogue is one too |
 | `logs/` | `serve.log` (a service started by hand), `update.log` |
-| `plugins/{id}/` | Each plugin's own files: `store.json` from `api.store`, and anything else under `api.data_dir`. The Memory archive is `plugins/memory/`, and saved dialogues are in `plugins/dialogue/dialogues/` |
+| `plugins/{id}/` | Each plugin's own files: `store.json` from `api.store`, and anything else under `api.data_dir`. The Memory archive is `plugins/memory/` |
 
 New kinds of files go in one of these folders, not at the top.
 
@@ -132,7 +133,7 @@ The folder was `~/.agent-dashboard` until 2026-11-11. The code that moved it was
 
 ### 4.2 Registry (`registry.py`)
 
-JSON file at `~/.agentop/state/sessions.json`. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A start records the agent's pid and start time, and the tool's session ID when it is known at launch; the store adds the ID and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. A session a plugin started for its own use, such as a dialogue's agent, has `owner` (the plugin's ID), recorded by `ops.start(owner=…)` before the agent starts. The session list in the app leaves such sessions out, and their terminal is always read-only (section 6); neither `agentop send` nor the input bar types into them (`ops.accepts_prompts`).
+One JSON file per project, `~/.agentop/projects/<project>/.project/sessions.json`, keyed by tmux session name, all under one lock (`state/sessions.lock`); `load()` merges them and gives each record its `project`, and a new record goes where `project` says. Tracks which sessions were started by agentop (managed) and stores user-set descriptions. A start records the agent's pid and start time, and the tool's session ID when it is known at launch; the store adds the ID and AI title once it sees them, so History (`history.py`) can list and resume it after it ends; ended records are kept for at least `history_window`. `ops.start(project=…, readonly=…, counted=…)` records the project and the starting plugin's flags before the agent starts. A `readonly` session, such as a dialogue's agent, has a terminal that is always read-only (section 6), and neither `agentop send` nor the input bar types into it (`ops.accepts_prompts`); one not `counted` takes no place in `max_active_sessions`. The file from before projects, `state/sessions.json`, is moved into `default` on first use (`sessions.json.migrated` is left), with `owner` becoming `readonly` and uncounted.
 
 A write never saves over a registry it can't read: one that isn't valid JSON is moved aside to `sessions.json.corrupt-<time>` and the write fails once, so the next starts a new registry; a read error fails the write and leaves the file. `plugins.json` and Memory's `state.json` are moved aside the same way. All of them are written with `jsonfile.write_json_atomic` (fsync, then rename).
 

@@ -39,7 +39,7 @@ export const LIMIT_MESSAGE = "Active sessions are at the limit. Close a session 
  * History, under the active sessions in Sessions' left panel: the past sessions
  * agentop started and used within the window, newest first.
  */
-export function HistorySection({ selected }: { selected?: string }) {
+export function HistorySection({ selected, project = "default" }: { selected?: string; project?: string }) {
   const history = useApp((s) => s.history);
   const loadHistory = useApp((s) => s.loadHistory);
   const openTab = useApp((s) => s.openTab);
@@ -61,11 +61,12 @@ export function HistorySection({ selected }: { selected?: string }) {
       (history.items ?? [])
         .filter(
           (i) =>
+            (i.project ?? "default") === project &&
             (!tool || i.tool === tool) &&
             (!needle || `${i.name} ${i.title ?? ""} ${i.description} ${i.cwd}`.toLowerCase().includes(needle)),
         )
         .sort((a, b) => b.last_active - a.last_active),
-    [history.items, tool, needle],
+    [history.items, tool, needle, project],
   );
 
   function open(item: HistoryItem, mode: "replace" | "tab") {

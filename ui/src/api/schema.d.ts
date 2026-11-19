@@ -509,6 +509,8 @@ export interface components {
             cwd: string;
             /** Name */
             name?: string | null;
+            /** Project */
+            project?: string | null;
             resume?: components["schemas"]["ResumeRef"] | null;
             /** Tool */
             tool: string;
@@ -605,6 +607,11 @@ export interface components {
             last_active: number;
             /** Name */
             name: string;
+            /**
+             * Project
+             * @default default
+             */
+            project: string;
             /**
              * Session Id
              * @description The agent tool's own ID for it
@@ -765,6 +772,11 @@ export interface components {
             attachable: boolean;
             /** Bridge Url */
             bridge_url?: string | null;
+            /**
+             * Counted
+             * @default true
+             */
+            counted: boolean;
             /** Created At */
             created_at: number | null;
             /** Cwd */
@@ -781,10 +793,15 @@ export interface components {
             managed: boolean;
             /** Memory Mb */
             memory_mb: number | null;
-            /** Owner */
-            owner?: string | null;
             /** Pid */
             pid: number | null;
+            /** Project */
+            project?: string | null;
+            /**
+             * Readonly
+             * @default false
+             */
+            readonly: boolean;
             /** Runtime Seconds */
             runtime_seconds: number | null;
             /** Session Id */

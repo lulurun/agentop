@@ -11,15 +11,13 @@ from __future__ import annotations
 
 import re
 import time
-from datetime import datetime, timezone
 
 from agentop import registry
 from agentop.agentclis import get_agent
 
 _PID_SUFFIX = re.compile(r"-\d+$")
-# The date and time a resumed session's name ends with (resume_name).
+# The date and time agentop used to add to a resumed session's name.
 _RESUMED_AT = re.compile(r"\s+\d{4}-\d{2}-\d{2} \d{2}:\d{2}$")
-NAME_MAX = 64
 
 
 def resolve_agent_ids(records: dict[str, dict], listed: set[str]) -> dict[str, dict]:
@@ -63,12 +61,6 @@ def base_name(name: str, record: dict) -> str:
     return _RESUMED_AT.sub("", display).strip() or display
 
 
-def resume_name(item: dict) -> str:
-    """`<its name> <when it was last used>`, the name a resumed session gets."""
-    stamp = datetime.fromtimestamp(item["last_active"], timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M")
-    return f"{item['name'][: NAME_MAX - len(stamp) - 1]} {stamp}"
-
-
 def list_history(
     records: dict[str, dict],
     listed: set[str],
@@ -88,7 +80,7 @@ def list_history(
     found: dict[tuple[str, str], dict] = {}
     for name, record in records.items():
         tool, agent_id = record.get("tool"), record.get("agent_session_id")
-        if not (record.get("managed") and tool and agent_id) or record.get("owner"):
+        if not (record.get("managed") and tool and agent_id) or record.get("readonly"):
             continue
         if name in listed or agent_id in in_use:
             continue
@@ -98,6 +90,7 @@ def list_history(
             continue
         found[key] = {
             "id": name,
+            "project": record.get("project") or "default",
             "tool": tool,
             "session_id": agent_id,
             "name": base_name(name, record),

@@ -21,11 +21,12 @@ from agentop.results import OpsError
 from agentop.tmux import Session
 
 from . import scenarios
-from .model import FINISHED, DialogueMeta, dialogues_dir
+from agentop import projects
+
+from .model import FINISHED, OWNER, DialogueMeta, dialogue_names
 from .scenarios.reader import load as load_scenario
 from .status import DialogueStatus
 
-OWNER = "dialogue"  # the plugin's sessions: hidden from the session list, watched read-only
 # The agents' windows keep this size whoever watches them. The orchestrator finds each
 # reply's BEGIN/END lines on the screen, so a window narrowed by a viewer could break them.
 WINDOW_SIZE = (80, 40)
@@ -49,6 +50,10 @@ def create_dialogue(
     resolved_scenario = scenario_file or scenarios.default_path()
     scenario = load_scenario(resolved_scenario)
     brief_name = _slug(brief_name)
+    try:
+        projects.create(f"{scenario.name}_{brief_name}_{dialogue_id}", OWNER)
+    except projects.ProjectError as exc:
+        raise OpsError(str(exc)) from exc
     meta = DialogueMeta.create(
         dialogue_id=dialogue_id,
         session_a="",
@@ -95,7 +100,15 @@ def launch_dialogue(meta: DialogueMeta) -> dict:
 
     for side, tool in (("a", meta.agent_a), ("b", meta.agent_b)):
         try:
-            name = agent_ops.start(tool, cwd, short_name=f"{short}{side}", params=dialogue_params, owner=OWNER).name
+            name = agent_ops.start(
+                tool,
+                cwd,
+                short_name=f"{short}{side}",
+                params=dialogue_params,
+                project=meta._dir().name,
+                readonly=True,
+                counted=False,
+            ).name
             error = None
         except OpsError as exc:
             name, error = getattr(exc, "name", None), str(exc)
@@ -253,11 +266,9 @@ def _summary(meta: DialogueMeta) -> dict:
 
 
 def list_dialogues() -> list[dict]:
-    if not dialogues_dir().exists():
-        return []
     result = []
-    for meta_file in sorted(dialogues_dir().glob("*/meta.json"), key=lambda p: p.stat().st_mtime, reverse=True):
-        meta = DialogueMeta.load(meta_file.parent.name)
+    for name in dialogue_names():
+        meta = DialogueMeta.load(name)
         if meta:
             _settle_interrupted(meta)
             result.append(_summary(meta))
@@ -470,11 +481,9 @@ def get_dialogue(dialogue_id: str) -> dict | None:
 
 
 def list_dialogues_by_status(status: str) -> list[DialogueMeta]:
-    if not dialogues_dir().exists():
-        return []
     result = []
-    for meta_file in dialogues_dir().glob("*/meta.json"):
-        meta = DialogueMeta.load(meta_file.parent.name)
+    for name in dialogue_names():
+        meta = DialogueMeta.load(name)
         if meta and meta.status == status:
             result.append(meta)
     return result

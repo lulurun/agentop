@@ -74,6 +74,7 @@ class HistoryItem(BaseModel):
     """A past session agentop started, still resumable."""
 
     id: str = Field(description="Its record in the registry: the agentop session it was last")
+    project: str = "default"
     tool: str
     session_id: str = Field(description="The agent tool's own ID for it")
     name: str
@@ -183,9 +184,11 @@ class SessionModel(BaseModel):
     step: Literal["creating", "launching", "waiting", "confirming"] | None
     error: str | None
     managed: bool
-    # The plugin that started the session for its own use, such as a dialogue's agents.
-    # The app leaves such sessions out of the session list, and their terminal is read-only.
-    owner: str | None = None
+    # The project a session agentop started is in; None for one started elsewhere.
+    project: str | None = None
+    # Set by the plugin that started it: a dialogue's agents are watched only, and don't count towards the limit.
+    readonly: bool = False
+    counted: bool = True
     attachable: bool
     cwd: str
     created_at: float | None
@@ -208,6 +211,7 @@ class CreateSession(BaseModel):
     cwd: str = Field(min_length=1)
     name: str | None = None
     resume: ResumeRef | None = None
+    project: str | None = None
 
 
 class PatchSession(BaseModel):

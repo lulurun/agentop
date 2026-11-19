@@ -18,7 +18,7 @@ from dataclasses import asdict
 
 import psutil
 
-from agentop import ops, registry
+from agentop import ops, projects, registry
 from agentop.results import OpsError
 from agentop.tmux import Session
 
@@ -61,7 +61,9 @@ def _base_row(session_id: str, record: dict, tmux_sessions: dict[str, int]) -> d
         "step": None,
         "error": None,
         "managed": bool(record.get("managed") or record.get("status")),
-        "owner": record.get("owner"),
+        "project": record.get("project"),
+        "readonly": bool(record.get("readonly")),
+        "counted": record.get("counted", True) is not False,
         "attachable": attached is not None,
         "cwd": record.get("cwd") or "",
         "created_at": record.get("created_at"),
@@ -133,8 +135,8 @@ def _visible(row: dict) -> dict:
 
 
 def counts_as_active(row: dict) -> bool:
-    """Whether a row takes one of the max_active places: a session agentop started, still listed, not a plugin's."""
-    return bool(row.get("managed")) and not row.get("owner")
+    """Whether a row takes one of the max_active places: a session agentop started, still listed, that its plugin counts."""
+    return bool(row.get("managed")) and row.get("counted", True)
 
 
 def _process_started(pid: int) -> float | None:
@@ -357,14 +359,37 @@ class SessionStore:
 
     # ------------------------------------------------------------------ actions
 
+    def _name_taken(self, project: str, name: str) -> bool:
+        wanted = name.lower()
+        return any(
+            row.get("project") == project and (row.get("display_name") or "").lower() == wanted
+            for row in self._sessions.values()
+        )
+
+    def _free_name(self, project: str, base: str) -> str:
+        name, n = base, 2
+        while self._name_taken(project, name):
+            suffix = f"-{n}"
+            name, n = f"{base[: 32 - len(suffix)]}{suffix}", n + 1
+        return name
+
     async def create(
-        self, tool: str, cwd: str, name: str | None = None, resume_id: str | None = None, display_name: str | None = None
+        self,
+        tool: str,
+        cwd: str,
+        name: str | None = None,
+        resume_id: str | None = None,
+        display_name: str | None = None,
+        project: str = projects.DEFAULT,
     ) -> dict:
         """Validate, record the session as `starting`, and begin starting it in the background.
 
-        `name` goes into the tmux session's name; `display_name`, shown instead
-        when given, can be any text, such as a resumed session's name and date.
+        A name is unique among the project's sessions: a given one that is taken is
+        refused, a made-up one gets a number. `display_name`, shown instead when
+        given, can be any text, such as a resumed session's own name.
         """
+        if project != projects.DEFAULT and not await asyncio.to_thread(projects.exists, project):
+            raise StoreError(404, f"No project called {project}")
         if self.at_limit():
             raise StoreError(409, f"{self.max_active} sessions are active, the most allowed. Close one to start another")
         agent = ops.get_agent(tool)
@@ -373,9 +398,12 @@ class SessionStore:
         cwd = os.path.abspath(os.path.expanduser(cwd))
         if not os.path.isdir(cwd):
             raise StoreError(400, f"Not a directory: {cwd}")
-        short_name = name or _default_name(cwd)
+        short_name = name or self._free_name(project, _default_name(cwd))
         if not ops.is_valid_short_name(short_name):
             raise StoreError(400, "Name must be 1-32 letters, digits, '-' or '_', starting with a letter or digit")
+        shown = display_name or short_name
+        if self._name_taken(project, shown):
+            raise StoreError(409, f"A session called {shown} is already in {project}. Pick another name")
         if resume_id is not None:
             # The ID is typed into a shell.
             if not _RESUME_ID.fullmatch(resume_id):
@@ -385,10 +413,11 @@ class SessionStore:
 
         session_id = agent.new_session_name(short_name)
         record = {
+            "project": project,
             "managed": True,
             "tool": tool,
             "cwd": cwd,
-            "display_name": display_name or short_name,
+            "display_name": shown,
             "created_at": time.time(),
             "status": "starting",
             "step": "creating",
@@ -426,11 +455,11 @@ class SessionStore:
         try:
             if resume_id is None:
                 await asyncio.to_thread(
-                    ops.start, tool, cwd, short_name, None, session_id, on_progress
+                    ops.start, tool, cwd, short_name, None, session_id, on_progress, self._starting[session_id]["project"]
                 )
             else:
                 await asyncio.to_thread(
-                    ops.resume_session, tool, resume_id, cwd, short_name, session_id, on_progress
+                    ops.resume_session, tool, resume_id, cwd, short_name, session_id, on_progress, self._starting[session_id]["project"]
                 )
             error = None
         except OpsError as exc:

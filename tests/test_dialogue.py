@@ -17,7 +17,7 @@ pytest.importorskip("agentop.plugins.dialogue")
 
 from websockets.sync.client import connect  # noqa: E402
 
-from agentop import paths  # noqa: E402
+from agentop import paths, projects  # noqa: E402
 from agentop.tmux import CapturePane, Session  # noqa: E402
 from tests.test_service_live import run_service  # noqa: E402
 
@@ -31,8 +31,9 @@ def service(fake_agents):
 
 
 def seed_dialogue(name="debate_topic_abc12345", status="completed", session_a="diaabc12a-1", session_b="diaabc12b-1"):
-    directory = paths.plugins_dir() / "dialogue" / "dialogues" / name
+    directory = projects.folder(name)
     directory.mkdir(parents=True)
+    projects.adopt(name, "dialogue")
     (directory / "meta.json").write_text(
         json.dumps(
             {
@@ -207,7 +208,7 @@ def test_a_new_dialogue_saves_its_brief_and_starts_hidden_read_only_agents(servi
     dialogue_id = response.json()["id"]
     assert dialogue_id.startswith("pm-sde_ship-the-widget_")
 
-    folder = paths.plugins_dir() / "dialogue" / "dialogues" / dialogue_id
+    folder = projects.folder(dialogue_id)
     assert (folder / "brief.md").read_text() == "# Ship the Widget!\n\nBuild {it} well.\n"
     assert (folder / "scenario.toml").is_file()
 
@@ -220,9 +221,9 @@ def test_a_new_dialogue_saves_its_brief_and_starts_hidden_read_only_agents(servi
         time.sleep(0.1)
     assert detail["title"] == "Ship the Widget!" and detail["max_turns"] == 7
 
-    # Both agents are the plugin's: listed with their owner, and their terminal can't be typed into.
+    # Both agents are in the dialogue's project, uncounted, and their terminal can't be typed into.
     session = service.wait_for(detail["session_a"], "running")
-    assert session["owner"] == "dialogue"
+    assert session["project"] == dialogue_id and session["readonly"] and not session["counted"]
     from tests.test_service_live import read_until
 
     # Watching never resizes the window: the orchestrator reads the agents' replies off it.
@@ -244,7 +245,7 @@ def test_an_ordinary_terminal_can_be_opened_read_only(service):
 
     created = service.create()
     service.wait_for(created["id"], "running")
-    assert service.http.get(f"/sessions/{created['id']}").json()["owner"] is None
+    assert service.http.get(f"/sessions/{created['id']}").json()["readonly"] is False
     ticket = service.ticket("terminal", created["id"])
     url = f"ws://127.0.0.1:{service.port}/api/v2/ws/sessions/{created['id']}/terminal?ticket={ticket}&readonly=true"
     with connect(url) as ws:
@@ -317,3 +318,32 @@ def test_turns_of_an_older_dialogue_come_from_its_log(service):
         (1, "a", "continue", "first\n[not a log line]"),
         (2, "b", "complete", "end"),
     ]
+
+
+def test_dialogues_from_before_projects_move_into_projects_of_their_own(service):
+    from agentop import registry
+
+    old = paths.plugins_dir() / "dialogue" / "dialogues" / "debate_old_abc12345"
+    old.mkdir(parents=True)
+    (old / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "abc12345",
+                "session_a": "diaabc1a-x",
+                "session_b": "",
+                "agent_a": "claude",
+                "agent_b": "codex",
+                "max_turns": 10,
+                "start_time": "2026-11-01T00:00:00+00:00",
+                "status": "completed",
+                "scenario_name": "debate",
+                "brief_name": "old",
+            }
+        )
+    )
+    registry.upsert_session("diaabc1a-x", {"managed": True, "readonly": True})
+
+    assert [d["id"] for d in service.http.get(BASE).json()] == ["debate_old_abc12345"]
+    assert projects.get("debate_old_abc12345")["owner"] == "dialogue"
+    assert not old.parent.exists()
+    assert registry.load()["sessions"]["diaabc1a-x"]["project"] == "debate_old_abc12345"

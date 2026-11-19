@@ -90,7 +90,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | E10 | Rename a session and edit its description in the right panel | Saved, and shown in the list | Not run |
 | E11 | Right panel for a running session | Details, token usage, changed files and all files are correct; for Claude Code, a third tab lists the project's memory notes and opens them | Not run |
 | E12 | Copy the tmux attach command from the right panel and run it in a real terminal on the devhost | Attaches to the same session | Not run |
-| E13 | A session started outside agentop (in a plain terminal) | Listed under "Started elsewhere"; read-only where it can't be attached | Not run |
+| E13 | A session started outside agentop (in a plain terminal) | Not listed in Sessions (Started elsewhere was removed with projects) | Not run |
 
 ## F. History, dialogues, settings
 

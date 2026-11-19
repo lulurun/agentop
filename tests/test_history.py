@@ -46,7 +46,7 @@ def test_only_sessions_used_within_the_window_newest_first(used):
 def test_not_history_unless_agentop_started_it_and_it_has_ended(used):
     records = {
         "external": {"tool": "fakeagent", "agent_session_id": "E"},
-        "dialogue-1": record(agent_session_id="D", owner="dialogue"),
+        "dialogue-1": record(agent_session_id="D", readonly=True),
         "no-id-2": record(),
         "listed-3": record(agent_session_id="L"),
         "running-4": record(agent_session_id="R"),
@@ -68,12 +68,6 @@ def test_a_session_resumed_twice_is_listed_once_as_its_latest(used):
     items = history.list_history(records, set(), set(), 30 * DAY, now=NOW)
     assert ids(items) == ["second-2"]
     assert items[0]["name"] == "fix"
-
-
-def test_resume_name_is_the_name_and_when_it_was_last_used():
-    last = time.mktime((2026, 11, 3, 9, 5, 0, 0, 0, -1))
-    assert history.resume_name({"name": "fix-auth", "last_active": last}) == "fix-auth 2026-11-03 09:05"
-    assert len(history.resume_name({"name": "x" * 80, "last_active": last})) == history.NAME_MAX
 
 
 def test_the_agent_session_id_is_recorded_for_managed_sessions_only():
@@ -127,7 +121,7 @@ def test_no_session_starts_past_the_limit(fake_agents, monkeypatch):
         assert (body["active"], body["max_active"]) == (1, 1)
 
 
-def test_resume_from_history_names_it_and_takes_it_out_of_history(fake_agents, used):
+def test_resume_from_history_keeps_its_name_and_takes_it_out_of_history(fake_agents, used):
     used["AGENT-1"] = time.time() - 3600
     registry.upsert_session(
         "demo-1", record(agent_session_id="AGENT-1", display_name="demo", ended_at=time.time() - 3000)
@@ -143,10 +137,13 @@ def test_resume_from_history_names_it_and_takes_it_out_of_history(fake_agents, u
         response = service.http.post("/history/demo-1/resume")
         assert response.status_code == 202, response.text
         session = response.json()
-        assert session["display_name"] == history.resume_name(body["items"][0])
+        assert session["display_name"] == "demo" and session["project"] == "default"
         service.wait_for(session["id"], "running")
-        assert service.http.get(f"/sessions/{session['id']}").json()["display_name"].startswith("demo 20")
+        assert service.http.get(f"/sessions/{session['id']}").json()["display_name"] == "demo"
         assert service.http.get("/history").json()["items"] == []
+        # The name is the running session's now, so a new session can't take it.
+        taken = service.http.post("/sessions", json={"tool": "fakeagent", "cwd": "/tmp", "name": "demo"})
+        assert taken.status_code == 409
 
         assert service.http.post("/history/nope/resume").status_code == 404
 

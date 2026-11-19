@@ -77,7 +77,8 @@ const SessionRow = memo(function SessionRow({ session, selected }: { session: Se
   );
 });
 
-export const Sidebar = memo(function Sidebar() {
+/** The left panel of a project's sessions: Sessions shows the default project's. */
+export const Sidebar = memo(function Sidebar({ project = "default" }: { project?: string }) {
   const sessions = useApp((s) => s.sessions);
   const selected = useApp((s) => s.selected[s.activeId]);
   const setDialog = useApp((s) => s.setDialog);
@@ -90,12 +91,13 @@ export const Sidebar = memo(function Sidebar() {
   const [filter, setFilter] = useState("");
 
   const needle = filter.trim().toLowerCase();
-  // A plugin's own sessions, such as a dialogue's agents, are shown in its feature instead.
-  const rows = sortedSessions(sessions).filter(
-    (s) => !s.owner && (!needle || `${sessionTitle(s)} ${s.tool ?? ""} ${s.cwd}`.toLowerCase().includes(needle)),
+  // Other projects' sessions, such as a dialogue's agents, are shown in their own feature.
+  const managed = sortedSessions(sessions).filter(
+    (s) =>
+      s.managed &&
+      (s.project ?? "default") === project &&
+      (!needle || `${sessionTitle(s)} ${s.tool ?? ""} ${s.cwd}`.toLowerCase().includes(needle)),
   );
-  const managed = rows.filter((s) => s.managed);
-  const external = rows.filter((s) => !s.managed);
   const active = activeCount(sessions);
   // The selected session is only marked while its tab, not a past session's, has focus.
   const current = pastOpen ? undefined : selected;
@@ -140,16 +142,7 @@ export const Sidebar = memo(function Sidebar() {
               )}
             </nav>
           </Section>
-          {external.length > 0 && (
-            <Section id="elsewhere" title="Started elsewhere" extra={<span className="session-count">{external.length}</span>}>
-              <nav className="session-list" aria-label="Started elsewhere">
-                {external.map((s) => (
-                  <SessionRow key={s.id} session={s} selected={s.id === current} />
-                ))}
-              </nav>
-            </Section>
-          )}
-          <HistorySection selected={pastOpen} />
+          <HistorySection selected={pastOpen} project={project} />
         </div>
   );
 });

@@ -29,7 +29,7 @@ async def list_sessions(ctx: Ctx):
 @router.post("/sessions", response_model=SessionModel, status_code=202)
 async def create_session(body: CreateSession, ctx: Ctx):
     resume_id = body.resume.session_id if body.resume else None
-    return await ctx.store.create(body.tool, body.cwd, body.name, resume_id)
+    return await ctx.store.create(body.tool, body.cwd, body.name, resume_id, project=body.project or "default")
 
 
 @router.get("/sessions/{session_id}", response_model=SessionModel)
