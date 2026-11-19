@@ -24,7 +24,7 @@ The app's layout is fixed. This page names each part of it, says what goes where
 | **Left panel toggle** | Shows or hides the left panel | `App.tsx` |
 | **Connection manager** | Which service the app is connected to: switch, add, Status of each | `ServiceSwitcher.tsx` |
 | **Feature nav** | One button per feature, the current one highlighted | `FeatureNav.tsx` |
-| **Feature** | A top-level part of the app: Sessions (core), Dialogues and Memory (plugins), more from plugins. Each has its own left panel, right panel, background and tabs | `features.ts` |
+| **Feature** | A top-level part of the app: Sessions (core, the `default` project), Projects, Dialogues and Memory (plugins), more from plugins. Each has its own left panel, right panel, background and tabs | `features.ts` |
 | **Settings button** | Opens Settings, the app's own settings | `App.tsx` |
 | **Right panel toggle** | Shows or hides the right panel | `App.tsx` |
 | **Body** | Everything below the header: left panel, middle panel, right panel | |
@@ -44,6 +44,7 @@ The app's layout is fixed. This page names each part of it, says what goes where
 - An action in the **header** (Status in the connection manager) opens in the left area.
 - An action inside a **buffer** (a link in a Markdown file) opens in that buffer's area.
 - If the target area isn't there, it is made, and the middle panel shows it beside the other area if there is one.
+- A session's tab opens in Sessions when it is in the `default` project, and in the feature shown when it is in another project ([project.md](project.md)); each feature has its own selected session, which its right panel shows.
 - A tab already open in either area is shown where it is instead of opening twice.
 - By default a tab takes the place of the target area's tab of the same kind (a session replaces the session shown); Ctrl or Cmd-click or the middle button opens a new tab.
 - When an area's last tab closes, the area goes; when both have gone, the background shows.

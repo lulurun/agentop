@@ -142,6 +142,38 @@ class PluginAPI:
         """A snapshot of the session list. Changing it changes nothing."""
         return self._host.store.list()
 
+    async def create_project(self, name: str, welcome: str = "", instructions: str = "") -> dict:
+        """Make a project the plugin owns and start its Coordinator. Raises projects.ProjectError.
+
+        `welcome` ends "You can ask me to …" in the Coordinator's first message;
+        `instructions` is its part of the Coordinator's AGENTS.md.
+        """
+        from agentop import agentclis, projects
+
+        found = await asyncio.to_thread(projects.create, name, self.id, welcome, instructions)
+        tools = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)
+        await self._host.store.ensure_coordinator(name, [t.name for t in tools])
+        return found
+
+    async def remove_project(self, name: str, delete_folder: bool = False) -> None:
+        """Stop a project's sessions and forget it. Only the plugin's own. Raises projects.ProjectError."""
+        from agentop import projects
+
+        found = await asyncio.to_thread(projects.get, name)
+        if found is None or found.get("owner") != self.id:
+            raise projects.ProjectError(f"No project called {name} of {self.id}'s")
+        for row in self._host.store.list():
+            if row.get("project") == name and row.get("managed") and row["status"] != "starting":
+                await self._host.store.stop(row["id"])
+        await asyncio.to_thread(projects.remove, name, delete_folder)
+
+    async def start_coordinator(self, name: str) -> dict | None:
+        """The project's Coordinator: running, or resumed or started now."""
+        from agentop import agentclis
+
+        tools = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)
+        return await self._host.store.ensure_coordinator(name, [t.name for t in tools])
+
     def sign_in(self, name: str) -> dict:
         """Sign a new client in, as the service token does, and return its token.
 

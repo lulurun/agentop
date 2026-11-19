@@ -23,7 +23,7 @@ from agentop.tmux import Session
 from . import scenarios
 from agentop import projects
 
-from .model import FINISHED, OWNER, DialogueMeta, dialogue_names
+from .model import FINISHED, OWNER, DialogueMeta, dialogue_names, end_note, tell_coordinator
 from .scenarios.reader import load as load_scenario
 from .status import DialogueStatus
 
@@ -50,8 +50,10 @@ def create_dialogue(
     resolved_scenario = scenario_file or scenarios.default_path()
     scenario = load_scenario(resolved_scenario)
     brief_name = _slug(brief_name)
+    from .texts import INSTRUCTIONS, WELCOME
+
     try:
-        projects.create(f"{scenario.name}_{brief_name}_{dialogue_id}", OWNER)
+        projects.create(f"{scenario.name}_{brief_name}_{dialogue_id}", OWNER, WELCOME, INSTRUCTIONS)
     except projects.ProjectError as exc:
         raise OpsError(str(exc)) from exc
     meta = DialogueMeta.create(
@@ -535,6 +537,7 @@ def stop_dialogue(dialogue_id: str) -> dict:
         except ProcessLookupError:
             pass
     meta.update({"status": "stopped", "pid": None})
+    tell_coordinator(meta._dir().name, end_note(meta))
     # The orchestrator process was just killed, so it cannot run its own
     # session cleanup — close both tmux sessions here instead. Everything
     # said so far is already in dialogue.log, so the sessions are safe to drop.

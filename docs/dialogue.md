@@ -4,9 +4,9 @@
 
 The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dialogue/`) orchestrates two agent CLI processes collaborating on a shared task. The orchestrator relays messages between them, enforcing a structured protocol so it can extract and forward only the agent's intended output.
 
-Dialogue data is persisted to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`.
+Dialogue data is persisted to `~/.agentop/projects/<scenario>_<brief>_<id>/`.
 
-Planned: each dialogue becomes a project, with a Coordinator to design, start, stop and collect it, and its folder moves to `~/.agentop/projects/` ([project.md](project.md#73-dialogues-plugin-dialogue)).
+Each dialogue is a project (`~/.agentop/projects/<scenario>_<brief>_<id>/`, owned by `dialogue`; older ones in `plugins/dialogue/dialogues/` are moved in on first use), with a Coordinator to design, start, stop and sum it up, started with the dialogue. Its agents are read-only and don't count towards the session limit. When the dialogue ends, the Coordinator is sent a note to read the turns and deliverables and write `summary.md` ([project.md](project.md#73-dialogues-plugin-dialogue)).
 
 The app has a Dialogues feature (section 8): a wizard starts one, and each one's two agents are shown side by side, live while it runs and as transcripts once it ends. Turning the plugin off in Status → Plugins (Status on the service switcher) stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
 
@@ -134,7 +134,7 @@ The four scenarios at the top of `scenarios/` have descriptions; the ones under 
 | `{name_a}` | Role name for agent A |
 | `{name_b}` | Role name for agent B |
 | `{brief}` | Contents of the `--brief` file |
-| `{progress_file}` | Path to `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/progress.md` |
+| `{progress_file}` | Path to `~/.agentop/projects/<scenario>_<brief>_<id>/progress.md` |
 | `{topic}` | Alias for `{brief}` (legacy compat) |
 
 ### 4.3 Built-in scenarios
@@ -169,7 +169,7 @@ Older or domain-specific ones, in `scenarios/shelf/`:
 
 ## 5 Persisted files
 
-Each dialogue gets a directory at `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/` (the folder is named from the scenario name and brief filename; `<id>` is an 8-char unique token):
+Each dialogue gets a directory at `~/.agentop/projects/<scenario>_<brief>_<id>/` (the folder is named from the scenario name and brief filename; `<id>` is an 8-char unique token):
 
 | File | Contents |
 |------|----------|

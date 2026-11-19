@@ -91,3 +91,27 @@ def test_the_coordinator_starts_once_with_its_welcome_and_is_resumed_after(fake_
         again = service.http.post("/projects/default/coordinator").json()
         assert again["id"] != row["id"] and again["display_name"] == "Coordinator"
         assert registry.load()["sessions"][again["id"]]["agent_session_id"] == "COORD-1"
+
+
+def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
+    with run_service() as service:
+        base = "/plugins/projects/projects"
+        assert service.http.post(base, json={"name": "Bad Name"}).status_code == 400
+        made = service.http.post(base, json={"name": "alpha"})
+        assert made.status_code == 201, made.text
+        assert [p["name"] for p in service.http.get(base).json()] == ["alpha"]
+        coordinator_row = next(
+            r for r in service.http.get("/sessions").json() if r["project"] == "alpha" and r["display_name"] == "Coordinator"
+        )
+        service.wait_for(coordinator_row["id"], "running")
+        assert "Run the alpha" not in (projects.folder("alpha") / "AGENTS.md").read_text()
+        assert "You run this project" in (projects.folder("alpha") / "AGENTS.md").read_text()
+        assert service.http.post(f"{base}/alpha/coordinator").json()["id"] == coordinator_row["id"]
+        # Not its own: the default project, and a project that isn't there.
+        assert service.http.delete(f"{base}/default").status_code == 404
+        assert service.http.post(f"{base}/nope/coordinator").status_code == 404
+
+        assert service.http.delete(f"{base}/alpha").status_code == 200
+        assert not Session.has(coordinator_row["id"])
+        assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
+        assert service.http.get(base).json() == []

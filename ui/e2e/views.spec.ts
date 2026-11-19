@@ -24,8 +24,10 @@ async function open(page: Page, name = "box") {
 }
 
 function seedDialogue(s: Service, name: string, session = "diaabcdea-1", status = "completed") {
-  const directory = join(s.root, "state/plugins/dialogue/dialogues", name);
-  mkdirSync(directory, { recursive: true });
+  // Each dialogue is a project of the plugin's.
+  const directory = join(s.root, "state/projects", name);
+  mkdirSync(join(directory, ".project"), { recursive: true });
+  writeFileSync(join(directory, ".project", "project.json"), JSON.stringify({ owner: "dialogue", created_at: 0 }));
   writeFileSync(
     join(directory, "meta.json"),
     JSON.stringify({
@@ -81,7 +83,7 @@ function seedHistory(s: Service, past: { id: string; name: string; tool: "claude
 
 const pastRows = (page: Page) => page.getByRole("navigation", { name: "Past sessions" }).locator(".session-name");
 
-test("history is under the active sessions: filtered, opened, deleted, and resumed with its date", async ({ page }) => {
+test("history is under the active sessions: filtered, opened, deleted, and resumed under its name", async ({ page }) => {
   const s = await new Service("box").start();
   cleanup.push(() => s.dispose());
   seedHistory(s, [
@@ -135,9 +137,9 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   await history.getByRole("button", { name: /fix-login/ }).click();
   await view.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("terminal").locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
-  // Named for when it was last used, and no longer in History.
-  await expect(page.getByRole("main").getByRole("tab")).toHaveText([/^fix-login \d{4}-\d{2}-\d{2} \d{2}:\d{2}$/]);
-  await expect(page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(/^fix-login 20/)).toBeVisible();
+  // Under its own name, and no longer in History.
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["fix-login"]);
+  await expect(page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(/^fix-login$/)).toBeVisible();
   await expect(pastRows(page)).toHaveText(["docs"]);
   await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("1/20");
 });
@@ -269,8 +271,8 @@ test("the New dialogue wizard asks for every field, then starts two agents watch
   await expect(left.getByTestId("terminal")).toContainText("fake agent ready");
   await expect(page.getByRole("region", { name: "Right area" }).getByTestId("terminal")).toContainText("fake agent ready");
 
-  const brief = join(s.root, "state/plugins/dialogue/dialogues");
-  const folder = readdirSync(brief)[0];
+  const brief = join(s.root, "state/projects");
+  const folder = readdirSync(brief).find((name) => name !== "default")!;
   expect(readFileSync(join(brief, folder, "brief.md"), "utf8")).toBe("# Ship the widget\n\nBuild the widget, with tests.\n");
 
   // Both agents run, but the session list leaves them out. (It may list agents running elsewhere on this machine.)
@@ -301,7 +303,7 @@ test("a session in a dialogue is labelled in the list", async ({ page }) => {
 test("turning Dialogues off while one runs asks first, then stops it", async ({ page }) => {
   const s = await open(page);
   seedDialogue(s, "debate_topic_running1", "diaabcdea-1", "running");
-  const meta = join(s.root, "state/plugins/dialogue/dialogues/debate_topic_running1/meta.json");
+  const meta = join(s.root, "state/projects/debate_topic_running1/meta.json");
   const views = features(page);
   await expect(views.getByRole("button", { name: "Dialogues" })).toBeVisible();
 
@@ -456,4 +458,30 @@ test("the Memory feature searches past conversations, opens one at the hit, and 
   await expect(panel.getByRole("status")).toContainText("“sushi”, “ramen”");
   const noted = readFileSync(join(s.root, "state/plugins/memory/recall.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
   expect(noted.at(-1)).toMatchObject({ type: "miss", kind: "nothing", looked_for: "the ramen shop", tried: ["sushi", "ramen"] });
+});
+
+test("a project is made with a name, opens its Coordinator, and keeps its sessions out of Sessions", async ({ page }) => {
+  const s = await open(page);
+  await features(page).getByRole("button", { name: "Projects" }).click();
+  const left = page.getByRole("complementary", { name: "Left panel" });
+  await left.getByLabel("New project's name").fill("alpha");
+  await left.getByRole("button", { name: "New project" }).click();
+
+  // Its Coordinator works in the project folder, with its instructions there, and opens in Projects.
+  await expect(left.getByLabel("Project", { exact: true })).toHaveValue("alpha");
+  const sessions = left.getByRole("navigation", { name: "Sessions", exact: true });
+  await expect(sessions.getByText("Coordinator")).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId("terminal")).toContainText("fake agent ready", { timeout: 15_000 });
+  expect(existsSync(join(s.root, "state/projects/alpha/AGENTS.md"))).toBe(true);
+  expect(readFileSync(join(s.root, "state/projects/alpha/CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
+
+  // Sessions shows the default project's only.
+  await features(page).getByRole("button", { name: "Sessions" }).click();
+  await expect(page.getByRole("navigation", { name: "Sessions", exact: true }).getByText("Coordinator")).toHaveCount(0);
+
+  // Removing it stops its sessions and keeps its folder.
+  await features(page).getByRole("button", { name: "Projects" }).click();
+  await left.getByRole("button", { name: "Remove" }).click();
+  await expect(left.getByText("No projects yet.")).toBeVisible();
+  expect(existsSync(join(s.root, "state/projects/alpha/AGENTS.md"))).toBe(true);
 });

@@ -1,5 +1,5 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { useApp } from "../../store";
+import { selectedId, useApp } from "../../store";
 import type { PluginClient, PluginContext, UiPlugin } from "../types";
 
 /** {session ID: when it started waiting, epoch seconds}. */
@@ -63,7 +63,7 @@ function waitingSet(plugin: PluginContext): WaitingSet {
 function WaitingBadge({ session, plugin }: { session: { id: string }; plugin: PluginContext }) {
   const set = waitingSet(plugin);
   const waiting = useSyncExternalStore(set.subscribe, set.snapshot);
-  const open = useApp((s) => s.selected[s.activeId] === session.id);
+  const open = useApp((s) => selectedId(s) === session.id);
   const since = waiting[session.id];
   if (since === undefined || open) return null;
   return (

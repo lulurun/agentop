@@ -89,6 +89,15 @@ def start(args) -> None:
     )
     if not result.get("ok"):
         _fail(result["error"])
+    from pathlib import Path
+
+    from agentop import agentclis, coordinator, projects
+    from agentop.results import OpsError
+
+    try:
+        coordinator.start_now(projects.get(Path(result["cwd"]).name), [a.name for a in agentclis.installed(agentclis.AGENTS)])
+    except OpsError as exc:
+        print(f"Its Coordinator didn't start: {exc}", file=sys.stderr)
     did = result["id"]
     sa, sb = result["session_a"], result["session_b"]
     watch_cmd = (

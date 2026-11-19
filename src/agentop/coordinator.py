@@ -89,3 +89,16 @@ def member_header(project: dict, name: str) -> str:
         f"and other sessions read them there. The project's Coordinator is the session called `{projects.COORDINATOR}`; "
         f'reach it with `agentop send {projects.COORDINATOR} "…"`.'
     )
+
+
+def start_now(project: dict, available: list[str]) -> str | None:
+    """Start a new Coordinator without the service, as `agentop project create` does. Returns its tmux name."""
+    from agentop import ops
+
+    tool = pick_tool(available)
+    if tool is None:
+        return None
+    write_instructions(project)
+    name = ops.start(tool, project["folder"], projects.COORDINATOR, project=project["name"]).name
+    ops.first_prompt(name, welcome_prompt(project), project["name"], projects.COORDINATOR)
+    return name

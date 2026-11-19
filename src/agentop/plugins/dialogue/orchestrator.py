@@ -8,7 +8,7 @@ import threading
 
 from agentop.actor import Actor
 
-from .model import Dialogue
+from .model import Dialogue, end_note, tell_coordinator
 from .parser import ResponseParser
 from .status import DialogueStatus, ReceiveStatus
 
@@ -114,6 +114,8 @@ class DialogueOrchestrator(threading.Thread):
 
         if self.dialogue.status in (DialogueStatus.COMPLETED, DialogueStatus.STOPPED):
             self._close_sessions()
+        if not self._stop.is_set():
+            tell_coordinator(self.dialogue.meta._dir().name, end_note(self.dialogue.meta))
 
     def _close_sessions(self) -> None:
         """Send /exit and kill the tmux session for each actor. Safe to call once everything is logged."""

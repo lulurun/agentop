@@ -49,6 +49,9 @@ export class Service {
       writeFileSync(join(bin, file), body);
       chmodSync(join(bin, file), 0o755);
     }
+    // A Coordinator would be one more session in every test; the test that wants one turns it on.
+    mkdirSync(join(this.root, "state"));
+    writeFileSync(join(this.root, "state", "config.toml"), "start_coordinator = false\n");
     this.tmux("-f", "/dev/null", "new-session", "-d", "-s", "keeper");
     this.tmux("set-option", "-g", "default-shell", "/bin/sh");
   }

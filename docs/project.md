@@ -1,6 +1,6 @@
 # Projects
 
-Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only, the Coordinator (started for `default` by `agentop serve`, `POST /api/v2/projects/{name}/coordinator`). Not yet: the Projects plugin, a dialogue's Coordinator. It replaces the "Project groups" idea in the backlog.
+Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only, the Coordinator (started for `default` by `agentop serve`, `POST /api/v2/projects/{name}/coordinator`). the Projects plugin (feature, `/api/v2/plugins/projects/`, `agentop project create | remove`). A dialogue's Coordinator: started with the dialogue (or, for an older one, by Open the Coordinator in its right panel), told when it ends. It replaces the "Project groups" idea in the backlog.
 
 ## 1 What it is
 
@@ -100,7 +100,7 @@ The `default` project, as Sessions is today, without Started elsewhere and with 
 A dialogue is a project with three sessions: Coordinator, and agents A and B (`readonly`, not `counted`, kept at 80×40). Its folder is the project folder, which A and B already share as their working directory, so `brief.md`, `meta.json`, `turns.jsonl` and `deliverables/` stay where they are.
 
 - **Left panel**: New dialogue instead of New project, then In progress and Finished as now. Picking a dialogue opens A and B side by side, as now.
-- **New dialogue** creates the project and its Coordinator, and opens the wizard. The wizard is still the quick way; the Coordinator can do the same with `agentop dialogue start --project <name> …`.
+- **New dialogue** (the wizard, or `agentop dialogue start`) creates the project and starts its agents and its Coordinator. To design a new dialogue, the Coordinator writes a brief and runs `agentop dialogue start`, which makes another dialogue with its own folder and Coordinator.
 - When the dialogue ends, the orchestrator sends the Coordinator a note: done, why, and where the turns and deliverables are.
 - The Coordinator can be opened from the right panel. It can be stopped, and is resumed when the dialogue is opened again, so old dialogues cost nothing.
 

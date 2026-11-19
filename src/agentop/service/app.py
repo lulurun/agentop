@@ -69,7 +69,7 @@ def create_app(
         await store.startup()
         # After the first scan, so plugins don't hear every existing session as new.
         await plugins.startup()
-        if available:
+        if available and settings.start_coordinator:
             # Only `agentop serve` knows the installed tools; a test's app starts no Coordinator.
             await asyncio.to_thread(projects.ensure_default)
             try:

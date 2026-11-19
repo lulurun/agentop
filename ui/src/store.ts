@@ -43,7 +43,7 @@ export function activeCount(sessions: Record<string, Session>): number {
   return Object.values(sessions).filter((s) => s.managed && s.counted !== false).length;
 }
 
-interface AppState {
+export interface AppState {
   connections: Connection[];
   activeId: string;
   /** The feature shown, per connection. */
@@ -66,6 +66,8 @@ interface AppState {
   folded: string[];
   switcherOpen: boolean;
   dialog: Dialog;
+  /** The project New session starts its session in. */
+  dialogProject: string;
   error: string | null;
 
   init(): Promise<void>;
@@ -87,7 +89,7 @@ interface AppState {
   removeConnection(id: string): void;
   /** Show a session in Sessions, by default in the left area in place of the session shown. */
   select(sessionId: string, mode?: OpenMode, area?: Area): void;
-  /** Open a tab in an area (docs/ui.md, Where tabs open) of the feature shown; a session's tab always opens in Sessions. */
+  /** Open a tab in an area (docs/ui.md, Where tabs open) of the feature shown; a default-project session's tab always opens in Sessions. */
   openTab(content: TabContent, area: Area, mode?: OpenMode): void;
   /** Close the tabs of a feature whose content matches. */
   closeTabs(feature: FeatureId, matches: (content: TabContent) => boolean): void;
@@ -109,7 +111,7 @@ interface AppState {
   toggleRight(): void;
   setFolded(section: string, folded: boolean): void;
   setSwitcherOpen(open: boolean): void;
-  setDialog(dialog: Dialog): void;
+  setDialog(dialog: Dialog, project?: string): void;
   /** Open a service's Status tab in the feature shown, switching to that service first. */
   openStatus(id: string): void;
   setError(error: string | null): void;
@@ -184,6 +186,25 @@ export function currentFeature(state: Pick<AppState, "features" | "activeId" | "
   const wanted = saved && isKnownFeature(saved) ? saved : "sessions";
   if (!pluginOf(wanted) || !state.pluginsLoaded) return wanted;
   return featuresFor(state.plugins).some((w) => w.id === wanted) ? wanted : "sessions";
+}
+
+/** Where `selected` keeps a feature's selected session: Sessions' under the connection's ID, as before projects. */
+export function selectionKey(activeId: string, feature: FeatureId): string {
+  return feature === "sessions" ? activeId : `${activeId}|${feature}`;
+}
+
+/** The session the feature shown has selected: the one its right panel shows. */
+export function selectedId(state: Pick<AppState, "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded">): string | undefined {
+  return state.selected[selectionKey(state.activeId, currentFeature(state))];
+}
+
+/**
+ * The feature a project's session opens in: Sessions for the default project's,
+ * and the feature shown for another project's, which only its own feature lists.
+ */
+export function featureForProject(state: Pick<AppState, "features" | "activeId" | "plugins" | "pluginsLoaded">, project?: string | null): FeatureId {
+  if (!project || project === "default") return "sessions";
+  return currentFeature(state);
 }
 
 const EMPTY_LAYOUT = tabs.emptyLayout();
@@ -484,7 +505,7 @@ export const useApp = create<AppState>((set, get) => {
 
   /**
    * Change one feature's tabs on the active connection, by default the one shown.
-   * In Sessions, the selected session follows the focused tab.
+   * The feature's selected session follows its focused tab.
    */
   function updateLayout(change: (layout: Layout) => Layout, feature: FeatureId = currentFeature(get())) {
     const state = get();
@@ -493,12 +514,11 @@ export const useApp = create<AppState>((set, get) => {
     if (layout === before) return;
     const layouts = { ...state.layouts, [state.activeId]: { ...state.layouts[state.activeId], [feature]: layout } };
     const selected = { ...state.selected };
-    if (feature === "sessions") {
-      const focused = tabs.focusedTab(layout);
-      const session = focused && tabs.sessionOf(focused.content);
-      if (session) selected[state.activeId] = session;
-      else if (!focused) delete selected[state.activeId];
-    }
+    const key = selectionKey(state.activeId, feature);
+    const focused = tabs.focusedTab(layout);
+    const session = focused && tabs.sessionOf(focused.content);
+    if (session) selected[key] = session;
+    else if (!focused) delete selected[key];
     saveLayouts(layouts, selected);
   }
 
@@ -593,6 +613,7 @@ export const useApp = create<AppState>((set, get) => {
     folded: loadFolded(),
     switcherOpen: false,
     dialog: null,
+    dialogProject: "default",
     error: null,
 
     async init() {
@@ -689,12 +710,13 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     select(sessionId, mode = "replace", area = "left") {
-      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, area, mode), "sessions");
-      showFeature("sessions");
+      const feature = featureForProject(get(), get().sessions[sessionId]?.project);
+      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, area, mode), feature);
+      showFeature(feature);
     },
 
     openTab(content, area, mode = "replace") {
-      const feature = content.kind === "session" ? "sessions" : currentFeature(get());
+      const feature = content.kind === "session" ? featureForProject(get(), get().sessions[content.sessionId]?.project) : currentFeature(get());
       updateLayout((layout) => tabs.open(layout, content, area, mode), feature);
       showFeature(feature);
     },
@@ -718,7 +740,7 @@ export const useApp = create<AppState>((set, get) => {
       if (!created) return;
       const past = (content: TabContent) => content.kind === "past" && content.historyId === item.id;
       const session: TabContent = { kind: "session", sessionId: created.id };
-      updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), "sessions");
+      updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), featureForProject(get(), item.project));
       showFeature("sessions");
       void get().loadHistory();
     },
@@ -753,7 +775,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setSwitcherOpen: (switcherOpen) => set({ switcherOpen }),
-    setDialog: (dialog) => set({ dialog, switcherOpen: false }),
+    setDialog: (dialog, project = "default") => set({ dialog, dialogProject: project, switcherOpen: false }),
     openStatus(id) {
       set({ switcherOpen: false, dialog: null });
       if (id !== get().activeId) get().switchTo(id);

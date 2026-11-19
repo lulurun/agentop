@@ -72,7 +72,25 @@ def register(api) -> None:
         # Starting both agents takes as long as they take to boot: the request returns now, and the
         # dialogue shows as `starting` until its orchestrator runs.
         threading.Thread(target=launch, name=f"dialogue-launch-{meta.id}", daemon=True).start()
+        try:
+            await api.start_coordinator(meta._dir().name)
+        except Exception:
+            api.log.exception("Dialogue %s: its Coordinator didn't start", meta.id)
         return {"id": meta._dir().name}
+
+    @api.router.post("/dialogues/{dialogue_id}/coordinator", status_code=202)
+    async def dialogue_coordinator(dialogue_id: str):
+        """The dialogue's Coordinator: running, resumed, or started now (an older dialogue gets one when first opened)."""
+        from agentop import projects
+
+        from .texts import INSTRUCTIONS, WELCOME
+
+        name = exact_name(dialogue_id)
+        await asyncio.to_thread(projects.fill_in, name, WELCOME, INSTRUCTIONS)
+        row = await api.start_coordinator(name)
+        if row is None:
+            raise HTTPException(409, "No agent tool is installed")
+        return row
 
     @api.router.get("/dialogues/{dialogue_id}/turns")
     async def dialogue_turns(dialogue_id: str):

@@ -24,6 +24,7 @@ function saveRecent(dir: string, recent: string[]) {
 export function NewSessionDialog() {
   const setDialog = useApp((s) => s.setDialog);
   const select = useApp((s) => s.select);
+  const project = useApp((s) => s.dialogProject);
   const client = useActiveClient();
 
   const [tools, setTools] = useState<ToolInfo[]>([]);
@@ -70,7 +71,7 @@ export function NewSessionDialog() {
     setSubmitting(true);
     setError("");
     try {
-      const session = await client.create({ tool, cwd, name: name.trim() || null });
+      const session = await client.create({ tool, cwd, name: name.trim() || null, project });
       saveRecent(cwd, recent);
       useApp.setState((s) => ({ sessions: { ...s.sessions, [session.id]: session } }));
       select(session.id);
@@ -82,7 +83,7 @@ export function NewSessionDialog() {
   }
 
   return (
-    <Dialog title="New session">
+    <Dialog title={project === "default" ? "New session" : `New session in ${project}`}>
       <form onSubmit={(event) => void submit(event)}>
         <fieldset className="tool-choice">
           <legend>Agent</legend>

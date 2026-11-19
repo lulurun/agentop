@@ -149,7 +149,7 @@ agentop dialogue start \
 | `--max-turns` | the scenario's, or 20 | Maximum relay turns |
 
 Both agents always run with cwd set to the dialogue's own directory at
-`~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/` — there is no way to override this. Any
+`~/.agentop/projects/<scenario>_<brief>_<id>/` — there is no way to override this. Any
 `deliverables/` folder a scenario asks the agents to create ends up there,
 alongside `brief.md`, `scenario.toml`, and `dialogue.log`. Agents can still
 read or write files elsewhere by using absolute paths.
@@ -216,6 +216,8 @@ Projects are described in [project.md](project.md).
 ```bash
 agentop project list [--json]          # every project: owner, live sessions, folder
 agentop project show [<name>] [--json] # a project's folder and sessions (default: this session's project)
+agentop project create <name>          # a Projects project: its folder, and its Coordinator started (the plugin must be on)
+agentop project remove <name> [--delete-folder]   # stop its sessions and forget it; the folder is kept unless asked
 ```
 
 ## 3 Service commands

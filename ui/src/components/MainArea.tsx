@@ -4,15 +4,16 @@ import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } f
 import { platform } from "../platform";
 import { LoginMethods, useLoginMethods } from "../plugins/Login";
 import { PluginPanel, TerminalInputs } from "../plugins/Slot";
-import { activeConnection, currentFeature, useActiveClient, useApp } from "../store";
+import { activeConnection, currentFeature, selectedId, useActiveClient, useApp, type AppState } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { pluginOf } from "../features";
 import { Workbench, type SessionPaneProps } from "./Workbench";
 
-type Selection = { sessions: Record<string, Session>; selected: Record<string, string>; activeId: string };
+type Selection = Pick<AppState, "sessions" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded">;
 
 export function selectedSession(state: Selection): Session | undefined {
-  return state.sessions[state.selected[state.activeId]];
+  const id = selectedId(state);
+  return id ? state.sessions[id] : undefined;
 }
 
 const STEPS = [

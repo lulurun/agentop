@@ -17,7 +17,7 @@
 
 - `agentop serve` runs the service at `http://127.0.0.1:9775`: the app at `/`, the API at `/api/v2`. agentop ships no systemd unit or proxy config: on the devhost, a separate ops repo owns the `agentop-api` unit and the nginx setup
 - Supported agent tools: `claude`, `codex`, `antigravity`
-- Dialogues are stored in `~/.agentop/plugins/dialogue/dialogues/<scenario>_<brief>_<id>/`
+- Dialogues are stored in `~/.agentop/projects/<scenario>_<brief>_<id>/`
 - Only sessions started by agentop (managed) can be stopped or sent prompts
 
 ## Running the service

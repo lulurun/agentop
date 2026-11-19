@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import type { Session } from "../../api/client";
 import { sessionIdsKey, useActiveClient, useApp } from "../../store";
 import { formatBytes } from "../../components/format";
 import { Section } from "../../components/Section";
@@ -325,6 +326,7 @@ function FileLinks({ id, files }: { id: string; files: DialogueFile[] }) {
 
 function Actions({ plugin, d }: { plugin: PluginContext; d: DialogueDetail }) {
   const act = useApp((s) => s.act);
+  const select = useApp((s) => s.select);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -337,8 +339,22 @@ function Actions({ plugin, d }: { plugin: PluginContext; d: DialogueDetail }) {
     await refreshDialogues(plugin.client);
   }
 
+  async function openCoordinator() {
+    setBusy(true);
+    const row = await act(() => plugin.client.post<Session>(`${dialoguePath(d.id)}/coordinator`));
+    setBusy(false);
+    if (!row) return;
+    useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
+    select(row.id);
+  }
+
   return (
     <div className="details-actions">
+      <p className="stop-buttons">
+        <button type="button" disabled={busy} title="Design, start, stop and sum up dialogues with it" onClick={() => void openCoordinator()}>
+          Open the Coordinator
+        </button>
+      </p>
       {d.running && (
         <p className="stop-buttons">
           <button type="button" disabled={busy} onClick={() => void run((c) => c.post(`${dialoguePath(d.id)}/stop`))}>

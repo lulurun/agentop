@@ -347,3 +347,17 @@ def test_dialogues_from_before_projects_move_into_projects_of_their_own(service)
     assert projects.get("debate_old_abc12345")["owner"] == "dialogue"
     assert not old.parent.exists()
     assert registry.load()["sessions"]["diaabc1a-x"]["project"] == "debate_old_abc12345"
+
+
+def test_the_coordinator_hears_when_its_dialogue_ends(fake_agents):
+    from agentop import ops
+    from agentop.plugins.dialogue.model import tell_coordinator
+
+    projects.create("debate_x_abc12345", "dialogue")
+    name = ops.start("fakeagent", str(projects.folder("debate_x_abc12345")), "Coordinator", project="debate_x_abc12345").name
+    tell_coordinator("debate_x_abc12345", "The dialogue has ended")
+    deadline = time.monotonic() + 5
+    while "got: [agentop dialogue]" not in CapturePane.scrollback(name):
+        assert time.monotonic() < deadline, CapturePane.scrollback(name)
+        time.sleep(0.1)
+    tell_coordinator("nope", "no Coordinator there: nothing happens")

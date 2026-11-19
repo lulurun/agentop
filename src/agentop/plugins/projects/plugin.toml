@@ -1,0 +1,7 @@
+id = "projects"
+name = "Projects"
+version = "0.1.0"
+description = "Your projects: each a group of sessions and a shared folder, run through a Coordinator session you talk to. New project, a project switcher, then the same sections as Sessions. Turning it off stops the projects' sessions; their folders are kept."
+plugin_api = 1
+default_enabled = true
+ui = ["feature"]

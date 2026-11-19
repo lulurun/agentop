@@ -223,6 +223,61 @@ def cmd_project_list(args):
         print(col.format(p["name"], p.get("owner") or "—", count, _shorten(p["folder"])))
 
 
+def _projects_plugin_on() -> bool:
+    from agentop import paths
+    from agentop.plugin_manifest import ManifestError, is_enabled, plugin_folders, plugin_roots, read_flags, read_manifest
+
+    for folder in plugin_folders(plugin_roots()):
+        try:
+            manifest = read_manifest(folder)
+        except ManifestError:
+            continue
+        if manifest.id == "projects":
+            return is_enabled(manifest, read_flags(paths.state_dir() / "plugins.json") or {})
+    return False
+
+
+def cmd_project_create(args):
+    from agentop import agentclis, coordinator, projects
+    from agentop.plugins.projects.texts import INSTRUCTIONS, WELCOME
+    from agentop.results import OpsError
+
+    if not _projects_plugin_on():
+        print("Error: the Projects plugin is off. Turn it on in Status → Plugins", file=sys.stderr)
+        sys.exit(1)
+    try:
+        found = projects.create(args.name, "projects", WELCOME, INSTRUCTIONS)
+    except projects.ProjectError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    print(f"Project {args.name}: {found['folder']}")
+    print("Starting its Coordinator …")
+    try:
+        name = coordinator.start_now(found, [a.name for a in agentclis.installed(agentclis.AGENTS)])
+    except OpsError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+    if name is None:
+        print("Error: no agent tool is installed", file=sys.stderr)
+        sys.exit(1)
+    print(f"  Attach: tmux attach-session -t {name}")
+
+
+def cmd_project_remove(args):
+    from agentop import projects
+
+    found = projects.get(args.name)
+    if found is None or found.get("owner") != "projects":
+        print(f"Error: no project called {args.name} (only the Projects plugin's can be removed here)", file=sys.stderr)
+        sys.exit(1)
+    for s in _ops().get_sessions(with_meta=False):
+        if s.get("project") == args.name:
+            print(f"Stopping {s['display_name']} …")
+            _ops().stop(s["name"])
+    projects.remove(args.name, args.delete_folder)
+    print(f"Removed {args.name}" + (", and its folder" if args.delete_folder else f"; its folder is kept: {found['folder']}"))
+
+
 def cmd_project_show(args):
     from agentop import projects, registry
 
@@ -571,6 +626,11 @@ def main():
     p_pshow = project_sub.add_parser("show", help="A project's folder and sessions (default: this session's)")
     p_pshow.add_argument("name", nargs="?")
     p_pshow.add_argument("--json", action="store_true")
+    p_pcreate = project_sub.add_parser("create", help="Make a project of the Projects plugin's, and start its Coordinator")
+    p_pcreate.add_argument("name")
+    p_premove = project_sub.add_parser("remove", help="Stop a Projects project's sessions and forget it")
+    p_premove.add_argument("name")
+    p_premove.add_argument("--delete-folder", action="store_true", help="Delete its folder too")
 
     # serve
     p_serve = sub.add_parser("serve", help="Run the service in the foreground")
@@ -623,7 +683,12 @@ def main():
         if not args.project_command:
             p_project.print_help()
             sys.exit(0)
-        {"list": cmd_project_list, "show": cmd_project_show}[args.project_command](args)
+        {
+            "list": cmd_project_list,
+            "show": cmd_project_show,
+            "create": cmd_project_create,
+            "remove": cmd_project_remove,
+        }[args.project_command](args)
         return
 
     if args.command == "service":

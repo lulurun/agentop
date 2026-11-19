@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
-import { activeCount, layoutOf, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
+import { activeCount, layoutOf, selectedId, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { focusedTab } from "../tabs";
 import { HistorySection } from "./HistoryView";
 import { StatusMark } from "./icons";
@@ -77,15 +77,24 @@ const SessionRow = memo(function SessionRow({ session, selected }: { session: Se
   );
 });
 
-/** The left panel of a project's sessions: Sessions shows the default project's. */
-export const Sidebar = memo(function Sidebar({ project = "default" }: { project?: string }) {
+/** Sessions' left panel: the default project's sections. */
+export const Sidebar = memo(function Sidebar() {
+  return (
+    <div className="sidebar-scroll">
+      <SessionSections project="default" />
+    </div>
+  );
+});
+
+/** A project's Active sessions and History, as Sessions shows them; a project's own feature shows them too. */
+export const SessionSections = memo(function SessionSections({ project }: { project: string }) {
   const sessions = useApp((s) => s.sessions);
-  const selected = useApp((s) => s.selected[s.activeId]);
+  const selected = useApp(selectedId);
   const setDialog = useApp((s) => s.setDialog);
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   const maxActive = useApp((s) => s.history.maxActive);
   const pastOpen = useApp((s) => {
-    const content = focusedTab(layoutOf(s, "sessions"))?.content;
+    const content = focusedTab(layoutOf(s))?.content;
     return content?.kind === "past" ? content.historyId : undefined;
   });
   const [filter, setFilter] = useState("");
@@ -104,7 +113,7 @@ export const Sidebar = memo(function Sidebar({ project = "default" }: { project?
 
   if (!linked) return null;
   return (
-        <div className="sidebar-scroll">
+        <>
           <Section
             id="active"
             title="Active sessions"
@@ -120,7 +129,7 @@ export const Sidebar = memo(function Sidebar({ project = "default" }: { project?
                 value={filter}
                 onChange={(event) => setFilter(event.target.value)}
               />
-              <button type="button" className="primary" onClick={() => setDialog("new-session")}>
+              <button type="button" className="primary" onClick={() => setDialog("new-session", project)}>
                 New session
               </button>
             </div>
@@ -133,7 +142,7 @@ export const Sidebar = memo(function Sidebar({ project = "default" }: { project?
                   {needle ? "No sessions match." : (
                     <>
                       No sessions yet.{" "}
-                      <button type="button" className="link" onClick={() => setDialog("new-session")}>
+                      <button type="button" className="link" onClick={() => setDialog("new-session", project)}>
                         Start one
                       </button>
                     </>
@@ -143,6 +152,6 @@ export const Sidebar = memo(function Sidebar({ project = "default" }: { project?
             </nav>
           </Section>
           <HistorySection selected={pastOpen} project={project} />
-        </div>
+        </>
   );
 });

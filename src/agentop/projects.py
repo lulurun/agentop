@@ -82,11 +82,24 @@ def create(name: str, owner: str, welcome: str = "", instructions: str = "") -> 
     return get(name)
 
 
-def adopt(name: str, owner: str) -> dict:
+def adopt(name: str, owner: str, welcome: str = "", instructions: str = "") -> dict:
     """Make an existing folder a project, as when a plugin's older data moves in. Leaves its files alone."""
     if not exists(name):
         meta_dir(name).mkdir(parents=True, exist_ok=True)
-        write_json_atomic(_meta_path(name), {"owner": owner, "created_at": folder(name).stat().st_mtime})
+        record = {"owner": owner, "created_at": folder(name).stat().st_mtime, "welcome": welcome, "instructions": instructions}
+        write_json_atomic(_meta_path(name), record)
+    return get(name)
+
+
+def fill_in(name: str, welcome: str, instructions: str) -> dict:
+    """Give a project its owner's texts where it has none, as one adopted before it had them."""
+    found = get(name)
+    if found is None:
+        raise ProjectError(f"No project called {name}")
+    record = json.loads(_meta_path(name).read_text())
+    if not record.get("welcome") and not record.get("instructions"):
+        record.update(welcome=welcome, instructions=instructions)
+        write_json_atomic(_meta_path(name), record)
     return get(name)
 
 

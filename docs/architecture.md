@@ -159,7 +159,7 @@ See [dialogue.md](dialogue.md) for full detail. The plugin is `src/agentop/plugi
 |--------|------|
 | `__init__.py` | `register(api)`: the routes under `/api/v2/plugins/dialogue/`, and stopping running dialogues when the plugin is turned off (`api.on_disable`) |
 | `cli.py` | `agentop dialogue start / list / stop / remove`, loaded by the CLI through `register_cli` |
-| `model.py` | `Dialogue` and `DialogueMeta` (persisted to `~/.agentop/plugins/dialogue/dialogues/`) |
+| `model.py` | `Dialogue` and `DialogueMeta` (persisted to `~/.agentop/projects/<name>/`, a project of the plugin's) |
 | `orchestrator.py` | `DialogueOrchestrator` thread: the relay loop |
 | `parser.py` | `ResponseParser`: extracts BEGIN/END blocks from scrollback |
 | `status.py` | `DialogueStatus` and `ReceiveStatus` enums |

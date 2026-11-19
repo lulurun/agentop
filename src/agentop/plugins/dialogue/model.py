@@ -57,7 +57,9 @@ def _migrate() -> None:
             continue
         projects.folder(name).parent.mkdir(parents=True, exist_ok=True)
         old.rename(projects.folder(name))
-        projects.adopt(name, OWNER)
+        from .texts import INSTRUCTIONS, WELCOME
+
+        projects.adopt(name, OWNER, WELCOME, INSTRUCTIONS)
         try:
             data = json.loads((projects.folder(name) / "meta.json").read_text())
         except (OSError, ValueError):
@@ -79,6 +81,24 @@ def dialogue_names() -> list[str]:
 def is_dialogue(name: str) -> bool:
     found = projects.get(name)
     return bool(found and found.get("owner") == OWNER and (projects.folder(name) / "meta.json").is_file())
+
+
+def tell_coordinator(project: str, text: str) -> None:
+    """Type a note into the dialogue's Coordinator, if it runs. A dialogue never fails over it."""
+    from agentop import ops
+
+    try:
+        ops.send(projects.COORDINATOR, f"[agentop dialogue]\n{text}", project=project)
+    except ops.OpsError as exc:
+        LOG.info("No note for the Coordinator of %s: %s", project, exc)
+
+
+def end_note(meta: "DialogueMeta") -> str:
+    reason = f" ({meta.error})" if meta.error else ""
+    return (
+        f"The dialogue has ended: {meta.status}{reason}. Its messages are in turns.jsonl and what the agents wrote "
+        "is in progress.md and deliverables/. Read them, write what it came to in summary.md, and tell the owner."
+    )
 
 
 @dataclass
