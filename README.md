@@ -18,6 +18,8 @@ It gives each task its own agent and each agent its own named session, then show
 
 **One agent per task, each in a session that outlives the window and your time at the desk.**
 
+[![agentop: one AI coding agent per task, each in its own tmux session](https://img.youtube.com/vi/uU1zz-McHds/maxresdefault.jpg)](https://www.youtube.com/watch?v=uU1zz-McHds)
+
 ## How it works
 
 My own first version of this was manual: one agent per tmux session, named after its task, found with `tmux ls`, started and stopped by hand. agentop automates that habit and hides it (you need no tmux knowledge) but keeps its one structural idea: **every agent lives in its own tmux session**. Nearly everything else follows from that.
