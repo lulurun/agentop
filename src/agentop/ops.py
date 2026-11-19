@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 import time
 
@@ -82,6 +83,37 @@ def _place(agent: AgentCli, name: str | None, short_name: str, project: str, rea
     return name
 
 
+def _with_folder(params: dict | None, cwd: str, project: str) -> dict:
+    """A session working outside its project's folder gets the folder as another directory to work in."""
+    params = dict(params or {})
+    folder = str(projects.folder(project))
+    if os.path.realpath(cwd) != os.path.realpath(folder):
+        params["add_dir"] = folder
+    return params
+
+
+def first_prompt(name: str, prompt: str, project: str | None = None, display_name: str | None = None) -> None:
+    """Give a session that has just started its first prompt, once its tool takes input. Raises OpsError.
+
+    A session other than the Coordinator is told about its project first (coordinator.member_header).
+    """
+    from agentop import coordinator
+
+    record = registry.load()["sessions"].get(name) or {}
+    project = project or record.get("project") or projects.DEFAULT
+    display_name = display_name or record.get("display_name") or _bare(name)
+    agent = _agent(record.get("tool") or "")
+    found = projects.get(project)
+    if found and display_name != projects.COORDINATOR:
+        prompt = f"{coordinator.member_header(found, display_name)}\n\n{prompt.strip()}"
+    # Before the tool is ready, a paste is dropped without a word.
+    time.sleep(agent.boot_seconds)
+    try:
+        agent.deliver(name, prompt)
+    except PasteError as exc:
+        raise OpsError(f"The first prompt didn't reach {display_name}: {exc}") from exc
+
+
 def _record_start(tool: str, cwd: str, short_name: str, run) -> StartResult:
     """Run a start, and register its outcome. A failure with a tmux session is kept, to be seen and closed.
 
@@ -127,6 +159,7 @@ def start(
     """
     agent = _agent(tool)
     name = _place(agent, name, short_name, project, readonly, counted)
+    params = _with_folder(params, cwd, project)
     return _record_start(tool, cwd, short_name, lambda: agent.start_session(cwd, short_name, params, name=name, on_progress=on_progress))
 
 
@@ -199,8 +232,12 @@ def resume_session(
     """Resume a saved agent session in a new tmux window. Raises as start does."""
     agent = _agent(tool)
     name = _place(agent, name, short_name, project, False, True)
+    params = _with_folder(None, cwd, project)
     return _record_start(
-        tool, cwd, short_name, lambda: agent.resume_session(session_id, cwd, short_name, name=name, on_progress=on_progress)
+        tool,
+        cwd,
+        short_name,
+        lambda: agent.resume_session(session_id, cwd, short_name, name=name, on_progress=on_progress, params=params),
     )
 
 

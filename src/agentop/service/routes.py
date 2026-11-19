@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from .api import admin, clients, history, sessions, sockets
+from .api import admin, clients, history, projects, sessions, sockets
 from .api.context import AUTHED, REPO_ROOT, Context
 from .store import StoreError
 
@@ -38,6 +38,6 @@ def create_v2_app(ctx: Context) -> FastAPI:
     if ctx.plugins is not None:
         # Plugin routes go under /plugins/{id}/, behind the same token.
         ctx.plugins.attach(v2, AUTHED, clients.sign_in_for(ctx))
-    for area in (admin, sessions, history, sockets):
+    for area in (admin, sessions, history, projects, sockets):
         v2.include_router(area.router)
     return v2

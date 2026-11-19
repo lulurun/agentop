@@ -18,7 +18,7 @@ from dataclasses import asdict
 
 import psutil
 
-from agentop import ops, projects, registry
+from agentop import coordinator, ops, projects, registry
 from agentop.results import OpsError
 from agentop.tmux import Session
 
@@ -381,12 +381,14 @@ class SessionStore:
         resume_id: str | None = None,
         display_name: str | None = None,
         project: str = projects.DEFAULT,
+        prompt: str | None = None,
     ) -> dict:
         """Validate, record the session as `starting`, and begin starting it in the background.
 
         A name is unique among the project's sessions: a given one that is taken is
         refused, a made-up one gets a number. `display_name`, shown instead when
-        given, can be any text, such as a resumed session's own name.
+        given, can be any text, such as a resumed session's own name. `prompt`
+        is typed in once the agent is up (ops.first_prompt).
         """
         if project != projects.DEFAULT and not await asyncio.to_thread(projects.exists, project):
             raise StoreError(404, f"No project called {project}")
@@ -430,7 +432,7 @@ class SessionStore:
             self._starting[session_id] = record
             await self._refresh_locked(with_meta=False)
 
-        task = asyncio.create_task(self._run_start(session_id, tool, cwd, short_name, resume_id, display_name))
+        task = asyncio.create_task(self._run_start(session_id, tool, cwd, short_name, resume_id, display_name, prompt))
         self._start_tasks.add(task)
         task.add_done_callback(self._start_tasks.discard)
         return self.get(session_id)
@@ -445,7 +447,14 @@ class SessionStore:
         self._publish({"type": "session.upserted", "session": copy.deepcopy(row)})
 
     async def _run_start(
-        self, session_id: str, tool: str, cwd: str, short_name: str, resume_id: str | None, display_name: str | None
+        self,
+        session_id: str,
+        tool: str,
+        cwd: str,
+        short_name: str,
+        resume_id: str | None,
+        display_name: str | None,
+        prompt: str | None = None,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -478,6 +487,49 @@ class SessionStore:
         async with self._lock:
             self._starting.pop(session_id, None)
             await self._refresh_locked(with_meta=True)
+        if prompt and not error:
+            try:
+                await asyncio.to_thread(ops.first_prompt, session_id, prompt)
+            except OpsError as exc:
+                LOG.warning("%s", exc)
+            except Exception:
+                LOG.exception("The first prompt of %s failed", session_id)
+
+    async def ensure_coordinator(self, project: str, available: list[str]) -> dict | None:
+        """Start the project's Coordinator unless it runs: resumed if it ran before, else new, with its welcome. None if there is no tool."""
+        found = await asyncio.to_thread(projects.get, project)
+        if found is None:
+            raise StoreError(404, f"No project called {project}")
+        name = projects.COORDINATOR
+        running = next(
+            (
+                r
+                for r in self._sessions.values()
+                if r.get("project") == project and r.get("display_name") == name and r["status"] != "failed"
+            ),
+            None,
+        )
+        if running:
+            return copy.deepcopy(running)
+        for row in [r for r in self._sessions.values() if r.get("project") == project and r.get("display_name") == name]:
+            await self.close(row["id"])
+        records = (await asyncio.to_thread(registry.load))["sessions"]
+        before = [
+            r for r in records.values()
+            if r.get("project") == project and r.get("display_name") == name and r.get("agent_session_id") and r.get("tool")
+        ]
+        if before:
+            last = max(before, key=lambda r: r.get("created_at") or 0)
+            agent = ops.get_agent(last["tool"])
+            if agent and agent.get_resume_cmd(last["agent_session_id"]):
+                return await self.create(
+                    last["tool"], found["folder"], name, last["agent_session_id"], display_name=name, project=project
+                )
+        tool = coordinator.pick_tool(available)
+        if tool is None:
+            return None
+        await asyncio.to_thread(coordinator.write_instructions, found)
+        return await self.create(tool, found["folder"], name, project=project, prompt=coordinator.welcome_prompt(found))
 
     def _require(self, session_id: str) -> dict:
         row = self._sessions.get(session_id)

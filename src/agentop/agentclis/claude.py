@@ -75,6 +75,7 @@ def messages(record: dict, context: dict) -> Iterator[Message]:
 
 class ClaudeAgentCli(AgentCli):
     name = "claude"
+    add_dir_flag = "--add-dir"
 
     # Shown under the input box, and not on the trust prompt.
     READY_MARKER = "shift+tab to cycle"

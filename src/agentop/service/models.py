@@ -202,6 +202,13 @@ class SessionModel(BaseModel):
     bridge_url: str | None = None
 
 
+class ProjectModel(BaseModel):
+    name: str
+    owner: str | None = None
+    folder: str
+    created_at: float | None = None
+
+
 class ResumeRef(BaseModel):
     session_id: str
 

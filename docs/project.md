@@ -1,6 +1,6 @@
 # Projects
 
-Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only. Not yet: the Coordinator, the Projects plugin. It replaces the "Project groups" idea in the backlog.
+Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only, the Coordinator (started for `default` by `agentop serve`, `POST /api/v2/projects/{name}/coordinator`). Not yet: the Projects plugin, a dialogue's Coordinator. It replaces the "Project groups" idea in the backlog.
 
 ## 1 What it is
 

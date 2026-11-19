@@ -11,6 +11,7 @@ names a tool itself.
 from __future__ import annotations
 
 import random
+import shlex
 import shutil
 import string
 from collections.abc import Iterator
@@ -53,6 +54,8 @@ class AgentCli:
     idle_seconds: float = 5.0
     # How long a dialogue waits after launch before the first prompt.
     boot_seconds: float = 8.0
+    # The flag that gives the agent another directory to work in (a project's folder), if it has one.
+    add_dir_flag: str | None = None
 
     def deliver(self, session: str, text: str) -> None:
         """Submit a prompt: take the pane out of copy mode, where Enter wouldn't reach the tool, then send_text.
@@ -156,7 +159,9 @@ class AgentCli:
         """Append agent-specific CLI flags derived from params."""
         cmd = base_cmd
         if "model" in params:
-            cmd += f" --model {params['model']}"
+            cmd += f" --model {shlex.quote(params['model'])}"
+        if params.get("add_dir") and self.add_dir_flag:
+            cmd += f" {self.add_dir_flag} {shlex.quote(params['add_dir'])}"
         return cmd
 
     def new_session_name(self, short_name: str = "") -> str:
@@ -189,12 +194,13 @@ class AgentCli:
         short_name: str = "",
         name: str | None = None,
         on_progress: ProgressCallback | None = None,
+        params: dict | None = None,
     ) -> StartResult:
         """Raises StartFailed."""
         cmd = self.get_resume_cmd(session_id)
         if not cmd:
             raise StartFailed(f"{self.name} does not support session resume")
-        return launcher.launch(self, cmd, cwd, short_name, None, name, on_progress, session_id)
+        return launcher.launch(self, cmd, cwd, short_name, params, name, on_progress, session_id)
 
     # ------------------------------------------------------------------ the tool's own session ID
 

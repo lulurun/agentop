@@ -127,6 +127,12 @@ def cmd_start(args):
             print(f"The tmux session was kept: tmux attach-session -t {exc.name}", file=sys.stderr)
         sys.exit(1)
     name = result.name
+    if args.prompt:
+        print("Typing in the first prompt once it is up …")
+        try:
+            _ops().first_prompt(name, args.prompt)
+        except OpsError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
     print(f"Started:  {name}")
     print(f"  PID:    {result.pid}")
     print(f"  Tool:   {args.tool}")
@@ -164,7 +170,8 @@ def cmd_stop(args):
     from agentop.results import OpsError
 
     try:
-        result = _ops().stop(args.name)
+        found = _ops().find_session(args.name, project=_own_project(args))
+        result = _ops().stop(found["name"])
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if "not found" in str(exc).lower():
@@ -512,6 +519,7 @@ def main():
     p_start.add_argument("--tool", required=True, choices=agentclis.names())
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
     p_start.add_argument("--project", help="The project to start it in (default: this session's, else default)")
+    p_start.add_argument("--prompt", help="Its first prompt, typed in once it is up, after a line about its project")
 
     # history
     p_history = sub.add_parser(
@@ -536,7 +544,8 @@ def main():
             "Only sessions started with 'agentop start' can be stopped."
         ),
     )
-    p_stop.add_argument("name", help="Session name (from 'agentop list')")
+    p_stop.add_argument("name", help="Session name in this project, or <project>/<name>")
+    p_stop.add_argument("--project", help="The project to look the name up in (default: this session's, else default)")
 
     # send
     p_send = sub.add_parser(

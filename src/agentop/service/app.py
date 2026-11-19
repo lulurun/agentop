@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import mimetypes
 import os
@@ -13,6 +14,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
+
+from agentop import projects
 
 from . import auth, config, host, identity, manager
 from .config import Settings
@@ -66,6 +69,13 @@ def create_app(
         await store.startup()
         # After the first scan, so plugins don't hear every existing session as new.
         await plugins.startup()
+        if available:
+            # Only `agentop serve` knows the installed tools; a test's app starts no Coordinator.
+            await asyncio.to_thread(projects.ensure_default)
+            try:
+                await store.ensure_coordinator(projects.DEFAULT, available)
+            except Exception:
+                LOG.exception("The default project's Coordinator didn't start")
         yield
         await plugins.shutdown()
         await store.shutdown()

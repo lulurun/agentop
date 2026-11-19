@@ -75,6 +75,7 @@ def messages(record: dict, context: dict) -> Iterator[Message]:
 
 class CodexAgentCli(AgentCli):
     name = "codex"
+    add_dir_flag = "--add-dir"
     # Codex boots its MCP servers first; a prompt sent sooner is dropped.
     boot_seconds = 20.0
 

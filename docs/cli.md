@@ -13,13 +13,15 @@ agentop list
 agentop list --json
 ```
 
-Columns: SESSION, TOOL, STATUS, PID, RUNTIME, MEM, TOKENS, CWD
+Columns: SESSION (`<project>/<name>` for agentop's), TOOL, STATUS, PID, RUNTIME, MEM, TOKENS, CWD
 
 `--json` outputs the full session array. Useful fields:
 
 | Field | Description |
 |-------|-------------|
 | `name` | Unique session identifier (also the tmux session name) |
+| `project`, `display_name` | For a managed session: its project, and its name there, unique in the project |
+| `readonly` | Set by the plugin that started it, such as a dialogue's agents: it takes no prompts |
 | `tool` | `claude` \| `codex` \| `antigravity` |
 | `managed` | `true` if started by agentop; only managed sessions can be stopped or sent prompts |
 | `pid` | Agent process PID |
@@ -36,10 +38,12 @@ Columns: SESSION, TOOL, STATUS, PID, RUNTIME, MEM, TOKENS, CWD
 Launch a new agent session in a managed tmux session.
 
 ```bash
-agentop start <session_name> --tool <tool> [--cwd <path>]
+agentop start <session_name> --tool <tool> [--cwd <path>] [--project <name>] [--prompt "<task>"]
 ```
 
-- `session_name` — must be under 32 characters; the tmux session is named `{session_name}-{random}`, and keeps that name for life
+- `session_name` — under 32 characters, unique among the project's sessions; the tmux session is named `{session_name}-{random}`, and keeps that name for life
+- `--project` — the project it belongs to (default: the project of the session this runs in, else `default`). A session working outside the project's folder gets the folder as another directory to work in (`--add-dir`, Claude and Codex)
+- `--prompt` — its first prompt, typed in once the tool is up. A session other than the Coordinator gets a first line about its project: its folder, and how to reach the Coordinator
 - `--tool` — `claude`, `codex`, or `antigravity`
 - `--cwd` — working directory (default: home directory)
 
@@ -54,8 +58,10 @@ tmux attach-session -t <session_name>-<random>
 Gracefully stop a managed session.
 
 ```bash
-agentop stop <session>
+agentop stop <session> [--project <name>]
 ```
+
+The session is looked up as `agentop send` does.
 
 Sends `/exit` to the agent, waits 3 seconds, then kills the tmux session. Only managed sessions (started by agentop) can be stopped.
 
@@ -68,9 +74,9 @@ agentop send <target> "<prompt>"
 agentop send <target> < prompt.txt     # no prompt, or -: read it from stdin
 ```
 
-- `target` — a session name from `agentop list`, ignoring case and the `-<suffix>`: `deploy` finds `Deploy-2953204`. With no match it says `I don't see an active session called 'deploy'`, and with several it lists them. It never starts a session
-- Run from inside tmux, the prompt gets a first line `[agentop send from <this session>]`; `--no-header` leaves it off
-- Only managed sessions (started by agentop) take prompts, and not a plugin's own sessions, such as a dialogue's agents
+- `target` — a session's name in the sender's project (from inside a session; else `default`, or `--project`), ignoring case: `dev`. Another project's is `<project>/<name>`. The tmux name also works (`Deploy-2953204`, or `deploy` without the suffix within the project). With no match it says `I don't see an active session called 'deploy' in default`, and with several it lists them. It never starts a session
+- Run from inside tmux, the prompt gets a first line `[agentop send from <project>/<name>]`; `--no-header` leaves it off
+- Only managed sessions (started by agentop) take prompts, and not read-only ones, such as a dialogue's agents
 - If the paste fails, it says so and presses no Enter
 - Nothing comes back by itself: switch to the target to follow it and answer it. A prompt can ask the target to reply with its own `agentop send`, which arrives as a new prompt in the sender
 
@@ -202,6 +208,15 @@ agentop dialogue remove --status stopped --yes
 `--status` bulk removal only accepts `stopped` or `completed`. Any other status requires `--id`.
 
 If the dialogue has open tmux sessions (e.g. status is `running`), they are stopped and closed automatically before the directory is deleted.
+
+## 2b Project commands
+
+Projects are described in [project.md](project.md).
+
+```bash
+agentop project list [--json]          # every project: owner, live sessions, folder
+agentop project show [<name>] [--json] # a project's folder and sessions (default: this session's project)
+```
 
 ## 3 Service commands
 
