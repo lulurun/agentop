@@ -92,7 +92,7 @@ function DialogueList({ plugin }: { plugin: PluginContext }) {
   const finished = items?.filter((d) => !d.running) ?? [];
   return (
     <>
-      <CreateSection id="dialogue:create" label="New dialogue" onClick={openWizard} />
+      <CreateSection id="dialogue:create" title="Create new dialogue" label="New dialogue" onClick={openWizard} />
       <Section id="dialogue:running" title="In progress" extra={items && <span className="session-count">{running.length}</span>}>
         <nav className="session-list" aria-label="Dialogues in progress">
           {items === null && <p className="session-empty">Loading…</p>}

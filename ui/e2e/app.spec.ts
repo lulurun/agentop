@@ -25,7 +25,7 @@ test.beforeEach(async ({ page }) => {
 const terminalText = (page: Page) => page.getByTestId("terminal").locator(".xterm-rows");
 
 async function startSession(page: Page, s: Service, name: string, tool = "claude", cwd = join(s.root, "project")) {
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Working directory").fill(cwd);
   await dialog.getByText(tool, { exact: true }).click();
@@ -223,7 +223,7 @@ test("only the agent tools installed on the service can be picked", async ({ pag
   rmSync(join(created.root, "bin", "codex"));
   const s = await created.start();
   await page.goto(s.signedInUrl);
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const agents = page.getByRole("dialog").getByRole("group", { name: "Agent" });
   await expect(agents.getByRole("radio")).toHaveCount(2);
   await expect(agents.getByText("claude", { exact: true })).toBeVisible();

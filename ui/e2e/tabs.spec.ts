@@ -21,7 +21,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function startSession(page: Page, name: string, cwd: string) {
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Working directory").fill(cwd);
   await dialog.getByText("claude", { exact: true }).click();

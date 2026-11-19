@@ -24,7 +24,7 @@ async function withInputBar(page: Page) {
   writeFileSync(join(s.root, "state", "state", "plugins.json"), JSON.stringify({ input: { enabled: true } }));
   await s.start();
   await page.goto(s.signedInUrl);
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
   await dialog.getByLabel("Name").fill("phone");

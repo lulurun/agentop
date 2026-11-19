@@ -1,4 +1,4 @@
-import { memo, useState, type ReactNode } from "react";
+import { memo, useState } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
 import { activeCount, layoutOf, selectedId, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
@@ -83,22 +83,21 @@ export const Sidebar = memo(function Sidebar() {
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   return (
     <div className="sidebar-scroll">
-      {linked && <CreateSection id="sessions:create" label="New session" onClick={() => setDialog("new-session")} />}
+      {linked && <CreateSection id="sessions:create" title="Create new session" label="New session" onClick={() => setDialog("new-session")} />}
       <SessionSections project="default" />
     </div>
   );
 });
 
-/** The top section of a feature's left panel: its one New button, full width. */
-export function CreateSection({ id, label, onClick, children }: { id: string; label: string; onClick(): void; children?: ReactNode }) {
+/** A left panel's section with one New button, full width. */
+export function CreateSection({ id, title, label, onClick }: { id: string; title: string; label: string; onClick(): void }) {
   return (
-    <Section id={id} title="Create new">
+    <Section id={id} title={title}>
       <div className="sidebar-actions">
         <button type="button" className="primary sidebar-wide" onClick={onClick}>
           {label}
         </button>
       </div>
-      {children}
     </Section>
   );
 }

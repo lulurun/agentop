@@ -159,7 +159,7 @@ test("resuming waits for a session to close once the active sessions are at the 
   await page.getByRole("region", { name: "History" }).getByRole("button", { name: /fix-login/ }).click();
   await expect(view.getByRole("button", { name: "Resume" })).toBeEnabled();
 
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
   await dialog.getByLabel("Name").fill("busy");
@@ -169,7 +169,7 @@ test("resuming waits for a session to close once the active sessions are at the 
   await page.getByRole("region", { name: "History" }).getByRole("button", { name: /fix-login/ }).click();
   await expect(view.getByRole("button", { name: "Resume" })).toBeDisabled();
   await expect(view).toContainText("Active sessions are at the limit. Close a session to resume this one.");
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   await expect(page.getByRole("dialog").getByRole("button", { name: "Start session" })).toBeDisabled();
 });
 
@@ -180,7 +180,7 @@ test("an empty history says so", async ({ page }) => {
 
 test("each feature keeps its tabs, and Sessions keeps its terminal connected", async ({ page }) => {
   const s = await open(page);
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
   await dialog.getByLabel("Name").fill("keeper");
@@ -224,8 +224,8 @@ test("a finished dialogue shows each agent's messages side by side, its stats an
   // No tabs to start with: a background, as in Sessions; New dialogue is in the left panel.
   await expect(page.locator(".main .placard")).toContainText("Create a new dialogue, or pick one from the list");
   await expect(page.locator('.workbench[data-feature="plugin:dialogue"]')).toHaveCount(0);
-  await expect(page.locator(".header").getByRole("button", { name: "New dialogue" })).toHaveCount(0);
-  await expect(page.locator(".sidebar").getByRole("button", { name: "New dialogue" })).toHaveCount(1);
+  await expect(page.locator(".header").getByRole("button", { name: "New dialogue", exact: true })).toHaveCount(0);
+  await expect(page.locator(".sidebar").getByRole("button", { name: "New dialogue", exact: true })).toHaveCount(1);
   const list = page.locator(".sidebar");
   await list.getByRole("button", { name: /Decide the plan/ }).click();
 
@@ -251,9 +251,9 @@ test("a finished dialogue shows each agent's messages side by side, its stats an
 test("the New dialogue wizard asks for every field, then starts two agents watched read-only and kept out of the session list", async ({ page }) => {
   const s = await open(page);
   await features(page).getByRole("button", { name: "Dialogues" }).click();
-  await page.locator(".sidebar").getByRole("button", { name: "New dialogue" }).click();
+  await page.locator(".sidebar").getByRole("button", { name: "New dialogue", exact: true }).click();
 
-  const wizard = page.getByRole("region", { name: "New dialogue" });
+  const wizard = page.getByRole("region", { name: "New dialogue", exact: true });
   await wizard.getByLabel("Scenario").selectOption("shelf/pm-sde");
   const start = wizard.getByRole("button", { name: "Start dialogue" });
   await expect(start).toBeDisabled();
@@ -285,7 +285,7 @@ test("the New dialogue wizard asks for every field, then starts two agents watch
 
 test("a session in a dialogue is labelled in the list", async ({ page }) => {
   const s = await open(page);
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New session", exact: true }).first().click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
   await dialog.getByLabel("Name").fill("agent-a");
@@ -464,12 +464,11 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   const s = await open(page);
   await features(page).getByRole("button", { name: "Projects" }).click();
   const left = page.getByRole("complementary", { name: "Left panel" });
-  await left.getByRole("button", { name: "New project" }).click();
   await left.getByLabel("New project's name").fill("alpha");
   await left.getByRole("button", { name: "Create", exact: true }).click();
 
   // Its Coordinator works in the project folder, with its instructions there, and opens in Projects.
-  await expect(left.getByLabel("Project", { exact: true })).toHaveValue("alpha");
+  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("alpha");
   const sessions = left.getByRole("navigation", { name: "Sessions", exact: true });
   await expect(sessions.getByText("Coordinator")).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("terminal")).toContainText("fake agent ready", { timeout: 15_000 });
@@ -480,8 +479,14 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   await features(page).getByRole("button", { name: "Sessions" }).click();
   await expect(page.getByRole("navigation", { name: "Sessions", exact: true }).getByText("Coordinator")).toHaveCount(0);
 
-  // Removing it stops its sessions and keeps its folder.
+  // A second one, named straight after, is made and chosen too.
   await features(page).getByRole("button", { name: "Projects" }).click();
+  await left.getByLabel("New project's name").fill("beta");
+  await left.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("beta");
+
+  // Removing one stops its sessions and keeps its folder.
+  await left.getByRole("button", { name: "Remove beta" }).click();
   await left.getByRole("button", { name: "Remove alpha" }).click();
   await expect(left.getByText("No projects yet.")).toBeVisible();
   expect(existsSync(join(s.root, "state/projects/alpha/AGENTS.md"))).toBe(true);
