@@ -73,8 +73,13 @@ class UpdateInfo(BaseModel):
     last_run: UpdateRun | None
 
 
-class LatestRelease(BaseModel):
-    version: str | None = Field(description="The newest vX.Y.Z tag, without the v")
+class VersionInfo(BaseModel):
+    """What the service runs and what Update would bring, in one form: X.Y.Z following releases, else a commit."""
+
+    update_from: Literal["main", "release"]
+    current: str | None
+    latest: str | None = Field(description="Equal to current when nothing is newer")
+    ui_build: str | None = Field(description="The entry script of the app the service serves now")
     checked_at: float
     check_error: str | None
 

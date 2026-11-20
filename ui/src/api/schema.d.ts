@@ -4,23 +4,6 @@
  */
 
 export interface paths {
-    "/admin/latest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Latest Release */
-        get: operations["latest_release_admin_latest_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/admin/restart": {
         parameters: {
             query?: never;
@@ -67,6 +50,23 @@ export interface paths {
         put?: never;
         /** Start Update */
         post: operations["start_update_admin_update_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Version Info */
+        get: operations["version_info_admin_version_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -751,18 +751,6 @@ export interface components {
              */
             truncated: boolean;
         };
-        /** LatestRelease */
-        LatestRelease: {
-            /** Check Error */
-            check_error: string | null;
-            /** Checked At */
-            checked_at: number;
-            /**
-             * Version
-             * @description The newest vX.Y.Z tag, without the v
-             */
-            version: string | null;
-        };
         /** LoginMethod */
         LoginMethod: {
             /** Id */
@@ -1052,6 +1040,33 @@ export interface components {
             /** Error Type */
             type: string;
         };
+        /**
+         * VersionInfo
+         * @description What the service runs and what Update would bring, in one form: X.Y.Z following releases, else a commit.
+         */
+        VersionInfo: {
+            /** Check Error */
+            check_error: string | null;
+            /** Checked At */
+            checked_at: number;
+            /** Current */
+            current: string | null;
+            /**
+             * Latest
+             * @description Equal to current when nothing is newer
+             */
+            latest: string | null;
+            /**
+             * Ui Build
+             * @description The entry script of the app the service serves now
+             */
+            ui_build: string | null;
+            /**
+             * Update From
+             * @enum {string}
+             */
+            update_from: "main" | "release";
+        };
     };
     responses: never;
     parameters: never;
@@ -1061,37 +1076,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    latest_release_admin_latest_get: {
-        parameters: {
-            query?: never;
-            header?: {
-                authorization?: string | null;
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LatestRelease"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     restart_admin_restart_post: {
         parameters: {
             query?: never;
@@ -1203,6 +1187,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Accepted"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    version_info_admin_version_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionInfo"];
                 };
             };
             /** @description Validation Error */

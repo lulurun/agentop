@@ -478,22 +478,30 @@ The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.con
 |------|---------|-----------------|--------------|
 | X | The wrapper (`desktop/`) | **App update** opens the release page: a download and a reinstall | Shows **New version: reload** |
 | Y | The UI (`ui/`) | **Update agentop** updates this computer's agentop in place | Shows **New version: reload** |
-| Z | Only the service | **Update agentop**, as for Y | Nothing |
+| Z | Only the service | **Update agentop**, as for Y | Shows **New version: reload**: an open page compares versions as strings, so it can't tell Z from Y |
 
-**Who finds a new release.** The service: `GET /admin/latest` asks the git remote for its newest `vX.Y.Z` tag (`git ls-remote`), at most once an hour, and the UI polls it hourly and on every connect. Against what runs:
+**Who finds an update** (since 2026-11-20). The UI asks, and only the service that served the page: in the desktop app that is this computer's service on loopback, in a browser the one at the page's own address. Other connected services are never asked; each one's Status still has its own Update.
 
-- The desktop app compares with its copy of agentop: a higher X than the wrapper is **App update**, anything else newer is **Update agentop**.
-- The web app compares with the service's version and shows **agentop X.Y.Z is out**, which opens the service's Status, where Update is. Once the service has updated, the page shows **New version: reload** (below).
+The service answers `GET /admin/version`: `current`, what it runs, and `latest`, what Update would bring, in the same form, so that equal means nothing to do. The form follows `update_from` (8.4):
+
+- **`release`** (the desktop app's copy, started with `--update-from release`): `X.Y.Z`. `current` is the version in the checkout's `pyproject.toml`; `latest` is the newest `vX.Y.Z` tag on the git remote (`git ls-remote`), when it is above `current`.
+- **`main`** (`agentop serve`, the default, for development): a 10-character commit. `current` is `HEAD`; `latest` is `main` on the remote, unless the checkout already has it, as one that commits to itself does.
+
+`current` is read once, when the service starts: the checkout can move under a running service, as when it is pulled during an update or committed to. The remote is asked at most once an hour. The answer also carries `ui_build`, the entry script of the app the service serves now.
+
+The UI keeps the first answer it gets as the page's own version, with the page's own entry script, and asks again hourly and whenever the service restarts. Then, in this order:
+
+1. **The page is out of date** when the service's `current` differs from the page's, or its `ui_build` from the page's entry script. Both clients show **New version: reload**, and the user reloads when ready; the page never reloads by itself. The entry script catches a UI rebuilt with no new commit (`build-ui.sh`).
+2. **In the desktop app, on a service following releases**, the UI asks the wrapper for its own version (`desktop_info`) and compares by part: a `latest` with a higher X than the wrapper is **App update**, which opens the release page; a `latest` above `current` is **Update agentop**, which updates this computer's agentop in place. Y and Z are compared with `current`, not with the wrapper, whose version stays the one it was built at after an in-place update.
+3. **Otherwise**, in a browser or on a service following `main`, a `latest` that differs from `current` shows **agentop X.Y.Z is out** (or **New commits on main**), which opens that service's Status, where Update is. Once the service has updated, 1 applies.
 
 `scripts/release.sh` with no argument picks the part from the paths changed since the last tag: `desktop/`, then `ui/`, then anything else. `x`, `y`, `z` or an exact version override it.
 
-**Updating in place (Y, Z).** The UI compares the newest tag (`/admin/latest`, or the app's own version when that is newer) with the app's copy of agentop (`service_version` in `desktop_info`, from its `pyproject.toml`). Clicking **Update agentop** calls `update_open`: the window shows the start page in its update mode. That checks the tools as setup does, then runs the copy's `agentop service update`, which needs no sign-in (the CLI reads the service token). The service runs `update.sh` (8.4): the newest tag, install, UI build, restart in place, health check, and going back if any of it fails. Each step is a row on the start page, from `state/update-status.json`. **Launch** then opens the service's page. Sessions keep running.
+**Updating in place (Y, Z).** The UI compares `latest`, or the app's own version when that is newer, as after a new app is installed, with `current`, which is the app's copy of agentop. Clicking **Update agentop** calls `update_open`: the window shows the start page in its update mode. That checks the tools as setup does, then runs the copy's `agentop service update`, which needs no sign-in (the CLI reads the service token). The service runs `update.sh` (8.4): the newest tag, install, UI build, restart in place, health check, and going back if any of it fails. Each step is a row on the start page, from `state/update-status.json`. **Launch** then opens the service's page. Sessions keep running.
 
 **The wrapper (X)** is offered only when the newest tag has a higher major version, and only as the latest release page, which is that major version's app. A new wrapper that finds its copy of agentop older than itself, as after a reinstall, opens the update mode on start, once per run.
 
-**Open pages** decide by the app itself, not the version: the service reports `ui_build`, the entry script of the app it serves (`/service`). A page served by that service whose own entry script differs shows **New version: reload**, and the user reloads when ready; it never reloads by itself. A Z release rebuilds the same app, so its entry script, which is named by content hash, stays the same. This works on `main` too, where the version doesn't change between releases. The page fetches `/service` again whenever its event socket reopens, as after a restart.
-
-- The updater's key: CI signs each build with it and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. The app no longer reads it: the newest version comes from the service.
+- The updater's key: CI signs each build with it and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. The app no longer reads it: the newest version comes from the service, so an app whose service can't reach the git remote, or isn't a git checkout, learns of no release.
 - The UI comes from the service, so it can be newer than the wrapper. The wrapper reports `native_api`, the revision of its commands (`desktop_info`). When the UI needs a higher one, the button says **App update needed** and opens the release page. Revision 2 added `update_open`, `update_run` and `service_version`; an app from before `desktop_info` counts as 0.
 - Until v2.0.0 (2026-11-20), the wrapper replaced itself in place with Tauri's updater on every release.
 
@@ -517,7 +525,7 @@ All routes are under `/api/v2`. The old `/api` routes and the dashboard that use
 | `GET` | `/service` | Name, version, `api_version`, commit, uptime, PID, tmux version, manager, capabilities, `install_kind`, whether TLS is on |
 | `POST` | `/admin/restart`, `/admin/stop` | Admin: restart or stop this service (8.3) |
 | `GET`, `POST` | `/admin/update` | Admin: check and status; start an update |
-| `GET` | `/admin/latest` | The newest `vX.Y.Z` tag on the git remote, checked at most hourly (8.5) |
+| `GET` | `/admin/version` | What the service runs and what Update would bring: `X.Y.Z` following releases, else a commit; the remote checked at most hourly (8.5) |
 | `POST` | `/tickets` | Issue a WebSocket ticket |
 | `GET` | `/tools` | Supported tools, and whether each is installed |
 | `GET` | `/fs/dirs?path=` | Directory listing for the working-directory picker |

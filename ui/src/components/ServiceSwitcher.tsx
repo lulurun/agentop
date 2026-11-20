@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { fetchHealth } from "../api/client";
-import { pageIsOutdated } from "../build";
+import { useEffect, useRef, useState } from "react";
+import { fetchHealth, ServiceClient, type VersionInfo } from "../api/client";
+import { ownBuild } from "../build";
 import { appIsOutdated, connectionName, isEncrypted, isLoopback } from "../connections";
 import { platform, type AppUpdate } from "../platform";
-import { compareVersions } from "../platform/tauri";
-import { activeClient, activeConnection, useApp } from "../store";
+import { activeConnection, useApp } from "../store";
 
 type Reach = "checking" | "reachable" | "unreachable";
 
@@ -116,21 +115,12 @@ export function ServiceSwitcher() {
 }
 
 /**
- * This page is older than the app its service now serves: a notice, and the user reloads.
- * Or another service's /api/v2 is newer than this UI. The desktop app shows the UI of this
+ * Another service's /api/v2 is newer than this UI. The desktop app shows the UI of this
  * computer's service, so there that means this computer's service is older.
  */
 export function AppOutdated() {
   const link = useApp((s) => s.link);
-  const url = useApp((s) => s.connections.find((c) => c.id === s.activeId)?.url ?? "");
   if (link.state !== "connected" && link.state !== "reconnecting") return null;
-  if (pageIsOutdated(url, link.service.ui_build)) {
-    return (
-      <button type="button" className="app-outdated" title={`${link.service.name} has a newer version of this page. Reload when you're ready; sessions keep running.`} onClick={() => window.location.reload()}>
-        New version: reload
-      </button>
-    );
-  }
   if (!appIsOutdated(link.service)) return null;
   if (platform.kind === "desktop") {
     return (
@@ -146,72 +136,100 @@ export function AppOutdated() {
   );
 }
 
-const LATEST_POLL_MS = 60 * 60 * 1000;
+const VERSION_POLL_MS = 60 * 60 * 1000;
 
-/** The newest release, as the connected service last saw it on the git remote. */
-function useLatestRelease(): string | null {
-  const link = useApp((s) => s.link);
-  const connected = link.state === "connected" || link.state === "reconnecting";
-  const activeId = useApp((s) => s.activeId);
-  const [latest, setLatest] = useState<string | null>(null);
+/**
+ * The versions of the service that served this page, asked hourly and when it restarts. Its first
+ * answer is the page's own version, so a later one that differs means the page is out of date.
+ */
+function useHomeVersion(): { info: VersionInfo; stale: boolean } | null {
+  const id = useApp((s) => s.connections.find((c) => c.isHome)?.id);
+  const url = useApp((s) => s.connections.find((c) => c.isHome)?.url ?? "");
+  const signedIn = useApp((s) => !!s.connections.find((c) => c.isHome)?.token);
+  const restarted = useApp((s) =>
+    s.activeId === id && (s.link.state === "connected" || s.link.state === "reconnecting") ? s.link.service.started_at : null,
+  );
+  const page = useRef<{ current: string | null; build: string | null } | null>(null);
+  const [info, setInfo] = useState<VersionInfo | null>(null);
   useEffect(() => {
-    if (!connected) return;
+    if (!url || !signedIn) return;
+    const client = new ServiceClient(url, () => useApp.getState().connections.find((c) => c.id === id)?.token ?? "");
     let live = true;
     const run = () =>
-      void activeClient(useApp.getState())
-        .latestRelease()
-        .then((found) => live && setLatest(found.version ?? null))
+      void client
+        .versionInfo()
+        .then((found) => {
+          if (!live) return;
+          page.current ??= { current: found.current, build: ownBuild() };
+          setInfo(found);
+        })
         .catch(() => undefined);
     run();
-    const timer = setInterval(run, LATEST_POLL_MS);
+    const timer = setInterval(run, VERSION_POLL_MS);
     return () => {
       live = false;
       clearInterval(timer);
     };
-  }, [connected, activeId]);
-  return latest;
+  }, [id, url, signedIn, restarted]);
+  if (!info || !page.current) return null;
+  const own = page.current;
+  const stale = info.current !== own.current || (!!own.build && !!info.ui_build && info.ui_build !== own.build);
+  return { info, stale };
 }
 
 /**
- * A newer release than the service runs. In the desktop app, a new major version links to its
- * page and any other updates this computer's agentop in place; on the web, it opens Status.
+ * The service that served this page has a newer version than the page, or Update would bring one.
+ * The desktop app, on a service following releases, decides by the part of X.Y.Z that changed:
+ * X is a new app to download, Y or Z updates this computer's agentop in place.
  */
 export function UpdateBadge() {
-  const latest = useLatestRelease();
-  const link = useApp((s) => s.link);
-  const activeId = useApp((s) => s.activeId);
+  const home = useHomeVersion();
+  const homeId = useApp((s) => s.connections.find((c) => c.isHome)?.id);
   const openStatus = useApp((s) => s.openStatus);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [installing, setInstalling] = useState(false);
   const [failed, setFailed] = useState("");
-  const running = link.state === "connected" || link.state === "reconnecting" ? link.service : null;
+  const info = home?.info;
+  const release =
+    info?.update_from === "release" && info.current && info.latest ? { current: info.current, latest: info.latest } : null;
 
   useEffect(() => {
     const check = platform.checkAppUpdate;
     if (!check) return;
     let live = true;
-    void check(latest)
+    void check(release)
       .then((found) => live && setUpdate(found))
       .catch(() => undefined);
     return () => {
       live = false;
     };
-  }, [latest, running?.version]);
+  }, [release?.current, release?.latest]);
 
-  if (!platform.checkAppUpdate) {
-    if (!running || !latest || compareVersions(latest, running.version) <= 0) return null;
+  if (home?.stale && !update?.required) {
     return (
       <button
         type="button"
         className="app-outdated"
-        title={`${running.name} runs ${running.version}. Update it from its Status; this page then offers to reload.`}
-        onClick={() => activeId && openStatus(activeId)}
+        title="The service that opened this page has a newer version of it. Reload when you're ready; sessions keep running."
+        onClick={() => window.location.reload()}
       >
-        {`agentop ${latest} is out`}
+        New version: reload
       </button>
     );
   }
-  if (!update) return null;
+  if (!update) {
+    if (!info?.latest || info.latest === info.current || (platform.checkAppUpdate && release)) return null;
+    return (
+      <button
+        type="button"
+        className="app-outdated"
+        title="Update it from its Status; this page then offers to reload."
+        onClick={() => homeId && openStatus(homeId)}
+      >
+        {info.update_from === "release" ? `agentop ${info.latest} is out` : "New commits on main"}
+      </button>
+    );
+  }
   const version = update.version ? ` ${update.version}` : "";
   if (update.kind === "service") {
     return (

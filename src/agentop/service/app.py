@@ -17,7 +17,8 @@ from fastapi.staticfiles import StaticFiles
 
 from agentop import projects
 
-from . import auth, config, host, identity, manager
+from . import auth, config, host, identity, manager, update
+from .api.context import REPO_ROOT
 from .config import Settings
 from .identity import Identity
 from .plugins import PluginHost
@@ -66,6 +67,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        await asyncio.to_thread(update.running_version, REPO_ROOT, settings.update_from)
         await store.startup()
         # After the first scan, so plugins don't hear every existing session as new.
         await plugins.startup()

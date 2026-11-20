@@ -533,44 +533,6 @@
         "title": "HistoryStats",
         "type": "object"
       },
-      "LatestRelease": {
-        "properties": {
-          "check_error": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Check Error"
-          },
-          "checked_at": {
-            "title": "Checked At",
-            "type": "number"
-          },
-          "version": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "The newest vX.Y.Z tag, without the v",
-            "title": "Version"
-          }
-        },
-        "required": [
-          "version",
-          "checked_at",
-          "check_error"
-        ],
-        "title": "LatestRelease",
-        "type": "object"
-      },
       "LoginMethod": {
         "properties": {
           "id": {
@@ -1440,6 +1402,79 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "VersionInfo": {
+        "description": "What the service runs and what Update would bring, in one form: X.Y.Z following releases, else a commit.",
+        "properties": {
+          "check_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Error"
+          },
+          "checked_at": {
+            "title": "Checked At",
+            "type": "number"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "latest": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Equal to current when nothing is newer",
+            "title": "Latest"
+          },
+          "ui_build": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The entry script of the app the service serves now",
+            "title": "Ui Build"
+          },
+          "update_from": {
+            "enum": [
+              "main",
+              "release"
+            ],
+            "title": "Update From",
+            "type": "string"
+          }
+        },
+        "required": [
+          "update_from",
+          "current",
+          "latest",
+          "ui_build",
+          "checked_at",
+          "check_error"
+        ],
+        "title": "VersionInfo",
+        "type": "object"
       }
     }
   },
@@ -1449,52 +1484,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/admin/latest": {
-      "get": {
-        "operationId": "latest_release_admin_latest_get",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "authorization",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Authorization"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/LatestRelease"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Latest Release"
-      }
-    },
     "/admin/restart": {
       "post": {
         "operationId": "restart_admin_restart_post",
@@ -1675,6 +1664,52 @@
           }
         },
         "summary": "Start Update"
+      }
+    },
+    "/admin/version": {
+      "get": {
+        "operationId": "version_info_admin_version_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionInfo"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Version Info"
       }
     },
     "/auth/clients": {

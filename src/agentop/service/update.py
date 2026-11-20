@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import sys
 import time
+import tomllib
 from pathlib import Path
 
 from agentop.paths import data_dir, state_dir
@@ -27,9 +28,11 @@ FETCH_TIMEOUT_SECONDS = 20
 CHECK_CACHE_SECONDS = 60
 LATEST_CACHE_SECONDS = 60 * 60
 RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
+COMMIT_LENGTH = 10
 
 _checked: dict[str, tuple[float, dict]] = {}
 _latest: dict[str, tuple[float, dict]] = {}
+_running: dict[str, str | None] = {}
 
 
 class UpdateError(RuntimeError):
@@ -103,21 +106,57 @@ def latest_release(repo: Path) -> str | None:
 
 
 def _version_key(tag: str) -> tuple[int, ...]:
-    return tuple(int(p) for p in tag[1:].split("."))
+    return tuple(int(p) for p in tag.removeprefix("v").split("."))
 
 
-def newest_tag(repo: Path) -> dict:
-    """The newest vX.Y.Z tag on the remote, asked at most once an hour. A tag is a release; a GitHub release is only the app's."""
-    key = str(repo)
+def _package_version(repo: Path) -> str | None:
+    try:
+        return tomllib.loads((repo / "pyproject.toml").read_text())["project"]["version"]
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return None
+
+
+def running_version(repo: Path, update_from: str) -> str | None:
+    """X.Y.Z following releases, else the commit. Kept from the first call: the checkout can move under a running service."""
+    key = f"{repo}:{update_from}"
+    if key not in _running:
+        found = None
+        if update_from != "release":
+            try:
+                found = _git(repo, "rev-parse", "HEAD")[:COMMIT_LENGTH]
+            except (OSError, subprocess.SubprocessError):
+                pass
+        _running[key] = found or _package_version(repo)
+    return _running[key]
+
+
+def _newer_on_remote(repo: Path, update_from: str, current: str) -> str | None:
+    if update_from == "release":
+        refs = _git(repo, "ls-remote", "--tags", "--refs", "origin", "v*", timeout=FETCH_TIMEOUT_SECONDS)
+        tags = [line.rsplit("refs/tags/", 1)[-1] for line in refs.splitlines()]
+        newest = max((t for t in tags if RELEASE_TAG.fullmatch(t)), key=_version_key, default=None)
+        try:
+            return newest[1:] if newest and _version_key(newest) > _version_key(current) else None
+        except ValueError:
+            return newest[1:] if newest else None
+    found = _git(repo, "ls-remote", "origin", "refs/heads/main", timeout=FETCH_TIMEOUT_SECONDS).split()
+    if not found or found[0].startswith(current):
+        return None
+    # The checkout may be ahead of the remote, as on a machine that commits to it.
+    contained = subprocess.run(["git", "merge-base", "--is-ancestor", found[0], "HEAD"], cwd=repo, capture_output=True, check=False)
+    return None if contained.returncode == 0 else found[0][:COMMIT_LENGTH]
+
+
+def latest(repo: Path, update_from: str) -> dict:
+    """What Update would move to, in the form of running_version: the same string when nothing is newer. Asked at most hourly."""
+    key = f"{repo}:{update_from}"
     cached = _latest.get(key)
     if cached and time.monotonic() - cached[0] < LATEST_CACHE_SECONDS:
         return cached[1]
-    result: dict = {"version": None, "checked_at": time.time(), "check_error": None}
+    current = running_version(repo, update_from)
+    result: dict = {"latest": current, "checked_at": time.time(), "check_error": None}
     try:
-        refs = _git(repo, "ls-remote", "--tags", "--refs", "origin", "v*", timeout=FETCH_TIMEOUT_SECONDS)
-        tags = [line.rsplit("refs/tags/", 1)[-1] for line in refs.splitlines()]
-        found = max((t for t in tags if RELEASE_TAG.fullmatch(t)), key=_version_key, default=None)
-        result["version"] = found[1:] if found else None
+        result["latest"] = _newer_on_remote(repo, update_from, current or "") or current
     except subprocess.TimeoutExpired:
         result["check_error"] = "The git remote did not answer."
     except (OSError, subprocess.CalledProcessError) as exc:

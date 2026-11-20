@@ -112,6 +112,14 @@ def test_update_info_keeps_a_stable_shape(api, tmp_path, monkeypatch):
     assert body["running"] is False and body["last_run"]["state"] == "done"
 
 
+def test_version_says_what_runs_and_what_update_brings_in_one_form(api, monkeypatch):
+    monkeypatch.setattr(update, "running_version", lambda repo, update_from: "a012345678")
+    monkeypatch.setattr(update, "latest", lambda repo, update_from: {"latest": "b012345678", "checked_at": 1.0, "check_error": None})
+    body = api.get("/admin/version").json()
+    assert (body["update_from"], body["current"], body["latest"]) == ("main", "a012345678", "b012345678")
+    assert "ui_build" in body
+
+
 def test_available_counts_commits_behind(tmp_path):
     import subprocess
 

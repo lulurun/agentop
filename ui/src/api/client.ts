@@ -5,7 +5,7 @@ export type Session = components["schemas"]["SessionModel"];
 export type Health = components["schemas"]["Health"];
 export type ServiceInfo = components["schemas"]["ServiceInfo"];
 export type UpdateInfo = components["schemas"]["UpdateInfo"];
-export type LatestRelease = components["schemas"]["LatestRelease"];
+export type VersionInfo = components["schemas"]["VersionInfo"];
 export type HistoryItem = components["schemas"]["HistoryItem"];
 export type HistoryListing = components["schemas"]["HistoryListing"];
 export type HistoryStats = components["schemas"]["HistoryStats"];
@@ -116,7 +116,7 @@ export class ServiceClient {
   clients = () => this.get<ClientInfo[]>("/auth/clients");
   revokeClient = (id: string) => this.request<void>("DELETE", `/auth/clients/${encodeURIComponent(id)}`);
   updateInfo = () => this.admin<UpdateInfo>("GET", "update");
-  latestRelease = () => this.get<LatestRelease>("/admin/latest");
+  versionInfo = () => this.get<VersionInfo>("/admin/version");
   restartService = () => this.admin("POST", "restart");
   stopService = () => this.admin("POST", "stop");
   startUpdate = () => this.admin("POST", "update");

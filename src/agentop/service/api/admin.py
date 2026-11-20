@@ -20,12 +20,12 @@ from ..models import (
     Accepted,
     DirListing,
     Health,
-    LatestRelease,
     PatchPlugin,
     PluginInfo,
     ServiceInfo,
     ToolInfo,
     UpdateInfo,
+    VersionInfo,
 )
 from .context import AUTHED, REPO_ROOT, Context, Ctx
 
@@ -124,11 +124,18 @@ async def update_info(ctx: Ctx):
     }
 
 
-@router.get("/admin/latest", response_model=LatestRelease, dependencies=AUTHED)
-async def latest_release():
-    if _install_kind() != "git":
-        return {"version": None, "checked_at": time.time(), "check_error": "This service isn't a git checkout."}
-    return await asyncio.to_thread(update.newest_tag, REPO_ROOT)
+@router.get("/admin/version", response_model=VersionInfo, dependencies=AUTHED)
+async def version_info(ctx: Ctx):
+    mode = ctx.settings.update_from
+    found = {"latest": update.running_version(REPO_ROOT, mode), "checked_at": time.time(), "check_error": "This service isn't a git checkout."}
+    if _install_kind() == "git":
+        found = await asyncio.to_thread(update.latest, REPO_ROOT, mode)
+    return {
+        "update_from": mode,
+        "current": update.running_version(REPO_ROOT, mode),
+        "ui_build": await asyncio.to_thread(ui_build),
+        **found,
+    }
 
 
 @router.post("/admin/update", response_model=Accepted, status_code=202, dependencies=AUTHED)

@@ -258,18 +258,44 @@ def test_from_releases_with_none_yet_changes_nothing(install):
     assert install.head == install.good
 
 
-def test_the_newest_tag_is_by_version_and_asked_once_an_hour(install, monkeypatch):
+@pytest.fixture
+def versions(monkeypatch):
     from agentop.service import update
 
     monkeypatch.setattr(update, "_latest", {})
-    assert update.newest_tag(install.repo)["version"] is None
-    update._latest.clear()
-    for tag in ("v1.9.0", "v1.10.0", "v1.10.0-rc1"):
+    monkeypatch.setattr(update, "_running", {})
+    return update
+
+
+def test_following_releases_the_latest_is_the_newest_tag_above_what_runs_asked_once_an_hour(install, versions):
+    (install.repo / "pyproject.toml").write_text('[project]\nversion = "1.9.0"\n')
+    assert versions.running_version(install.repo, "release") == "1.9.0"
+    assert versions.latest(install.repo, "release")["latest"] == "1.9.0"
+    versions._latest.clear()
+    for tag in ("v1.8.0", "v1.10.0", "v1.10.0-rc1"):
         install.release(tag)
-    found = update.newest_tag(install.repo)
-    assert (found["version"], found["check_error"]) == ("1.10.0", None)
+    found = versions.latest(install.repo, "release")
+    assert (found["latest"], found["check_error"]) == ("1.10.0", None)
     install.release("v2.0.0")
-    assert update.newest_tag(install.repo)["version"] == "1.10.0"
+    assert versions.latest(install.repo, "release")["latest"] == "1.10.0"
+
+
+def test_following_main_versions_are_commits_and_the_latest_never_goes_back(install, versions):
+    current = versions.running_version(install.repo, "main")
+    assert current == install.good[:10]
+    assert versions.latest(install.repo, "main")["latest"] == current
+    versions._latest.clear()
+    install.publish("v2")
+    assert versions.latest(install.repo, "main")["latest"] == git(install.dev, "rev-parse", "HEAD")[:10]
+    git(install.repo, "pull", "-q")
+    assert versions.running_version(install.repo, "main") == current  # what runs, until a restart
+
+    versions._latest.clear()
+    versions._running.clear()
+    (install.repo / "LOCAL").write_text("x")
+    git(install.repo, "add", "-A")
+    git(install.repo, "commit", "-qm", "ahead of the remote")
+    assert versions.latest(install.repo, "main")["latest"] == install.head[:10]
 
 
 def test_the_ui_is_built_only_when_it_changed_and_installed_only_when_its_lockfile_did(install, tmp_path):

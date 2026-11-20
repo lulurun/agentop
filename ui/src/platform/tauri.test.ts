@@ -67,7 +67,7 @@ describe("the home connection", () => {
 });
 
 describe("app updates", () => {
-  const INFO = { version: "2.0.0", native_api: 2, releases_url: "https://github.com/lulurun/agentop/releases", service_version: "2.0.0" };
+  const INFO = { version: "2.0.0", native_api: 2, releases_url: "https://github.com/lulurun/agentop/releases" };
   const withInfo = (info: unknown) =>
     invoke.mockImplementation(async (command: string) => {
       if (command === "desktop_info") {
@@ -76,31 +76,34 @@ describe("app updates", () => {
       }
       return null;
     });
+  const check = async (current: string, latest: string) => (await platform()).checkAppUpdate!({ current, latest });
 
-  it("has none when the app and its agentop are the newest", async () => {
+  it("has none when the app and its agentop are the newest, or the service doesn't follow releases", async () => {
     withInfo(INFO);
-    expect(await (await platform()).checkAppUpdate!("2.0.0")).toBeNull();
+    expect(await check("2.0.0", "2.0.0")).toBeNull();
+    expect(await check("2.1.0", "2.1.0")).toBeNull();
     expect(await (await platform()).checkAppUpdate!(null)).toBeNull();
   });
 
-  it("updates this computer's agentop in place for a new minor or patch release", async () => {
+  it("updates this computer's agentop in place for a new minor or patch release, by what the service runs", async () => {
     withInfo(INFO);
-    for (const version of ["2.0.1", "2.1.0"]) {
-      const update = await (await platform()).checkAppUpdate!(version);
-      expect(update).toMatchObject({ kind: "service", version, required: false });
+    for (const latest of ["2.0.1", "2.1.0"]) {
+      const update = await check("2.0.0", latest);
+      expect(update).toMatchObject({ kind: "service", version: latest, required: false });
       await update!.install!();
       expect(invoke).toHaveBeenCalledWith("update_open", undefined);
     }
+    expect(await check("2.1.0", "2.2.0")).toMatchObject({ kind: "service", version: "2.2.0" });
   });
 
   it("updates an agentop older than the app itself, as after a new app is installed", async () => {
-    withInfo({ ...INFO, service_version: "1.3.0" });
-    expect(await (await platform()).checkAppUpdate!(null)).toMatchObject({ kind: "service", version: "2.0.0" });
+    withInfo(INFO);
+    expect(await check("1.3.0", "1.3.0")).toMatchObject({ kind: "service", version: "2.0.0" });
   });
 
   it("links to the release page for a new major version", async () => {
     withInfo(INFO);
-    const update = await (await platform()).checkAppUpdate!("3.0.2");
+    const update = await check("2.1.0", "3.0.2");
     expect(update).toMatchObject({ kind: "app", version: "3.0.2", releaseUrl: "https://github.com/lulurun/agentop/releases/latest" });
     expect(update?.install).toBeUndefined();
   });

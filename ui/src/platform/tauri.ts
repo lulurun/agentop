@@ -35,8 +35,6 @@ interface DesktopInfo {
   version: string;
   native_api: number;
   releases_url: string;
-  /** The app's copy of agentop. */
-  service_version?: string | null;
 }
 
 const RELEASES_URL = "https://github.com/lulurun/agentop/releases";
@@ -128,14 +126,17 @@ export const tauriPlatform: Platform = {
   },
 
   /** A new major version is the app's own: a download. Any other release only updates this computer's agentop, in place. */
-  async checkAppUpdate(latest) {
+  async checkAppUpdate(release) {
     const info = await desktopInfo();
-    if (info.native_api < NATIVE_API) return { kind: "app", version: latest ?? "", required: true, releaseUrl: info.releases_url };
-    // This app's own version is out too, as the tag it was built from.
-    if (!latest || compareVersions(latest, info.version) < 0) latest = info.version;
-    if (parseVersion(latest)[0] > parseVersion(info.version)[0]) return { kind: "app", version: latest, required: false, releaseUrl: `${info.releases_url}/latest` };
-    if (!info.service_version || compareVersions(latest, info.service_version) <= 0) return null;
-    return { kind: "service", version: latest, required: false, releaseUrl: info.releases_url, install: () => invoke("update_open") };
+    if (info.native_api < NATIVE_API) return { kind: "app", version: release?.latest ?? "", required: true, releaseUrl: info.releases_url };
+    if (!release) return null;
+    if (parseVersion(release.latest)[0] > parseVersion(info.version)[0]) {
+      return { kind: "app", version: release.latest, required: false, releaseUrl: `${info.releases_url}/latest` };
+    }
+    // The app's own version is out too, as the tag it was built from: a new app can find its agentop older.
+    const target = compareVersions(info.version, release.latest) > 0 ? info.version : release.latest;
+    if (compareVersions(target, release.current) <= 0) return null;
+    return { kind: "service", version: target, required: false, releaseUrl: info.releases_url, install: () => invoke("update_open") };
   },
 
   /** Resolves once the service answers, or rejects with why it didn't. */

@@ -553,7 +553,7 @@ test("a service of the app's own /api/v2 shows no reload", async ({ page }) => {
 
 test("a service that now serves another app shows a reload notice, and doesn't reload by itself", async ({ page }) => {
   const s = await service("alpha");
-  await page.route("**/api/v2/service", async (route) => {
+  await page.route("**/api/v2/admin/version", async (route) => {
     const response = await route.fetch();
     await route.fulfill({ response, json: { ...(await response.json()), ui_build: "index-newer.js" } });
   });
@@ -572,19 +572,28 @@ test("a service that now serves another app shows a reload notice, and doesn't r
 
 test("a newer release than the service runs shows, and opens the service's Status", async ({ page }) => {
   const s = await service("alpha");
-  await page.route("**/api/v2/admin/latest", (route) => route.fulfill({ json: { version: "99.0.0", checked_at: 0, check_error: null } }));
+  await page.route("**/api/v2/admin/version", (route) => route.fulfill({ json: { update_from: "release", current: "1.0.0", latest: "99.0.0", ui_build: null, checked_at: 0, check_error: null } }));
   await page.goto(s.signedInUrl);
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
   await page.getByRole("button", { name: "agentop 99.0.0 is out" }).click();
   await expect(page.getByRole("tab", { name: "Status" })).toBeVisible();
 });
 
-test("a release no newer than the service shows nothing", async ({ page }) => {
+test("new commits on main show too, and open the service's Status", async ({ page }) => {
   const s = await service("alpha");
-  await page.route("**/api/v2/admin/latest", (route) => route.fulfill({ json: { version: "0.0.1", checked_at: 0, check_error: null } }));
+  await page.route("**/api/v2/admin/version", (route) => route.fulfill({ json: { update_from: "main", current: "a012345678", latest: "b012345678", ui_build: null, checked_at: 0, check_error: null } }));
   await page.goto(s.signedInUrl);
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: /is out$/ })).toHaveCount(0);
+  await page.getByRole("button", { name: "New commits on main" }).click();
+  await expect(page.getByRole("tab", { name: "Status" })).toBeVisible();
+});
+
+test("nothing newer than the service shows nothing", async ({ page }) => {
+  const s = await service("alpha");
+  await page.route("**/api/v2/admin/version", (route) => route.fulfill({ json: { update_from: "release", current: "1.0.0", latest: "1.0.0", ui_build: null, checked_at: 0, check_error: null } }));
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /is out$|New commits|reload/ })).toHaveCount(0);
 });
 
 test("a service serving this very app shows no reload notice", async ({ page }) => {

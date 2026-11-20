@@ -14,6 +14,12 @@ export interface AppUpdate {
   releaseUrl: string;
 }
 
+/** X.Y.Z versions: what this computer's service runs, and what Update would bring. */
+export interface Release {
+  current: string;
+  latest: string;
+}
+
 /** The only code that differs between the web app and the desktop app. */
 export interface Platform {
   kind: "web" | "desktop";
@@ -23,8 +29,8 @@ export interface Platform {
   loadActiveId(): string | null;
   saveActiveId(id: string): void;
   copyText(text: string): Promise<void>;
-  /** Desktop only: what the newest release, `latest`, needs of this app, if anything. */
-  checkAppUpdate?(latest: string | null): Promise<AppUpdate | null>;
+  /** Desktop only: what this app needs, given this computer's service following releases (null otherwise). */
+  checkAppUpdate?(release: Release | null): Promise<AppUpdate | null>;
   /** Desktop only: start this computer's service again. */
   startService?(): Promise<void>;
   /** Desktop only: open a page in the system browser. */
