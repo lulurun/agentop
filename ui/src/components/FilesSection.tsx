@@ -161,14 +161,14 @@ function Directory({ sessionId, tree, path }: { sessionId: string; tree: Tree; p
   );
 }
 
-/** Whether the session's agent tool keeps a memory folder, which only Claude Code does. */
+/** Whether the session's agent tool keeps notes for its project, which only Claude Code does. */
 function useHasMemory(sessionId: string): boolean {
   const client = useActiveClient();
   const [has, setHas] = useState(false);
   useEffect(() => {
     let cancelled = false;
     client.memoryFiles(sessionId).then(
-      () => !cancelled && setHas(true),
+      (listing) => !cancelled && setHas(listing.entries.length > 0),
       () => !cancelled && setHas(false),
     );
     return () => {

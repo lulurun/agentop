@@ -56,7 +56,7 @@ test("the app on a local service connects to a devhost through the proxy", async
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(`http://127.0.0.1:${proxy.port}/agentop#token=${devhost.token}`);
   await dialog.getByRole("button", { name: "Test connection" }).click();
-  await expect(dialog.getByText("Found devhost")).toBeVisible();
+  await expect(dialog.getByText("Found an agentop service")).toBeVisible();
   await dialog.getByRole("button", { name: "Add and connect" }).click();
   await expect(page.locator(".switcher-current")).toContainText("devhost");
 
@@ -82,7 +82,7 @@ test("a proxy that drops WebSockets is named, and the app recovers when it is fi
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(`http://127.0.0.1:${broken.port}/agentop#token=${devhost.token}`);
   await dialog.getByRole("button", { name: "Test connection" }).click();
-  await expect(dialog.getByText("Found devhost")).toBeVisible();
+  await expect(dialog.getByText("Found an agentop service")).toBeVisible();
   await dialog.getByRole("button", { name: "Add and connect" }).click();
   await expect(page.getByRole("alert")).toContainText("forward WebSocket upgrades", { timeout: 15_000 });
 

@@ -392,7 +392,7 @@ def test_claudes_memory_folder_before_the_first_log_is_in_the_one_named_after_cw
 
 
 def test_a_tool_without_a_memory_folder_has_none(client):
-    assert client.get("/api/v2/sessions/one/memory", headers=AUTH).status_code == 404
+    assert client.get("/api/v2/sessions/one/memory", headers=AUTH).json()["entries"] == []
     response = client.get(
         "/api/v2/plugins/viewer/file", params={"session": "one", "path": "s1.jsonl", "source": "memory"}, headers=AUTH
     )
@@ -400,4 +400,4 @@ def test_a_tool_without_a_memory_folder_has_none(client):
 
 
 def test_a_claude_project_without_notes_has_no_memory_folder(claude_client):
-    assert claude_client.get("/api/v2/sessions/one/memory", headers=AUTH).status_code == 404
+    assert claude_client.get("/api/v2/sessions/one/memory", headers=AUTH).json()["entries"] == []

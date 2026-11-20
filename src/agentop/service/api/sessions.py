@@ -87,8 +87,9 @@ async def session_memory(session_id: str, ctx: Ctx, path: str = ""):
     if row is None:
         raise HTTPException(404, "Session not found")
     root = await asyncio.to_thread(transcripts.memory_folder, row.get("tool"), row.get("session_id"), row.get("cwd"))
-    if root is None:
-        raise HTTPException(404, "This session's tool keeps no memory folder")
+    # Empty rather than 404: having no notes is the usual answer, and a browser logs every 404 as an error.
+    if root is None or not root.is_dir():
+        return {"root": "", "path": path, "entries": [], "truncated": False}
     return await _listing(str(root), path)
 
 

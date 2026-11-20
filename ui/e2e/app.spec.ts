@@ -293,7 +293,7 @@ async function addService(page: Page, other: Service) {
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("Address").fill(other.connectInfo);
   await dialog.getByRole("button", { name: "Test connection" }).click();
-  await expect(dialog.getByText(`Found ${other.name}`)).toBeVisible();
+  await expect(dialog.getByText("Found an agentop service")).toBeVisible();
   await dialog.getByRole("button", { name: "Add and connect" }).click();
 }
 
