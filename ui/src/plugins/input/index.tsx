@@ -64,7 +64,7 @@ function InputBar({ session, plugin, terminal }: { session: Session; plugin: Plu
   const [touch] = useState(touchScreen);
 
   useEffect(() => {
-    terminal.takeInput(active);
+    terminal.takeInput(active, () => box.current?.focus({ preventScroll: true }));
   }, [active, terminal]);
 
   useEffect(() => {

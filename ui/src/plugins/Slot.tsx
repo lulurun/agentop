@@ -153,7 +153,7 @@ export function TerminalInputs({
   keyboard,
 }: {
   session: Session;
-  onTakeInput: (id: string, on: boolean) => void;
+  onTakeInput: (id: string, on: boolean, focus?: () => void) => void;
   /** The terminal's keyboard (`TerminalView`'s `keyboard`). */
   keyboard: MutableRefObject<((data: string) => boolean) | null>;
 }) {
@@ -178,12 +178,12 @@ function TerminalInputPiece({
 }: {
   info: PluginInfo;
   session: Session;
-  onTakeInput: (id: string, on: boolean) => void;
+  onTakeInput: (id: string, on: boolean, focus?: () => void) => void;
   keyboard: MutableRefObject<((data: string) => boolean) | null>;
 }) {
   const plugin = usePluginContext(info);
   const terminal = useMemo<TerminalInputControl>(
-    () => ({ takeInput: (on) => onTakeInput(info.id, on), type: (data) => keyboard.current?.(data) ?? false }),
+    () => ({ takeInput: (on, focus) => onTakeInput(info.id, on, focus), type: (data) => keyboard.current?.(data) ?? false }),
     [info.id, onTakeInput, keyboard],
   );
   useEffect(() => () => onTakeInput(info.id, false), [info.id, onTakeInput]);

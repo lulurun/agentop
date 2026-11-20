@@ -46,7 +46,8 @@ export interface LoginContext {
  * or goes away gives the input back.
  */
 export interface TerminalInputControl {
-  takeInput(on: boolean): void;
+  /** `focus` is called when the watched terminal is clicked, to move the keyboard to the piece. */
+  takeInput(on: boolean, focus?: () => void): void;
   /**
    * Type into the terminal as its keyboard would, through tmux's own client, so
    * tmux's key bindings apply (its prefix, then a key). It works while the input

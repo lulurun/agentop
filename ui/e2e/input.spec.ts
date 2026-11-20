@@ -38,6 +38,8 @@ test("prompts and keys go through the bar, and the terminal is only watched", as
   await expect(prompt).toBeVisible();
 
   await page.getByTestId("terminal").click();
+  await expect(prompt).toBeFocused();
+  await page.locator(".xterm-helper-textarea").focus();
   await page.keyboard.type("typed in terminal\n");
 
   await prompt.fill("hello from the bar");

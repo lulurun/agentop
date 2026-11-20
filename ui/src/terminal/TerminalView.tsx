@@ -100,10 +100,12 @@ interface Props {
    * `typing` is off, and returns false when the terminal isn't connected.
    */
   keyboard?: MutableRefObject<((data: string) => boolean) | null>;
+  /** A mouse click on the terminal while `typing` is off, so the input below can take the keyboard. */
+  onWatchedClick?: () => void;
 }
 
 /** The only code that touches xterm, so the terminal library can be replaced in one place. */
-export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay, searchable = true, readOnly = false, typing = true, keyboard }: Props) {
+export function TerminalView({ client, sessionId, focusRequest, locked = false, overlay, searchable = true, readOnly = false, typing = true, keyboard, onWatchedClick }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const lockedRef = useRef(locked || readOnly);
   const searchableRef = useRef(searchable);
@@ -308,7 +310,18 @@ export function TerminalView({ client, sessionId, focusRequest, locked = false, 
 
   return (
     <div className="terminal" data-status={status} data-locked={locked || undefined} data-readonly={readOnly || undefined} data-typing={typing ? undefined : "off"}>
-      <div className="terminal-host" ref={host} data-testid="terminal" inert={locked} />
+      <div
+        className="terminal-host"
+        ref={host}
+        data-testid="terminal"
+        inert={locked}
+        onClick={(event) => {
+          // A tap stays put, so it doesn't raise a phone's keyboard; a selection is kept for Ctrl+Shift+C.
+          const pointer = (event.nativeEvent as PointerEvent).pointerType;
+          if (typing || locked || pointer === "touch" || term.current?.hasSelection()) return;
+          onWatchedClick?.();
+        }}
+      />
       {locked && overlay}
       {searching && (
         <form

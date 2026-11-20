@@ -227,10 +227,13 @@ function SessionPane({ session, focused, visible, client, onClose }: SessionPane
   // The plugins below the terminal that are taking its input, such as the Input bar.
   const [takers, setTakers] = useState<string[]>([]);
   const keyboard = useRef<((data: string) => boolean) | null>(null);
-  const onTakeInput = useCallback(
-    (id: string, on: boolean) => setTakers((ids) => (on === ids.includes(id) ? ids : on ? [...ids, id] : ids.filter((other) => other !== id))),
-    [],
-  );
+  const focusers = useRef(new Map<string, () => void>());
+  const onTakeInput = useCallback((id: string, on: boolean, focus?: () => void) => {
+    if (on && focus) focusers.current.set(id, focus);
+    else focusers.current.delete(id);
+    setTakers((ids) => (on === ids.includes(id) ? ids : on ? [...ids, id] : ids.filter((other) => other !== id)));
+  }, []);
+  const focusTaker = useCallback(() => focusers.current.values().next().value?.(), []);
   // Shown again after being kept out of sight: its terminal takes the keyboard back, as a new one would.
   const [focusRequest, setFocusRequest] = useState(0);
   const wasVisible = useRef(visible);
@@ -267,6 +270,7 @@ function SessionPane({ session, focused, visible, client, onClose }: SessionPane
           searchable={focused}
           locked={session.status === "exited"}
           typing={takers.length === 0}
+          onWatchedClick={focusTaker}
           keyboard={keyboard}
           overlay={<ExitedCurtain session={session} />}
         />
