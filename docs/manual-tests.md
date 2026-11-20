@@ -125,8 +125,9 @@ The app runs this computer's service (design 4.2), from its own copy of agentop 
 | H7 | Quit and reopen the app | Saved services and tokens are kept (OS keychain) | Not run |
 | H8 | Repeat C1 to C5 and D1 to D4 in the desktop app | Same as in the browser | Not run |
 | H9 | Remove `~/.agentop-desktop/venv`, then open the app | The setup screen lists the tools and installs again; Launch opens the app signed in | Seen working (macOS, v1.2.0, from a clean `~/.agentop-desktop`) |
-| H10 | Install the newest `agentop-desktop` release, then release a newer `v*` | **App update** shows; clicking it updates and restarts the app; sessions keep running, and closing the new copy stops the service | Not run |
-| H11 | Run a copy built with `npm run build` while a newer release exists | **App update** opens the release page instead of installing | Not run |
+| H10 | Install the newest `agentop-desktop` release, then release a Y or Z version | **Update agentop** shows; clicking it shows the start page with the tools checked and a row per update step, then **Launch** opens the new version signed in, with no sign-in asked; sessions keep running | Not run |
+| H11 | Release a new X version | **App update** opens its release page. After installing it, the app opens on the update page by itself and updates its agentop | Not run |
+| H15 | Keep a browser tab open on a service, then release a Y version and update the service; then a Z version | After Y the tab shows **New version: reload** and doesn't reload by itself; after Z it shows nothing | Not run |
 | H12 | Update the service from its panel in the app | The window reloads on the new UI, still signed in | Not run |
 | H13 | On a Mac without tmux, open the app for the first time | tmux shows ✗ with `brew install tmux`, nothing installs; after installing it, Check again goes on to install, then **Ready to launch** | Not run |
 | H14 | On a Mac where `~/.local/bin` isn't on PATH, run setup | "agentop on PATH" shows ✗ with the line for `~/.zprofile`; **Add it** adds it once and setup passes | Not run |

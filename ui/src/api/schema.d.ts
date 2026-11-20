@@ -824,6 +824,11 @@ export interface components {
             tls: boolean;
             /** Tmux Version */
             tmux_version: string | null;
+            /**
+             * Ui Build
+             * @description The entry script of the app the service serves now. A page with another one is out of date
+             */
+            ui_build?: string | null;
             /** Uptime Seconds */
             uptime_seconds: number;
             /** Version */

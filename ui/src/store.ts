@@ -491,6 +491,15 @@ export const useApp = create<AppState>((set, get) => {
         set({ link: { state: "connected", service } });
         // On every open, so a reconnect also catches changes made while away.
         void loadPlugins(mine);
+        // A restart, as after an update, may bring another version and app.
+        void activeClient(get())
+          .service()
+          .then((fresh) => {
+            if (mine !== attempt || get().link.state !== "connected") return;
+            service = fresh;
+            set({ link: { state: "connected", service: fresh } });
+          })
+          .catch(() => undefined);
       }
     };
     ws.onmessage = (message) => {

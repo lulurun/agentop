@@ -26,7 +26,7 @@ There is no agent-level streaming, chat view, or message parsing. The terminal i
 - The UI can read service status and stop, start, restart, and update it.
 - The UI can add, connect to, and switch between services, on this machine or any other reachable machine.
 - On a PC, opening the desktop app is all it takes: it starts this computer's service on loopback and opens signed in. Closing it stops that service and leaves every session running in tmux (4.2).
-- Both clients show when an update is available, and the desktop app updates itself from GitHub Releases (8.5).
+- Both clients show when an update is available. The desktop app updates its copy of agentop in place, and a new major version of the app is a download from GitHub Releases (8.5).
 
 ### 2.2 Non-goals
 
@@ -124,7 +124,7 @@ The app keeps the PID of a service it started in `~/.agentop/state/desktop-serve
 
 Restart and update from the service panel work as for `agentop serve` by hand (`SelfManager`, 8.2). A restart `exec`s in place, so the PID, and the app's hold on it, stay the same. Stop from the panel stops the service. The app then shows "The service on this computer stopped", with a Start button (8.3).
 
-Because the UI comes from the service, it is always the service's own version, and a service update updates the desktop UI with it. Only the wrapper, a few hundred lines of Rust, is built into the app, and it rarely changes. It updates itself (8.5).
+Because the UI comes from the service, it is always the service's own version, and a service update updates the desktop UI with it. Only the wrapper, a few hundred lines of Rust, is built into the app, and it rarely changes. A new wrapper is a new major version and a download (8.5).
 
 ### 4.3 Repository layout
 
@@ -470,15 +470,27 @@ Update needs a git checkout, not systemd. It must outlive the service it restart
 
 agentop has one release series on GitHub: `v*` tags, such as `v1.1.1`, made by `scripts/release.sh`. A tag marks the code, and `.github/workflows/desktop.yml` publishes the desktop app built from it as the release **agentop-desktop v1.1.1**: AppImage (Linux), `.app` (macOS). The app is the only thing to download. The service has no release of its own: it updates from the tags, or from `main` (below). Before 2026-11-18 there were two series, `desktop-v*` for the app and `v*` for the service; those releases were deleted, and the `v1.0.0` and `v1.1.0` tags kept.
 
-The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.conf.json` and `Cargo.toml`, which the script sets together. A release whose wrapper didn't change still ships a new app build; the updater then replaces it with an identical wrapper, which costs a restart.
+The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.conf.json` and `Cargo.toml`, which the script sets together.
 
-**The wrapper updates itself** with Tauri's updater (`tauri-plugin-updater`).
+**Versions say what an update needs** (since 2026-11-20, from v2.0.0). In `vX.Y.Z`:
 
-- CI signs each build with the updater key and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. A lost key means every installed app has to be reinstalled by hand, so it is kept backed up.
-- Installed apps read `latest.json` from `releases/latest`, which is always the newest app, since the app is the only release. An app from before 2026-11-18 reads the deleted `desktop-latest` release instead, and has to be reinstalled by hand once.
-- The UI asks the platform layer (10.6) on load and every 6 hours. With an update, the header shows **App update**. Clicking it downloads the update, checks its signature, replaces the app, and restarts it. The new copy finds the service still running and adopts it (4.2). Sessions carry on, and the new window reconnects to them.
-- Where the app can't replace itself, the button opens the release page instead: a development build, a Linux build that isn't the AppImage, or a failed install.
-- The UI comes from the service, so it can be newer than the wrapper. The wrapper reports `native_api`, the revision of its commands (`desktop_info`). When the UI needs a higher one, the button says **App update needed**. An app from before `desktop_info` counts as revision 0.
+| Part | Changed | The desktop app | An open page |
+|------|---------|-----------------|--------------|
+| X | The wrapper (`desktop/`) | **App update** opens the release page: a download and a reinstall | Shows **New version: reload** |
+| Y | The UI (`ui/`) | **Update agentop** updates this computer's agentop in place | Shows **New version: reload** |
+| Z | Only the service | **Update agentop**, as for Y | Nothing |
+
+`scripts/release.sh` with no argument picks the part from the paths changed since the last tag: `desktop/`, then `ui/`, then anything else. `x`, `y`, `z` or an exact version override it.
+
+**Updating in place (Y, Z).** The UI compares the newest release (the updater's `latest.json`, or the app's own version when that has nothing newer) with the app's copy of agentop (`service_version` in `desktop_info`, from its `pyproject.toml`). Clicking **Update agentop** calls `update_open`: the window shows the start page in its update mode. That checks the tools as setup does, then runs the copy's `agentop service update`, which needs no sign-in (the CLI reads the service token). The service runs `update.sh` (8.4): the newest tag, install, UI build, restart in place, health check, and going back if any of it fails. Each step is a row on the start page, from `state/update-status.json`. **Launch** then opens the service's page. Sessions keep running.
+
+**The wrapper (X)** is offered only when the newest release has a higher major version, and only as its release page. CI still builds the app for every tag, so the newest release always has one to download. A new wrapper that finds its copy of agentop older than itself, as after a reinstall, opens the update mode on start, once per run.
+
+**Open pages** decide by the app itself, not the version: the service reports `ui_build`, the entry script of the app it serves (`/service`). A page served by that service whose own entry script differs shows **New version: reload**, and the user reloads when ready; it never reloads by itself. A Z release rebuilds the same app, so its entry script, which is named by content hash, stays the same. This works on `main` too, where the version doesn't change between releases. The page fetches `/service` again whenever its event socket reopens, as after a restart.
+
+- The updater's key: CI signs each build with it and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. The app now reads `latest.json` only to learn the newest version.
+- The UI comes from the service, so it can be newer than the wrapper. The wrapper reports `native_api`, the revision of its commands (`desktop_info`). When the UI needs a higher one, the button says **App update needed** and opens the release page. Revision 2 added `update_open`, `update_run` and `service_version`; an app from before `desktop_info` counts as 0.
+- Until v2.0.0 (2026-11-20), the wrapper replaced itself in place with Tauri's updater on every release.
 
 **Linux ships as an AppImage only**: a single file to download, `chmod +x`, and run, on any distribution, and the only Linux format the updater replaces in place. It needs `fuse2`, or `--appimage-extract-and-run`. With NVIDIA's driver loaded, the app sets `WEBKIT_DISABLE_DMABUF_RENDERER=1` before opening a window, because WebKitGTK's DMA-BUF renderer can give a blank window there. Only then: setting it everywhere made the terminal visibly slow on an AMD (Mesa) PC (2026-11-16), and the user's own value always wins. There is no `.deb` and no AUR package: a package manager and the updater would both try to own the file.
 
@@ -654,7 +666,7 @@ interface Platform {
   connections: ConnectionStore                // saved list; keychain or localStorage
   defaultConnection(): Promise<Connection | null>
   copyText(text: string): Promise<void>
-  checkAppUpdate?(): Promise<AppUpdate | null>   // desktop: the wrapper's own update (8.5)
+  checkAppUpdate?(): Promise<AppUpdate | null>   // desktop: agentop in place, or a new app (8.5)
   startService?(): Promise<void>                 // desktop: this computer's service (8.3)
   openUrl?(url: string): Promise<void>           // desktop: the release page, in the browser
 }
@@ -924,7 +936,7 @@ The later features ([backlog](backlog.md)) become plugins one at a time, where t
 | Grouping sessions by project | Yes, on a core feature: projects (groups of sessions with a shared folder and a Coordinator) are core, and the `projects` plugin makes the owner's own ([project.md](project.md), designed 2026-11-19) |
 | A merged session list across services, a window per service | No: client-only. It stays a non-goal (2.2) |
 | Offline app shell for the web app | No: client-only |
-| Desktop auto-update | No: desktop-only. Built with the wrapper (8.5) |
+| Desktop updates | No: desktop-only. Built with the wrapper (8.5) |
 | macOS host support (`LaunchdManager`) | No: the core needs it to run at all |
 | Non-git install kinds for update | No: part of core service update |
 

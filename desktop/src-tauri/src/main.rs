@@ -5,8 +5,9 @@
 //!
 //! It runs `agentop serve` on loopback while it is open (see `service.rs`), then shows
 //! the UI that service serves, signed in with the token in `service.json`. So the UI is
-//! always the service's own, and updates with it. The wrapper updates itself from
-//! GitHub Releases.
+//! always the service's own, and updates with it: a release that keeps the wrapper's
+//! major version is installed by the service updating itself, shown on the start page.
+//! A new major version is a new download from GitHub Releases.
 //!
 //! The window gets no shell or file access: only the commands below, each doing one
 //! fixed thing, writing text to the clipboard, the updater, and opening this project's
@@ -21,13 +22,13 @@ mod tokens;
 use serde::{Deserialize, Serialize};
 use service::{Service, Startup};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use tauri::ipc::CapabilityBuilder;
 use tauri::{AppHandle, Manager, RunEvent};
 
 /// The revision of the commands below. The UI, which comes from the service and so may be
 /// newer than this app, asks for an update when it needs a higher one.
-const NATIVE_API: u32 = 1;
+const NATIVE_API: u32 = 2;
 const RELEASES_URL: &str = "https://github.com/lulurun/agentop/releases";
 
 #[derive(Deserialize)]
@@ -60,12 +61,11 @@ fn read_service_info() -> Option<ServiceInfo> {
 struct DesktopInfo {
     version: &'static str,
     native_api: u32,
-    /// Whether the updater can replace this copy: not a development build, and on Linux
-    /// only an AppImage. Otherwise the app links to the release page.
-    self_update: bool,
     releases_url: &'static str,
     owns_service: bool,
     log: Option<String>,
+    /// The app's copy of agentop, which a Y or Z release updates in place.
+    service_version: Option<String>,
 }
 
 #[tauri::command]
@@ -73,21 +73,11 @@ fn desktop_info(service: tauri::State<'_, Arc<Service>>) -> DesktopInfo {
     DesktopInfo {
         version: env!("CARGO_PKG_VERSION"),
         native_api: NATIVE_API,
-        self_update: can_self_update(),
         releases_url: RELEASES_URL,
         owns_service: service.owns_service(),
         log: service::log_path().map(|path| path.display().to_string()),
+        service_version: setup::installed_version(),
     }
-}
-
-fn can_self_update() -> bool {
-    if cfg!(debug_assertions) {
-        return false;
-    }
-    if cfg!(target_os = "linux") {
-        return std::env::var_os("APPIMAGE").is_some();
-    }
-    true
 }
 
 #[tauri::command]
@@ -104,6 +94,30 @@ fn setup_status(setup: tauri::State<'_, Arc<setup::Setup>>) -> setup::Status {
 #[tauri::command]
 fn setup_run(setup: tauri::State<'_, Arc<setup::Setup>>) {
     setup.run();
+}
+
+/// From the service's page: show the start page, which updates this computer's agentop.
+#[tauri::command]
+fn update_open(app: AppHandle) -> Result<(), String> {
+    open_update_page(&app)
+}
+
+/// From the start page: check the tools and update, from the top.
+#[tauri::command]
+fn update_run(setup: tauri::State<'_, Arc<setup::Setup>>) {
+    setup.run_update();
+}
+
+/// The start page, as the window first loaded it.
+static START_PAGE: OnceLock<tauri::Url> = OnceLock::new();
+static UPDATE_OFFERED: AtomicBool = AtomicBool::new(false);
+
+fn open_update_page(app: &AppHandle) -> Result<(), String> {
+    UPDATE_OFFERED.store(true, Ordering::SeqCst);
+    let mut url = START_PAGE.get().cloned().ok_or("The start page isn't known.")?;
+    url.set_query(Some("update"));
+    let window = app.get_webview_window("main").ok_or("No window.")?;
+    window.navigate(url).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -148,6 +162,7 @@ fn service_capability(url: &str) -> CapabilityBuilder {
         "allow-desktop-info",
         "allow-startup-status",
         "allow-service-start",
+        "allow-update-open",
         "allow-token-get",
         "allow-token-set",
         "allow-token-delete",
@@ -173,6 +188,16 @@ fn start_in_background(app: AppHandle) {
         if !CAPABILITY_ADDED.swap(true, Ordering::SeqCst) {
             if let Err(error) = app.add_capability(service_capability(&url)) {
                 eprintln!("agentop-desktop: couldn't allow the service's page: {error}");
+            }
+        }
+        // This app is newer than its copy of agentop, as after a new major version is
+        // installed: update the copy first. Once per run, so a failed update still launches.
+        let own_copy = std::env::var_os("AGENTOP_BIN").is_none();
+        if own_copy && setup::copy_is_older(env!("CARGO_PKG_VERSION")) && !UPDATE_OFFERED.swap(true, Ordering::SeqCst) {
+            if let Err(error) = open_update_page(&app) {
+                eprintln!("agentop-desktop: couldn't open the update page: {error}");
+            } else {
+                return;
             }
         }
         let Some(window) = app.get_webview_window("main") else { return };
@@ -239,9 +264,14 @@ fn main() {
             token_delete,
             setup_status,
             setup_run,
-            setup_add_path
+            setup_add_path,
+            update_open,
+            update_run
         ])
         .setup(|app| {
+            if let Some(url) = app.get_webview_window("main").and_then(|w| w.url().ok()) {
+                let _ = START_PAGE.set(url);
+            }
             start_in_background(app.handle().clone());
             Ok(())
         })

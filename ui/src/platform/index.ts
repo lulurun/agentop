@@ -4,12 +4,13 @@ import { webPlatform } from "./web";
 
 /** A new release of the desktop app itself, the native wrapper around the UI. */
 export interface AppUpdate {
+  /** "app": a new major version, downloaded from the release page. "service": this computer's agentop, updated in place. */
+  kind: "app" | "service";
   version: string;
   /** The UI needs something this copy of the app doesn't have. */
   required: boolean;
-  /** Download it, replace this copy, and restart. Missing where the app can't replace itself. */
+  /** Updates this computer's agentop, on the app's start page. Only for "service". */
   install?: () => Promise<void>;
-  /** Where to get it by hand. */
   releaseUrl: string;
 }
 

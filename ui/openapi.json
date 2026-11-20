@@ -779,6 +779,18 @@
             ],
             "title": "Tmux Version"
           },
+          "ui_build": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The entry script of the app the service serves now. A page with another one is out of date",
+            "title": "Ui Build"
+          },
           "uptime_seconds": {
             "title": "Uptime Seconds",
             "type": "integer"

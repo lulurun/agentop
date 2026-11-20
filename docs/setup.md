@@ -160,11 +160,12 @@ Security, click Open Anyway. Or clear the download flag once:
 xattr -dr com.apple.quarantine /Applications/agentop-desktop.app
 ```
 
-Updates the app installs itself don't get the flag, so this is needed only once.
+It is needed again for each new major version, which is a new download.
 
-**Updates.** When a newer `agentop-desktop` release is out, the header shows **App update**.
-Clicking it installs the update and restarts the app; sessions keep running. A copy
-built by hand can't replace itself, so there the button opens the release page.
+**Updates.** When a newer release is out, the header shows **Update agentop**. Clicking
+it shows the start page while this computer's agentop updates itself, with a row for
+each step, then **Launch**; sessions keep running. A new major version is a new app:
+the header shows **App update**, which opens the release page to download it.
 
 **Building it yourself** needs Rust and the WebKitGTK 4.1 development files. On Arch
 those are `webkit2gtk-4.1`, `gtk3`, `libsoup3`, and `librsvg`.
@@ -187,7 +188,7 @@ Linux with no secret service running, it keeps them in `~/.agentop/state/desktop
 |--------|------|
 | `scripts/build-ui.sh [--clean]` | Builds the web UI into `src/agentop/service/webdist/`, which the service serves. `--clean` reinstalls `node_modules` |
 | `scripts/build-app.sh [--appimage]` | `build-ui.sh`, then the desktop app |
-| `scripts/release.sh 1.2.0` | Releases agentop as `v1.2.0`: sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. The `desktop` workflow builds, signs, and publishes the release `agentop-desktop v1.2.0`, and installed apps offer the update |
+| `scripts/release.sh [x\|y\|z\|X.Y.Z]` | Releases agentop as the next `vX.Y.Z`: X when `desktop/` changed since the last tag, else Y when `ui/` did, else Z (design 8.5), unless told. Sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. The `desktop` workflow builds, signs, and publishes the release `agentop-desktop vX.Y.Z`, and installed apps offer the update |
 
 The script runs only on `main`, clean and level with `origin/main`, and builds the UI
 and the app first, so nothing is tagged that doesn't build. The tag is also what

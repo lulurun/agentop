@@ -13,6 +13,8 @@ fn main() {
         "setup_status",
         "setup_run",
         "setup_add_path",
+        "update_open",
+        "update_run",
     ];
     tauri_build::try_build(
         tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(commands)),

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import re
 import subprocess
 import time
 from importlib import metadata
@@ -31,6 +32,19 @@ from .context import AUTHED, REPO_ROOT, Context, Ctx
 LIFECYCLE_DELAY_SECONDS = 0.3
 
 router = APIRouter()
+
+
+WEB_INDEX = Path(__file__).resolve().parents[1] / "webdist" / "index.html"
+_ENTRY = re.compile(r'src="[^"]*assets/([^"/]+\.js)"')
+
+
+def ui_build() -> str | None:
+    """Read on every call: an update or build-ui.sh replaces the app without a restart."""
+    try:
+        found = _ENTRY.search(WEB_INDEX.read_text())
+    except OSError:
+        return None
+    return found.group(1) if found else None
 
 
 def version() -> str:
@@ -140,6 +154,7 @@ async def service(ctx: Ctx):
         "install_kind": _install_kind(),
         "tls": ctx.settings.tls,
         "plugins": len(ctx.plugins.plugins) if ctx.plugins else 0,
+        "ui_build": await asyncio.to_thread(ui_build),
     }
 
 

@@ -12,7 +12,7 @@ import type { AppUpdate, Platform } from "./index";
  * The revision of the app's native commands this UI needs (NATIVE_API in
  * desktop/src-tauri/src/main.rs). An app below it must be updated before it works fully.
  */
-export const NATIVE_API = 1;
+export const NATIVE_API = 2;
 
 const SAVED_KEY = "agentop.connections";
 const ACTIVE_KEY = "agentop.active";
@@ -34,8 +34,9 @@ const serviceInfo = () => invoke<ServiceInfo | null>("read_service_info");
 interface DesktopInfo {
   version: string;
   native_api: number;
-  self_update: boolean;
   releases_url: string;
+  /** The app's copy of agentop. */
+  service_version?: string | null;
 }
 
 const RELEASES_URL = "https://github.com/lulurun/agentop/releases";
@@ -45,8 +46,19 @@ async function desktopInfo(): Promise<DesktopInfo> {
   try {
     return await invoke<DesktopInfo>("desktop_info");
   } catch {
-    return { version: "0.0.0", native_api: 0, self_update: false, releases_url: RELEASES_URL };
+    return { version: "0.0.0", native_api: 0, releases_url: RELEASES_URL };
   }
+}
+
+function parseVersion(text: string): number[] {
+  const parts = text.split(".").map((p) => parseInt(p, 10) || 0);
+  return [parts[0] ?? 0, parts[1] ?? 0, parts[2] ?? 0];
+}
+
+/** Negative, zero or positive, as a is older than, the same as, or newer than b. */
+export function compareVersions(a: string, b: string): number {
+  const [x, y] = [parseVersion(a), parseVersion(b)];
+  return x[0] - y[0] || x[1] - y[1] || x[2] - y[2];
 }
 
 /** The address of the service that served this page, or, before it has, its configured one. */
@@ -115,33 +127,25 @@ export const tauriPlatform: Platform = {
     await clipboard.writeText(text);
   },
 
+  /**
+   * A new major version is the app's own: a download. Any other release only updates this
+   * computer's agentop, which the app does in place. The newest release is the updater's
+   * feed, or this app when the feed has nothing newer.
+   */
   async checkAppUpdate(): Promise<AppUpdate | null> {
     const info = await desktopInfo();
-    const required = info.native_api < NATIVE_API;
-    let found: Awaited<ReturnType<typeof import("@tauri-apps/plugin-updater").check>> = null;
+    let latest = info.version;
     try {
       const updater = await import("@tauri-apps/plugin-updater");
-      found = await updater.check();
+      latest = (await updater.check())?.version ?? latest;
     } catch {
-      // No network, no release yet, or an app from before the updater.
+      // No network, or no release yet.
     }
-    if (!found && !required) return null;
-    const releaseUrl = found ? `${info.releases_url}/tag/v${found.version}` : info.releases_url;
-    const update = found;
-    return {
-      version: found?.version ?? "",
-      required,
-      releaseUrl,
-      install:
-        update && info.self_update
-          ? async () => {
-              await update.downloadAndInstall();
-              const process = await import("@tauri-apps/plugin-process");
-              // The new copy finds the service still running and stops it when it closes.
-              await process.relaunch();
-            }
-          : undefined,
-    };
+    const releaseUrl = `${info.releases_url}/tag/v${latest}`;
+    if (info.native_api < NATIVE_API) return { kind: "app", version: latest, required: true, releaseUrl: info.releases_url };
+    if (parseVersion(latest)[0] > parseVersion(info.version)[0]) return { kind: "app", version: latest, required: false, releaseUrl };
+    if (!info.service_version || compareVersions(latest, info.service_version) <= 0) return null;
+    return { kind: "service", version: latest, required: false, releaseUrl, install: () => invoke("update_open") };
   },
 
   /** Resolves once the service answers, or rejects with why it didn't. */

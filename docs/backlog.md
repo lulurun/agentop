@@ -40,7 +40,7 @@ Two places signal a PID read from a file, with no check that it is still the pro
 
 ### Service and UI updates in the header
 
-Update can follow `v*` releases (`update_from = "release"`, built 2026-11-18), but the header's **Update**, shown in both clients when a newer release is out, isn't built (design 8.5). Today Update is in each service's Status.
+Update can follow `v*` releases (`update_from = "release"`, built 2026-11-18). The desktop app's header offers **Update agentop** (built 2026-11-20); the web app's header has no Update yet, only each service's Status (design 8.5).
 
 ### Desktop app: say which copy is running
 

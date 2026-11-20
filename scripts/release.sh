@@ -1,21 +1,46 @@
 #!/usr/bin/env bash
-# Release agentop as v<version>: one tag for the code and the desktop app. Sets the
+# Release agentop as vX.Y.Z: one tag for the code and the desktop app. Sets the
 # version in pyproject.toml, tauri.conf.json and Cargo.toml, commits, tags, and pushes.
 # The "desktop" workflow then builds and publishes agentop-desktop. See docs/design.md 8.5.
 #
-#   scripts/release.sh 1.2.0
+# X is for the desktop app's wrapper (a download), Y for the UI (open pages reload), Z
+# for the service only (a restart). With no argument, the part is picked from what
+# changed since the last release: desktop/, then ui/, then anything else.
+#
+#   scripts/release.sh            # picked from the changes
+#   scripts/release.sh x|y|z      # that part
+#   scripts/release.sh 2.0.0      # exactly that
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 
 die() { echo "error: $*" >&2; exit 1; }
 
-version="${1:-}"
+git fetch --quiet origin main --tags
+last=$(git tag -l 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -1 || true)
+[[ -n "$last" ]] || last=v0.0.0
+IFS=. read -r major minor patch <<<"${last#v}"
+
+part="${1:-}"
+if [[ -z "$part" ]]; then
+  changed=$(git diff --name-only "$last"..HEAD 2>/dev/null || true)
+  [[ -n "$changed" ]] || die "nothing has changed since $last"
+  if grep -q '^desktop/' <<<"$changed"; then part=x
+  elif grep -q '^ui/' <<<"$changed"; then part=y
+  else part=z
+  fi
+  echo "Since $last: $part (desktop/ is x, ui/ is y, anything else z)"
+fi
+case "$part" in
+  x|X) version="$((major + 1)).0.0" ;;
+  y|Y) version="$major.$((minor + 1)).0" ;;
+  z|Z) version="$major.$minor.$((patch + 1))" ;;
+  *) version="$part" ;;
+esac
 tag="v$version"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "version must look like 1.2.3, not '$version'"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "give x, y, z or a version like 1.2.3, not '$part'"
 [[ "$(git branch --show-current)" == "main" ]] || die "not on main"
 [[ -z "$(git status --porcelain)" ]] || die "uncommitted changes"
-git fetch --quiet origin main --tags
 [[ "$(git rev-parse HEAD)" == "$(git rev-parse origin/main)" ]] || die "main differs from origin/main: pull or push first"
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && die "tag $tag already exists"
 

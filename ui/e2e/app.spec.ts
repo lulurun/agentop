@@ -550,3 +550,29 @@ test("a service of the app's own /api/v2 shows no reload", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Reload for the new version" })).toHaveCount(0);
 });
+
+test("a service that now serves another app shows a reload notice, and doesn't reload by itself", async ({ page }) => {
+  const s = await service("alpha");
+  await page.route("**/api/v2/service", async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({ response, json: { ...(await response.json()), ui_build: "index-newer.js" } });
+  });
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  const notice = page.getByRole("button", { name: "New version: reload" });
+  await expect(notice).toBeVisible();
+  await page.evaluate(() => ((window as unknown as { stayed: boolean }).stayed = true));
+  await page.waitForTimeout(1500);
+  expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed)).toBe(true);
+  await notice.click();
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { stayed?: boolean }).stayed)).toBeUndefined();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
+test("a service serving this very app shows no reload notice", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "New version: reload" })).toHaveCount(0);
+});

@@ -1,10 +1,11 @@
 // The app's start page. It runs first-run setup when the app's copy of agentop isn't
 // installed, then starts the service. The app replaces it with the service's own page
-// once the service answers.
+// once the service answers. Opened with ?update, it updates the app's copy instead.
 const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
 const $ = (id) => document.getElementById(id);
 const ICONS = { pending: "○", running: "…", ok: "✓", warning: "!", missing: "✗", failed: "✗" };
 
+const updating = new URLSearchParams(location.search).has("update");
 let mode = "start";
 let timer = null;
 
@@ -78,6 +79,26 @@ function rowElement(row) {
   return li;
 }
 
+async function enterUpdate() {
+  mode = "update";
+  $("install-title").textContent = "Update";
+  show(["setup"], true);
+  show(["log", "retry", "resetup", "check"], false);
+  const current = await invoke("setup_status");
+  if (current.phase !== "running") await invoke("update_run");
+  pollSetup();
+}
+
+function updateHeading(status) {
+  if (status.phase === "running" || status.phase === "idle") {
+    heading("Updating agentop", "Checking the tools, then updating this computer's agentop to the newest release. Sessions keep running.");
+  } else if (status.phase === "blocked") {
+    heading("The update didn't finish", "Fix what's marked ✗ and try again, or launch the version that's installed.");
+  } else {
+    heading("Updated", "agentop is up to date. Launch it to carry on.");
+  }
+}
+
 async function pollSetup() {
   const status = await invoke("setup_status");
   for (const group of ["tools", "agents", "install"]) {
@@ -85,6 +106,17 @@ async function pollSetup() {
   }
   const blocked = status.phase === "blocked";
   const done = status.phase === "done";
+  if (mode === "update") {
+    updateHeading(status);
+    $("tail").textContent = blocked ? status.tail : "";
+    show(["tail"], blocked && !!status.tail);
+    $("setup-log").textContent = status.log ? `Update output: ${status.log}` : "";
+    show(["setup-log"], blocked && !!status.log);
+    show(["update-again"], blocked);
+    show(["launch"], blocked || done);
+    if (!blocked && !done) schedule(pollSetup);
+    return;
+  }
   if (status.phase === "running" || status.phase === "idle") {
     heading("Setting up agentop-desktop", "Checking the tools agentop needs, then installing it in ~/.agentop-desktop.");
   } else if (blocked) {
@@ -122,17 +154,22 @@ $("add-path").addEventListener("click", async () => {
 
 async function startService() {
   mode = "start";
-  show(["setup", "launch", "check", "retry", "resetup", "log"], false);
+  show(["setup", "launch", "check", "retry", "resetup", "log", "update-again"], false);
   heading("Starting agentop…", "Starting the service on this computer.");
   await invoke("service_start");
   schedule(pollStartup);
 }
 
 $("launch").addEventListener("click", startService);
+$("update-again").addEventListener("click", async () => {
+  await invoke("update_run");
+  pollSetup();
+});
 $("retry").addEventListener("click", startService);
 $("resetup").addEventListener("click", async () => {
   await invoke("setup_run");
   enterSetup(false);
 });
 
-pollStartup();
+if (updating) enterUpdate();
+else pollStartup();

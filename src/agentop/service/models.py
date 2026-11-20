@@ -28,6 +28,9 @@ class ServiceInfo(BaseModel):
     install_kind: str
     tls: bool
     plugins: int = Field(description="How many plugins the service found, in any state")
+    ui_build: str | None = Field(
+        None, description="The entry script of the app the service serves now. A page with another one is out of date"
+    )
 
 
 class PluginInfo(BaseModel):
