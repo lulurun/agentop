@@ -533,6 +533,44 @@
         "title": "HistoryStats",
         "type": "object"
       },
+      "LatestRelease": {
+        "properties": {
+          "check_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Check Error"
+          },
+          "checked_at": {
+            "title": "Checked At",
+            "type": "number"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The newest vX.Y.Z tag, without the v",
+            "title": "Version"
+          }
+        },
+        "required": [
+          "version",
+          "checked_at",
+          "check_error"
+        ],
+        "title": "LatestRelease",
+        "type": "object"
+      },
       "LoginMethod": {
         "properties": {
           "id": {
@@ -1411,6 +1449,52 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/admin/latest": {
+      "get": {
+        "operationId": "latest_release_admin_latest_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LatestRelease"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Latest Release"
+      }
+    },
     "/admin/restart": {
       "post": {
         "operationId": "restart_admin_restart_post",

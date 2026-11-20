@@ -5,7 +5,7 @@ import { currentFeature, layoutOf, useApp } from "../store";
 import { pluginOf, featuresFor } from "../features";
 import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
-import { AppOutdated, DesktopUpdate, ServiceSwitcher } from "./ServiceSwitcher";
+import { AppOutdated, ServiceSwitcher, UpdateBadge } from "./ServiceSwitcher";
 import { MainArea } from "./MainArea";
 import { NewSessionDialog } from "./NewSessionDialog";
 import { SettingsDialog } from "./SettingsDialog";
@@ -133,7 +133,7 @@ export function App() {
           <ServiceSwitcher />
           {linked && <FeatureNav />}
           <AppOutdated />
-          <DesktopUpdate />
+          <UpdateBadge />
         </div>
         <button type="button" className="icon" aria-label="Settings" title="Settings (Ctrl+Shift+9)" onClick={() => setDialog("settings")}>
           <GearIcon />

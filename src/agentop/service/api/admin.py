@@ -20,6 +20,7 @@ from ..models import (
     Accepted,
     DirListing,
     Health,
+    LatestRelease,
     PatchPlugin,
     PluginInfo,
     ServiceInfo,
@@ -121,6 +122,13 @@ async def update_info(ctx: Ctx):
         "running": running,
         "last_run": update.read_status(),
     }
+
+
+@router.get("/admin/latest", response_model=LatestRelease, dependencies=AUTHED)
+async def latest_release():
+    if _install_kind() != "git":
+        return {"version": None, "checked_at": time.time(), "check_error": "This service isn't a git checkout."}
+    return await asyncio.to_thread(update.newest_tag, REPO_ROOT)
 
 
 @router.post("/admin/update", response_model=Accepted, status_code=202, dependencies=AUTHED)

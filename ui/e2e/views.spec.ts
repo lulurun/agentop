@@ -171,6 +171,7 @@ test("resuming waits for a session to close once the active sessions are at the 
   await expect(view).toContainText("Active sessions are at the limit. Close a session to resume this one.");
   await page.getByRole("button", { name: "New session", exact: true }).first().click();
   await expect(page.getByRole("dialog").getByRole("button", { name: "Start session" })).toBeDisabled();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("an empty history says so", async ({ page }) => {

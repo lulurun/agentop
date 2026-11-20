@@ -23,8 +23,8 @@ export interface Platform {
   loadActiveId(): string | null;
   saveActiveId(id: string): void;
   copyText(text: string): Promise<void>;
-  /** Desktop only: a newer release of the app, if there is one. */
-  checkAppUpdate?(): Promise<AppUpdate | null>;
+  /** Desktop only: what the newest release, `latest`, needs of this app, if anything. */
+  checkAppUpdate?(latest: string | null): Promise<AppUpdate | null>;
   /** Desktop only: start this computer's service again. */
   startService?(): Promise<void>;
   /** Desktop only: open a page in the system browser. */

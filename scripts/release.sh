@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Release agentop as vX.Y.Z: one tag for the code and the desktop app. Sets the
 # version in pyproject.toml, tauri.conf.json and Cargo.toml, commits, tags, and pushes.
-# The "desktop" workflow then builds and publishes agentop-desktop. See docs/design.md 8.5.
+# For X (vX.0.0) the "desktop" workflow then builds and publishes agentop-desktop; any
+# other release is the tag alone. See docs/design.md 8.5.
 #
 # X is for the desktop app's wrapper (a download), Y for the UI (open pages reload), Z
 # for the service only (a restart). With no argument, the part is picked from what
@@ -64,7 +65,11 @@ git commit -q -m "Release $tag"
 git tag -a "$tag" -m "agentop $tag"
 
 git --no-pager log --oneline -1
-read -r -p "Push the commit and tag $tag to GitHub? CI builds and publishes agentop-desktop. [y/N] " answer
+if [[ "$version" == *.0.0 ]]; then next="CI builds and publishes agentop-desktop $tag: a download."
+else next="No app release: the desktop app and services update from the tag."
+fi
+read -r -p "Push the commit and tag $tag to GitHub? $next [y/N] " answer
 [[ "$answer" == "y" || "$answer" == "Y" ]] || die "stopped; nothing was pushed (undo the local commit with: git reset --hard origin/main && git tag -d $tag)"
 git push -q origin main "$tag"
-echo "Pushed $tag. Watch the build at https://github.com/lulurun/agentop/actions/workflows/desktop.yml"
+echo "Pushed $tag."
+[[ "$version" != *.0.0 ]] || echo "Watch the build at https://github.com/lulurun/agentop/actions/workflows/desktop.yml"

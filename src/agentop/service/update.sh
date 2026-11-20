@@ -22,7 +22,7 @@ PYTHON=${AGENTOP_PYTHON:-python3}
 HEALTH_URL=${AGENTOP_HEALTH_URL:-http://127.0.0.1:9775/api/v2/health}
 HEALTH_TIMEOUT=${AGENTOP_HEALTH_TIMEOUT:-30}
 INSTALL_CMD=${AGENTOP_INSTALL_CMD:-"$PYTHON" -m pip install --quiet -e .}
-BUILD_CMD=${AGENTOP_BUILD_CMD:-cd ui && npm ci --silent && npm run -s build}
+BUILD_CMD=${AGENTOP_BUILD_CMD:-build_ui}
 RESTART_CMD=${AGENTOP_RESTART_CMD:-systemctl --user daemon-reload && systemctl --user restart "$UNIT"}
 
 STATUS="$DATA/state/update-status.json"
@@ -55,6 +55,13 @@ healthy() {
         sleep 1
     done
     return 1
+}
+
+build_ui() { # only when ui/ differs between the two commits, and its packages only when the lockfile does
+    [[ -f src/agentop/service/webdist/index.html ]] && git diff --quiet "$OLD" "$NEW" -- ui && return 0
+    cd ui || return 1
+    { [[ -d node_modules ]] && git diff --quiet "$OLD" "$NEW" -- package-lock.json; } || npm ci --silent || return 1
+    npm run -s build
 }
 
 deploy() { # the working tree, whichever commit it is on

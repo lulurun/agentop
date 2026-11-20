@@ -138,8 +138,8 @@ Sessions, Memory and config stay in `~/.agentop/`, shared with any other install
 - The service's output goes to `~/.agentop/logs/desktop-serve.log`. If it doesn't
   start, the app says why.
 
-**Linux.** Download `agentop-desktop_<version>_amd64.AppImage` from the newest `agentop-desktop`
-release on GitHub, then:
+**Linux.** Download `agentop-desktop_<version>_amd64.AppImage` from the latest `agentop-desktop`
+release on GitHub (there is one per major version), then:
 
 ```bash
 chmod +x agentop-desktop_*_amd64.AppImage
@@ -162,7 +162,8 @@ xattr -dr com.apple.quarantine /Applications/agentop-desktop.app
 
 It is needed again for each new major version, which is a new download.
 
-**Updates.** When a newer release is out, the header shows **Update agentop**. Clicking
+**Updates.** This computer's service checks the git remote for a newer `vX.Y.Z` tag at
+most once an hour. When there is one, the header shows **Update agentop**. Clicking
 it shows the start page while this computer's agentop updates itself, with a row for
 each step, then **Launch**; sessions keep running. A new major version is a new app:
 the header shows **App update**, which opens the release page to download it.
@@ -188,7 +189,7 @@ Linux with no secret service running, it keeps them in `~/.agentop/state/desktop
 |--------|------|
 | `scripts/build-ui.sh [--clean]` | Builds the web UI into `src/agentop/service/webdist/`, which the service serves. `--clean` reinstalls `node_modules` |
 | `scripts/build-app.sh [--appimage]` | `build-ui.sh`, then the desktop app |
-| `scripts/release.sh [x\|y\|z\|X.Y.Z]` | Releases agentop as the next `vX.Y.Z`: X when `desktop/` changed since the last tag, else Y when `ui/` did, else Z (design 8.5), unless told. Sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. The `desktop` workflow builds, signs, and publishes the release `agentop-desktop vX.Y.Z`, and installed apps offer the update |
+| `scripts/release.sh [x\|y\|z\|X.Y.Z]` | Releases agentop as the next `vX.Y.Z`: X when `desktop/` changed since the last tag, else Y when `ui/` did, else Z (design 8.5), unless told. Sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. For X only (`vX.0.0`), the `desktop` workflow builds, signs, and publishes the release `agentop-desktop vX.0.0`; any other release is just the tag. Installed apps and services find either within the hour |
 
 The script runs only on `main`, clean and level with `origin/main`, and builds the UI
 and the app first, so nothing is tagged that doesn't build. The tag is also what

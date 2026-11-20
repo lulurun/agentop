@@ -73,6 +73,12 @@ class UpdateInfo(BaseModel):
     last_run: UpdateRun | None
 
 
+class LatestRelease(BaseModel):
+    version: str | None = Field(description="The newest vX.Y.Z tag, without the v")
+    checked_at: float
+    check_error: str | None
+
+
 class HistoryItem(BaseModel):
     """A past session agentop started, still resumable."""
 

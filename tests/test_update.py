@@ -55,6 +55,7 @@ class Install:
     def commit(self, version, **extra):
         (self.dev / "VERSION").write_text(version)
         for name, text in extra.items():
+            (self.dev / name).parent.mkdir(parents=True, exist_ok=True)
             (self.dev / name).write_text(text)
         git(self.dev, "add", "-A")
         git(self.dev, "commit", "-m", version)
@@ -255,3 +256,43 @@ def test_from_releases_with_none_yet_changes_nothing(install):
     assert install.run(AGENTOP_UPDATE_FROM="release").returncode == 1
     assert install.status["message"] == "There is no release yet."
     assert install.head == install.good
+
+
+def test_the_newest_tag_is_by_version_and_asked_once_an_hour(install, monkeypatch):
+    from agentop.service import update
+
+    monkeypatch.setattr(update, "_latest", {})
+    assert update.newest_tag(install.repo)["version"] is None
+    update._latest.clear()
+    for tag in ("v1.9.0", "v1.10.0", "v1.10.0-rc1"):
+        install.release(tag)
+    found = update.newest_tag(install.repo)
+    assert (found["version"], found["check_error"]) == ("1.10.0", None)
+    install.release("v2.0.0")
+    assert update.newest_tag(install.repo)["version"] == "1.10.0"
+
+
+def test_the_ui_is_built_only_when_it_changed_and_installed_only_when_its_lockfile_did(install, tmp_path):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "npm.log"
+    (bin_dir / "npm").write_text(
+        f'#!/bin/sh\necho "$*" >> {log}\n'
+        'case "$*" in *build*) mkdir -p ../src/agentop/service/webdist && touch ../src/agentop/service/webdist/index.html;; '
+        "*ci*) mkdir -p node_modules;; esac\n"
+    )
+    (bin_dir / "npm").chmod(0o755)
+    env = {"AGENTOP_BUILD_CMD": "build_ui", "PATH": f"{bin_dir}:{os.environ['PATH']}"}
+    calls = lambda: log.read_text().splitlines() if log.exists() else []  # noqa: E731
+
+    gitignore = "node_modules/\nsrc/agentop/service/webdist/\n"
+    install.publish("v2", **{".gitignore": gitignore, "ui/package-lock.json": "1", "ui/app.ts": "a"})
+    assert install.run(**env).returncode == 0
+    assert [c.split()[0] for c in calls()] == ["ci", "run"]
+    log.unlink()
+    install.publish("v3", **{"server.py": "changed"})
+    assert install.run(**env).returncode == 0
+    assert calls() == []
+    install.publish("v4", **{"ui/app.ts": "b"})
+    assert install.run(**env).returncode == 0
+    assert [c.split()[0] for c in calls()] == ["run"]

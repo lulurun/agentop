@@ -4,8 +4,6 @@ import type { Connection } from "../connections";
 
 const invoke = vi.fn();
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
-const check = vi.fn();
-vi.mock("@tauri-apps/plugin-updater", () => ({ check }));
 
 const SERVICE = { url: "http://127.0.0.1:9775", token: "local", name: "pc" };
 const respond = (service: unknown) =>
@@ -19,7 +17,6 @@ async function platform() {
 
 beforeEach(() => {
   invoke.mockReset();
-  check.mockReset();
   localStorage.clear();
 });
 
@@ -82,15 +79,14 @@ describe("app updates", () => {
 
   it("has none when the app and its agentop are the newest", async () => {
     withInfo(INFO);
-    check.mockResolvedValue(null);
-    expect(await (await platform()).checkAppUpdate!()).toBeNull();
+    expect(await (await platform()).checkAppUpdate!("2.0.0")).toBeNull();
+    expect(await (await platform()).checkAppUpdate!(null)).toBeNull();
   });
 
   it("updates this computer's agentop in place for a new minor or patch release", async () => {
     withInfo(INFO);
     for (const version of ["2.0.1", "2.1.0"]) {
-      check.mockResolvedValue({ version });
-      const update = await (await platform()).checkAppUpdate!();
+      const update = await (await platform()).checkAppUpdate!(version);
       expect(update).toMatchObject({ kind: "service", version, required: false });
       await update!.install!();
       expect(invoke).toHaveBeenCalledWith("update_open", undefined);
@@ -99,24 +95,21 @@ describe("app updates", () => {
 
   it("updates an agentop older than the app itself, as after a new app is installed", async () => {
     withInfo({ ...INFO, service_version: "1.3.0" });
-    check.mockResolvedValue(null);
-    expect(await (await platform()).checkAppUpdate!()).toMatchObject({ kind: "service", version: "2.0.0" });
+    expect(await (await platform()).checkAppUpdate!(null)).toMatchObject({ kind: "service", version: "2.0.0" });
   });
 
   it("links to the release page for a new major version", async () => {
     withInfo(INFO);
-    check.mockResolvedValue({ version: "3.0.0" });
-    const update = await (await platform()).checkAppUpdate!();
-    expect(update).toMatchObject({ kind: "app", releaseUrl: "https://github.com/lulurun/agentop/releases/tag/v3.0.0" });
+    const update = await (await platform()).checkAppUpdate!("3.0.2");
+    expect(update).toMatchObject({ kind: "app", version: "3.0.2", releaseUrl: "https://github.com/lulurun/agentop/releases/latest" });
     expect(update?.install).toBeUndefined();
   });
 
   it("is required for an app without the update command, even offline", async () => {
     withInfo({ version: "1.2.0", native_api: 1, releases_url: "https://github.com/lulurun/agentop/releases" });
-    check.mockRejectedValue(new Error("offline"));
-    expect(await (await platform()).checkAppUpdate!()).toMatchObject({ kind: "app", required: true });
+    expect(await (await platform()).checkAppUpdate!(null)).toMatchObject({ kind: "app", required: true });
     withInfo(null);
-    expect(await (await platform()).checkAppUpdate!()).toMatchObject({ kind: "app", required: true });
+    expect(await (await platform()).checkAppUpdate!(null)).toMatchObject({ kind: "app", required: true });
   });
 });
 

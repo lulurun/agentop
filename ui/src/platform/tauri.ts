@@ -1,5 +1,5 @@
 import type { Connection } from "../connections";
-import type { AppUpdate, Platform } from "./index";
+import type { Platform } from "./index";
 
 /**
  * The desktop app. It runs this computer's service and shows the page that service
@@ -127,25 +127,15 @@ export const tauriPlatform: Platform = {
     await clipboard.writeText(text);
   },
 
-  /**
-   * A new major version is the app's own: a download. Any other release only updates this
-   * computer's agentop, which the app does in place. The newest release is the updater's
-   * feed, or this app when the feed has nothing newer.
-   */
-  async checkAppUpdate(): Promise<AppUpdate | null> {
+  /** A new major version is the app's own: a download. Any other release only updates this computer's agentop, in place. */
+  async checkAppUpdate(latest) {
     const info = await desktopInfo();
-    let latest = info.version;
-    try {
-      const updater = await import("@tauri-apps/plugin-updater");
-      latest = (await updater.check())?.version ?? latest;
-    } catch {
-      // No network, or no release yet.
-    }
-    const releaseUrl = `${info.releases_url}/tag/v${latest}`;
-    if (info.native_api < NATIVE_API) return { kind: "app", version: latest, required: true, releaseUrl: info.releases_url };
-    if (parseVersion(latest)[0] > parseVersion(info.version)[0]) return { kind: "app", version: latest, required: false, releaseUrl };
+    if (info.native_api < NATIVE_API) return { kind: "app", version: latest ?? "", required: true, releaseUrl: info.releases_url };
+    // This app's own version is out too, as the tag it was built from.
+    if (!latest || compareVersions(latest, info.version) < 0) latest = info.version;
+    if (parseVersion(latest)[0] > parseVersion(info.version)[0]) return { kind: "app", version: latest, required: false, releaseUrl: `${info.releases_url}/latest` };
     if (!info.service_version || compareVersions(latest, info.service_version) <= 0) return null;
-    return { kind: "service", version: latest, required: false, releaseUrl, install: () => invoke("update_open") };
+    return { kind: "service", version: latest, required: false, releaseUrl: info.releases_url, install: () => invoke("update_open") };
   },
 
   /** Resolves once the service answers, or rejects with why it didn't. */

@@ -25,9 +25,11 @@ SCRIPT = Path(__file__).with_name("update.sh")
 UPDATE_UNIT = "agentop-update"
 FETCH_TIMEOUT_SECONDS = 20
 CHECK_CACHE_SECONDS = 60
+LATEST_CACHE_SECONDS = 60 * 60
 RELEASE_TAG = re.compile(r"v\d+\.\d+\.\d+")
 
 _checked: dict[str, tuple[float, dict]] = {}
+_latest: dict[str, tuple[float, dict]] = {}
 
 
 class UpdateError(RuntimeError):
@@ -98,6 +100,31 @@ def latest_release(repo: Path) -> str | None:
     """The newest vX.Y.Z tag the repository has, by version order."""
     tags = _git(repo, "tag", "-l", "v*", "--sort=-v:refname").splitlines()
     return next((t for t in tags if RELEASE_TAG.fullmatch(t)), None)
+
+
+def _version_key(tag: str) -> tuple[int, ...]:
+    return tuple(int(p) for p in tag[1:].split("."))
+
+
+def newest_tag(repo: Path) -> dict:
+    """The newest vX.Y.Z tag on the remote, asked at most once an hour. A tag is a release; a GitHub release is only the app's."""
+    key = str(repo)
+    cached = _latest.get(key)
+    if cached and time.monotonic() - cached[0] < LATEST_CACHE_SECONDS:
+        return cached[1]
+    result: dict = {"version": None, "checked_at": time.time(), "check_error": None}
+    try:
+        refs = _git(repo, "ls-remote", "--tags", "--refs", "origin", "v*", timeout=FETCH_TIMEOUT_SECONDS)
+        tags = [line.rsplit("refs/tags/", 1)[-1] for line in refs.splitlines()]
+        found = max((t for t in tags if RELEASE_TAG.fullmatch(t)), key=_version_key, default=None)
+        result["version"] = found[1:] if found else None
+    except subprocess.TimeoutExpired:
+        result["check_error"] = "The git remote did not answer."
+    except (OSError, subprocess.CalledProcessError) as exc:
+        stderr = getattr(exc, "stderr", "") or ""
+        result["check_error"] = stderr.strip().splitlines()[-1] if stderr.strip() else "git failed."
+    _latest[key] = (time.monotonic(), result)
+    return result
 
 
 def _release_behind(repo: Path, tag: str) -> int:

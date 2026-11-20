@@ -459,7 +459,7 @@ Update needs a git checkout, not systemd. It must outlive the service it restart
 `src/agentop/service/update.sh` writes progress to `~/.agentop/state/update-status.json`:
 
 1. Refuse if the tree is dirty, or, following `main`, not on `main`.
-2. Record the current commit, then `git pull --ff-only`; or, following releases (8.5), fetch the tags and check out the newest `vX.Y.Z`, only if it is newer.
+3. `pip install -e .`, then build the web app, but only when `ui/` changed between the two commits, and `npm ci` only when its lockfile did, so a service-only update stays quick.
 3. `pip install -e .`, then build the web app.
 4. Restart the service, then poll `/api/v2/health` for 30s.
 5. On any failure: check out the recorded commit, reinstall, rebuild, restart, and record the failure.
@@ -468,7 +468,7 @@ Update needs a git checkout, not systemd. It must outlive the service it restart
 
 ### 8.5 Releases and the update indicator (2026-11-16)
 
-agentop has one release series on GitHub: `v*` tags, such as `v1.1.1`, made by `scripts/release.sh`. A tag marks the code, and `.github/workflows/desktop.yml` publishes the desktop app built from it as the release **agentop-desktop v1.1.1**: AppImage (Linux), `.app` (macOS). The app is the only thing to download. The service has no release of its own: it updates from the tags, or from `main` (below). Before 2026-11-18 there were two series, `desktop-v*` for the app and `v*` for the service; those releases were deleted, and the `v1.0.0` and `v1.1.0` tags kept.
+agentop has one release series on GitHub: `v*` tags, such as `v1.1.1`, made by `scripts/release.sh`. A tag marks the code, and is all a release is. Only for a new major version, `vX.0.0`, does `.github/workflows/desktop.yml` also publish the desktop app built from it as a GitHub release, **agentop-desktop vX.0.0**: AppImage (Linux), `.app` (macOS). The app is the only thing to download. Until 2026-11-20 every tag had a GitHub release. The service has no release of its own: it updates from the tags, or from `main` (below). Before 2026-11-18 there were two series, `desktop-v*` for the app and `v*` for the service; those releases were deleted, and the `v1.0.0` and `v1.1.0` tags kept.
 
 The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.conf.json` and `Cargo.toml`, which the script sets together.
 
@@ -480,15 +480,20 @@ The tag must match the version in `pyproject.toml`, `desktop/src-tauri/tauri.con
 | Y | The UI (`ui/`) | **Update agentop** updates this computer's agentop in place | Shows **New version: reload** |
 | Z | Only the service | **Update agentop**, as for Y | Nothing |
 
+**Who finds a new release.** The service: `GET /admin/latest` asks the git remote for its newest `vX.Y.Z` tag (`git ls-remote`), at most once an hour, and the UI polls it hourly and on every connect. Against what runs:
+
+- The desktop app compares with its copy of agentop: a higher X than the wrapper is **App update**, anything else newer is **Update agentop**.
+- The web app compares with the service's version and shows **agentop X.Y.Z is out**, which opens the service's Status, where Update is. Once the service has updated, the page shows **New version: reload** (below).
+
 `scripts/release.sh` with no argument picks the part from the paths changed since the last tag: `desktop/`, then `ui/`, then anything else. `x`, `y`, `z` or an exact version override it.
 
-**Updating in place (Y, Z).** The UI compares the newest release (the updater's `latest.json`, or the app's own version when that has nothing newer) with the app's copy of agentop (`service_version` in `desktop_info`, from its `pyproject.toml`). Clicking **Update agentop** calls `update_open`: the window shows the start page in its update mode. That checks the tools as setup does, then runs the copy's `agentop service update`, which needs no sign-in (the CLI reads the service token). The service runs `update.sh` (8.4): the newest tag, install, UI build, restart in place, health check, and going back if any of it fails. Each step is a row on the start page, from `state/update-status.json`. **Launch** then opens the service's page. Sessions keep running.
+**Updating in place (Y, Z).** The UI compares the newest tag (`/admin/latest`, or the app's own version when that is newer) with the app's copy of agentop (`service_version` in `desktop_info`, from its `pyproject.toml`). Clicking **Update agentop** calls `update_open`: the window shows the start page in its update mode. That checks the tools as setup does, then runs the copy's `agentop service update`, which needs no sign-in (the CLI reads the service token). The service runs `update.sh` (8.4): the newest tag, install, UI build, restart in place, health check, and going back if any of it fails. Each step is a row on the start page, from `state/update-status.json`. **Launch** then opens the service's page. Sessions keep running.
 
-**The wrapper (X)** is offered only when the newest release has a higher major version, and only as its release page. CI still builds the app for every tag, so the newest release always has one to download. A new wrapper that finds its copy of agentop older than itself, as after a reinstall, opens the update mode on start, once per run.
+**The wrapper (X)** is offered only when the newest tag has a higher major version, and only as the latest release page, which is that major version's app. A new wrapper that finds its copy of agentop older than itself, as after a reinstall, opens the update mode on start, once per run.
 
 **Open pages** decide by the app itself, not the version: the service reports `ui_build`, the entry script of the app it serves (`/service`). A page served by that service whose own entry script differs shows **New version: reload**, and the user reloads when ready; it never reloads by itself. A Z release rebuilds the same app, so its entry script, which is named by content hash, stays the same. This works on `main` too, where the version doesn't change between releases. The page fetches `/service` again whenever its event socket reopens, as after a restart.
 
-- The updater's key: CI signs each build with it and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. The app now reads `latest.json` only to learn the newest version.
+- The updater's key: CI signs each build with it and attaches the signatures and a `latest.json` to the release. The key is the repository secret `TAURI_SIGNING_PRIVATE_KEY`, and the app has its public key built in. The app no longer reads it: the newest version comes from the service.
 - The UI comes from the service, so it can be newer than the wrapper. The wrapper reports `native_api`, the revision of its commands (`desktop_info`). When the UI needs a higher one, the button says **App update needed** and opens the release page. Revision 2 added `update_open`, `update_run` and `service_version`; an app from before `desktop_info` counts as 0.
 - Until v2.0.0 (2026-11-20), the wrapper replaced itself in place with Tauri's updater on every release.
 
@@ -512,6 +517,7 @@ All routes are under `/api/v2`. The old `/api` routes and the dashboard that use
 | `GET` | `/service` | Name, version, `api_version`, commit, uptime, PID, tmux version, manager, capabilities, `install_kind`, whether TLS is on |
 | `POST` | `/admin/restart`, `/admin/stop` | Admin: restart or stop this service (8.3) |
 | `GET`, `POST` | `/admin/update` | Admin: check and status; start an update |
+| `GET` | `/admin/latest` | The newest `vX.Y.Z` tag on the git remote, checked at most hourly (8.5) |
 | `POST` | `/tickets` | Issue a WebSocket ticket |
 | `GET` | `/tools` | Supported tools, and whether each is installed |
 | `GET` | `/fs/dirs?path=` | Directory listing for the working-directory picker |

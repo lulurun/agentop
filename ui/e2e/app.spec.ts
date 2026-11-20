@@ -570,6 +570,23 @@ test("a service that now serves another app shows a reload notice, and doesn't r
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
+test("a newer release than the service runs shows, and opens the service's Status", async ({ page }) => {
+  const s = await service("alpha");
+  await page.route("**/api/v2/admin/latest", (route) => route.fulfill({ json: { version: "99.0.0", checked_at: 0, check_error: null } }));
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await page.getByRole("button", { name: "agentop 99.0.0 is out" }).click();
+  await expect(page.getByRole("tab", { name: "Status" })).toBeVisible();
+});
+
+test("a release no newer than the service shows nothing", async ({ page }) => {
+  const s = await service("alpha");
+  await page.route("**/api/v2/admin/latest", (route) => route.fulfill({ json: { version: "0.0.1", checked_at: 0, check_error: null } }));
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /is out$/ })).toHaveCount(0);
+});
+
 test("a service serving this very app shows no reload notice", async ({ page }) => {
   const s = await service("alpha");
   await page.goto(s.signedInUrl);

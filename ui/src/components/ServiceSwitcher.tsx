@@ -3,7 +3,8 @@ import { fetchHealth } from "../api/client";
 import { pageIsOutdated } from "../build";
 import { appIsOutdated, connectionName, isEncrypted, isLoopback } from "../connections";
 import { platform, type AppUpdate } from "../platform";
-import { activeConnection, useApp } from "../store";
+import { compareVersions } from "../platform/tauri";
+import { activeClient, activeConnection, useApp } from "../store";
 
 type Reach = "checking" | "reachable" | "unreachable";
 
@@ -145,30 +146,71 @@ export function AppOutdated() {
   );
 }
 
-const APP_UPDATE_POLL_MS = 6 * 60 * 60 * 1000;
+const LATEST_POLL_MS = 60 * 60 * 1000;
 
-/** Desktop only: a new release. This computer's agentop updates in place; a new major version links to its page. */
-export function DesktopUpdate() {
+/** The newest release, as the connected service last saw it on the git remote. */
+function useLatestRelease(): string | null {
+  const link = useApp((s) => s.link);
+  const connected = link.state === "connected" || link.state === "reconnecting";
+  const activeId = useApp((s) => s.activeId);
+  const [latest, setLatest] = useState<string | null>(null);
+  useEffect(() => {
+    if (!connected) return;
+    let live = true;
+    const run = () =>
+      void activeClient(useApp.getState())
+        .latestRelease()
+        .then((found) => live && setLatest(found.version ?? null))
+        .catch(() => undefined);
+    run();
+    const timer = setInterval(run, LATEST_POLL_MS);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [connected, activeId]);
+  return latest;
+}
+
+/**
+ * A newer release than the service runs. In the desktop app, a new major version links to its
+ * page and any other updates this computer's agentop in place; on the web, it opens Status.
+ */
+export function UpdateBadge() {
+  const latest = useLatestRelease();
+  const link = useApp((s) => s.link);
+  const activeId = useApp((s) => s.activeId);
+  const openStatus = useApp((s) => s.openStatus);
   const [update, setUpdate] = useState<AppUpdate | null>(null);
   const [installing, setInstalling] = useState(false);
   const [failed, setFailed] = useState("");
+  const running = link.state === "connected" || link.state === "reconnecting" ? link.service : null;
 
   useEffect(() => {
     const check = platform.checkAppUpdate;
     if (!check) return;
     let live = true;
-    const run = () =>
-      void check()
-        .then((found) => live && setUpdate(found))
-        .catch(() => undefined);
-    run();
-    const timer = setInterval(run, APP_UPDATE_POLL_MS);
+    void check(latest)
+      .then((found) => live && setUpdate(found))
+      .catch(() => undefined);
     return () => {
       live = false;
-      clearInterval(timer);
     };
-  }, []);
+  }, [latest, running?.version]);
 
+  if (!platform.checkAppUpdate) {
+    if (!running || !latest || compareVersions(latest, running.version) <= 0) return null;
+    return (
+      <button
+        type="button"
+        className="app-outdated"
+        title={`${running.name} runs ${running.version}. Update it from its Status; this page then offers to reload.`}
+        onClick={() => activeId && openStatus(activeId)}
+      >
+        {`agentop ${latest} is out`}
+      </button>
+    );
+  }
   if (!update) return null;
   const version = update.version ? ` ${update.version}` : "";
   if (update.kind === "service") {

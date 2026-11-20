@@ -1,6 +1,7 @@
 # Builds the desktop app for Linux (AppImage) and macOS (the wrapper only: the
 # UI comes from the service; no Windows, which has no tmux to run a service), and
-# publishes it as the agentop-desktop release when scripts/release.sh pushes a v* tag.
+# publishes it as the agentop-desktop release when scripts/release.sh pushes a vX.0.0
+# tag. Other tags need no download: the app updates its agentop from the tag itself.
 #
 # The tag must match the version in pyproject.toml and tauri.conf.json. Each build is
 # signed with the updater key (secret TAURI_SIGNING_PRIVATE_KEY, and
@@ -11,7 +12,7 @@ name: desktop
 
 on:
   push:
-    tags: ["v*"]
+    tags: ["v*.0.0"]
 
 permissions:
   contents: write
@@ -67,7 +68,7 @@ jobs:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
           releaseName: "agentop-desktop ${{ github.ref_name }}"
-          releaseBody: "agentop-desktop. It updates itself from here; see docs/setup.md#desktop-app to install it the first time."
+          releaseBody: "agentop-desktop. Install it from here; see docs/setup.md#desktop-app. Releases until the next major version update it in place."
           releaseDraft: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}

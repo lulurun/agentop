@@ -4,6 +4,23 @@
  */
 
 export interface paths {
+    "/admin/latest": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Latest Release */
+        get: operations["latest_release_admin_latest_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/restart": {
         parameters: {
             query?: never;
@@ -734,6 +751,18 @@ export interface components {
              */
             truncated: boolean;
         };
+        /** LatestRelease */
+        LatestRelease: {
+            /** Check Error */
+            check_error: string | null;
+            /** Checked At */
+            checked_at: number;
+            /**
+             * Version
+             * @description The newest vX.Y.Z tag, without the v
+             */
+            version: string | null;
+        };
         /** LoginMethod */
         LoginMethod: {
             /** Id */
@@ -1032,6 +1061,37 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    latest_release_admin_latest_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LatestRelease"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     restart_admin_restart_post: {
         parameters: {
             query?: never;
