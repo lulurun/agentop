@@ -18,6 +18,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, Field
 
 from agentop.agentclis import get_agent
+from agentop.agentclis.base import typing
 from agentop.ops import accepts_prompts
 from agentop.tmux import PasteError, Session
 
@@ -68,8 +69,9 @@ def register(api):
             if body.text.strip():
                 agent.deliver(tmux_name, body.text)
             else:
-                Session.leave_mode(tmux_name)
-                Session.send_keys(tmux_name, "Enter")
+                with typing(tmux_name):
+                    Session.leave_mode(tmux_name)
+                    Session.send_keys(tmux_name, "Enter")
 
         try:
             await asyncio.to_thread(send)
@@ -85,8 +87,9 @@ def register(api):
         _, tmux_name = target(session_id)
 
         def send():
-            Session.leave_mode(tmux_name)
-            Session.send_keys(tmux_name, *(KEYS[k] for k in body.keys))
+            with typing(tmux_name):
+                Session.leave_mode(tmux_name)
+                Session.send_keys(tmux_name, *(KEYS[k] for k in body.keys))
 
         await asyncio.to_thread(send)
         return {"ok": True}

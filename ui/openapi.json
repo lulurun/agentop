@@ -707,6 +707,56 @@
         "title": "ResumeRef",
         "type": "object"
       },
+      "SendPrompt": {
+        "properties": {
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project"
+          },
+          "target": {
+            "minLength": 1,
+            "title": "Target",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 100000,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "text"
+        ],
+        "title": "SendPrompt",
+        "type": "object"
+      },
+      "SentPrompt": {
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "tmux": {
+            "title": "Tmux",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tmux"
+        ],
+        "title": "SentPrompt",
+        "type": "object"
+      },
       "ServiceInfo": {
         "properties": {
           "api_version": {
@@ -2519,6 +2569,63 @@
           }
         },
         "summary": "Start Coordinator"
+      }
+    },
+    "/send": {
+      "post": {
+        "description": "agentop send, here so its prompts queue with the Input bar's in the one process (AgentCli.deliver).",
+        "operationId": "send_prompt_send_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendPrompt"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SentPrompt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Prompt"
       }
     },
     "/service": {

@@ -1,4 +1,4 @@
-"""Live sessions: list, start, rename, stop, close, and what is in each one's folder and transcripts."""
+"""Live sessions: list, start, rename, stop, close, send a prompt, and what is in each one's folder and transcripts."""
 
 from __future__ import annotations
 
@@ -6,13 +6,16 @@ import asyncio
 
 from fastapi import APIRouter, HTTPException
 
-from agentop import files, transcripts
+from agentop import files, ops, transcripts
+from agentop.results import OpsError
 
 from ..models import (
     CreateSession,
     FileListing,
     GitChanges,
     PatchSession,
+    SendPrompt,
+    SentPrompt,
     SessionModel,
     TranscriptListing,
 )
@@ -30,6 +33,16 @@ async def list_sessions(ctx: Ctx):
 async def create_session(body: CreateSession, ctx: Ctx):
     resume_id = body.resume.session_id if body.resume else None
     return await ctx.store.create(body.tool, body.cwd, body.name, resume_id, project=body.project or "default")
+
+
+@router.post("/send", response_model=SentPrompt)
+async def send_prompt(body: SendPrompt):
+    """agentop send, here so its prompts queue with the Input bar's in the one process (AgentCli.deliver)."""
+    try:
+        sent = await asyncio.to_thread(ops.send, body.target, body.text, project=body.project)
+    except OpsError as exc:
+        raise HTTPException(409, {"message": str(exc), "matches": exc.matches}) from exc
+    return {"name": sent.name, "tmux": sent.tmux}
 
 
 @router.get("/sessions/{session_id}", response_model=SessionModel)

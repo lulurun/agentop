@@ -195,10 +195,23 @@ def cmd_send(args):
     sender = f"{here[1]}/{here[2]}" if here else Session.current()
     if sender and not args.no_header:
         text = f"[agentop send from {sender}]\n{text.strip()}"
-    from agentop.results import OpsError
+    from agentop.results import OpsError, Sent
+    from agentop.service import config
 
+    project = _own_project(args)
+    # Through the service, where it queues with the Input bar's prompts; without one, nothing else is typing.
+    answer = _service_api(config.load(), "POST", "/send", {"target": args.target, "text": text, "project": project}, timeout=60)
     try:
-        sent = _ops().send(args.target, text, project=_own_project(args))
+        if answer is None:
+            sent = _ops().send(args.target, text, project=project)
+        elif answer[0] >= 400:
+            detail = answer[1].get("detail")
+            if isinstance(detail, dict):
+                raise OpsError(detail.get("message", ""), matches=detail.get("matches") or [])
+            print(f"Error: the service refused: {detail or answer[0]}", file=sys.stderr)
+            sys.exit(1)
+        else:
+            sent = Sent(answer[1]["name"], answer[1]["tmux"])
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if not exc.matches:
@@ -403,8 +416,8 @@ def cmd_open(args):
 CLI_CLIENT_TTL_SECONDS = 60
 
 
-def _service_api(settings, method, path):
-    """Ask the service on this machine. Returns None if it didn't answer.
+def _service_api(settings, method, path, body=None, timeout=10):
+    """Ask the service on this machine. Returns None if it didn't answer, (503, …) if it stopped part way.
 
     The service token only adds a client, so the CLI adds a short-lived one
     with it first, and makes the request with that client's token.
@@ -429,7 +442,7 @@ def _service_api(settings, method, path):
             headers["Content-Type"] = "application/json"
         request = urllib.request.Request(f"{base}{path}", data=data, method=method, headers=headers)
         try:
-            with urllib.request.urlopen(request, timeout=10, context=context) as response:
+            with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
                 return response.status, json.load(response)
         except urllib.error.HTTPError as exc:
             try:
@@ -447,7 +460,8 @@ def _service_api(settings, method, path):
     )
     if added is None or added[0] >= 400:
         return added
-    return call(method, path, added[1]["token"])
+    # It answered once, so the request may have been acted on: never None, which a caller may retry without it.
+    return call(method, path, added[1]["token"], body) or (503, {"detail": "The service stopped answering"})
 
 
 _MANAGERS = {"systemd": "Run by its systemd unit.", "self": "Started with agentop serve."}

@@ -78,6 +78,7 @@ agentop send <target> < prompt.txt     # no prompt, or -: read it from stdin
 - Run from inside tmux, the prompt gets a first line `[agentop send from <project>/<name>]`; `--no-header` leaves it off
 - Only managed sessions (started by agentop) take prompts, and not read-only ones, such as a dialogue's agents
 - If the paste fails, it says so and presses no Enter
+- It goes through the service (`POST /api/v2/send`), where prompts into one session queue, the Input bar's included, so one never lands between another's paste and its Enter. With no service answering, it types the prompt itself
 - Nothing comes back by itself: switch to the target to follow it and answer it. A prompt can ask the target to reply with its own `agentop send`, which arrives as a new prompt in the sender
 
 The `handoff` skill uses it to pass a side task, such as a deploy, from one session to another. When the sender needs a result, such as a build version, the prompt asks for a one-line reply.

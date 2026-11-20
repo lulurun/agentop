@@ -68,9 +68,9 @@ def client(tmp_path, calls):
         yield test_client
 
 
-def test_off_by_default_and_fills_the_terminal_input_slot():
+def test_on_by_default_and_fills_the_terminal_input_slot():
     manifest = read_manifest(DEFAULT_ROOT / "input")
-    assert manifest.default_enabled is False
+    assert manifest.default_enabled is True
     assert manifest.ui == ("terminal-input",)
 
 

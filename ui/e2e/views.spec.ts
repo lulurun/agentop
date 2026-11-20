@@ -11,6 +11,8 @@ test.afterEach(async () => {
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     if (!localStorage.getItem("agentop.renderer")) localStorage.setItem("agentop.renderer", "dom");
+    // These type in the terminal, as a device that chose it over the Input bar does.
+    localStorage.setItem("agentop.input.mode", "terminal");
   });
   page.on("dialog", (dialog) => void dialog.accept());
 });

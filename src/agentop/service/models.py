@@ -235,6 +235,17 @@ class CreateSession(BaseModel):
     project: str | None = None
 
 
+class SendPrompt(BaseModel):
+    target: str = Field(min_length=1)
+    text: str = Field(min_length=1, max_length=100_000)
+    project: str | None = None
+
+
+class SentPrompt(BaseModel):
+    name: str
+    tmux: str
+
+
 class PatchSession(BaseModel):
     display_name: str | None = Field(default=None, max_length=64)
     description: str | None = Field(default=None, max_length=500)

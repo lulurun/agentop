@@ -18,7 +18,11 @@ test.afterEach(async () => {
 
 test.beforeEach(async ({ page }) => {
   // Text can only be read from the DOM renderer. WebGL has its own test.
-  await page.addInitScript(() => localStorage.setItem("agentop.renderer", "dom"));
+  await page.addInitScript(() => {
+    localStorage.setItem("agentop.renderer", "dom");
+    // These type in the terminal, as a device that chose it over the Input bar does.
+    localStorage.setItem("agentop.input.mode", "terminal");
+  });
   page.on("dialog", (dialog) => void dialog.accept());
 });
 

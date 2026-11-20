@@ -8,8 +8,6 @@ let s: Service;
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     localStorage.setItem("agentop.renderer", "dom");
-    // As a phone would start: the bar shows.
-    if (!localStorage.getItem("agentop.input.mode")) localStorage.setItem("agentop.input.mode", "bar");
   });
 });
 
@@ -17,7 +15,7 @@ test.afterEach(async () => {
   await s.dispose();
 });
 
-/** A service with the Input bar on, which is off by default. */
+/** A service with the Input bar on, as it is by default. */
 async function withInputBar(page: Page) {
   s = new Service("alpha");
   mkdirSync(join(s.root, "state", "state"), { recursive: true });
@@ -98,4 +96,18 @@ test("^B then a key goes to tmux through the terminal: c makes a window", async 
   await expect.poll(windows).toBe(2);
   await expect(prefix).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByLabel("Prompt for phone")).toHaveValue("");
+});
+
+test("with a keyboard, Enter sends and Shift+Enter is a new line", async ({ page }) => {
+  await withInputBar(page);
+  const prompt = page.getByLabel("Prompt for phone");
+  await expect(prompt).toHaveAttribute("placeholder", "Message phone");
+  await prompt.click();
+  await page.keyboard.type("first");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("second");
+  await expect(prompt).toHaveValue("first\nsecond");
+  await page.keyboard.press("Enter");
+  await expect(screen(page)).toContainText("got: first");
+  await expect(prompt).toHaveValue("");
 });

@@ -1,17 +1,15 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { afterPrefix, defaultMode, KEYS, loadDraft, loadMode, saveDraft } from "./state";
+import { afterPrefix, KEYS, loadDraft, loadMode, saveDraft } from "./state";
 
 describe("Input bar state", () => {
   beforeEach(() => localStorage.clear());
 
-  it("shows on a touch screen until told otherwise", () => {
-    expect(defaultMode(true)).toBe("bar");
-    expect(defaultMode(false)).toBe("terminal");
-    expect(loadMode(true)).toBe("bar");
+  it("shows until the device chooses the terminal", () => {
+    expect(loadMode()).toBe("bar");
     localStorage.setItem("agentop.input.mode", "terminal");
-    expect(loadMode(true)).toBe("terminal");
+    expect(loadMode()).toBe("terminal");
     localStorage.setItem("agentop.input.mode", "nonsense");
-    expect(loadMode(false)).toBe("terminal");
+    expect(loadMode()).toBe("bar");
   });
 
   it("keeps each session's unsent text, and forgets it once empty", () => {

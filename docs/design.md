@@ -1021,7 +1021,7 @@ The earlier design was a plugin: `agentop handoff send/ask/report/show/list`, a 
 | Concern | Resolution |
 |---------|------------|
 | Safety: one agent can make another act, and a prompt injection could make a session deploy | Accepted for now. agentop is a development tool, and the skill only does what the user would type in the target themselves. Only managed sessions take prompts |
-| Typing into a busy session, or over a draft | The tool queues a prompt sent while it works. The user sees the target in the session list and can switch to it to check and take control |
+| Typing into a busy session, or over a draft | The tool queues a prompt sent while it works. The user sees the target in the session list and can switch to it to check and take control. A draft is kept apart by the Input bar (12.12, 2026-11-20) |
 | Getting a report back to the sender | Only when the sender needs a result: the prompt asks the target to `agentop send` it back, and says the reply ends the exchange so the two don't loop. Otherwise the user watches the target and acts on the result there |
 
 ### 12.11 Memory: agentop's own record of conversations
@@ -1142,7 +1142,7 @@ Sources: [mem0 on Hermes Agent's memory](https://mem0.ai/blog/how-memory-works-i
 
 ### 12.12 Input bar: type prompts in a box, for phones
 
-Status: built 2026-11-17 as the `input` plugin, off by default.
+Status: built 2026-11-17 as the `input` plugin; on by default, on every device, since 2026-11-20.
 
 agentop leaves the agent's interface to the agent tool in tmux, and stays out of being a chat app. On a phone, though, typing into a terminal is poor: the keyboard covers it, autocorrect and Japanese input fight xterm, and there is no Esc. The Input bar adds a text box below the terminal instead of replacing anything: the terminal still shows everything, and only where the typing goes changes.
 
@@ -1155,9 +1155,15 @@ agentop leaves the agent's interface to the agent tool in tmux, and stays out of
 - **^B, tmux's prefix.** Pressing it arms the prefix; the next text or key button is typed as Ctrl-B and then that text, with no Enter: ^B then `c` makes a window, ^B then `2` goes to window 2. It can't go through `send-keys`, which hands keys to the program in the pane and skips tmux's bindings, so it goes through the terminal's own tmux client, as if typed on its keyboard (`TerminalInputControl.type`, `TerminalView`'s `keyboard`). That works while the terminal ignores typing. It assumes the default prefix, Ctrl-B. It replaced a Ctrl-C button (2026-11-17).
 - Only a running session agentop started, and not a plugin's own, takes prompts, as with `agentop send`. On any other the bar doesn't show and the terminal is typed into as before.
 
+**It holds the draft (2026-11-20).** In a project the user mostly talks to the Coordinator, which hands tasks to other sessions, and their replies come back with `agentop send` while the user is typing. Typed in the terminal, the draft sits in the tool's own prompt box, so the reply's paste joins it and its Enter submits both. Typed in the bar, the draft stays in the browser, the tool's box is empty, and the reply arrives as its own prompt (queued by the tool while it works, as 12.10.3 expects). For that the bar is now on by default, and on a PC too: a device that hasn't chosen shows it.
+
+**One queue.** `agentop send` goes through the service, `POST /api/v2/send` (it types the prompt itself only when no service answers), so it and the bar type in the one process. There `AgentCli.deliver`, which every prompt goes through, holds a lock for each tmux session (`agentclis.base.typing`), as do the bar's Enter and key buttons: a prompt waits for the one before it, and never lands between its paste and its Enter. Typing straight into the terminal still works, and is outside the queue.
+
 **Per device, not per service.** A plugin's switch belongs to the service (12.4), so turning it on would put every client's terminal behind the bar. The plugin being on only makes the bar available; each device then chooses, in localStorage (`agentop.input.mode`): a touch screen starts with the bar, a mouse and keyboard with the terminal. The ⌨ button in the bar switches to typing in the terminal and back, and the choice holds for every session on that device. It is also the way out when an agent shows a menu that the key buttons don't cover.
 
-**In the box.** Enter is a new line, as on a phone; the send button (↑), or Ctrl or Cmd with Enter, sends. Each session's unsent text is kept in localStorage until it is sent. Buttons don't take the focus, so the phone's keyboard stays up between a key and the next line.
+**In the box.** On a touch screen Enter is a new line, as on a phone; with a keyboard Enter sends and Shift+Enter is a new line, as in Slack (not while an IME is composing, so Japanese input confirms its word first). The send button, or Ctrl or Cmd with Enter, always sends. Each session's unsent text is kept in localStorage until it is sent. Buttons don't take the focus, so the phone's keyboard stays up between a key and the next line.
+
+**How it looks (2026-11-20).** A composer card, as in Slack: the text box on top, a toolbar inside the card below it, and the card's outline lights up while it has the focus. The placeholder names the session (`Message Coordinator`). The toolbar has the keys in groups (^B and Esc, the arrows and Enter, Tab, the digits), a hint for a new line on a wide screen, ⌨, and the send button at the right. That button is grey with an Enter mark while the box is empty, since sending nothing presses Enter, and filled with the action colour once there is text. ^B armed turns the card's outline and the send button amber. On a touch screen the keys are 36px high and the row fades at its right edge, where the keys that don't fit scroll.
 
 ## 13 Migration
 

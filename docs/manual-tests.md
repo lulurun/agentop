@@ -141,10 +141,12 @@ The app runs this computer's service (design 4.2), from its own copy of agentop 
 | I1 | Open `https://agentop.example.com/` on a phone, sign in, send a prompt to a session | The prompt arrives and the reply shows | Seen working |
 | I2 | Open and close the side panels on a phone | Panels appear as overlays; no sideways scroll | Not run |
 | I3 | Type with the phone's on-screen keyboard, including Enter, Backspace, and Japanese input | Keys arrive correctly | Not run |
-| I4 | Turn on the Input bar plugin in Status. On a phone, open a Claude session: the bar shows below the terminal. Tap the terminal; type a prompt of two lines, with Japanese, in the bar and send it | Tapping the terminal doesn't raise the keyboard; the prompt arrives as one prompt; the box empties | Not run |
+| I4 | On a phone, open a Claude session: the bar shows below the terminal. Tap the terminal; type a prompt of two lines, with Japanese, in the bar and send it | Tapping the terminal doesn't raise the keyboard; the prompt arrives as one prompt; the box empties | Not run |
 | I5 | With the bar, scroll the terminal back with a finger, then send a prompt | It scrolls; the prompt arrives and the screen returns to the bottom | Not run |
 | I6 | Ask Claude to do something that needs permission. Answer the menu with the 1–3 buttons, or ↑/↓ and ⏎; interrupt a reply with Esc | Each key acts as on a keyboard; the keyboard stays up between keys | Not run |
-| I7 | Press ⌨ in the bar, type in the terminal, press ⌨ Input bar again; reload | Typing works in the terminal while the bar is off; the choice survives the reload. On a PC with the plugin on, the bar starts off | Not run |
+| I7 | Press ⌨ in the bar, type in the terminal, press ⌨ Input bar again; reload | Typing works in the terminal while the bar is off; the choice survives the reload. On a PC that hasn't chosen, the bar starts on | Not run |
+| I9 | In a project, ask the Coordinator to hand a task to another session that sends a result back. While it works, type a long draft in the Coordinator's bar, without sending | The reply arrives in the Coordinator as its own prompt; the draft stays in the bar, untouched | Not run |
+| I10 | On a PC, type in the bar with Japanese input: confirm a word with Enter, then press Enter again; press Shift+Enter in a line | The first Enter only confirms the word, the second sends; Shift+Enter makes a new line | Not run |
 | I8 | With the bar, press ^B, type `c`, send; then ^B and the `1` button | A new tmux window opens; then window 1 shows again | Not run |
 
 ## J. Daily use

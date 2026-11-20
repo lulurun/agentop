@@ -344,6 +344,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Prompt
+         * @description agentop send, here so its prompts queue with the Input bar's in the one process (AgentCli.deliver).
+         */
+        post: operations["send_prompt_send_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/service": {
         parameters: {
             query?: never;
@@ -808,6 +828,22 @@ export interface components {
         ResumeRef: {
             /** Session Id */
             session_id: string;
+        };
+        /** SendPrompt */
+        SendPrompt: {
+            /** Project */
+            project?: string | null;
+            /** Target */
+            target: string;
+            /** Text */
+            text: string;
+        };
+        /** SentPrompt */
+        SentPrompt: {
+            /** Name */
+            name: string;
+            /** Tmux */
+            tmux: string;
         };
         /** ServiceInfo */
         ServiceInfo: {
@@ -1717,6 +1753,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SessionModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_prompt_send_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendPrompt"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SentPrompt"];
                 };
             };
             /** @description Validation Error */

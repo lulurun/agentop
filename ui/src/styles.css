@@ -1211,40 +1211,99 @@ button.app-outdated:hover { background: var(--line); }
 .past-session dl { margin: 0 0 8px; }
 .past-session h3 { margin: 14px 0 6px; color: var(--quiet); }
 
-/* The Input bar plugin, below a session's terminal */
-.input-bar { flex: none; display: grid; gap: 6px; padding: 6px 8px 8px; border-top: 1px solid var(--line); background: var(--surface); }
-.input-bar[data-mode="terminal"] { display: flex; justify-content: flex-end; padding: 2px 8px; }
-.input-bar[data-mode="terminal"] .input-toggle { padding: 1px 8px; font-size: 12px; color: var(--quiet); }
-.input-keys { display: flex; gap: 4px; min-width: 0; }
-.input-key-list { flex: 1; display: flex; gap: 4px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
-.input-keys button { flex: none; min-width: 36px; padding: 4px 8px; font-family: var(--code); font-size: 13px; }
-.input-keys .input-prefix[aria-pressed="true"] { background: var(--starting); border-color: var(--starting); color: var(--action-ink); }
-.input-row { display: flex; gap: 6px; align-items: flex-end; }
-.input-row textarea {
-  flex: 1;
+/* The Input bar plugin, below a session's terminal: a composer card, as in chat apps */
+.input-bar { flex: none; padding: 8px 10px 10px; background: var(--surface); border-top: 1px solid var(--line); }
+.input-bar[data-mode="terminal"] { display: flex; justify-content: flex-end; padding: 3px 8px; }
+.input-bar[data-mode="terminal"] .input-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: none;
+  font-size: 12px;
+  color: var(--quiet);
+}
+.input-bar[data-mode="terminal"] .input-toggle:hover { color: var(--text); }
+
+.composer {
+  display: grid;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--term-bg);
+  transition: border-color 120ms, box-shadow 120ms;
+}
+.composer:focus-within { border-color: color-mix(in srgb, var(--action) 70%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--action) 18%, transparent); }
+.composer[data-prefix] { border-color: var(--starting); box-shadow: 0 0 0 3px color-mix(in srgb, var(--starting) 18%, transparent); }
+.composer textarea {
+  display: block;
+  width: 100%;
   min-width: 0;
   resize: none;
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--term-bg);
+  padding: 10px 12px 4px;
+  border: 0;
+  background: none;
   color: var(--text);
   font: inherit;
   font-size: 16px; /* below 16px a phone zooms in on focus */
-  line-height: 1.35;
+  line-height: 1.4;
 }
-.input-row textarea:focus { outline: none; border-color: var(--action); }
-.input-send {
+.composer textarea:focus { outline: none; }
+.composer textarea::placeholder { color: var(--quiet); }
+
+.composer-tools { display: flex; align-items: center; gap: 4px; min-width: 0; padding: 4px 6px 6px; }
+.input-key-list { flex: 1; display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.input-key-list::-webkit-scrollbar { display: none; }
+.composer-tools button {
   flex: none;
-  width: 36px;
-  height: 36px;
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--quiet);
+  font-family: var(--code);
+  font-size: 12.5px;
+}
+.composer-tools button:hover:not(:disabled) { border-color: transparent; background: var(--raised); color: var(--text); }
+.input-key-list button[data-group-start] { margin-left: 9px; position: relative; }
+.input-key-list button[data-group-start]::before {
+  content: "";
+  position: absolute;
+  left: -6px;
+  top: 7px;
+  bottom: 7px;
+  width: 1px;
+  background: var(--line);
+}
+.composer-tools .input-prefix[aria-pressed="true"],
+.composer-tools .input-prefix[aria-pressed="true"]:hover:not(:disabled) { background: var(--starting); color: var(--action-ink); }
+.composer-hint { flex: none; padding: 0 6px; color: var(--quiet); font-size: 11.5px; white-space: nowrap; }
+@media (max-width: 720px) { .composer-hint { display: none; } }
+
+.composer-tools .input-send {
+  width: 34px;
+  height: 30px;
+  margin-left: 2px;
   padding: 0;
-  border-radius: 50%;
-  border-color: var(--action);
+  border-radius: 7px;
   background: var(--action);
   color: var(--action-ink);
-  font-size: 18px;
-  font-weight: 700;
+  transition: background-color 120ms, color 120ms;
 }
-.input-error { margin: 0; color: var(--failed); font-size: 12px; }
+.composer-tools .input-send:hover:not(:disabled) { background: color-mix(in srgb, var(--action) 85%, var(--text)); color: var(--action-ink); }
+.composer-tools .input-send[data-empty] { background: var(--raised); color: var(--quiet); }
+.composer-tools .input-send[data-empty]:hover:not(:disabled) { background: var(--line); color: var(--text); }
+.composer[data-prefix] .input-send { background: var(--starting); }
+.input-error { margin: 8px 10px 0; padding: 6px 9px; border-radius: 6px; background: color-mix(in srgb, var(--failed) 14%, transparent); color: var(--failed); font-size: 12.5px; }
+@media (pointer: coarse) {
+  .composer-tools button { min-width: 36px; height: 36px; font-size: 13.5px; }
+  .composer-tools .input-send { width: 40px; height: 36px; }
+  /* Keys that don't fit scroll sideways; the fade says there are more. */
+  .input-key-list { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); padding-right: 20px; }
+}
+@media (prefers-reduced-motion: reduce) { .composer, .composer-tools .input-send { transition: none; } }
 .terminal[data-typing="off"] .terminal-host { cursor: default; }

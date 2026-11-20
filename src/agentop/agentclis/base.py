@@ -14,6 +14,7 @@ import random
 import shlex
 import shutil
 import string
+import threading
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Callable, Optional
@@ -25,6 +26,15 @@ from agentop.results import SavedSession, StartFailed, StartResult
 from agentop.tmux import Session
 
 ProgressCallback = Callable[[str], None]
+
+_typing: dict[str, threading.Lock] = {}
+_typing_guard = threading.Lock()
+
+
+def typing(session: str) -> threading.Lock:
+    """The lock that queues what is typed into a session, so another prompt can't land between a paste and its Enter."""
+    with _typing_guard:
+        return _typing.setdefault(session, threading.Lock())
 
 
 def files_under(base: Path) -> Iterator[Path]:
@@ -60,10 +70,11 @@ class AgentCli:
     def deliver(self, session: str, text: str) -> None:
         """Submit a prompt: take the pane out of copy mode, where Enter wouldn't reach the tool, then send_text.
 
-        Every prompt goes through here. Raises PasteError, before Enter, if the paste failed.
+        Every prompt goes through here, one at a time per session (typing). Raises PasteError, before Enter, if the paste failed.
         """
-        Session.leave_mode(session)
-        self.send_text(session, text)
+        with typing(session):
+            Session.leave_mode(session)
+            self.send_text(session, text)
 
     def send_text(self, session: str, text: str) -> None:
         """Paste text into the tool's input and submit it. Raises PasteError, and sends no Enter, if the paste failed.

@@ -26,22 +26,10 @@ function write(key: string, value: string | null) {
   }
 }
 
-/** A touch screen shows the bar until told otherwise; a mouse and keyboard type in the terminal. */
-export function defaultMode(coarse: boolean): Mode {
-  return coarse ? "bar" : "terminal";
-}
-
-function touchScreen(): boolean {
-  try {
-    return window.matchMedia("(pointer: coarse)").matches;
-  } catch {
-    return false;
-  }
-}
-
-export function loadMode(coarse = touchScreen()): Mode {
+/** The bar shows until a device chooses the terminal: it holds a draft apart from prompts other sessions send. */
+export function loadMode(): Mode {
   const saved = read(MODE_KEY);
-  return saved === "bar" || saved === "terminal" ? saved : defaultMode(coarse);
+  return saved === "terminal" ? "terminal" : "bar";
 }
 
 /** One mode for every bar on the page, so switching in one tab switches them all. */
