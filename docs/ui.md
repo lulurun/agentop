@@ -54,7 +54,7 @@ One exception, kept from before: picking a dialogue in Dialogues' left panel sho
 
 ## Header
 
-From the left: left panel toggle, connection manager, the feature nav, settings button, right panel toggle. Nothing else goes in the header: a feature's New button (New session, New project, New dialogue) is the only thing in the Create new … section at the top of its left panel (Projects has a name field there instead). Below 600px the feature nav becomes a drop-down.
+From the left: left panel toggle, connection manager, the feature nav, settings button, right panel toggle. Nothing else goes in the header: a feature's New button (New session, New project, New dialogue) is the only thing in the Create new … section at the top of its left panel (Projects has none: its name field is at the top of its Projects section). Below 600px the feature nav becomes a drop-down.
 
 ## Keys
 

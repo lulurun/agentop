@@ -3,7 +3,7 @@ import type { Session } from "../../api/client";
 import { DetailsPanel } from "../../components/DetailsPanel";
 import { Section } from "../../components/Section";
 import { TrashIcon } from "../../components/icons";
-import { CreateSection, SessionSections } from "../../components/Sidebar";
+import { SessionSections } from "../../components/Sidebar";
 import { useApp } from "../../store";
 import type { PluginContext, UiPlugin } from "../types";
 
@@ -155,8 +155,6 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
 
 function Left({ plugin }: { plugin: PluginContext }) {
   const { projects, chosen, open, create, remove } = useProjects(plugin);
-  const setDialog = useApp((s) => s.setDialog);
-
   function removeOne(name: string) {
     if (!window.confirm(`Stop ${name}'s sessions and remove the project? Its folder is kept.`)) return;
     void remove(name, false).catch((e) => useApp.getState().setError(e instanceof Error ? e.message : String(e)));
@@ -164,10 +162,8 @@ function Left({ plugin }: { plugin: PluginContext }) {
 
   return (
     <>
-      <Section id="projects:create" title="Create new project">
-        <NewProject onCreate={create} />
-      </Section>
       <Section id="projects:projects" title="Projects" extra={projects && <span className="session-count">{projects.length}</span>}>
+        <NewProject onCreate={create} />
         <nav className="session-list" aria-label="Projects">
           {projects?.map((p) => (
             <div key={p.name} className="project-row" aria-current={p.name === chosen ? "true" : undefined}>
@@ -182,12 +178,7 @@ function Left({ plugin }: { plugin: PluginContext }) {
           {projects && projects.length === 0 && <p className="session-empty">No projects yet.</p>}
         </nav>
       </Section>
-      {chosen && (
-        <>
-          <CreateSection id="projects:create-session" title="Create new session" label="New session" onClick={() => setDialog("new-session", chosen)} />
-          <SessionSections project={chosen} />
-        </>
-      )}
+      {chosen && <SessionSections project={chosen} canStart={false} />}
     </>
   );
 }

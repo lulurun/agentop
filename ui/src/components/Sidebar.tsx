@@ -103,7 +103,7 @@ export function CreateSection({ id, title, label, onClick }: { id: string; title
 }
 
 /** A project's Active sessions and History, as Sessions shows them; a project's own feature shows them too. */
-export const SessionSections = memo(function SessionSections({ project }: { project: string }) {
+export const SessionSections = memo(function SessionSections({ project, canStart = true }: { project: string; canStart?: boolean }) {
   const sessions = useApp((s) => s.sessions);
   const selected = useApp(selectedId);
   const setDialog = useApp((s) => s.setDialog);
@@ -138,10 +138,15 @@ export const SessionSections = memo(function SessionSections({ project }: { proj
               ))}
               {managed.length === 0 && (
                 <p className="session-empty">
-                  No sessions yet.{" "}
-                  <button type="button" className="link" onClick={() => setDialog("new-session", project)}>
-                    Start one
-                  </button>
+                  No sessions yet.
+                  {canStart && (
+                    <>
+                      {" "}
+                      <button type="button" className="link" onClick={() => setDialog("new-session", project)}>
+                        Start one
+                      </button>
+                    </>
+                  )}
                 </p>
               )}
             </nav>

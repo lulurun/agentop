@@ -92,7 +92,7 @@ The `default` project, as Sessions is today, without Started elsewhere and with 
 
 ### 7.2 Projects (plugin `projects`)
 
-- **Left panel**: Create new project (a name field and Create), Projects (a list, the chosen one highlighted, each with a Remove icon), then for the chosen project the same sections as Sessions: Create new session, Active sessions, History.
+- **Left panel**: Projects (a name field and Create, then the list, the chosen one highlighted, each with a Remove icon), then for the chosen project Active sessions and History. There is no New session: the owner asks the Coordinator, which starts the project's other sessions.
 - Commands: `agentop project create <name>` and `agentop project remove <name> [--delete-folder]`. The Coordinator starts other sessions with `agentop start` (section 6).
 
 ### 7.3 Dialogues (plugin `dialogue`)
