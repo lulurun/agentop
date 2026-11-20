@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vitest/config";
 
@@ -23,7 +25,19 @@ function contentSecurityPolicy(): Plugin {
   };
 }
 
+// From git, so a build between releases says so (v2.3.0-2-gabc1234); pyproject.toml
+// when there is no git, as in a source archive.
+function uiVersion(): string {
+  try {
+    return execFileSync("git", ["describe", "--tags", "--match", "v[0-9]*", "--dirty"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    const found = /^version = "(.+)"/m.exec(readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8"));
+    return found ? `v${found[1]}` : "unknown";
+  }
+}
+
 export default defineConfig({
+  define: { __UI_VERSION__: JSON.stringify(uiVersion()) },
   // Relative, so the same build works at /app, behind a proxy path, or in Tauri.
   base: "./",
   plugins: [react(), contentSecurityPolicy()],

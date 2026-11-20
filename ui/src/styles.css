@@ -937,6 +937,7 @@ button.app-outdated:hover { background: var(--line); }
 .dialogue-text { margin: 0 0 16px; padding: 10px 12px; max-height: 280px; overflow: auto; background: var(--surface); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 "JetBrains Mono", ui-monospace, monospace; }
 .view h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .settings-field { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.settings-version { margin: 16px 0 0; font-size: 12px; color: var(--quiet); user-select: text; }
 .settings-field input[type="number"] { flex: none; width: 72px; }
 .settings-field select, .view-tools select, .features-compact {
   flex: none;

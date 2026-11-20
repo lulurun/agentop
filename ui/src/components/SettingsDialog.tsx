@@ -38,6 +38,7 @@ export function SettingsDialog() {
           <option value="dom">Compatible</option>
         </select>
       </label>
+      <p className="settings-version">UI version {__UI_VERSION__}</p>
       <div className="dialog-actions">
         <button type="button" onClick={() => setDialog(null)}>
           Close
