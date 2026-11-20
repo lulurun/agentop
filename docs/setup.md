@@ -195,6 +195,19 @@ The script runs only on `main`, clean and level with `origin/main`, and builds t
 and the app first, so nothing is tagged that doesn't build. The tag is also what
 services set to `update_from = "release"` update to; others follow `main`.
 
+**Making a release** is `scripts/release.sh` and nothing else; pushing the tag is the release:
+
+- **Y or Z** (`v2.2.0`, `v2.1.1`): the tag alone, with no GitHub release. Installed apps
+  show **Update agentop** and update their agentop in place; browser tabs on a service
+  following releases show **agentop X.Y.Z is out**.
+- **X** (`v3.0.0`): pushing the tag starts the `desktop` workflow
+  (`.github/workflows/desktop.yml`, on `v*.0.0` tags only). On GitHub's runners it builds
+  the Linux AppImage and the macOS universal `.app`, signs them, and publishes the
+  release **agentop-desktop vX.0.0**. Nothing is built or uploaded by hand. Installed
+  apps show **App update**, which opens that release. Follow the build at
+  [Actions](https://github.com/lulurun/agentop/actions/workflows/desktop.yml); it has no
+  manual trigger, so a failed job is re-run from there.
+
 The `desktop` workflow needs the repository secret `TAURI_SIGNING_PRIVATE_KEY`, the
 private half of the updater key whose public half is in `tauri.conf.json`.
 
