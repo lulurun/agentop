@@ -205,6 +205,9 @@ export function StatusView({ onClose }: { onClose(): void }) {
             {info && (
               <>
                 <div className="detail-row"><dt>Version</dt><dd>{info.commit ? `${info.version} (${info.commit})` : info.version}</dd></div>
+                {info.checkout_commit && info.commit && info.checkout_commit !== info.commit && (
+                  <div className="detail-row"><dt>Checked out</dt><dd>{info.checkout_commit}, not running yet: Restart runs it</dd></div>
+                )}
                 <div className="detail-row"><dt>Running for</dt><dd>{formatDuration(info.uptime_seconds)}</dd></div>
                 <div className="detail-row"><dt>tmux</dt><dd>{info.tmux_version ?? "Not found"}</dd></div>
                 {can.update && <div className="detail-row"><dt>Updates</dt><dd>{updateSummary(update)}</dd></div>}

@@ -771,6 +771,18 @@
             "title": "Capabilities",
             "type": "object"
           },
+          "checkout_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The commit checked out now. When it differs from commit, a restart runs it",
+            "title": "Checkout Commit"
+          },
           "commit": {
             "anyOf": [
               {
@@ -780,6 +792,7 @@
                 "type": "null"
               }
             ],
+            "description": "The commit this process started from",
             "title": "Commit"
           },
           "install_kind": {

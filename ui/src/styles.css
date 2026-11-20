@@ -938,6 +938,9 @@ button.app-outdated:hover { background: var(--line); }
 .view h3 { margin: 0 0 6px; font-size: 13px; font-weight: 600; }
 .settings-field { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
 .settings-version { margin: 16px 0 0; font-size: 12px; color: var(--quiet); user-select: text; }
+.settings-version div { display: flex; gap: 8px; }
+.settings-version dt::after { content: ":"; }
+.settings-version dd { margin: 0; }
 .settings-field input[type="number"] { flex: none; width: 72px; }
 .settings-field select, .view-tools select, .features-compact {
   flex: none;

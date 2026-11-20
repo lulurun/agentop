@@ -1,5 +1,8 @@
+import { useEffect, useState } from "react";
+import type { ServiceInfo } from "../api/client";
 import { FONT_SIZES, type Settings } from "../settings";
-import { useApp } from "../store";
+import { activeConnection, useActiveClient, useApp } from "../store";
+import { connectionName } from "../connections";
 import { Dialog } from "./Dialog";
 
 /** How this app looks: the same for every service. A service's plugins are in its Status tab. */
@@ -7,6 +10,17 @@ export function SettingsDialog() {
   const settings = useApp((s) => s.settings);
   const update = useApp((s) => s.updateSettings);
   const setDialog = useApp((s) => s.setDialog);
+  const connection = useApp(activeConnection);
+  const client = useActiveClient();
+  const [service, setService] = useState<ServiceInfo | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    client.service().then((info) => live && setService(info)).catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [client]);
 
   return (
     <Dialog title="Settings">
@@ -38,7 +52,18 @@ export function SettingsDialog() {
           <option value="dom">Compatible</option>
         </select>
       </label>
-      <p className="settings-version">UI version {__UI_VERSION__}</p>
+      <dl className="settings-version">
+        <div><dt>This app</dt><dd>{__UI_VERSION__}</dd></div>
+        {service && (
+          <div>
+            <dt>{connectionName(connection, service.name)}</dt>
+            <dd>
+              {service.commit ? `${service.version} (${service.commit})` : service.version}
+              {service.checkout_commit && service.commit && service.checkout_commit !== service.commit && `, ${service.checkout_commit} after a restart`}
+            </dd>
+          </div>
+        )}
+      </dl>
       <div className="dialog-actions">
         <button type="button" onClick={() => setDialog(null)}>
           Close

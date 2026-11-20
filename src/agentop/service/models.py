@@ -17,7 +17,10 @@ class ServiceInfo(BaseModel):
     version: str
     api_version: int = Field(description="Revision of /api/v2. A client built for a lower one should be updated")
     name: str
-    commit: str | None
+    commit: str | None = Field(description="The commit this process started from")
+    checkout_commit: str | None = Field(
+        None, description="The commit checked out now. When it differs from commit, a restart runs it"
+    )
     uptime_seconds: int
     # When this process started serving. A restart changes it, even one that keeps the PID.
     started_at: float | None = None

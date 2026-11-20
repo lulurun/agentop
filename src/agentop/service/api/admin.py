@@ -59,6 +59,16 @@ def _install_kind() -> str:
     return "git" if (REPO_ROOT / ".git").exists() else "unknown"
 
 
+_started: dict[str, str | None] = {}
+
+
+def started_commit() -> str | None:
+    """The commit this process runs: HEAD at its first call, made at startup, as the checkout can move under it."""
+    if "commit" not in _started:
+        _started["commit"] = _git_commit()
+    return _started["commit"]
+
+
 def _git_commit() -> str | None:
     if not (REPO_ROOT / ".git").exists():
         return None
@@ -159,7 +169,8 @@ async def service(ctx: Ctx):
         "version": version(),
         "api_version": API_VERSION,
         "name": ctx.identity.name,
-        "commit": await asyncio.to_thread(_git_commit),
+        "commit": await asyncio.to_thread(started_commit),
+        "checkout_commit": await asyncio.to_thread(_git_commit),
         "uptime_seconds": int(time.time() - ctx.started_at),
         "started_at": ctx.started_at,
         "pid": os.getpid(),

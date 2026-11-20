@@ -856,7 +856,15 @@ export interface components {
             capabilities: {
                 [key: string]: boolean;
             };
-            /** Commit */
+            /**
+             * Checkout Commit
+             * @description The commit checked out now. When it differs from commit, a restart runs it
+             */
+            checkout_commit?: string | null;
+            /**
+             * Commit
+             * @description The commit this process started from
+             */
             commit: string | null;
             /** Install Kind */
             install_kind: string;

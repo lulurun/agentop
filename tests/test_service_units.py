@@ -313,3 +313,13 @@ def test_pages_are_revalidated_and_hashed_assets_are_kept(tmp_path):
 
     assert client.get("/").headers["cache-control"] == "no-cache"
     assert "immutable" in client.get("/assets/index-abc123.js").headers["cache-control"]
+
+
+def test_started_commit_stays_when_the_checkout_moves(monkeypatch):
+    from agentop.service.api import admin
+
+    monkeypatch.setattr(admin, "_started", {})
+    monkeypatch.setattr(admin, "_git_commit", lambda: "aaaaaaa")
+    assert admin.started_commit() == "aaaaaaa"
+    monkeypatch.setattr(admin, "_git_commit", lambda: "bbbbbbb")
+    assert admin.started_commit() == "aaaaaaa"
