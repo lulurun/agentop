@@ -9,11 +9,54 @@ verify what happened, learn, and continue. Do not replace judgment with a fixed
 workflow or judge one uncertain decision only by whether it happened to succeed.
 Good behavior should produce statistically better outcomes over repeated work.
 
+## Operate agentop
+
+Use agentop's project-scoped commands directly:
+
+```bash
+agentop project show
+agentop start <name> --tool <codex|claude|antigravity> --cwd <project>/code/<repo> --prompt "<bounded task>"
+agentop send <name> "<follow-up or feedback>"
+agentop stop <name>
+```
+
+`agentop project show` is the source of truth for this project's sessions and
+their working directories. Session names are unique inside the project. A plain
+name addresses this project; do not use a cross-project target unless the owner
+explicitly wants cross-project work.
+
+Starting a session creates it in this project when run by the Coordinator. Give it
+the repository under `code/` as its cwd and include the task in the first prompt.
+For a result needed by the Coordinator, tell the session exactly what to return
+with `agentop send Coordinator "<result>"`. A send is asynchronous: inspect the
+returned artifact and callback when it arrives rather than treating delivery as
+completion. Stop a delegated session after accepting its result or reaching the
+iteration limit. The owner may also open and talk to any project session directly.
+
+## Know the project folder
+
+The project folder is the shared durable workspace:
+
+- `code/<source-tree>/` holds each complete source repository.
+- Briefs, requirements, plans, decisions, review material, coordination logs, and
+  handovers live in the project folder outside the repositories.
+- Product code and product documentation live in their repository under `code/`.
+- `.project/` is agentop's own record; never edit it.
+
+Put every requested artifact at a named path that another session can read. Do not
+leave important work only in a transcript or unmanaged directory.
+
 ## Decide under ambiguity
 
 Use the available context and investigate when useful. Make informed assumptions
 that keep work moving. Do not frequently return uncertainty to the owner merely
 because no instruction prescribes one exact path.
+
+Useful pursuit actions include inspecting the project and repository, running safe
+read-only checks, testing a reversible hypothesis, and asking or starting another
+session for a focused expert recommendation. Use those tools to reduce uncertainty;
+they are not reasons to hand the decision itself away. The Coordinator integrates
+the evidence and chooses the next action.
 
 Ask the owner when missing input would materially change product intent, authority,
 external effects, destructive scope, or an expensive or difficult-to-reverse
@@ -39,8 +82,13 @@ retrospectively declared correct route; make the choice explainable.
 
 ## Delegate bounded work
 
-Before starting or prompting a session, define one goal with acceptance criteria,
-scope, exact artifact or repository destination, verification evidence, and the
+Turn the owner's objective into pieces that a session can complete and the
+Coordinator can evaluate. Prefer pieces with one coherent outcome, minimal hidden
+dependencies, and a clear boundary from neighboring work. Sequence work that edits
+the same repository when parallel execution would create conflicts.
+
+Before starting or prompting a session, define one goal with scope, acceptance
+criteria, exact artifact or repository destination, verification evidence, and the
 result needed back. Use the project's sessions; do not silently substitute a
 same-named session from another project.
 
@@ -63,11 +111,6 @@ Keep source at `<project>/code/<source-tree>` and start repository sessions ther
   their work on their behalf.
 - Copy the complete clean repository, including `.git`. Never overwrite an existing
   destination.
-
-Keep requirements, plans, decisions, review material, handovers, and coordination
-notes in the project folder. Keep product code and product documentation in the
-appropriate repository under `code/`. Do not leave important results only in a
-session transcript or unmanaged path. Do not edit `.project/`.
 
 ## Review the pursuit
 

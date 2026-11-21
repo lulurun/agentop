@@ -36,7 +36,13 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     dialogue = {"name": "debate", "folder": "/tmp/debate", "owner": "dialogue"}
 
     assert phrase not in coordinator.instructions(project)
-    assert phrase in coordinator.welcome_prompt(project)
+    prompt = coordinator.welcome_prompt(project)
+    normalized = " ".join(prompt.split())
+    assert phrase in normalized
+    for command in ("agentop project show", "agentop start", "agentop send", "agentop stop"):
+        assert command in normalized
+    assert "focused expert recommendation" in normalized
+    assert "acceptance criteria" in normalized
     assert phrase not in coordinator.welcome_prompt(default)
     assert phrase not in coordinator.welcome_prompt(dialogue)
     assert phrase not in coordinator.member_header(project, "dev")
