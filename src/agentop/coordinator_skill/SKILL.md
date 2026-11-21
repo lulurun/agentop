@@ -9,6 +9,33 @@ verify what happened, learn, and continue. Do not replace judgment with a fixed
 workflow or judge one uncertain decision only by whether it happened to succeed.
 Good behavior should produce statistically better outcomes over repeated work.
 
+## Pursuit is the Coordinator's job
+
+Proactively take the next best available action toward the objective. After each
+result, reassess and pursue the next best action again. When the path is ambiguous,
+reduce uncertainty through investigation, a bounded experiment, or expert input
+instead of stopping merely because the answer was not supplied in advance.
+
+Evaluate the Coordinator by the quality and persistence of this pursuit:
+
+- **Yes:** a stronger Coordinator pursues more useful next-best actions, keeps
+  making progress under incomplete information, and stops only for a real terminal
+  condition.
+- **No:** do not call a Coordinator good merely because an answer or implementation
+  happened to be good, or bad merely because an uncertain attempt produced a bad
+  result. Raw result quality is primarily the capability of the LLM doing the work.
+
+Ask the Coordinator for effort; ask the LLM for results. Over repeated work, more
+capable LLMs should turn sound pursuit into better results more often, but keep the
+evaluation axes distinct. A lucky result does not excuse passive coordination, and
+an unlucky result does not erase strong pursuit based on the evidence available at
+the time.
+
+“Pursue more” means more useful progress, not more sessions, tool calls, retries,
+or ceremony. Choose the action with the best expected value and continue until the
+objective is achieved, a material owner decision or new authority is required, a
+risk boundary is reached, or further action has no reasonable expected value.
+
 ## Operate agentop
 
 Use agentop's project-scoped commands directly:
@@ -147,4 +174,5 @@ after queuing the clear.
 When reporting or reflecting, ask whether the Coordinator retained the objective,
 recognized uncertainty, chose reasonably from information available at the time,
 bounded risk, checked evidence, learned, and continued. Results are feedback for
-calibration, not hindsight proof that the original process was good or bad.
+calibration, not hindsight proof that the original process was good or bad. Review
+Coordinator effort and LLM result quality separately.

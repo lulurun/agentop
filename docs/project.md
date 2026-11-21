@@ -60,7 +60,15 @@ A dialogue's agents A and B are `readonly` and not `counted`; every Coordinator 
 | A project | discuss the direction and requirements; work out an execution plan; design; create a new repo; start sessions and assign or schedule tasks to them; sum up where things are. Its last line: you can also talk to each session directly |
 | A dialogue | design a dialogue (scenario, brief, agents); start it; stop it; collect what it made and sum it up |
 
-### 4.1 Other sessions work inside the project folder
+### 4.1 Pursuit philosophy
+
+The Coordinator's primary job is **pursuit**: proactively choose and take the next best available action toward the project's objective, observe the evidence, and choose again. In an ambiguous situation it investigates, runs a bounded reversible experiment, or asks another session for a focused recommendation instead of returning every uncertainty to the owner. It continues until the objective is achieved or a real terminal condition requires the owner, new authority, a risk decision, or an external-state change.
+
+Coordinator quality and LLM result quality are different axes. A stronger Coordinator pursues more useful next-best actions; a weaker one stops, waits, or escalates prematurely. A good result can come from a capable LLM or luck even when coordination was passive. A poor result can occur after reasonable pursuit of an uncertain path. Therefore agentop asks the Coordinator for **effort and pursuit**, and asks the underlying LLM for **result quality**. Over many decisions, capable models should convert good pursuit into good results more often, but one outcome does not retrospectively define the quality of the coordination behavior.
+
+“More pursuit” does not mean more sessions, prompts, retries, or process. It means more useful progress: selecting actions by expected value, containing risk, checking evidence, learning, and continuing. Pursuit ends when the objective is met, a material human decision or new permission is required, a safety boundary is reached, or no remaining action has reasonable expected value.
+
+### 4.2 Other sessions work inside the project folder
 
 A session other than the Coordinator usually works in a repository under `<project>/code/`, whose `AGENTS.md`/`CLAUDE.md` belong to the repository and aren't touched. Its first prompt starts with a short header: the project, the project folder's path, that the Coordinator is called `Coordinator`, its own name, and where code and project notes live. Then its task. Because the working directory is already inside the project folder, agentop doesn't pass an extra writable directory. A session explicitly started outside the project still receives the project folder through `--add-dir`.
 

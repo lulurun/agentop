@@ -46,6 +46,8 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
         assert command in normalized
     assert "focused expert recommendation" in normalized
     assert "acceptance criteria" in normalized
+    assert "Ask the Coordinator for effort; ask the LLM for results" in normalized
+    assert "Pursue more” means more useful progress" in normalized
     assert "Context is working memory; the project folder is durable memory" in normalized
     assert "Reset only after the state needed to continue is written down" in normalized
     assert 'agentop send --no-header Coordinator "/clear"' in normalized
