@@ -6,7 +6,7 @@
 | CLI commands | [docs/0_08_cli.md](docs/0_08_cli.md) |
 | Code structure | [docs/0_03_architecture.md](docs/0_03_architecture.md) |
 | UI layout: names of its parts, where tabs open, keys | [docs/0_10_ui.md](docs/0_10_ui.md) |
-| Projects: groups of sessions with a shared folder and a Coordinator | [docs/0_13_projects.md](docs/0_13_projects.md) |
+| Projects: a goal, and a Coordinator session that drives other agents to reach it | [docs/0_13_projects.md](docs/0_13_projects.md) |
 | Plugins: how they work, and each one | [docs/0_12_00_plugins.md](docs/0_12_00_plugins.md), and `docs/0_12_<number>_<id>.md` for the larger ones (dialogue, memory, input) |
 | Service and app setup | [docs/1_setup.md](docs/1_setup.md) |
 | Build and release (UI, desktop app) | [docs/1_setup.md](docs/1_setup.md#building-and-releasing), `scripts/` |

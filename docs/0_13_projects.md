@@ -1,14 +1,16 @@
 # Projects
 
-Status: built. What is still open is in section 10. Where projects sit in agentop is in [0_00_design.md section 13](0_00_design.md#13-projects).
+Status: the mechanism is built (folders, session lists, the Coordinator's start and resume, routing between sessions). The goal, an intelligent Coordinator, is not reached yet: how well a Coordinator pursues is what section 4.1 asks of it and what the rest of this design serves. What is still open is in section 10. Where projects sit in agentop is in [0_00_design.md section 13](0_00_design.md#13-projects).
 
 ## 1 What it is
 
-A **project** is a group of sessions and a folder they share, the **project folder**. Projects are part of the core; plugins make and use their own. Every agentop session belongs to exactly one project.
+**The goal** is an intelligent Coordinator: a session that listens to what the owner wants, works out the best approach, and drives agents through agentop's own session operations (start, send, read, stop) until the project is done. The owner states the requirement and makes the decisions only they can make; the Coordinator does the rest of the getting-there. That goal is not reached yet, and it is what projects are for.
 
-Each project other than `default` has a **Coordinator**: a session working in the project folder, the one the owner talks to. It sums up what the owner wants and routes the work to the project's other sessions, starting them when it decides one is needed or when asked. Talking to the Coordinator is the recommended way, not the only one: every session can be opened and used directly, unless its plugin made it read-only.
+So a **project is a goal with a Coordinator pursuing it.** Each project has its own topic: something to build, a question to settle, a dream that is still vague. What sets a project apart from a pile of sessions is that one session, the **Coordinator**, owns the goal. It sums up what the owner wants, decides what to do next, starts the sessions the work needs and routes tasks between them, and reports back. Its job is pursuit: choosing and taking the next best action until the goal is met or the owner is really needed (section 4.1). Talking to the Coordinator is the recommended way, not the only one: every session can be opened and used directly, unless its plugin made it read-only.
 
-In `default` the owner is the Coordinator: Sessions keeps the owner's manual way of working, for on-demand, occasional, unsure development or investigation, while a project is for work with a clear high-level goal ([design 12.1](0_00_design.md#121-core-and-plugins)). Its sessions are still kept apart from other projects', but nothing routes between them: the owner starts each one with New session in Sessions, which can start with no session at all.
+**Sessions is the `default` project, the one without a goal.** It is the owner's manual way of working, kept as it was before projects: on-demand, occasional, unsure development or investigation, random tasks the owner drives themselves ([design 12.1](0_00_design.md#121-core-and-plugins)). There the owner is the Coordinator: they start each session with New session, and nothing routes between them.
+
+**What a project looks like.** A project is a group of sessions and a folder they share, the **project folder** (section 2), where the Coordinator keeps the project's brief, plans and decisions, and its source repositories live under `code/`. Every agentop session belongs to exactly one project. Projects are kept apart: a session sees, and sends to, the sessions of its own project; Active sessions and History are per project. Projects are part of the core; plugins make and use their own.
 
 | | `default` | Any other project |
 |---|---|---|
@@ -17,9 +19,7 @@ In `default` the owner is the Coordinator: Sessions keeps the owner's manual way
 | Sessions started by | The owner, with New session | The Coordinator (`agentop start`); no New session |
 | Claude `--remote-control` | On | Off |
 
-Both run on the same code: one session store, registry, start, resume and stop, and the same API, keyed by project. The rows above are the only differences on the service, and they all follow from `projects.has_coordinator`. In the UI, Projects reuses Sessions' sections, tabs and right panel and only hides New session.
-
-Projects are kept apart: a session sees, and sends to, the sessions of its own project; Active sessions and History are per project.
+`default` and other projects run on the same code: one session store, registry, start, resume and stop, and the same API, keyed by project. The rows above are the only differences on the service, and they all follow from `projects.has_coordinator`. In the UI, Projects reuses Sessions' sections, tabs and right panel and only hides New session.
 
 | Project | Owner | Shown in | Coordinator's job |
 |---------|-------|----------|-------------------|

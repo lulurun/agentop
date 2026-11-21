@@ -27,7 +27,7 @@ Agentop opens an agent in tmux, and the user works with it through that terminal
 - A **service** owns sessions and exposes an API. It runs independently of any UI.
 - A **web app** and a **Tauri desktop app** show one UI codebase, with the same look and features. Both show the UI that a service serves. The desktop app is a thin wrapper that runs this computer's service while it is open ([11](#11-desktop-app)).
 - Both connect to the local service by default, can add and switch to any agentop service they can reach, and can see and control the status of the connected service.
-- **Plugins** add features on top of the core ([12](#12-plugins)), and **projects** group sessions under a Coordinator ([13](#13-projects)).
+- **Plugins** add features on top of the core ([12](#12-plugins)), and **projects** give a goal to a Coordinator session that drives other agents to reach it ([13](#13-projects)).
 
 There is no agent-level streaming, chat view, or message parsing. The terminal is a real `tmux attach` client, so all interaction is whatever tmux and the terminal library already support.
 
@@ -581,15 +581,19 @@ Handoff is not a plugin: `agentop send` and the `handoff` skill are enough ([4.6
 
 The full design is in [0_13_projects.md](0_13_projects.md).
 
-A **project** is a group of sessions and a folder they share, `~/.agentop/projects/<name>/`. Every agentop session belongs to exactly one project, and projects are kept apart: a session sees and sends to its own project's sessions, and each project has its own Active sessions and History. Projects are core; plugins make and use their own:
+The goal of projects is an intelligent **Coordinator**: a session that listens to the owner's requirement, pursues the best approach, and drives agents through agentop's session operations (`agentop start`, `agentop send`, reading and stopping sessions) until the project is done. That goal is not reached yet; the mechanism around it is built.
+
+So a project is a goal with a Coordinator pursuing it. Each project has its own topic, goal, or dream, and its Coordinator owns it: it decides what to do next, starts the sessions the work needs, routes tasks between them, and goes back to the owner only for what only the owner can decide. Its job is **pursuit**: choosing and taking the next best action until the goal is met or the owner is really needed ([0_13_projects.md 4.1](0_13_projects.md#41-pursuit-philosophy)).
+
+Sessions is the `default` project, the one without a goal or a Coordinator: the owner drives it by hand, for random tasks, as before projects.
+
+What a project looks like: a group of sessions and a folder they share, `~/.agentop/projects/<name>/`. Every agentop session belongs to exactly one project, and projects are kept apart: a session sees and sends to its own project's sessions, and each project has its own Active sessions and History. Projects are core; plugins make and use their own:
 
 | Project | Owner | Shown in | Coordinator |
 |---------|-------|----------|-------------|
 | `default` | core | Sessions | None: the owner starts and runs its sessions |
-| One per project of the owner's | `projects` plugin | Projects | Runs the project: requirements, plan, routing work to sessions it starts |
+| One per project of the owner's | `projects` plugin | Projects | Pursues the project's goal: requirements, plan, routing work to sessions it starts |
 | One per dialogue | `dialogue` plugin | Dialogues | Designs a dialogue, starts and stops it, collects what it made |
-
-Each project other than `default` has a **Coordinator**, the session the owner talks to, which routes work to the project's other sessions, starting them with `agentop start` and reaching them with `agentop send`. Its job is **pursuit**: choosing and taking the next best action toward the project's goal until it is met or the owner is really needed ([0_13_projects.md 4.1](0_13_projects.md#41-pursuit-philosophy)).
 
 ## 14 Risks
 

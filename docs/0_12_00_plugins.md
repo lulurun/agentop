@@ -4,7 +4,7 @@ Optional features built on the agentop core. Where the line between core and plu
 
 | # | Plugin | What it does | On by default | Doc |
 |---|--------|--------------|---------------|-----|
-| 01 | Projects (`projects`) | The owner's own projects: a group of sessions and a shared folder, run through a Coordinator session the owner talks to | Yes | [0_13_projects.md](0_13_projects.md) |
+| 01 | Projects (`projects`) | The owner's own projects: each a goal, pursued by a Coordinator session the owner talks to, which drives the project's other sessions | Yes | [0_13_projects.md](0_13_projects.md) |
 | 02 | Dialogues (`dialogue`) | Two agents work together on one task; an orchestrator passes messages between them, following a scenario | Yes | [0_12_02_dialogue.md](0_12_02_dialogue.md) |
 | 03 | Memory (`memory`) | agentop's own copy of every transcript on the host, with search, session summaries, and `agentop recall` | Yes | [0_12_03_memory.md](0_12_03_memory.md) |
 | 04 | Input bar (`input`) | A box below a session's terminal to type prompts in, with key buttons; it keeps the draft out of tmux | Yes | [0_12_04_input.md](0_12_04_input.md) |
@@ -151,7 +151,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 ### Projects (`projects`)
 
-The owner's own projects. A project (a core mechanism) is a group of sessions and a shared folder in `~/.agentop/projects/`, with a Coordinator session the owner talks to, which starts and routes work to the project's other sessions. The Projects feature has New project, the project list with Remove, and for the chosen project Sessions' own sections and right panel; picking a project opens its Coordinator, resumed or started if it isn't running. `agentop project create | remove` act on its projects and need it on. Turning it off stops its projects' sessions and keeps their folders. Everything else is in [0_13_projects.md](0_13_projects.md).
+The owner's own projects. Each has a goal and a Coordinator session the owner talks to, which pursues it by starting the project's other sessions and routing work between them; the sessions share a folder in `~/.agentop/projects/` (a core mechanism). The Projects feature has New project, the project list with Remove, and for the chosen project Sessions' own sections and right panel; picking a project opens its Coordinator, resumed or started if it isn't running. `agentop project create | remove` act on its projects and need it on. Turning it off stops its projects' sessions and keeps their folders. Everything else is in [0_13_projects.md](0_13_projects.md).
 
 Routes: `GET`, `POST /projects`, `DELETE /projects/{name}`, `POST /projects/{name}/coordinator`.
 

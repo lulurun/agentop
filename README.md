@@ -42,7 +42,7 @@ My own first version of this was manual: one agent per tmux session, named after
 - **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API and the app at `/`. The service token signs a browser or app in; each one then gets its own token, which by default runs out after 12 hours unused and after 30 days in all; the app renews it while in use.
 - **App.** One UI, served by the service, in a browser or in the Tauri desktop app, which runs this computer's service while it is open. Sessions sit on the left, the agent's live terminal in the middle, details (token usage, changed files) on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal. The layout adapts to a phone-width screen.
 - **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It shows the connected service's status and can restart or update it.
-- **Project.** Every managed session belongs to a project, a group of sessions with a shared folder. Sessions is the `default` project, which you run yourself; any other project has a Coordinator session you talk to, which starts and routes work to the others.
+- **Project.** A goal, with a Coordinator session pursuing it: you tell the Coordinator what you want, and it works out the approach and drives other agent sessions, starting them and routing work between them, until the project is done. Sessions is the `default` project, with no goal and no Coordinator, which you drive yourself for random tasks. Each project's sessions share a folder, and every managed session belongs to one project.
 - **History.** Past sessions agentop started, in Sessions' left panel: filtered by keyword and tool, and resumed under their own name.
 - **CLI.** The `agentop` command does the same from a shell: start, stop, list, send, history, and service control.
 
@@ -156,7 +156,7 @@ For a service reachable from the internet, such as one behind an HTTPS proxy:
 - [Setup](docs/1_setup.md): running the service and the app
 - [CLI reference](docs/0_08_cli.md): every command and option
 - [Architecture](docs/0_03_architecture.md): code structure and modules
-- [Projects](docs/0_13_projects.md): groups of sessions with a shared folder and a Coordinator
+- [Projects](docs/0_13_projects.md): a goal, and a Coordinator session that drives other agents to reach it
 - [Plugins](docs/0_12_00_plugins.md): how plugins work, and what each one does; the larger ones have their own `0_12_<number>_<id>.md`
 - [UI](docs/0_10_ui.md): the app's layout, where tabs open, and its keys
 - [Manual tests](docs/8_manual-tests.md): checks that need a real PC
