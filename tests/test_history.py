@@ -246,3 +246,10 @@ def test_a_running_session_records_its_directory_and_process_for_later():
     }
     records["old-1"].update(fields)
     assert agent_fields(rows, records) == {}
+
+
+def test_a_past_session_is_found_by_its_name_for_its_files(monkeypatch):
+    records = {"a-1": record(agent_session_id="A"), "dialogue-2": record(agent_session_id="D", readonly=True), "new-3": record()}
+    monkeypatch.setattr(registry, "load", lambda: {"sessions": records})
+    assert history.record("a-1") == {"id": "a-1", "tool": "fakeagent", "session_id": "A", "cwd": "/tmp"}
+    assert [history.record(n) for n in ("dialogue-2", "new-3", "missing")] == [None, None, None]

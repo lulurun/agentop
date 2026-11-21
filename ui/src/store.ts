@@ -231,6 +231,12 @@ export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature
   return derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0"));
 }
 
+/** The past session whose tab has focus in the feature shown, if one does. */
+export function focusedPastId(state: LayoutState): string | undefined {
+  const content = tabs.focusedTab(layoutOf(state))?.content;
+  return content?.kind === "past" ? content.historyId : undefined;
+}
+
 function loadSelected(): Record<string, string> {
   try {
     return JSON.parse(localStorage.getItem(SELECTED_KEY) ?? "{}");

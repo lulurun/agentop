@@ -59,7 +59,10 @@ async function openStatus(page: Page, name = "box") {
 const features = (page: Page) => page.getByRole("navigation", { name: "Features" });
 
 /** Past sessions agentop started, each with a transcript last written `ago` seconds back. */
-function seedHistory(s: Service, past: { id: string; name: string; tool: "claude" | "codex"; agent: string; ago: number; description?: string }[]) {
+function seedHistory(
+  s: Service,
+  past: { id: string; name: string; tool: "claude" | "codex"; agent: string; ago: number; description?: string; transcript?: object[] }[],
+) {
   const sessions: Record<string, unknown> = {};
   const now = Date.now() / 1000;
   for (const p of past) {
@@ -76,7 +79,7 @@ function seedHistory(s: Service, past: { id: string; name: string; tool: "claude
     const folder = p.tool === "claude" ? join(s.root, ".claude/projects/-project") : join(s.root, ".codex/sessions/2026/11/15");
     mkdirSync(folder, { recursive: true });
     const file = join(folder, p.tool === "claude" ? `${p.agent}.jsonl` : `rollout-2026-11-15-${p.agent}.jsonl`);
-    writeFileSync(file, "{}\n");
+    writeFileSync(file, p.transcript ? p.transcript.map((r) => JSON.stringify(r) + "\n").join("") : "{}\n");
     utimesSync(file, now - p.ago, now - p.ago);
   }
   mkdirSync(join(s.root, "state/state"), { recursive: true });
@@ -89,7 +92,18 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   const s = await new Service("box").start();
   cleanup.push(() => s.dispose());
   seedHistory(s, [
-    { id: "fix-login-1", name: "fix-login", tool: "claude", agent: "aaa", ago: 7200, description: "Login bug" },
+    {
+      id: "fix-login-1",
+      name: "fix-login",
+      tool: "claude",
+      agent: "aaa",
+      ago: 7200,
+      description: "Login bug",
+      transcript: [
+        { type: "user", uuid: "u1", timestamp: "2026-11-15T10:00:00Z", message: { role: "user", content: "why does login fail?" } },
+        { type: "assistant", uuid: "a1", timestamp: "2026-11-15T10:00:09Z", message: { role: "assistant", content: [{ type: "text", text: "The token expired." }] } },
+      ],
+    },
     { id: "docs-2", name: "docs", tool: "codex", agent: "bbb", ago: 3600 },
     { id: "scratch-3", name: "scratch", tool: "claude", agent: "ccc", ago: 10_800 },
     // Last used longer ago than the 30-day window.
@@ -118,14 +132,26 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   await history.getByRole("button", { name: /^History/ }).click();
   await expect(pastRows(page)).toHaveText(["docs", "fix-login", "scratch"]);
 
-  // A past session opens in the main area; another takes its tab's place.
+  // A past session opens in the main area as its conversation; the right panel has what it was.
   const view = page.getByRole("region", { name: "Past session" });
+  const right = page.getByRole("complementary", { name: "Right panel" });
+  await history.getByRole("button", { name: /fix-login/ }).click();
+  const chat = view.getByRole("listitem");
+  await expect(chat).toHaveCount(2);
+  await expect(chat.nth(0)).toHaveAttribute("data-role", "user");
+  await expect(chat.nth(0)).toContainText("why does login fail?");
+  await expect(chat.nth(1)).toHaveAttribute("data-role", "assistant");
+  await expect(chat.nth(1)).toContainText("The token expired.");
+  await expect(right).toContainText("Prompts1");
+  await expect(right.getByRole("region", { name: "Files" })).toBeVisible();
+  // Another takes its tab's place.
   await history.getByRole("button", { name: /docs/ }).click();
-  await expect(view).toContainText("bbb");
+  await expect(right).toContainText("bbb");
   // What its transcript holds: here an empty one, with no tokens recorded.
-  await expect(view).toContainText("Prompts0");
-  await expect(view).toContainText("3 B in 1 file");
-  await expect(view).toContainText("Not recorded by codex.");
+  await expect(view).toContainText("No messages yet");
+  await expect(right).toContainText("Prompts0");
+  await expect(right).toContainText("3 B in 1 file");
+  await expect(right).toContainText("Not recorded by codex.");
   await history.getByRole("button", { name: /scratch/ }).click();
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["scratch"]);
   await view.getByRole("button", { name: "Delete" }).click();

@@ -2,8 +2,9 @@ import { memo, useState } from "react";
 import type { Session, TokenUsage } from "../api/client";
 import { platform } from "../platform";
 import { PluginSlot } from "../plugins/Slot";
-import { useApp } from "../store";
+import { focusedPastId, useApp } from "../store";
 import { FilesSection } from "./FilesSection";
+import { PastDetails } from "./HistoryView";
 import { Section } from "./Section";
 import { formatDuration, formatTokens } from "./format";
 import { selectedSession } from "./MainArea";
@@ -159,8 +160,10 @@ function StopSession({ id, name }: { id: string; name: string }) {
 
 export const DetailsPanel = memo(function DetailsPanel() {
   const session = useApp(selectedSession);
+  const pastId = useApp(focusedPastId);
   const act = useApp((s) => s.act);
 
+  if (pastId) return <PastDetails historyId={pastId} />;
   if (!session) {
     return (
       <Section id="details" title="Details">

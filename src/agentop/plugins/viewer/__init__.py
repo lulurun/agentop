@@ -64,7 +64,7 @@ def read_image(path: Path, max_bytes: int = MAX_IMAGE_BYTES) -> dict:
 
 def register(api):
     def session_row(session_id: str) -> dict:
-        row = next((s for s in api.sessions() if s["id"] == session_id), None)
+        row = api.session(session_id)
         if row is None:
             raise HTTPException(404, "Session not found")
         return row

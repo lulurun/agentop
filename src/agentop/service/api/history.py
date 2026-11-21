@@ -9,10 +9,13 @@ from fastapi import APIRouter, HTTPException
 from agentop import history, ops, registry, transcripts
 from agentop.results import OpsError
 
-from ..models import HistoryListing, HistoryStats, SessionModel
+from ..models import HistoryConversation, HistoryListing, HistoryStats, SessionModel
 from .context import AUTHED, Context, Ctx
 
 router = APIRouter(dependencies=AUTHED)
+
+# A longer conversation shows its latest messages.
+MAX_MESSAGES = 5000
 
 
 def _past_sessions(ctx: Context) -> list[dict]:
@@ -40,6 +43,16 @@ async def list_history(ctx: Ctx):
 async def history_stats(history_id: str, ctx: Ctx):
     item = await _past_session(ctx, history_id)
     return await asyncio.to_thread(transcripts.transcript_stats, item["tool"], item["session_id"])
+
+
+@router.get("/history/{history_id}/conversation", response_model=HistoryConversation)
+async def history_conversation(history_id: str, ctx: Ctx):
+    item = await _past_session(ctx, history_id)
+    messages = await asyncio.to_thread(transcripts.read_conversation, item["tool"], item["session_id"])
+    return {
+        "total": len(messages),
+        "messages": [{"role": m.role, "text": m.text, "at": m.at} for m in messages[-MAX_MESSAGES:]],
+    }
 
 
 @router.post("/history/{history_id}/resume", response_model=SessionModel, status_code=202)

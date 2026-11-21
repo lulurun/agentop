@@ -1,8 +1,7 @@
 import { memo, useState } from "react";
 import type { Session } from "../api/client";
 import { PluginSlot } from "../plugins/Slot";
-import { activeCount, layoutOf, selectedId, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
-import { focusedTab } from "../tabs";
+import { activeCount, focusedPastId, selectedId, sessionSummary, sessionTitle, sortedSessions, useApp } from "../store";
 import { HistorySection } from "./HistoryView";
 import { StatusMark } from "./icons";
 import { Section } from "./Section";
@@ -109,10 +108,7 @@ export const SessionSections = memo(function SessionSections({ project, canStart
   const setDialog = useApp((s) => s.setDialog);
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   const maxActive = useApp((s) => s.history.maxActive);
-  const pastOpen = useApp((s) => {
-    const content = focusedTab(layoutOf(s))?.content;
-    return content?.kind === "past" ? content.historyId : undefined;
-  });
+  const pastOpen = useApp(focusedPastId);
   // Other projects' sessions, such as a dialogue's agents, are shown in their own feature.
   const managed = sortedSessions(sessions).filter(
     (s) =>

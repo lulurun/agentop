@@ -38,6 +38,12 @@ class Context:
     # until then, and in tests that build the app directly: found on first ask.
     available: list[str] | None = None
 
+    def session_row(self, session_id: str) -> dict | None:
+        """A live session's row, or else a past one's, for reading its files."""
+        from agentop import history
+
+        return self.store.get(session_id) or history.record(session_id)
+
     def current_identity(self) -> Identity:
         if self.identity_file is None:
             return self.identity

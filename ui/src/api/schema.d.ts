@@ -222,6 +222,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/history/{history_id}/conversation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** History Conversation */
+        get: operations["history_conversation_history__history_id__conversation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/history/{history_id}/resume": {
         parameters: {
             query?: never;
@@ -594,6 +611,21 @@ export interface components {
             /** Ttl */
             ttl: number;
         };
+        /** ConversationMessage */
+        ConversationMessage: {
+            /**
+             * At
+             * @description Seconds since the epoch, where the tool records it
+             */
+            at?: number | null;
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Text */
+            text: string;
+        };
         /** CreateSession */
         CreateSession: {
             /** Cwd */
@@ -669,6 +701,19 @@ export interface components {
         Health: {
             /** Status */
             status: string;
+        };
+        /**
+         * HistoryConversation
+         * @description A past session's prompts and replies, oldest first. Not a subagent's.
+         */
+        HistoryConversation: {
+            /** Messages */
+            messages: components["schemas"]["ConversationMessage"][];
+            /**
+             * Total
+             * @description Messages in the whole conversation; only the latest are sent
+             */
+            total: number;
         };
         /**
          * HistoryItem
@@ -1528,6 +1573,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    history_conversation_history__history_id__conversation_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                history_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HistoryConversation"];
                 };
             };
             /** @description Validation Error */

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import type { HistoryItem, HistoryStats } from "../api/client";
+import type { HistoryConversation, HistoryItem, HistoryStats } from "../api/client";
 import { activeCount, useApp } from "../store";
+import { ChatView } from "./Conversation";
 import { Row, TokenRows } from "./DetailsPanel";
+import { FilesSection } from "./FilesSection";
 import { formatBytes } from "./format";
 import { Section } from "./Section";
 import { ToolBadge } from "./Sidebar";
@@ -122,7 +124,7 @@ export function HistorySection({ selected, project = "default" }: { selected?: s
 }
 
 /**
- * What a past session's transcript holds. Read when the tab opens, and again
+ * What a past session's transcript holds. Read when it is shown, and again
  * when the session was used since: the service reads the whole transcript.
  */
 function TranscriptStats({ item }: { item: HistoryItem }) {
@@ -144,7 +146,6 @@ function TranscriptStats({ item }: { item: HistoryItem }) {
   const files = `${stats.files}${stats.truncated ? "+" : ""} ${stats.files === 1 ? "file" : "files"}`;
   return (
     <>
-      <h3>Transcript</h3>
       <dl>
         <Row label="Prompts" value={String(stats.prompts)} />
         <Row label="Replies" value={String(stats.replies)} />
@@ -162,15 +163,68 @@ function TranscriptStats({ item }: { item: HistoryItem }) {
   );
 }
 
-/** A past session in the main area: what it was, its transcript, and Resume or Delete. */
+/** The right panel while a past session's tab has focus: what it was, its transcript, its files. */
+export function PastDetails({ historyId }: { historyId: string }) {
+  const item = useItem(historyId);
+  if (!item) {
+    return (
+      <Section id="details" title="Details">
+        <p className="detail-empty">This session is no longer in History.</p>
+      </Section>
+    );
+  }
+  return (
+    <>
+      <Section id="details" title="Details">
+        <dl>
+          <Row label="Name" value={item.name} />
+          <Row label="Title" value={item.title || "Untitled"} />
+          {item.description && <Row label="Description" value={item.description} />}
+          <Row label="Tool" value={item.tool} />
+          <Row label="Directory" value={item.cwd || "Unknown"} copy={item.cwd || undefined} />
+          <Row label="Started" value={when(item.created_at)} />
+          <Row label="Last used" value={when(item.last_active)} />
+          <Row label="Session ID" value={item.session_id} copy={item.session_id} />
+        </dl>
+      </Section>
+      <Section id="transcript" title="Transcript">
+        <TranscriptStats item={item} />
+      </Section>
+      {item.cwd && <FilesSection key={`files/${item.id}`} sessionId={item.id} tool={item.tool} />}
+    </>
+  );
+}
+
+/** A past session's conversation, read again when the session was used since. */
+function useConversation(item: HistoryItem | undefined, reloads: number): HistoryConversation | null | undefined {
+  const act = useApp((s) => s.act);
+  const [chat, setChat] = useState<HistoryConversation | null | undefined>(undefined);
+  const id = item?.id;
+  const stamp = item?.last_active;
+  useEffect(() => {
+    if (!id) return;
+    let live = true;
+    void act((client) => client.historyConversation(id)).then((found) => {
+      if (live) setChat(found ?? null);
+    });
+    return () => {
+      live = false;
+    };
+  }, [act, id, stamp, reloads]);
+  return chat;
+}
+
+/** A past session in the main area: its conversation, with Resume and Delete above it. */
 export function PastSessionView({ historyId, onClose }: { historyId: string; onClose(): void }) {
   const item = useItem(historyId);
   const loaded = useApp((s) => s.history.items !== null);
   const resumeHistory = useApp((s) => s.resumeHistory);
   const removeHistory = useApp((s) => s.removeHistory);
-  const { atLimit } = useLimit();
+  const { atLimit, max } = useLimit();
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [reloads, setReloads] = useState(0);
+  const chat = useConversation(item, reloads);
   useEffect(() => setConfirming(false), [historyId]);
 
   if (!item) {
@@ -192,41 +246,40 @@ export function PastSessionView({ historyId, onClose }: { historyId: string; onC
   }
 
   const resumable = !!item.cwd && !atLimit;
+  const why = !item.cwd ? "Its directory isn't known, so it can't be resumed" : atLimit ? `${LIMIT_MESSAGE} (at most ${max})` : "Resume this session in a new terminal";
   return (
-    <section className="view past-session" aria-label="Past session">
-      <h2>{item.name}</h2>
-      <dl>
-        <Row label="Title" value={item.title || "Untitled"} />
-        {item.description && <Row label="Description" value={item.description} />}
-        <Row label="CLI" value={item.tool} />
-        <Row label="Directory" value={item.cwd || "Unknown"} copy={item.cwd || undefined} />
-        <Row label="Started" value={when(item.created_at)} />
-        <Row label="Last used" value={when(item.last_active)} />
-        <Row label="Session ID" value={item.session_id} copy={item.session_id} />
-      </dl>
-      <TranscriptStats item={item} />
-      <div className="details-actions" aria-label="Actions">
+    <section className="viewer past-session" aria-label={`Past session ${item.name}`}>
+      <div className="viewer-bar">
+        <span className="viewer-path" title={item.cwd}>
+          <span className="viewer-source">Past session</span>
+          {item.name}
+        </span>
+        {chat && <span className="viewer-meta">{chat.total} {chat.total === 1 ? "message" : "messages"}</span>}
         {confirming ? (
           <>
-            <p className="stop-note">Delete this session's transcript from {item.tool}? It can't be resumed afterwards.</p>
-            <div className="stop-buttons">
-              <button type="button" onClick={() => setConfirming(false)}>Keep</button>
-              <button type="button" className="primary" disabled={busy} onClick={() => void run(() => removeHistory(item))}>Delete for good</button>
-            </div>
+            <span className="viewer-confirm">Delete its transcript from {item.tool}? It can't be resumed afterwards.</span>
+            <button type="button" onClick={() => setConfirming(false)}>Keep</button>
+            <button type="button" className="primary" disabled={busy} onClick={() => void run(() => removeHistory(item))}>Delete for good</button>
           </>
         ) : (
           <>
-            {atLimit && <p className="stop-note" role="status">{LIMIT_MESSAGE}</p>}
-            {!item.cwd && <p className="stop-note">Its directory isn't known, so it can't be resumed.</p>}
-            <div className="stop-buttons">
-              <button type="button" className="primary" disabled={!resumable || busy} onClick={() => void run(() => resumeHistory(item))}>
-                Resume
-              </button>
-              <button type="button" onClick={() => setConfirming(true)}>Delete</button>
-            </div>
+            <button type="button" className="primary" title={why} disabled={!resumable || busy} onClick={() => void run(() => resumeHistory(item))}>
+              Resume
+            </button>
+            <button type="button" onClick={() => setConfirming(true)}>Delete</button>
+            <button type="button" onClick={() => setReloads((n) => n + 1)}>Reload</button>
           </>
         )}
       </div>
+      {atLimit && !confirming && <p className="viewer-note" role="status">{LIMIT_MESSAGE}</p>}
+      {chat === undefined ? null : chat === null ? (
+        <div className="placard">
+          <h2>Can't read this conversation</h2>
+          <p>The transcript couldn't be read.</p>
+        </div>
+      ) : (
+        <ChatView messages={chat.messages} total={chat.total} label={`Conversation in ${item.name}`} />
+      )}
     </section>
   );
 }

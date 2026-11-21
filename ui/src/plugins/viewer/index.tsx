@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { platform } from "../../platform";
 import { useApp } from "../../store";
 import type { FileRef } from "../../tabs";
+import { ChatView, type ChatMessage } from "../../components/Conversation";
 import { useArea } from "../../components/Workbench";
 import type { PluginContext, UiPlugin } from "../types";
 import { parseDiff, type DiffRow } from "./diff";
@@ -22,16 +23,10 @@ interface FileText {
   text: string;
 }
 
-interface Message {
-  role: "user" | "assistant";
-  text: string;
-  at: number | null;
-}
-
 interface Conversation {
   path: string;
   total: number;
-  messages: Message[];
+  messages: ChatMessage[];
 }
 
 /** How the file is drawn. `raw` is the text with line numbers, which every text file has. */
@@ -47,68 +42,6 @@ function formatSize(bytes: number): string {
 
 function message(failure: unknown): string {
   return failure instanceof Error ? failure.message : String(failure);
-}
-
-const URL_PATTERN = /https?:\/\/[^\s<>"'`)\]]+/g;
-
-/** Text with its links made clickable. */
-function Linked({ text }: { text: string }) {
-  const parts: ReactNode[] = [];
-  let last = 0;
-  for (const match of text.matchAll(URL_PATTERN)) {
-    const url = match[0].replace(/[.,;:!?]+$/, "");
-    const start = match.index ?? 0;
-    parts.push(text.slice(last, start));
-    parts.push(
-      <a key={start} href={url} target="_blank" rel="noreferrer noopener">
-        {url}
-      </a>,
-    );
-    last = start + url.length;
-  }
-  parts.push(text.slice(last));
-  return <>{parts}</>;
-}
-
-/** The prompts and replies in a transcript, oldest first, opened at the latest. */
-function ConversationView({ conversation, label }: { conversation: Conversation; label: string }) {
-  const scroller = useRef<HTMLDivElement>(null);
-  useLayoutEffect(() => {
-    const element = scroller.current;
-    if (element) element.scrollTop = element.scrollHeight;
-  }, [conversation]);
-
-  if (conversation.messages.length === 0) {
-    return (
-      <div className="placard">
-        <h2>No messages yet</h2>
-        <p>This transcript has no prompts or replies in it.</p>
-      </div>
-    );
-  }
-  const hidden = conversation.total - conversation.messages.length;
-  return (
-    <div className="conversation" ref={scroller} tabIndex={0} aria-label={label}>
-      {hidden > 0 && (
-        <p className="viewer-note" role="status">
-          Showing the latest {conversation.messages.length} of {conversation.total} messages.
-        </p>
-      )}
-      <ol>
-        {conversation.messages.map((m, index) => (
-          <li key={index} className="message" data-role={m.role}>
-            <div className="message-head">
-              <strong>{m.role === "user" ? "You" : "Agent"}</strong>
-              {m.at !== null && <time dateTime={new Date(m.at * 1000).toISOString()}>{new Date(m.at * 1000).toLocaleString()}</time>}
-            </div>
-            <div className="message-text">
-              <Linked text={m.text} />
-            </div>
-          </li>
-        ))}
-      </ol>
-    </div>
-  );
 }
 
 interface FileDiff {
@@ -362,7 +295,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   } else if (!result) {
     body = null;
   } else if (showing === "conversation") {
-    body = chat && <ConversationView conversation={chat} label={`Conversation in ${file.path}`} />;
+    body = chat && <ChatView messages={chat.messages} total={chat.total} label={`Conversation in ${file.path}`} />;
   } else if (showing === "preview") {
     body = (
       <>

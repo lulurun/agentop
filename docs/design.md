@@ -869,6 +869,7 @@ States: `enabled`, `disabled`, `failed`, `incompatible`. A plugin that fails nev
 | `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. The handler is a plain function, called with the session row (or, for `scan`, the session list). Each handler runs isolated: an exception is logged and counted, and never reaches the core. Handlers run in a thread off the event loop, with a time limit (10s), and the core never waits for their result |
 | `api.task(fn)` | A supervised background task. `fn` is an async function, not a coroutine, so the task can be started again when the plugin is enabled again. If it raises, the plugin goes to `failed` and the task is not restarted |
 | `api.sessions()` | A read-only snapshot of the session list |
+| `api.session(id)` | One live session's row, or else a past one's (tool, agent session ID, directory) by its History ID, for reading its files |
 | `api.on_disable(fn)` | Called, in a thread, when the user turns the plugin off, to wind down work it started: the Dialogues plugin stops running dialogues. Not called when the service stops, so work that outlives the service (a process the plugin started) keeps running then. A failure is logged; the plugin is off either way |
 | `api.store` | A JSON file at `~/.agentop/plugins/{id}/store.json` for the plugin's own data |
 | `api.data_dir` | The plugin's own folder, `~/.agentop/plugins/{id}/`, for files that don't fit in one JSON file. It is made when first written to |

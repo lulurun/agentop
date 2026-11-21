@@ -9,6 +9,7 @@ export type VersionInfo = components["schemas"]["VersionInfo"];
 export type HistoryItem = components["schemas"]["HistoryItem"];
 export type HistoryListing = components["schemas"]["HistoryListing"];
 export type HistoryStats = components["schemas"]["HistoryStats"];
+export type HistoryConversation = components["schemas"]["HistoryConversation"];
 export type TokenUsage = components["schemas"]["TokenUsage"];
 export type ToolInfo = components["schemas"]["ToolInfo"];
 export type DirListing = components["schemas"]["DirListing"];
@@ -131,6 +132,7 @@ export class ServiceClient {
   changes = (id: string) => this.get<GitChanges>(`/sessions/${encodeURIComponent(id)}/changes`);
   history = () => this.get<HistoryListing>("/history");
   historyStats = (id: string) => this.get<HistoryStats>(`/history/${encodeURIComponent(id)}/stats`);
+  historyConversation = (id: string) => this.get<HistoryConversation>(`/history/${encodeURIComponent(id)}/conversation`);
   resumeHistory = (id: string) => this.request<Session>("POST", `/history/${encodeURIComponent(id)}/resume`);
   deleteHistory = (id: string) => this.request("DELETE", `/history/${encodeURIComponent(id)}`);
   create = (body: CreateSession) => this.request<Session>("POST", "/sessions", body);

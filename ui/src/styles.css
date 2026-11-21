@@ -1211,9 +1211,25 @@ button.app-outdated:hover { background: var(--line); }
 /* A past session's row has no status mark, so its name starts where a mark would be. */
 .history-row { grid-template-columns: minmax(0, 1fr); --row-edge: var(--action); }
 .history-row .session-meta { grid-column: 1; }
-.past-session { max-width: 760px; }
-.past-session dl { margin: 0 0 8px; }
-.past-session h3 { margin: 14px 0 6px; color: var(--quiet); }
+.viewer-confirm { flex: none; color: var(--starting); font-size: 12px; }
+
+/* A conversation as a chat: the user's prompts on the right, the agent's replies on the left */
+.chat ol { gap: 12px; }
+.chat .message {
+  max-width: min(80%, 680px);
+  justify-self: start;
+  border-radius: 12px 12px 12px 4px;
+  border-color: transparent;
+  background: var(--raised);
+}
+.chat .message[data-role="user"] {
+  justify-self: end;
+  border-radius: 12px 12px 4px 12px;
+  border-color: color-mix(in srgb, var(--action) 40%, transparent);
+  background: color-mix(in srgb, var(--action) 16%, var(--surface));
+}
+.chat .message[data-role="user"] .message-head { justify-content: flex-end; }
+.chat .message[data-role="user"] .message-head strong { order: 1; }
 
 /* The Input bar plugin, below a session's terminal: a composer card, as in chat apps */
 .input-bar { flex: none; padding: 8px 10px 10px; background: var(--surface); border-top: 1px solid var(--line); }

@@ -125,3 +125,24 @@ def transcript_stats(tool: str | None, session_id: str | None) -> dict:
         "truncated": len(found) > MAX_FILES,
         "archived": archived,
     }
+
+
+def read_conversation(tool: str | None, session_id: str | None) -> list[conversation.Message]:
+    """The session's prompts and replies, not a subagent's, oldest first across all its files."""
+    _base, found, _ = _files(tool, session_id)
+    agent = get_agent(tool) if tool else None
+    messages: list[conversation.Message] = []
+    for path in found[:MAX_FILES]:
+        if agent is None or agent.side_conversation(path):
+            continue
+        try:
+            messages.extend(conversation.read(agent, path) or [])
+        except (OSError, ValueError):
+            continue
+    # A message with no time keeps its place after the one before it.
+    last = 0.0
+    keys = []
+    for m in messages:
+        last = m.at if m.at is not None else last
+        keys.append(last)
+    return [m for _, _, m in sorted(zip(keys, range(len(messages)), messages), key=lambda k: (k[0], k[1]))]

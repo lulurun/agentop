@@ -122,6 +122,19 @@ class HistoryStats(BaseModel):
     archived: bool = Field(description="The tool deleted its own files; these are the Memory archive's copy")
 
 
+class ConversationMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    text: str
+    at: float | None = Field(None, description="Seconds since the epoch, where the tool records it")
+
+
+class HistoryConversation(BaseModel):
+    """A past session's prompts and replies, oldest first. Not a subagent's."""
+
+    total: int = Field(description="Messages in the whole conversation; only the latest are sent")
+    messages: list[ConversationMessage]
+
+
 class ToolInfo(BaseModel):
     name: str
     installed: bool

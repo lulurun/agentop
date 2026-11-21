@@ -142,6 +142,12 @@ class PluginAPI:
         """A snapshot of the session list. Changing it changes nothing."""
         return self._host.store.list()
 
+    def session(self, session_id: str) -> dict | None:
+        """A live session's row, or else a past one's (tool, session_id, cwd), for reading its files."""
+        from agentop import history
+
+        return self._host.store.get(session_id) or history.record(session_id)
+
     async def create_project(self, name: str, welcome: str = "", instructions: str = "") -> dict:
         """Make a project the plugin owns and start its Coordinator. Raises projects.ProjectError.
 

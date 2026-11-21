@@ -135,3 +135,21 @@ def test_nothing_for_an_unknown_session_or_a_bad_id():
     for tool, sid in (("claude", "missing"), ("claude", "../etc"), ("nope", "x"), (None, None)):
         stats = transcripts.transcript_stats(tool, sid)
         assert (stats["files"], stats["bytes"], stats["prompts"], stats["token_usage"]) == (0, 0, 0, None)
+
+
+def test_the_conversation_is_the_main_one_oldest_first(home):
+    sid = "11111111-2222-3333-4444-555555555555"
+    project = home / ".claude/projects/-w"
+    (project / sid / "subagents").mkdir(parents=True)
+    (project / f"{sid}.jsonl").write_text(
+        jsonl(
+            claude_turn("u1", "user", "fix the bug", timestamp="2026-11-01T10:00:00+00:00"),
+            claude_turn("a1", "assistant", "Done.", "msg_1", timestamp="2026-11-01T10:00:05+00:00"),
+        )
+    )
+    (project / sid / "subagents" / "agent-1.jsonl").write_text(
+        jsonl(claude_turn("s1", "user", "search the code", isSidechain=True, timestamp="2026-11-01T10:00:01+00:00"))
+    )
+    messages = transcripts.read_conversation("claude", sid)
+    assert [(m.role, m.text) for m in messages] == [("user", "fix the bug"), ("assistant", "Done.")]
+    assert transcripts.read_conversation("claude", "../nope") == []

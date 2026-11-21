@@ -111,6 +111,14 @@ def list_history(
     return items
 
 
+def record(name: str) -> dict | None:
+    """A past session's registry record, by name, as the fields a session's files are found by. None if it isn't one."""
+    found = registry.load()["sessions"].get(name)
+    if not found or not (found.get("managed") and found.get("tool") and found.get("agent_session_id")) or found.get("readonly"):
+        return None
+    return {"id": name, "tool": found["tool"], "session_id": found["agent_session_id"], "cwd": found.get("cwd") or ""}
+
+
 def past_sessions(rows: list[dict], window_seconds: float) -> list[dict]:
     """History's items, given the store's live rows. Agent IDs found on the way are saved, so each is looked up once."""
     records = registry.load()["sessions"]

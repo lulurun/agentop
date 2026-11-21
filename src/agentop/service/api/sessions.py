@@ -1,4 +1,6 @@
-"""Live sessions: list, start, rename, stop, close, send a prompt, and what is in each one's folder and transcripts."""
+"""Live sessions: list, start, rename, stop, close, send a prompt, and what is in each one's folder and transcripts
+(a past session's too, by its History ID).
+"""
 
 from __future__ import annotations
 
@@ -69,7 +71,7 @@ async def delete_session(session_id: str, ctx: Ctx):
 
 
 def _working_directory(ctx: Context, session_id: str) -> str:
-    row = ctx.store.get(session_id)
+    row = ctx.session_row(session_id)
     if row is None:
         raise HTTPException(404, "Session not found")
     if not row["cwd"]:
@@ -90,13 +92,13 @@ async def _listing(root: str, path: str) -> dict:
 
 @router.get("/sessions/{session_id}/files", response_model=FileListing)
 async def session_files(session_id: str, ctx: Ctx, path: str = ""):
-    return await _listing(_working_directory(ctx, session_id), path)
+    return await _listing(await asyncio.to_thread(_working_directory, ctx, session_id), path)
 
 
 @router.get("/sessions/{session_id}/memory", response_model=FileListing)
 async def session_memory(session_id: str, ctx: Ctx, path: str = ""):
     """The notes the agent tool keeps for this session's project, such as Claude Code's memory folder."""
-    row = ctx.store.get(session_id)
+    row = await asyncio.to_thread(ctx.session_row, session_id)
     if row is None:
         raise HTTPException(404, "Session not found")
     root = await asyncio.to_thread(transcripts.memory_folder, row.get("tool"), row.get("session_id"), row.get("cwd"))
@@ -116,7 +118,7 @@ async def session_changes(session_id: str, ctx: Ctx):
 
 @router.get("/sessions/{session_id}/transcripts", response_model=TranscriptListing)
 async def session_transcripts(session_id: str, ctx: Ctx):
-    row = ctx.store.get(session_id)
+    row = await asyncio.to_thread(ctx.session_row, session_id)
     if row is None:
         raise HTTPException(404, "Session not found")
     return await asyncio.to_thread(transcripts.list_transcripts, row.get("tool"), row.get("session_id"))
