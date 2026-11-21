@@ -131,6 +131,17 @@ Use judgment rather than a token or time interval. A completed design, accepted
 implementation slice, deployment, release, or other phase boundary is a useful
 signal when its state is durable.
 
+When ready, make the reset the last operational action of the milestone:
+
+```bash
+agentop send --no-header Coordinator "/clear"
+```
+
+`--no-header` is required so agentop sends the slash command by itself. After the
+clear, reload `COORDINATOR_SKILL.md` as the project-root instructions direct, read
+the durable project state, and begin the next phase. Do not continue the old phase
+after queuing the clear.
+
 ## Review the pursuit
 
 When reporting or reflecting, ask whether the Coordinator retained the objective,

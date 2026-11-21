@@ -500,6 +500,7 @@ class SessionStore:
         found = await asyncio.to_thread(projects.get, project)
         if found is None:
             raise StoreError(404, f"No project called {project}")
+        await asyncio.to_thread(coordinator.write_instructions, found)
         name = projects.COORDINATOR
         running = next(
             (
@@ -534,7 +535,6 @@ class SessionStore:
         tool = coordinator.pick_tool(available)
         if tool is None:
             return None
-        await asyncio.to_thread(coordinator.write_instructions, found)
         return await self.create(tool, found["folder"], name, project=project, prompt=coordinator.welcome_prompt(found))
 
     def _require(self, session_id: str) -> dict:

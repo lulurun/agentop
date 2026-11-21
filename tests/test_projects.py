@@ -5,6 +5,7 @@ import time
 import pytest
 
 from agentop import coordinator, ops, projects, registry
+from agentop.coordinator_skill import PATH as COORDINATOR_SKILL_SOURCE
 from agentop.tmux import CapturePane, Session
 from tests.test_service_live import run_service
 
@@ -36,6 +37,8 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     dialogue = {"name": "debate", "folder": "/tmp/debate", "owner": "dialogue"}
 
     assert phrase not in coordinator.instructions(project)
+    assert "COORDINATOR_SKILL.md" in coordinator.instructions(project)
+    assert "COORDINATOR_SKILL.md" not in coordinator.instructions(default)
     prompt = coordinator.welcome_prompt(project)
     normalized = " ".join(prompt.split())
     assert phrase in normalized
@@ -45,6 +48,7 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     assert "acceptance criteria" in normalized
     assert "Context is working memory; the project folder is durable memory" in normalized
     assert "Reset only after the state needed to continue is written down" in normalized
+    assert 'agentop send --no-header Coordinator "/clear"' in normalized
     assert phrase in coordinator.resume_prompt(project)
     assert phrase not in coordinator.welcome_prompt(default)
     assert phrase not in coordinator.welcome_prompt(dialogue)
@@ -77,6 +81,7 @@ def test_the_instructions_are_written_once(tmp_path, monkeypatch):
     assert f"{projects.folder('alpha')}/code/<source-tree>" in agents.read_text()
     assert "The Coordinator owns pursuit of the project's objective" not in agents.read_text()
     assert (projects.folder("alpha") / "CLAUDE.md").read_text() == "@AGENTS.md\n"
+    assert (projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE).read_text() == COORDINATOR_SKILL_SOURCE.read_text()
     agents.write_text("the owner's own")
     coordinator.write_instructions(found)
     assert agents.read_text() == "the owner's own"
@@ -148,6 +153,7 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         wait_for_screen(coordinator_row["id"], "The Coordinator owns pursuit")
         assert "Run the alpha" not in (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "You run this project" in (projects.folder("alpha") / "AGENTS.md").read_text()
+        assert (projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE).is_file()
         instructions = (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "git status --porcelain=v1 --untracked-files=all" not in instructions
         screen = CapturePane.scrollback(coordinator_row["id"])
@@ -162,7 +168,7 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
             time.sleep(0.1)
         coordinator_row = service.http.post(f"{base}/alpha/coordinator").json()
         service.wait_for(coordinator_row["id"], "running")
-        wait_for_screen(coordinator_row["id"], "Reload and follow the Coordinator skill")
+        wait_for_screen(coordinator_row["id"], "You are resuming this project's Coordinator session")
         assert registry.load()["sessions"][coordinator_row["id"]]["agent_session_id"] == "ALPHA-COORD-1"
 
         # Not its own: the default project, and a project that isn't there.
