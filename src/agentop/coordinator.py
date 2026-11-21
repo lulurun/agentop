@@ -101,6 +101,14 @@ def welcome_prompt(project: dict) -> str:
     )
 
 
+def resume_prompt(project: dict) -> str:
+    """Reload the Coordinator-only skill when a project Coordinator resumes."""
+    skill = _skill_part(project)
+    if not skill:
+        return ""
+    return f"You are resuming this project's Coordinator session. Reload and follow the Coordinator skill.{skill}"
+
+
 def member_header(project: dict, name: str) -> str:
     """What a session other than the Coordinator is told first, before its task."""
     return (

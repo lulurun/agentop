@@ -523,7 +523,13 @@ class SessionStore:
             agent = ops.get_agent(last["tool"])
             if agent and agent.get_resume_cmd(last["agent_session_id"]):
                 return await self.create(
-                    last["tool"], found["folder"], name, last["agent_session_id"], display_name=name, project=project
+                    last["tool"],
+                    found["folder"],
+                    name,
+                    last["agent_session_id"],
+                    display_name=name,
+                    project=project,
+                    prompt=coordinator.resume_prompt(found),
                 )
         tool = coordinator.pick_tool(available)
         if tool is None:

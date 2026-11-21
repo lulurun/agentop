@@ -45,8 +45,11 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     assert "acceptance criteria" in normalized
     assert "Context is working memory; the project folder is durable memory" in normalized
     assert "Reset only after the state needed to continue is written down" in normalized
+    assert phrase in coordinator.resume_prompt(project)
     assert phrase not in coordinator.welcome_prompt(default)
     assert phrase not in coordinator.welcome_prompt(dialogue)
+    assert coordinator.resume_prompt(default) == ""
+    assert coordinator.resume_prompt(dialogue) == ""
     assert phrase not in coordinator.member_header(project, "dev")
 
 
@@ -150,6 +153,18 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         screen = CapturePane.scrollback(coordinator_row["id"])
         assert "git status --porcelain=v1 --untracked-files=all" in screen
         assert service.http.post(f"{base}/alpha/coordinator").json()["id"] == coordinator_row["id"]
+
+        registry.upsert_session(coordinator_row["id"], {"agent_session_id": "ALPHA-COORD-1"})
+        assert service.http.post(f"/sessions/{coordinator_row['id']}/stop").status_code == 200
+        deadline = time.monotonic() + 5
+        while service.http.get(f"/sessions/{coordinator_row['id']}").status_code == 200:
+            assert time.monotonic() < deadline
+            time.sleep(0.1)
+        coordinator_row = service.http.post(f"{base}/alpha/coordinator").json()
+        service.wait_for(coordinator_row["id"], "running")
+        wait_for_screen(coordinator_row["id"], "Reload and follow the Coordinator skill")
+        assert registry.load()["sessions"][coordinator_row["id"]]["agent_session_id"] == "ALPHA-COORD-1"
+
         # Not its own: the default project, and a project that isn't there.
         assert service.http.delete(f"{base}/default").status_code == 404
         assert service.http.post(f"{base}/nope/coordinator").status_code == 404
