@@ -803,6 +803,12 @@ Agentop grows from here through plugins. The features that exist today are the *
 
 ### 12.1 Core and plugins
 
+**Where the line comes from.** The core is the owner's manual workflow from before agentop, automated. Back then they ran each agent CLI in a tmux window, Claude Code with `--remote-control` so the work could go on from a phone when they were out. `tmux ls` was the session list. Which session did which task was kept in their head. To hand work to another session, they copied the context and pasted it in. agentop's core does the same things: it starts agents in tmux (Claude with remote control in Sessions), lists them with names and summaries, attaches their terminals, resumes them from History, and delivers a prompt from one session to another (`agentop send`). Because that workflow is how the owner works, the core must always work: with no plugins, or with any plugin broken.
+
+Plugins are the greedier, lazier features built on top: having a Coordinator run a project, dialogues between agents, notifications. They save effort beyond what the manual workflow did, and none of them is needed to work the old way.
+
+The two top features follow the same split. **Sessions** (the `default` project) is the old usage: on-demand, occasional, unsure development or investigation that the owner drives themselves. **Projects** is for work with a clear high-level goal, a dream, that a Coordinator can pursue ([project.md](project.md)).
+
 **Core** is every feature that existed before plugins. It is always loaded and has no off switch:
 
 - Sessions: scan, start, stop, close, resume, rename and describe, managed and external sessions.

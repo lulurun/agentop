@@ -8,7 +8,7 @@ A **project** is a group of sessions and a folder they share, the **project fold
 
 Each project other than `default` has a **Coordinator**: a session working in the project folder, the one the owner talks to. It sums up what the owner wants and routes the work to the project's other sessions, starting them when it decides one is needed or when asked. Talking to the Coordinator is the recommended way, not the only one: every session can be opened and used directly, unless its plugin made it read-only.
 
-In `default` the owner is the Coordinator. Its sessions are still kept apart from other projects', but nothing routes between them: the owner starts each one with New session in Sessions, which can start with no session at all.
+In `default` the owner is the Coordinator: Sessions keeps the owner's manual way of working, for on-demand, occasional, unsure development or investigation, while a project is for work with a clear high-level goal ([design 12.1](design.md#121-core-and-plugins)). Its sessions are still kept apart from other projects', but nothing routes between them: the owner starts each one with New session in Sessions, which can start with no session at all.
 
 | | `default` | Any other project |
 |---|---|---|
