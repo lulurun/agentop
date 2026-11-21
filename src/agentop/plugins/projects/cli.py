@@ -30,6 +30,11 @@ def register_cli(cli) -> None:
     start.add_argument("--tool", required=True, choices=agentclis.names())
     start.add_argument("--cwd", required=True, help="Its working directory, usually <project>/code/<repo>")
     start.add_argument("--model", help='Claude takes "Sonnet 5.5"; codex and antigravity, none')
+    start.add_argument(
+        "--no-remote-control",
+        action="store_true",
+        help="Do not expose a Claude session through claude.ai remote control",
+    )
     start.add_argument("--goal", required=True, help="The one outcome it delivers")
     start.add_argument("--accept", action="append", default=[], required=True, metavar="CRITERION",
                        help="A criterion you will check the result against; repeat for each")
@@ -180,6 +185,8 @@ def task_start(args, project: str) -> None:
             params["model"] = agentclis.get_agent(args.tool).model_id(args.model)
         except ValueError as exc:
             _fail(str(exc))
+    if args.no_remote_control:
+        params["remote_control"] = False
     taken = [
         s for s in ops.get_sessions(with_meta=False)
         if s.get("project") == project and s.get("display_name", "").lower() == args.name.lower()

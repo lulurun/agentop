@@ -184,11 +184,11 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         wait_for_screen(coordinator_row["id"], "Your job is pursuit")
         assert "Run the alpha" not in (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "You run this project" in (projects.folder("alpha") / "AGENTS.md").read_text()
-        assert (projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE).is_file()
+        skill = projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE
+        assert skill.is_file()
         instructions = (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "git status --porcelain=v1 --untracked-files=all" not in instructions
-        screen = CapturePane.scrollback(coordinator_row["id"])
-        assert "git status --porcelain=v1 --untracked-files=all" in screen
+        assert "git status --porcelain=v1 --untracked-files=all" in skill.read_text()
         assert service.http.post(f"{base}/alpha/coordinator").json()["id"] == coordinator_row["id"]
 
         registry.upsert_session(coordinator_row["id"], {"agent_session_id": "ALPHA-COORD-1"})

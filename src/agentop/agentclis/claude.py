@@ -86,6 +86,12 @@ class ClaudeAgentCli(AgentCli):
     def launch_cmd(self) -> str:
         return "claude --dangerously-skip-permissions"
 
+    def _build_cmd(self, base_cmd: str, params: dict) -> str:
+        cmd = super()._build_cmd(base_cmd, params)
+        if params.get("remote_control") is False:
+            cmd = cmd.replace(" --remote-control", "")
+        return cmd
+
     def skills_dir(self) -> Path:
         return self.home / ".claude" / "skills"
 

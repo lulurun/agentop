@@ -160,6 +160,19 @@ def test_claude_is_started_with_a_session_id_agentop_picks():
     assert agent.start_cmd(session_id) == f"{agent.launch_cmd} --session-id {session_id}"
 
 
+def test_claude_remote_control_can_be_disabled():
+    from agentop.agentclis.claude import ClaudeAgentCli
+
+    agent = ClaudeAgentCli()
+    start = agent._build_cmd(agent.start_cmd("session-1"), {"remote_control": False})
+    resume = agent._build_cmd(agent.get_resume_cmd("session-1"), {"remote_control": False})
+
+    assert "--remote-control" not in start
+    assert "--remote-control" not in resume
+    assert "--dangerously-skip-permissions" in start
+    assert "--dangerously-skip-permissions" in resume
+
+
 def test_a_start_records_the_agent_and_any_id_it_was_given(fake_agents, tmp_path, monkeypatch):
     from agentop import ops
 

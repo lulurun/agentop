@@ -145,6 +145,8 @@ def cmd_start(args):
         ]
         if taken:
             raise OpsError(f"A session called {args.session_name} is already in {project}. Pick another name")
+        if args.no_remote_control:
+            params["remote_control"] = False
         result = _ops().start(args.tool, cwd, args.session_name, params, project=project)
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
@@ -165,7 +167,7 @@ def cmd_start(args):
     print(f"Started:  {name}")
     print(f"  PID:    {result.pid}")
     print(f"  Tool:   {args.tool}")
-    if params:
+    if "model" in params:
         print(f"  Model:  {params['model']}")
     print(f"  CWD:    {cwd}")
     print(f"  Attach: tmux attach-session -t {name}")
@@ -626,6 +628,11 @@ def main():
     p_start.add_argument("--model", help='Its model (default: the tool\'s own). Claude takes "Sonnet 5.5"; codex and antigravity, none')
     p_start.add_argument("--prompt", help="Its first prompt, typed in once it is up, after a line about its project; '-' reads it from stdin")
     p_start.add_argument("--untracked", action="store_true", help="From a Projects Coordinator: start a session that is not a task")
+    p_start.add_argument(
+        "--no-remote-control",
+        action="store_true",
+        help="Do not expose a Claude session through claude.ai remote control",
+    )
 
     # history
     p_history = sub.add_parser(

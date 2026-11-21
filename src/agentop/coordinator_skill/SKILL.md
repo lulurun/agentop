@@ -47,7 +47,7 @@ agentop yield owner \
 Delegate when a session with its own context will do the work better: a separate repository, a long implementation, a specialist review, or parallel work. A small, well-tested change may stay with you.
 
 ```bash
-agentop task start dev --tool claude --cwd <project>/code/<repo> [--model "Sonnet 5.5"] \
+agentop task start dev --tool claude --no-remote-control --cwd <project>/code/<repo> [--model "Sonnet 5.5"] \
   --goal "One outcome, in one sentence" \
   --accept "A criterion you can check" --accept "Another" \
   --artifact results/dev-auth.md \
@@ -60,6 +60,7 @@ EOF
 - **Criteria you can check yourself**: tests that pass, a command's output, a file with given sections. "Good quality" is not a criterion.
 - **The artifact** is a file in the project folder (relative paths are from it). For code, it names the commits, how they were verified, and what is left. The session can't report without it.
 - **Tool**: Codex for discovering what to build (discussion, research, design); Claude for building a well-specified target (implementation, deployment). These are defaults; explain a different choice.
+- For Claude, pass `--no-remote-control`; project work stays inside agentop rather than exposing a separate control path through claude.ai.
 - Pass the brief with `--prompt -` and a quoted heredoc, so the shell leaves backticks and `$` alone.
 
 The session ends with `agentop task report`, which tells you. Then:

@@ -1,4 +1,5 @@
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,6 +11,41 @@ from agentop.tmux import CapturePane, Session
 @pytest.fixture
 def cwd(tmp_path):
     return str(tmp_path)
+
+
+def test_cli_can_disable_claude_remote_control(monkeypatch, capsys, cwd):
+    from agentop import cli
+
+    seen = {}
+
+    class FakeOps:
+        def current_session(self):
+            return None
+
+        def get_sessions(self, with_meta=False):
+            return []
+
+        def start(self, tool, working_dir, short_name, params, project):
+            seen.update(tool=tool, cwd=working_dir, name=short_name, params=params, project=project)
+            return SimpleNamespace(name="dev-abc123", pid=123)
+
+    monkeypatch.setattr(cli, "_ops", lambda: FakeOps())
+    args = SimpleNamespace(
+        tool="claude",
+        cwd=cwd,
+        session_name="dev",
+        project="alpha",
+        prompt=None,
+        model=None,
+        untracked=False,
+        no_remote_control=True,
+    )
+
+    cli.cmd_start(args)
+
+    assert seen["params"] == {"remote_control": False}
+    assert seen["project"] == "alpha"
+    assert "Started:  dev-abc123" in capsys.readouterr().out
 
 
 def test_start_uses_the_same_name_throughout(fake_agents, cwd):

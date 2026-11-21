@@ -93,7 +93,6 @@ From [0_10_ui.md](0_10_ui.md) and [0_12_03_memory.md 6](0_12_03_memory.md#6-the-
 ### Sign-in and security
 
 - **Single-use pairing codes**, so the service token never leaves the machine. `agentop service pair` prints a short code (`K7QF-2M9X`), typed into the sign-in form instead of the token; once, 10 minutes. A setting turns the service token off for `POST /api/v2/auth/clients` (it can't be "loopback only": behind a proxy every request is from `127.0.0.1`). The CLI and desktop app would sign in by writing a code into `~/.agentop/state/`. Downside: every new browser, and every sign-in after 12 hours unused, needs a code from a shell. Email code ([0_12_00_plugins.md](0_12_00_plugins.md#email-code-email-code)) already covers most of the phone case; approving a device from one already signed in would be another login plugin.
-- **Remote control as a per-session option.** Every Claude session in `default` starts and resumes with `--remote-control` (and skip-permissions), an access path outside agentop's tokens ([0_06_security.md 3.1](0_06_security.md#31-what-the-service-allows)). Keep it on by default, but offer it at start.
 - **Rotate the service token by itself.** Today only `agentop service token --rotate` does.
 - **Close the plain HTTP path** to the devhost, `http://proxy-host:7700/agentop/` (the ops repo's nginx). It has no authentication and carries the token in the clear; the HTTPS address replaces it.
 

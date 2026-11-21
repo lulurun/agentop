@@ -201,16 +201,21 @@ def test_task_start_briefs_the_session_and_report_tells_the_coordinator(alpha, m
 
     started, prompts, delivered = [], [], []
     monkeypatch.setattr(ops, "get_sessions", lambda with_meta=False: [])
-    monkeypatch.setattr(ops, "start", lambda tool, cwd, name, params, project: started.append(name) or SimpleNamespace(name=f"{name}-1"))
+    monkeypatch.setattr(
+        ops,
+        "start",
+        lambda tool, cwd, name, params, project: started.append((name, params)) or SimpleNamespace(name=f"{name}-1"),
+    )
     monkeypatch.setattr(ops, "first_prompt", lambda name, prompt: prompts.append(prompt))
     monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text)))
 
     args = SimpleNamespace(
         task_command="start", project="alpha", name="dev", tool="claude", cwd="/x", model=None,
+        no_remote_control=True,
         goal="Add login", accept=["tests pass", "docs updated"], artifact="results/dev.md", prompt="Read README first.",
     )
     cli.run_task(args, None)
-    assert started == ["dev"]
+    assert started == [("dev", {"remote_control": False})]
     assert "Goal: Add login" in prompts[0] and "- docs updated" in prompts[0] and "Read README first." in prompts[0]
     assert str(projects.folder("alpha") / "results/dev.md") in prompts[0] and "agentop task report" in prompts[0]
 
