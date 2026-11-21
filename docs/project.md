@@ -19,7 +19,8 @@ Projects are kept apart: a session sees, and sends to, the sessions of its own p
 ## 2 The project and its folder
 
 - A project is `~/.agentop/projects/<name>/`. The name is its folder's name: lowercase letters, digits, `-` and `_`, unique on the machine, never renamed (sessions' working directories and transcripts point at the folder).
-- The folder holds everything of the project's that isn't in a git repo: briefs, requirements, plans, decisions, notes, hand-over files, a dialogue's turns and deliverables. Code stays in its repos.
+- The folder holds the whole project. Briefs, requirements, plans, decisions, notes, hand-over files, a dialogue's turns and deliverables live at its top level; source repositories live under `<project>/code/<source-tree>`.
+- Source intake is explicit. A repository URL is cloned under `code/`. A local non-repository tree is copied there, initialized as Git, and committed. A local Git repository is copied in full only when its tracked and untracked status is clean; otherwise the Coordinator asks the owner for a fully committed repository. An existing destination is never overwritten.
 - agentop's own record of it is in `<project>/.project/`: `project.json` (owner, created, the welcome message) and `sessions.json` (its sessions, section 3). Agents don't edit these; they read them through `agentop project show`.
 - **Creating** a project, whoever asks for it, always does the same: make the folder and `.project/`, write the Coordinator's `AGENTS.md` and `CLAUDE.md` (section 4), start the Coordinator, and send it the welcome prompt. Creating doesn't open it in the app.
 - `default` is created this way the first time `agentop serve` starts, if it isn't there. On every later start, a Coordinator that has stopped (after a reboot) is resumed. `start_coordinator = false` in `config.toml` turns that off (the e2e tests do).
@@ -58,9 +59,9 @@ A dialogue's agents A and B are `readonly` and not `counted`; every Coordinator 
 | A project | discuss the direction and requirements; work out an execution plan; design; create a new repo; start sessions and assign or schedule tasks to them; sum up where things are. Its last line: you can also talk to each session directly |
 | A dialogue | design a dialogue (scenario, brief, agents); start it; stop it; collect what it made and sum it up |
 
-### 4.1 Other sessions know the project folder
+### 4.1 Other sessions work inside the project folder
 
-A session other than the Coordinator usually works in a repo, whose `AGENTS.md`/`CLAUDE.md` belong to the repo and aren't touched. Instead its first prompt starts with a short header: the project, the project folder's path, that the Coordinator is called `Coordinator`, its own name, and "files that aren't for the repo go in the project folder". Then its task. It is started with the project folder as an extra writable directory (`--add-dir` for Claude and Codex; Codex's sandbox would otherwise keep it to the repo).
+A session other than the Coordinator usually works in a repository under `<project>/code/`, whose `AGENTS.md`/`CLAUDE.md` belong to the repository and aren't touched. Its first prompt starts with a short header: the project, the project folder's path, that the Coordinator is called `Coordinator`, its own name, and where code and project notes live. Then its task. Because the working directory is already inside the project folder, agentop doesn't pass an extra writable directory. A session explicitly started outside the project still receives the project folder through `--add-dir`.
 
 ## 5 Sending between sessions
 
@@ -82,7 +83,7 @@ Python, through the plugin API:
 
 The UI: the core's Active sessions and History sections, and its session tabs, take a project, so a plugin's feature reuses them as they are. The core's feature for `default` is Sessions.
 
-The core's commands work for every project: `agentop project list`, `agentop project show <name>`, and `agentop start --project <name> --name dev --cwd ~/repo [--tool claude] [--prompt "…"]` (from inside a session, `--project` defaults to its own). Creating and removing are the owning plugin's: `agentop project create | remove` (the `projects` plugin adds them to the core's `project` group) and `agentop dialogue start | remove`.
+The core's commands work for every project: `agentop project list`, `agentop project show <name>`, and `agentop start --project <name> --name dev --cwd ~/.agentop/projects/<name>/code/<repo> [--tool claude] [--prompt "…"]` (from inside a session, `--project` defaults to its own). Creating and removing are the owning plugin's: `agentop project create | remove` (the `projects` plugin adds them to the core's `project` group) and `agentop dialogue start | remove`.
 
 ## 7 Features
 

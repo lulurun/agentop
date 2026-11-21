@@ -34,6 +34,7 @@ def test_names_and_the_default_project(tmp_path, monkeypatch):
     assert projects.is_valid_name("my-app_2") and not projects.is_valid_name("My App") and not projects.is_valid_name("")
     assert projects.ensure_default()["owner"] == projects.CORE
     projects.create("alpha", "projects", welcome="plan things")
+    assert (projects.folder("alpha") / "code").is_dir()
     with pytest.raises(projects.ProjectError):
         projects.create("alpha", "projects")
     assert [p["name"] for p in projects.list_projects("projects")] == ["alpha"]
@@ -49,10 +50,24 @@ def test_the_instructions_are_written_once(tmp_path, monkeypatch):
     coordinator.write_instructions(found)
     agents = projects.folder("alpha") / "AGENTS.md"
     assert "Coordinator of alpha" in agents.read_text() and "Run the alpha project." in agents.read_text()
+    assert f"{projects.folder('alpha')}/code/<source-tree>" in agents.read_text()
     assert (projects.folder("alpha") / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     agents.write_text("the owner's own")
     coordinator.write_instructions(found)
     assert agents.read_text() == "the owner's own"
+
+
+def test_a_session_inside_the_project_needs_no_extra_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    projects.create("alpha", "projects")
+    repo = projects.folder("alpha") / "code" / "app"
+    repo.mkdir()
+
+    assert ops._with_folder({}, str(projects.folder("alpha")), "alpha") == {}
+    assert ops._with_folder({}, str(repo), "alpha") == {}
+    assert ops._with_folder({}, str(tmp_path / "outside"), "alpha") == {
+        "add_dir": str(projects.folder("alpha"))
+    }
 
 
 def test_a_session_outside_the_folder_is_told_about_its_project(fake_agents, quick_boot, tmp_path):
@@ -106,6 +121,9 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         service.wait_for(coordinator_row["id"], "running")
         assert "Run the alpha" not in (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "You run this project" in (projects.folder("alpha") / "AGENTS.md").read_text()
+        instructions = (projects.folder("alpha") / "AGENTS.md").read_text()
+        assert "git status --porcelain=v1 --untracked-files=all" in instructions
+        assert "Do not direct a session to source outside the project folder" in instructions
         assert service.http.post(f"{base}/alpha/coordinator").json()["id"] == coordinator_row["id"]
         # Not its own: the default project, and a project that isn't there.
         assert service.http.delete(f"{base}/default").status_code == 404

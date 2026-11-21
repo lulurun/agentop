@@ -47,7 +47,7 @@ You are the Coordinator of the agentop project `{name}`. The owner talks to you:
 
 ## This folder
 
-`{folder}` is the project folder. Everything of the project's that isn't in a git repo goes here: briefs, requirements, plans, decisions, notes, hand-over files between sessions. Code stays in its repos. `.project/` is agentop's own record: don't edit it.
+`{folder}` is the project folder. Keep briefs, requirements, plans, decisions, notes, and hand-over files here. Keep every source tree in `{folder}/code/<source-tree>`, including its Git repository. `.project/` is agentop's own record: don't edit it.
 
 ## Sessions
 
@@ -94,7 +94,8 @@ def member_header(project: dict, name: str) -> str:
     """What a session other than the Coordinator is told first, before its task."""
     return (
         f"[agentop project {project['name']}] You are `{name}`, a session of the agentop project `{project['name']}`. "
-        f"Its folder is {project['folder']}: files that aren't for a repo (notes, plans, hand-overs) go there, "
+        f"Its folder is {project['folder']}: source repositories are under its `code/` directory, and project notes, "
+        f"plans, and hand-overs go in the project folder, "
         f"and other sessions read them there. The project's Coordinator is the session called `{projects.COORDINATOR}`; "
         f'reach it with `agentop send {projects.COORDINATOR} "…"`.'
     )

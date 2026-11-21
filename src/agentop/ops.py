@@ -86,8 +86,9 @@ def _place(agent: AgentCli, name: str | None, short_name: str, project: str, rea
 def _with_folder(params: dict | None, cwd: str, project: str) -> dict:
     """A session working outside its project's folder gets the folder as another directory to work in."""
     params = dict(params or {})
-    folder = str(projects.folder(project))
-    if os.path.realpath(cwd) != os.path.realpath(folder):
+    folder = os.path.realpath(projects.folder(project))
+    working = os.path.realpath(cwd)
+    if os.path.commonpath((working, folder)) != folder:
         params["add_dir"] = folder
     return params
 

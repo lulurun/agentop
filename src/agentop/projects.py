@@ -18,6 +18,7 @@ DEFAULT = "default"
 CORE = "core"
 COORDINATOR = "Coordinator"
 META_DIR = ".project"
+CODE_DIR = "code"
 
 _NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,95}")
 
@@ -77,6 +78,7 @@ def create(name: str, owner: str, welcome: str = "", instructions: str = "") -> 
     if exists(name):
         raise ProjectError(f"There is a project called {name} already")
     meta_dir(name).mkdir(parents=True, exist_ok=True)
+    (folder(name) / CODE_DIR).mkdir(exist_ok=True)
     record = {"owner": owner, "created_at": time.time(), "welcome": welcome, "instructions": instructions}
     write_json_atomic(_meta_path(name), record)
     return get(name)
@@ -88,6 +90,7 @@ def adopt(name: str, owner: str, welcome: str = "", instructions: str = "") -> d
         meta_dir(name).mkdir(parents=True, exist_ok=True)
         record = {"owner": owner, "created_at": folder(name).stat().st_mtime, "welcome": welcome, "instructions": instructions}
         write_json_atomic(_meta_path(name), record)
+    (folder(name) / CODE_DIR).mkdir(exist_ok=True)
     return get(name)
 
 
