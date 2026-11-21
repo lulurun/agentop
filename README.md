@@ -137,6 +137,8 @@ Then turn on **Email code** in the service's Status tab, under Plugins, and chec
 
 **What isn't done yet.** The service token is never rotated by itself: it stays the same until you run `agentop service token --rotate`.
 
+**Reaching it from elsewhere.** For your own devices, use [Tailscale](https://tailscale.com) with `tailscale serve`: the service stays on loopback, and only devices signed in to your tailnet can reach it, over HTTPS ([setup](docs/1_setup.md#tailscale)). The other ways, and why this one is recommended, are in [docs/0_06_security.md](docs/0_06_security.md#32-choosing-a-route).
+
 For a service reachable from the internet, such as one behind an HTTPS proxy:
 
 - **Shorten the lifetimes** in `~/.agentop/config.toml`, then restart the service:

@@ -93,7 +93,7 @@ From [0_10_ui.md](0_10_ui.md) and [0_12_03_memory.md 6](0_12_03_memory.md#6-the-
 ### Sign-in and security
 
 - **Single-use pairing codes**, so the service token never leaves the machine. `agentop service pair` prints a short code (`K7QF-2M9X`), typed into the sign-in form instead of the token; once, 10 minutes. A setting turns the service token off for `POST /api/v2/auth/clients` (it can't be "loopback only": behind a proxy every request is from `127.0.0.1`). The CLI and desktop app would sign in by writing a code into `~/.agentop/state/`. Downside: every new browser, and every sign-in after 12 hours unused, needs a code from a shell. Email code ([0_12_00_plugins.md](0_12_00_plugins.md#email-code-email-code)) already covers most of the phone case; approving a device from one already signed in would be another login plugin.
-- **Remote control as a per-session option.** Every Claude session in `default` starts and resumes with `--remote-control` (and skip-permissions), an access path outside agentop's tokens ([design 6.3](0_00_design.md#63-remote-access)). Keep it on by default, but offer it at start.
+- **Remote control as a per-session option.** Every Claude session in `default` starts and resumes with `--remote-control` (and skip-permissions), an access path outside agentop's tokens ([0_06_security.md 3.1](0_06_security.md#31-what-the-service-allows)). Keep it on by default, but offer it at start.
 - **Rotate the service token by itself.** Today only `agentop service token --rotate` does.
 - **Close the plain HTTP path** to the devhost, `http://proxy-host:7700/agentop/` (the ops repo's nginx). It has no authentication and carries the token in the clear; the HTTPS address replaces it.
 
@@ -134,4 +134,4 @@ Kept so they aren't proposed again.
 - **`agentop send` idle check and delivery confirmation** (review 1.2): on hold since 2026-11-18; the owner doesn't see sending into a busy session as a problem. A visible record of handoffs, built from the `[agentop send from …]` prompts Memory already indexes, was part of the same suggestion.
 - **Agent hooks or transcript tailing for busy/idle state** (2026-11-19): state stays on tmux signals; agent internals drift between versions.
 - **The handoff plugin** (queue, idle-only delivery, audit log, Handoffs view, cross-host handoff): dropped 2026-11-13 ([design D9](0_00_design.md#15-decisions)).
-- Deliberate, with their residual risk in [design 6](0_00_design.md#6-security): open CORS with no `Origin` or `Host` allowlist, the global service-token lockout, `/fs/dirs` browsing the whole filesystem, skip-permissions agents.
+- Deliberate, with their residual risk in [0_06_security.md](0_06_security.md): open CORS with no `Origin` or `Host` allowlist, the global service-token lockout, `/fs/dirs` browsing the whole filesystem, skip-permissions agents.

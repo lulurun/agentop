@@ -8,6 +8,7 @@
 | UI layout: names of its parts, where tabs open, keys | [docs/0_10_ui.md](docs/0_10_ui.md) |
 | Projects: a goal, and a Coordinator session that drives other agents to reach it | [docs/0_13_projects.md](docs/0_13_projects.md) |
 | Plugins: how they work, and each one | [docs/0_12_00_plugins.md](docs/0_12_00_plugins.md), and `docs/0_12_<number>_<id>.md` for the larger ones (dialogue, memory, input) |
+| Security: tokens, sign-in, and which way to reach a service from elsewhere (Tailscale, for one person) | [docs/0_06_security.md](docs/0_06_security.md) |
 | Service and app setup | [docs/1_setup.md](docs/1_setup.md) |
 | Build and release (UI, desktop app) | [docs/1_setup.md](docs/1_setup.md#building-and-releasing), `scripts/` |
 | Manual tests (real user and PC) | [docs/8_manual-tests.md](docs/8_manual-tests.md) |

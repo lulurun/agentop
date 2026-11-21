@@ -217,23 +217,74 @@ private half of the updater key whose public half is in `tauri.conf.json`.
 default. Everything under `/api/v2` except `/health` needs a client's token, which
 the service token signs in. But tokens are all there is: whoever holds the service
 token, or a live client token, can type into every agent on the machine, including
-agents started with skip-permissions flags. See [Secure setup](../README.md#secure-setup). So, to reach a service from
+agents started with skip-permissions flags. See [Secure setup](../README.md#secure-setup).
+Why each route below is ranked where it is, and the others considered, is in
+[0_06_security.md](0_06_security.md#32-choosing-a-route). To reach a service from
 another machine, in order of preference:
 
-1. **An SSH tunnel.** `ssh -L 9775:127.0.0.1:9775 host`, then use
+1. **Tailscale**, with `tailscale serve` (below). Only your own devices can reach it,
+   over HTTPS, and the service stays on loopback. The recommended way for one person.
+2. **An SSH tunnel.** `ssh -L 9775:127.0.0.1:9775 host`, then use
    `http://127.0.0.1:9775` locally. Nothing new is exposed, and the browser treats
    the tunnel as a loopback address.
-2. **An HTTPS proxy** in front of the loopback service, as on the devhost
+3. **An HTTPS proxy** in front of the loopback service, as on the devhost
    (`https://agentop.example.com`). The proxy must forward WebSockets (the
    `Upgrade` and `Connection` headers). The app works under a path prefix too
    (`/agentop/`), since it uses relative addresses. Consider an IP allow-list or a
    second factor at the proxy: the token is the only thing in front of the agents.
-3. **TLS in the service itself**: set `host`, `tls_cert` and `tls_key` in
+4. **TLS in the service itself**: set `host`, `tls_cert` and `tls_key` in
    `~/.agentop/config.toml` (or `--host`, `--tls-cert`, `--tls-key`).
 
 Plain HTTP on a non-loopback address is refused ([design D6](0_00_design.md#15-decisions)): `agentop
 serve` exits with an error when `host` isn't loopback and TLS isn't set, and Connect
 to a service won't test or add a plain `http://` address that isn't loopback. Anyone
 on the network path could otherwise read the token as it is sent, and every keystroke
-and screen of every terminal. Connections saved before then still work, labelled "Not
+and screen of every terminal. This holds on a tailnet too, so don't bind the service to
+its `100.x` address: `tailscale serve` is the way in. Connections saved before then still work, labelled "Not
 encrypted". The README has a short guide to the SSH tunnel.
+
+### Tailscale
+
+`tailscale serve` takes HTTPS at `https://<machine>.<tailnet>.ts.net`, with a
+certificate it gets and renews itself, and forwards it to the service on
+`127.0.0.1:9775`, WebSockets included. Only devices signed in to your tailnet can reach
+that address. Nothing in agentop changes: it stays bound to loopback.
+
+On the machine that runs the service (Arch shown; other systems are on
+[tailscale.com/download](https://tailscale.com/download)):
+
+```bash
+sudo pacman -S tailscale
+sudo systemctl enable --now tailscaled
+sudo tailscale up                      # prints a link: sign in, and create the tailnet if it's the first device
+sudo tailscale set --operator=$USER    # so that serve runs without sudo
+```
+
+In the [admin console](https://login.tailscale.com/admin):
+
+- **DNS**: MagicDNS and HTTPS Certificates on. `tailscale serve` gives a link to turn
+  on the second if it is off.
+- **Machines**: on this machine's menu, Disable key expiry. Otherwise it drops off the
+  tailnet after 180 days, until someone signs it in again.
+
+Then:
+
+```bash
+tailscale serve --bg 9775              # prints https://<machine>.<tailnet>.ts.net
+tailscale serve status
+agentop service connect-info --url https://<machine>.<tailnet>.ts.net
+```
+
+`--bg` keeps the setting across reboots and restarts of `tailscaled`. The first request
+can take a few seconds while the certificate is issued. `tailscale serve reset`
+removes it.
+
+On each device you use it from, install Tailscale and sign in with the same account,
+then paste the `connect-info` string into Connect to a service, or open the address in
+a browser. On a phone, that is the Tailscale app, then Add to Home Screen as in
+[On a phone](#on-a-phone). Use `tailscale serve`, not `tailscale funnel`: Funnel puts
+the address on the public internet.
+
+If anyone else is in the tailnet, or you share this machine with them, they can reach
+the sign-in screen too. Limit port 443 on this machine to your own devices in the
+tailnet's access controls.

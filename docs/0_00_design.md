@@ -8,7 +8,7 @@ The first doc to read. Each section says what a part of agentop is and why; wher
 | [3 Architecture](#3-architecture) | [0_03_architecture.md](0_03_architecture.md) |
 | [4 Sessions](#4-sessions) | |
 | [5 Terminal](#5-terminal) | |
-| [6 Security](#6-security) | |
+| [6 Security](#6-security) | [0_06_security.md](0_06_security.md) |
 | [7 Service lifecycle](#7-service-lifecycle) | [1_setup.md](1_setup.md) |
 | [8 CLI](#8-cli) | [0_08_cli.md](0_08_cli.md) |
 | [9 API](#9-api) | |
@@ -174,7 +174,7 @@ UI                        Service                       tmux
 - Start timeout: 30s without an agent process sets `failed`, or within a second or so when the shell reports the command is missing. The tmux session stays open for inspection until the user closes it.
 - Resume uses the same endpoint and flow: `POST /api/v2/sessions` with `{resume: {session_id}, tool, cwd, name}`.
 - If the service restarts during a start, the record is marked `failed` on boot, unless reconciliation finds the agent alive.
-- Every Claude session runs with `--dangerously-skip-permissions`, and in the `default` project also with `--remote-control` ([6.3](#63-remote-access)).
+- Every Claude session runs with `--dangerously-skip-permissions`, and in the `default` project also with `--remote-control` ([0_06_security.md 3.1](0_06_security.md#31-what-the-service-allows)).
 
 ### 4.3 SessionStore
 
@@ -275,65 +275,14 @@ So all terminal code sits behind one `TerminalView` component with a `renderer: 
 
 ## 6 Security
 
-The terminal socket is remote code execution as the user, with agents running in skip-permissions mode. Connecting to any reachable service raises the stakes: a service can be exposed beyond loopback, and it must accept requests from origins it has never seen.
+The rules, how each client signs in, the ways to reach a service from elsewhere, and the ways to sign in are in [0_06_security.md](0_06_security.md).
 
-### 6.1 Rules
+The terminal socket is remote code execution as the user, with agents running in skip-permissions mode, and any origin must be able to connect. So:
 
-1. **Bind to loopback by default.** Exposing a service is an explicit choice: `agentop serve --host`, or `host` in `~/.agentop/config.toml`.
-2. **Require a client's bearer token on every request**, with no exception for loopback or for any client, except `GET /api/v2/health`, which returns only `{"status": "ok"}`, `POST /api/v2/auth/clients` (below), `GET /api/v2/auth/methods`, and a login plugin's public routes ([6.4](#64-ways-to-sign-in)). The service's name and version are behind the token, in `/service`, so a stranger learns only that something answers.
-   - The **service token**, random and 256-bit, lives in `~/.agentop/service.json`, mode `0600`. It does one thing: `POST /api/v2/auth/clients` signs in a new client with it. Every other route refuses it. After 10 wrong service tokens in a minute, from anyone, adding a client answers 429 for the rest of that minute. Clients already signed in are not affected.
-   - Each **client** (a browser, the desktop app, one CLI command) gets its own random token, which expires after `client_ttl` (default `12h`) unless renewed, and never outlives `client_max_age` (default `30d`) from sign-in. Only a SHA-256 hash of it is kept, in `~/.agentop/state/clients.json`, mode `0600`.
-   - `POST /api/v2/auth/renew` returns a new token good for another `client_ttl`. The old one keeps working until the new one is first used, then 60 seconds more, for requests already on their way; a phone that loses the reply carrying the new token goes on with the old one, and renews with it again.
-   - `GET /api/v2/auth/clients` lists the clients, and `DELETE /api/v2/auth/clients/{id}` revokes one, this one included (to sign out). A revoked or expired client's open WebSockets close within 5 seconds, with code 4403.
-   - `agentop service token --rotate` replaces the service token. Clients already signed in stay signed in, unless `--revoke-clients` is given.
-3. **No ambient credentials.** There are no cookies. A token is only ever sent when the app attaches it deliberately, so a malicious page has nothing to ride on. This removes CSRF as a class of problem.
-4. **WebSockets use single-use tickets.** Browsers cannot set headers on WebSocket requests, and a token in a URL ends up in logs. `POST /api/v2/tickets` returns a ticket valid for 30s, bound to one purpose (events, or terminal for one session).
-5. **File APIs are confined.** Paths are resolved, including symlinks, and must stay inside the session's working directory (or the other folders a route names, such as the tool's memory folder).
-
-Because any origin must be able to connect, the origin doesn't decide access; the token does. So:
-
-- **CORS is open.** `/api/v2` answers any origin, without credentials mode, and the CORS layer sits outside auth so preflights succeed. A foreign page can read `/health`, which says only that the service is up.
-- **There is no `Origin` or `Host` allowlist.** An allowlist would require configuring every service for every place the UI might be loaded from, which defeats "connect if reachable". Cookies are what those checks protect, and there are none.
-- **The web app sets a strict CSP**: `script-src 'self'` with no inline script. It stores client tokens in `localStorage`, so this is the main defence for them. A stolen one is good for at most `client_ttl` unless the thief keeps renewing it, and can be revoked on its own; the service token is never stored. `connect-src` has to stay open to user-chosen hosts.
-
-### 6.2 How each client signs in
-
-| Client | Service token from | Client token kept in |
-|--------|--------------------|----------------------|
-| Web | `agentop open` passes it in the URL fragment, which is cleared at once. A visitor with no token sees a screen that explains this and accepts a pasted one | `localStorage` |
-| Web, other services | Pasted through Connect to a service | `localStorage` |
-| Desktop, local | A Rust command reads `service.json`, so it can always sign in again | OS keychain |
-| Desktop, other services | Pasted through Connect to a service | OS keychain, else `state/desktop-tokens.json` (0600) |
-| CLI (`service status`, `stop`, `restart`, `update`) | `service.json` | Nowhere: it signs in for 60 seconds for each command |
-
-The service token is held in memory only until it has signed the app in.
-
-**Renewal.** The app renews, never the service. A token is renewed once it is a twelfth of `client_ttl` old (an hour, by default), and never more often than every five minutes. The app checks every five minutes while it is on screen, and whenever it comes back on screen (`visibilitychange`, `focus`). It renews every saved service's token that is due, not only the one shown. Tabs share one `localStorage`, so one tab renews under a Web Lock (`agentop-renew:<connection>`) and the others take the new token from the `storage` event. A hidden or closed app renews nothing, so after `client_ttl` unused it is signed out, and shows "Signed out of …" with the token form. A 401 from any request does the same, after first taking any newer token another tab saved. Every request, the events socket's reconnects included, uses the token as it is at that moment, never one held from when the connection opened.
-
-### 6.3 Remote access
-
-| Route | Encrypted | Notes |
-|-------|-----------|-------|
-| Tunnel, such as `ssh -L` or a VPN | Yes | Recommended; the service stays loopback-bound |
-| Reverse proxy with TLS | Yes | Base paths are supported in the connection URL |
-| Direct bind, with `--tls-cert` and `--tls-key` | Yes | Certificate must be trusted by the client |
-| Direct bind, plain HTTP | **No** | Refused: the service won't start. The token and all terminal traffic would be readable on the network |
-
-The Connect to a service form refuses a non-loopback `http://` address, and an address typed without a scheme defaults to `https://` unless it is loopback. Connections saved before this rule still work, with a "Not encrypted" label in the connection manager. How to set each route up is in [1_setup.md](1_setup.md#exposing-a-service).
-
-- **A loopback bind does not prove a route is private.** A tunnel or a proxy in front of a loopback service makes it reachable from outside. So every route carries its own protection: every route but `/api/v2/health`, `/api/v2/auth/methods`, a login plugin's public routes and the app's static files needs the token, and there is nothing a proxy can expose by mistake. A proxy with no authentication of its own leaves the tokens as the only thing in front of the agents.
-- **Claude remote control is a way in outside agentop.** Every Claude Code session agentop starts or resumes in the `default` project runs with `--remote-control`, and every Claude session with `--dangerously-skip-permissions` (`agentclis/claude.py`, `ops._launch_params`), so it shows up in the Claude mobile app and on claude.ai, and its bridge URL is in the details panel. Whoever can sign in to the user's Claude account can drive it, with no approval step and no agentop token. This is deliberate: it is what lets a phone pick up a Claude session without agentop. Sessions in other projects run without it: their Coordinator drives them, not a phone. Codex and Antigravity sessions have no such flag. Making it a per-session option is in the [backlog](9_backlog.md#sign-in-and-security).
-
-### 6.4 Ways to sign in
-
-The service token is one way to sign in, and always there: it is the recovery path, and what `agentop open`, the CLI and the desktop app use. Other ways are plugins, which can be turned on and off like any plugin.
-
-- **Every way ends the same.** A login plugin only decides who may sign in. It then calls `api.sign_in(name)`, which adds an ordinary client, exactly as `POST /auth/clients` does with the service token. Renewal, expiry, revocation and the client list are the core's, and a plugin can't issue any other kind of credential.
-- **`GET /api/v2/auth/methods`**, with no token, lists the ways to sign in: `[{id: "token", name: "Service token"}, …]`, then each enabled plugin whose manifest names the `login` UI slot. It says nothing else about the service. An older service answers 404, which the app reads as the service token only.
-- **Public routes.** A login plugin adds routes with no client token on `api.public_router`, mounted at `/api/v2/plugins/{id}/…` and 404 unless it is enabled. Only a plugin with the `login` slot may add them. Public routes face anyone who can reach the service, so the plugin limits its own attempts.
-- **The sign-in screen** shows, above the token form, the `login` component of each method the app has a module for.
-
-The first login plugin is Email code, which mails a one-time code to one address, for signing in a phone without copying the service token onto it ([0_12_00_plugins.md](0_12_00_plugins.md#email-code-email-code)).
+1. **Loopback by default.** Exposing a service is an explicit choice, and plain HTTP on any other address is refused ([D6](#15-decisions)).
+2. **The token decides, not the origin.** Every route but a few for signing in needs a client's token. The service token only signs clients in; each client's token expires and can be revoked ([D7](#15-decisions)). There are no cookies, so CORS is open and there is no `Origin` allowlist.
+3. **Reach is a layer of its own.** For one person's own devices, the recommended way in from elsewhere is Tailscale with `tailscale serve`, which keeps the service on loopback and lets only those devices reach it ([0_06_security.md 3.2](0_06_security.md#32-choosing-a-route)).
+4. **Claude remote control is a way in outside agentop**, on purpose, for Claude sessions in `default` ([0_06_security.md 3.1](0_06_security.md#31-what-the-service-allows)).
 
 ## 7 Service lifecycle
 
@@ -418,7 +367,7 @@ The web app's header has no one-click Update yet ([backlog](9_backlog.md#service
 Every command and option is in [0_08_cli.md](0_08_cli.md). The CLI is a peer of the app, not a client of it:
 
 - **Session commands** (`list`, `start`, `stop`, `send`, `history`) call the same `ops` functions the service does, and work with no service running. `send` goes through the service when one answers, so its prompts queue with the app's ([4.6](#46-sending-between-sessions)).
-- **Service commands** (`serve`, `open`, `service status | stop | restart | update | token | clients | connect-info`) run the service or ask it. They sign in with the service token from `service.json`, for 60 seconds per command ([6.2](#62-how-each-client-signs-in)).
+- **Service commands** (`serve`, `open`, `service status | stop | restart | update | token | clients | connect-info`) run the service or ask it. They sign in with the service token from `service.json`, for 60 seconds per command ([0_06_security.md 2](0_06_security.md#2-how-each-client-signs-in)).
 - **Project commands** (`project list | show | create | remove`): create and remove act on the Projects plugin's projects, and need it on ([13](#13-projects)).
 - **Plugin commands** (`dialogue`, `recall`, `email-code`) come from plugins and never start the service; a disabled plugin's command says so ([0_12_00_plugins.md](0_12_00_plugins.md#cli-commands)).
 - Agents are a main user of the CLI: a Coordinator starts and reaches its project's sessions with `agentop start` and `agentop send`, and the skills `agentop serve` installs (`handoff`, `recall`) run it ([src/agentop/skills/](../src/agentop/skills/README.md)).
@@ -434,7 +383,7 @@ All routes are under `/api/v2`. Plugin routes are under `/api/v2/plugins/{id}/`,
 | `POST` | `/admin/restart`, `/admin/stop` | Restart or stop this service ([7.2](#72-who-can-do-what)) |
 | `GET`, `POST` | `/admin/update` | Check and status; start an update |
 | `GET` | `/admin/version` | What the service runs and what Update would bring ([7.4](#74-releases-and-the-update-indicator)) |
-| `GET`, `POST` | `/auth/methods`, `/auth/clients` | Ways to sign in (no auth); sign a client in with the service token ([6.1](#61-rules)) |
+| `GET`, `POST` | `/auth/methods`, `/auth/clients` | Ways to sign in (no auth); sign a client in with the service token ([0_06_security.md 1](0_06_security.md#1-rules)) |
 | `POST` | `/auth/renew` | A new client token |
 | `GET`, `DELETE` | `/auth/clients`, `/auth/clients/{id}` | List signed-in clients; revoke one |
 | `POST` | `/tickets` | Issue a WebSocket ticket |
@@ -527,7 +476,7 @@ Because the UI comes from the service, it is always the service's own version, a
 
 - **Rust commands**, each doing one fixed thing, with no shell or file permission: `read_service_info`, `desktop_info`, `startup_status`, `service_start`, `update_open`, `update_run`, `service_version`, and the keychain commands for tokens. Stop, restart, and update of a running service go through the service's API, as in the web app. `build.rs` declares the commands, so each gets an `allow-…` permission.
 - **Permissions.** A page from another origin than the app's own can call only what a capability grants it. The bundled start page has one for its commands. The service's page gets one at run time, once the port is known, for that exact origin (`http://127.0.0.1:<port>/*`): the commands, writing text to the clipboard, restarting the app, and opening this project's release pages in the browser. Any other page on loopback gets nothing.
-- **CSP.** The start page's is the app's (`script-src 'self'`, IPC only). The service's page has the web app's own ([6.1](#61-rules)).
+- **CSP.** The start page's is the app's (`script-src 'self'`, IPC only). The service's page has the web app's own ([0_06_security.md 1](0_06_security.md#1-rules)).
 - **Connections** are saved in the window's storage, with tokens in the OS keychain, or a 0600 file where there is none.
 - **Native API revision.** The UI can be newer than the wrapper, so the wrapper reports `native_api`, the revision of its commands. When the UI needs a higher one, it says **App update needed** and opens the release page.
 
@@ -624,7 +573,7 @@ The choices that shape agentop, with what was chosen and what it was weighed aga
 | D4 | Dialogues | A plugin, not core ([0_12_02_dialogue.md](0_12_02_dialogue.md)) | CLI-only, or part of the core |
 | D5 | Host platforms | Linux and macOS; systemd optional. On a PC the desktop app runs the service | `LaunchdManager` for macOS without the app, later |
 | D6 | Plain HTTP on a non-loopback address (2026-11-14) | Refused: the service won't start without TLS, and the app won't add such an address. Use a tunnel or HTTPS | Allowing it with a warning: easier on a trusted network, but the token and terminals are readable to anyone on it |
-| D7 | Tokens (2026-11-14) | The service token only signs a client in. Each client gets its own token, which expires after `client_ttl` unused and `client_max_age` at most, is renewed by the app while in use, and can be revoked on its own ([6.1](#61-rules)) | One shared token for everything, where rotation resets every client |
+| D7 | Tokens (2026-11-14) | The service token only signs a client in. Each client gets its own token, which expires after `client_ttl` unused and `client_max_age` at most, is renewed by the app while in use, and can be revoked on its own ([0_06_security.md 1](0_06_security.md#1-rules)) | One shared token for everything, where rotation resets every client |
 | D8 | Where plugins come from | Only folders inside the agentop install (and `AGENTOP_PLUGIN_DIRS`), with their UI in the app build | A user plugin directory, or UI code served by the service: both let more parties run code in the service or the app. Open until a security review |
 | D9 | Handoff (2026-11-13) | `agentop send` and the `handoff` skill, on one host; the user watches the target | A handoff plugin with queues, idle-only delivery, reports, approval and an audit log, across hosts: it assumed nobody watches the target |
 | D10 | Busy and idle state (2026-11-19) | tmux signals only (the screen) | Agent hooks or transcript tailing: agent internals drift between versions |

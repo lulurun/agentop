@@ -68,7 +68,7 @@ A narrow object, not the service internals:
 | Facility | Rule |
 |----------|------|
 | `api.router` | A FastAPI router mounted at `/api/v2/plugins/{id}/`. It inherits token auth. A plugin cannot add routes anywhere else |
-| `api.public_router` | Routes with no client token, for signing in. Only a plugin whose manifest names the `login` slot may add them; any other that does fails to load ([design 6.4](0_00_design.md#64-ways-to-sign-in)) |
+| `api.public_router` | Routes with no client token, for signing in. Only a plugin whose manifest names the `login` slot may add them; any other that does fails to load ([0_06_security.md 4](0_06_security.md#4-ways-to-sign-in)) |
 | `api.sign_in(name)` | Signs in an ordinary client and returns its token, for a login plugin's public routes |
 | `api.on(event, handler)` | Core events: `session.started`, `session.exited`, `session.closed`, `scan`. The handler is a plain function, called with the session row (or, for `scan`, the session list). It runs in a thread off the event loop, with a time limit (10s), isolated: an exception is logged and counted, and never reaches the core, which never waits for its result |
 | `api.task(fn)` | A supervised background task. `fn` is an async function, not a coroutine, so the task can be started again when the plugin is enabled again. If it raises, the plugin goes to `failed` |
@@ -136,7 +136,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 | `session-badge` | `sessionBadge` | A badge on a session row |
 | `settings-section` | `settingsSection` | A section in the service's Status, under Plugins |
 | `file-viewer` | `fileViewer` | The contents of a file tab. While one is enabled, files in the right panel open in a tab; without one, clicking copies the path |
-| `login` | `login` | A way to sign in, on the sign-in screen ([design 6.4](0_00_design.md#64-ways-to-sign-in)) |
+| `login` | `login` | A way to sign in, on the sign-in screen ([0_06_security.md 4](0_06_security.md#4-ways-to-sign-in)) |
 | `terminal-input` | `terminalInput` | A strip below a session's terminal ([0_12_04_input.md](0_12_04_input.md)) |
 
 **Status → Plugins** lists every plugin the service reported, with its description, version, state, and any error, and a switch to enable or disable it. A `failed` plugin shows its error and that a restart is needed to retry it. An `incompatible` one says which side is too old. A plugin the service has but this app doesn't know is listed as "Not available in this app".
@@ -190,7 +190,7 @@ Only files in the session's working directory, its memory folder, or its transcr
 
 ### Email code (`email-code`)
 
-A way to sign in without the service token, for a phone ([design 6.4](0_00_design.md#64-ways-to-sign-in)). The sign-in screen gets "Send me a sign-in code".
+A way to sign in without the service token, for a phone ([0_06_security.md 4](0_06_security.md#4-ways-to-sign-in)). The sign-in screen gets "Send me a sign-in code".
 
 - **Settings** are in `~/.agentop/plugins/email-code/config.toml`, mode `0600` since it holds the SMTP password: `to` (the one address codes go to), `smtp_host`, `smtp_port` (465 means SSL, anything else STARTTLS), `smtp_user`, `smtp_password`, and optionally `from` and `smtp_security` (`ssl`, `starttls`, or `none`, which is only allowed for a mail server on loopback). They are read on each send, so a change needs no restart. Off by default; `agentop email-code test` sends a test mail.
 - **`POST /send {name}`** (public) mails a 6-digit code and answers `{request, expires_in}` and nothing about where it went. Sending is limited for all callers together, as one proxy makes them look alike: once a minute, 5 an hour. Not set up answers 503, a failed send 502, with the reason only in the service log.
