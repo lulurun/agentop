@@ -46,8 +46,6 @@ class Settings:
     history_window: str | int = "30d"
     # How many sessions agentop runs at once, not counting a plugin's own.
     max_active_sessions: int = 20
-    # Start the default project's Coordinator when the service starts.
-    start_coordinator: bool = True
     # What Update follows: "main", the branch (the default, for development), or
     # "release", the newest vX.Y.Z tag (the desktop app's own copy).
     update_from: str = "main"

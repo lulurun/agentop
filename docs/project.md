@@ -1,18 +1,27 @@
 # Projects
 
-Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only, the Coordinator (started for `default` by `agentop serve`, `POST /api/v2/projects/{name}/coordinator`). the Projects plugin (feature, `/api/v2/plugins/projects/`, `agentop project create | remove`). A dialogue's Coordinator: started with the dialogue (or, for an older one, by Open the Coordinator in its right panel), told when it ends. It replaces the "Project groups" idea in the backlog.
+Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only, the Coordinator (`POST /api/v2/projects/{name}/coordinator`; `default` has none, 2026-11-21). the Projects plugin (feature, `/api/v2/plugins/projects/`, `agentop project create | remove`). A dialogue's Coordinator: started with the dialogue (or, for an older one, by Open the Coordinator in its right panel), told when it ends. It replaces the "Project groups" idea in the backlog.
 
 ## 1 What it is
 
 A **project** is a group of sessions and a folder they share, the **project folder**. Projects are part of the core; plugins make and use their own. Every agentop session belongs to exactly one project.
 
-Each project has a **Coordinator**: a session working in the project folder, the one the owner talks to. It sums up what the owner wants and routes the work to the project's other sessions, starting them when it decides one is needed or when asked. Talking to the Coordinator is the recommended way, not the only one: every session can be opened and used directly, unless its plugin made it read-only.
+Each project other than `default` has a **Coordinator**: a session working in the project folder, the one the owner talks to. It sums up what the owner wants and routes the work to the project's other sessions, starting them when it decides one is needed or when asked. Talking to the Coordinator is the recommended way, not the only one: every session can be opened and used directly, unless its plugin made it read-only.
+
+In `default` the owner is the Coordinator. Its sessions are still kept apart from other projects', but nothing routes between them: the owner starts each one with New session in Sessions, which can start with no session at all.
+
+| | `default` | Any other project |
+|---|---|---|
+| Sessions listed in | Sessions | Projects (or Dialogues), per project |
+| Coordinator | None: the owner | One, always there |
+| Sessions started by | The owner, with New session | The Coordinator (`agentop start`); no New session |
+| Claude `--remote-control` | On | Off |
 
 Projects are kept apart: a session sees, and sends to, the sessions of its own project; Active sessions and History are per project.
 
 | Project | Owner | Shown in | Coordinator's job |
 |---------|-------|----------|-------------------|
-| `default` | core | Sessions | General: start sessions, fix, update and restart agentop |
+| `default` | core | Sessions | None: the owner starts and runs its sessions |
 | One per project of the owner's | `projects` plugin | Projects | Run a project: requirements, plan, routing work |
 | One per dialogue | `dialogue` plugin | Dialogues | Design a dialogue, start and stop it, collect what it made |
 
@@ -22,8 +31,8 @@ Projects are kept apart: a session sees, and sends to, the sessions of its own p
 - The folder holds the whole project. Briefs, requirements, plans, decisions, notes, hand-over files, a dialogue's turns and deliverables live at its top level; source repositories live under `<project>/code/<source-tree>`.
 - Source intake is explicit. A repository URL is cloned under `code/`. A local non-repository tree is copied there, initialized as Git, and committed. A local Git repository is copied in full only when its tracked and untracked status is clean; otherwise the Coordinator asks the owner for a fully committed repository. An existing destination is never overwritten.
 - agentop's own record of it is in `<project>/.project/`: `project.json` (owner, created, the welcome message) and `sessions.json` (its sessions, section 3). Agents don't edit these; they read them through `agentop project show`.
-- **Creating** a project, whoever asks for it, always does the same: make the folder and `.project/`, write the Coordinator's `AGENTS.md` and `CLAUDE.md` (section 4), start the Coordinator, and send it the welcome prompt. Creating doesn't open it in the app.
-- `default` is created this way the first time `agentop serve` starts, if it isn't there. On every later start, a Coordinator that has stopped (after a reboot) is resumed. `start_coordinator = false` in `config.toml` turns that off (the e2e tests do).
+- **Creating** a project other than `default`, whoever asks for it, always does the same: make the folder and `.project/`, write the Coordinator's `AGENTS.md` and `CLAUDE.md` (section 4), start the Coordinator, and send it the welcome prompt. Creating doesn't open it in the app.
+- `default` is made, folder and `.project/` only, the first time one of its sessions is recorded. It gets no instructions and no Coordinator.
 - **Removing** a project stops its sessions and forgets it; its folder is kept unless "Delete the folder too" is ticked. `default` can't be removed.
 - A plugin lists and changes only the projects it owns. No plugin changes `default`.
 
@@ -48,15 +57,14 @@ A dialogue's agents A and B are `readonly` and not `counted`; every Coordinator 
 
 ## 4 The Coordinator
 
-- Named `Coordinator` in every project. It works in the project folder, with Codex if installed, else Claude, else the first other installed tool.
+- Named `Coordinator` in every project but `default`. It works in the project folder, with Codex if installed, else Claude, else the first other installed tool.
 - It always exists: made with its project, resumed (same conversation) when it has stopped, never started afresh.
 - Its instructions are files in the project folder, written when the project is created: `AGENTS.md` (read by Codex and Antigravity) and `CLAUDE.md` (`@AGENTS.md`). They say it is this project's Coordinator, what the folder is for, how sessions reach each other (section 5), and its owner's part (below). The owner and the Coordinator may edit them afterwards; agentop doesn't overwrite them.
-- For a project owned by the Projects plugin, agentop keeps `COORDINATOR_SKILL.md` in the project folder and embeds its body in the Coordinator's initial and resume prompts. Root instructions contain only a conditional pointer: the session named `Coordinator` reloads the file after `/clear`; every other session must not load it. The skill covers autonomous pursuit, routing judgment, bounded delegation, project-owned source intake, context reset at durable milestones, and behavioral review. It is outside agentop's globally installed skills bundle and is not loaded into the default Coordinator, dialogue Coordinators, or another project session.
-- **Welcome.** Its first prompt asks it to greet the owner, from the owner's side, and list what they can ask it as bullets. In `default` it says "Hi, I'm the Coordinator." and doesn't mention projects or folders; in any other project, "Hi, I'm the Coordinator of this project." The owner of the project supplies the list and the instructions' own part; the core's are for `default`:
+- For a project owned by the Projects plugin, agentop keeps `COORDINATOR_SKILL.md` in the project folder and embeds its body in the Coordinator's initial and resume prompts. Root instructions contain only a conditional pointer: the session named `Coordinator` reloads the file after `/clear`; every other session must not load it. The skill covers autonomous pursuit, routing judgment, bounded delegation, project-owned source intake, context reset at durable milestones, and behavioral review. It is outside agentop's globally installed skills bundle and is not loaded into dialogue Coordinators or another project session.
+- **Welcome.** Its first prompt asks it to greet the owner, from the owner's side, with "Hi, I'm the Coordinator of this project.", and list what they can ask it as bullets. The owner of the project supplies the list and the instructions' own part:
 
 | Project | "You can ask me to:" |
 |---------|------------------------|
-| `default` | start a session for a task; ask a session to do something and bring back its answer; tell you what the sessions are doing; fix a problem with agentop; update and restart agentop; show you how to use agentop |
 | A project | discuss the direction and requirements; work out an execution plan; design; create a new repo; start sessions and assign or schedule tasks to them; sum up where things are. Its last line: you can also talk to each session directly |
 | A dialogue | design a dialogue (scenario, brief, agents); start it; stop it; collect what it made and sum it up |
 
@@ -98,7 +106,7 @@ The core's commands work for every project: `agentop project list`, `agentop pro
 
 ### 7.1 Sessions (core)
 
-The `default` project, as Sessions is today, without Started elsewhere and with Coordinator in Active sessions.
+The `default` project, without Started elsewhere and without a Coordinator. New session starts one (Claude with `--remote-control`); it gets no project header and no `--add-dir`.
 
 ### 7.2 Projects (plugin `projects`)
 

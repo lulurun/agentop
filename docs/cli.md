@@ -31,7 +31,7 @@ Columns: SESSION (`<project>/<name>` for agentop's), TOOL, STATUS, PID, RUNTIME,
 | `ai_title` | AI-generated conversation title |
 | `session_id` | Internal session ID used to resume later |
 | `tmux` | `{session, window, pane}` |
-| `bridge_url` | claude.ai remote-control URL (Claude only) |
+| `bridge_url` | claude.ai remote-control URL (Claude, `default` project only) |
 
 ### 1.2 start
 
@@ -43,7 +43,7 @@ agentop start <session_name> --tool <tool> [--cwd <path>] [--project <name>] [--
 
 - `session_name` — under 32 characters, unique among the project's sessions; the tmux session is named `{session_name}-{random}`, and keeps that name for life
 - `--project` — the project it belongs to (default: the project of the session this runs in, else `default`). A session working outside the project's folder gets the folder as another directory to work in (`--add-dir`, Claude and Codex)
-- `--prompt` — its first prompt, typed in once the tool is up. A session other than the Coordinator gets a first line about its project: its folder, and how to reach the Coordinator
+- `--prompt` — its first prompt, typed in once the tool is up. In a project other than `default`, a session other than the Coordinator gets a first line about its project: its folder, and how to reach the Coordinator
 - `--tool` — `claude`, `codex`, or `antigravity`
 - `--cwd` — working directory (default: home directory)
 

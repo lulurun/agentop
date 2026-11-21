@@ -33,12 +33,11 @@ def test_the_coordinator_is_codex_then_claude_then_any():
 def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     phrase = "The Coordinator owns pursuit of the project's objective"
     project = {"name": "alpha", "folder": "/tmp/alpha", "owner": "projects"}
-    default = {"name": "default", "folder": "/tmp/default", "owner": "core"}
     dialogue = {"name": "debate", "folder": "/tmp/debate", "owner": "dialogue"}
 
     assert phrase not in coordinator.instructions(project)
     assert "COORDINATOR_SKILL.md" in coordinator.instructions(project)
-    assert "COORDINATOR_SKILL.md" not in coordinator.instructions(default)
+    assert "COORDINATOR_SKILL.md" not in coordinator.instructions(dialogue)
     prompt = coordinator.welcome_prompt(project)
     normalized = " ".join(prompt.split())
     assert phrase in normalized
@@ -52,9 +51,7 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     assert "Reset only after the state needed to continue is written down" in normalized
     assert 'agentop send --no-header Coordinator "/clear"' in normalized
     assert phrase in coordinator.resume_prompt(project)
-    assert phrase not in coordinator.welcome_prompt(default)
     assert phrase not in coordinator.welcome_prompt(dialogue)
-    assert coordinator.resume_prompt(default) == ""
     assert coordinator.resume_prompt(dialogue) == ""
     assert phrase not in coordinator.member_header(project, "dev")
 
@@ -95,11 +92,31 @@ def test_a_session_inside_the_project_needs_no_extra_directory(tmp_path, monkeyp
     repo = projects.folder("alpha") / "code" / "app"
     repo.mkdir()
 
-    assert ops._with_folder({}, str(projects.folder("alpha")), "alpha") == {}
-    assert ops._with_folder({}, str(repo), "alpha") == {}
-    assert ops._with_folder({}, str(tmp_path / "outside"), "alpha") == {
+    assert ops._launch_params({}, str(projects.folder("alpha")), "alpha") == {}
+    assert ops._launch_params({}, str(repo), "alpha") == {}
+    assert ops._launch_params({}, str(tmp_path / "outside"), "alpha") == {
         "add_dir": str(projects.folder("alpha"))
     }
+
+
+def test_only_default_sessions_get_remote_control(tmp_path, monkeypatch):
+    from agentop.agentclis.claude import ClaudeAgentCli
+
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    projects.create("alpha", "projects")
+    assert ops._launch_params({}, str(tmp_path / "repo"), projects.DEFAULT) == {"remote_control": True}
+    assert "remote_control" not in ops._launch_params({}, str(tmp_path / "repo"), "alpha")
+    claude = ClaudeAgentCli()
+    assert "--remote-control" not in claude.launch_cmd and "--remote-control" not in claude.get_resume_cmd("S")
+    assert claude._build_cmd(claude.launch_cmd, {"remote_control": True}).endswith(" --remote-control")
+    assert "--remote-control" not in claude._build_cmd(claude.launch_cmd, {"add_dir": "/x"})
+
+
+def test_a_default_session_gets_no_project_header(fake_agents, quick_boot, tmp_path):
+    name = ops.start("fakeagent", str(tmp_path), "dev").name
+    ops.first_prompt(name, "build it")
+    wait_for_screen(name, "got: build it")
+    assert "[agentop project" not in CapturePane.scrollback(name)
 
 
 def test_a_session_outside_the_folder_is_told_about_its_project(fake_agents, quick_boot, tmp_path):
@@ -113,19 +130,19 @@ def test_a_session_outside_the_folder_is_told_about_its_project(fake_agents, qui
 
 
 def test_the_coordinator_starts_once_with_its_welcome_and_is_resumed_after(fake_agents, quick_boot):
-    projects.ensure_default()
+    projects.create("alpha", "projects")
     with run_service() as service:
-        first = service.http.post("/projects/default/coordinator")
+        assert service.http.post("/projects/default/coordinator").status_code == 400
+        first = service.http.post("/projects/alpha/coordinator")
         assert first.status_code == 202, first.text
         row = first.json()
-        assert (row["display_name"], row["project"]) == ("Coordinator", "default")
-        assert row["cwd"] == str(projects.folder("default"))
+        assert (row["display_name"], row["project"]) == ("Coordinator", "alpha")
+        assert row["cwd"] == str(projects.folder("alpha"))
         service.wait_for(row["id"], "running")
         wait_for_screen(row["id"], "got: You have just been started as a Coordinator")
-        assert (projects.folder("default") / "AGENTS.md").is_file()
+        assert (projects.folder("alpha") / "AGENTS.md").is_file()
         # Already running: the same one.
-        assert service.http.post("/projects/default/coordinator").json()["id"] == row["id"]
-        assert [p["name"] for p in service.http.get("/projects").json()] == ["default"]
+        assert service.http.post("/projects/alpha/coordinator").json()["id"] == row["id"]
         assert service.http.post("/projects/nope/coordinator").status_code == 404
 
         registry.upsert_session(row["id"], {"agent_session_id": "COORD-1"})
@@ -136,7 +153,7 @@ def test_the_coordinator_starts_once_with_its_welcome_and_is_resumed_after(fake_
             assert time.monotonic() < deadline
             time.sleep(0.1)
 
-        again = service.http.post("/projects/default/coordinator").json()
+        again = service.http.post("/projects/alpha/coordinator").json()
         assert again["id"] != row["id"] and again["display_name"] == "Coordinator"
         assert registry.load()["sessions"][again["id"]]["agent_session_id"] == "COORD-1"
 

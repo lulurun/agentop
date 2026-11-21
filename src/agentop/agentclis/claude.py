@@ -82,7 +82,7 @@ class ClaudeAgentCli(AgentCli):
 
     @property
     def launch_cmd(self) -> str:
-        return "claude --dangerously-skip-permissions --remote-control"
+        return "claude --dangerously-skip-permissions"
 
     def skills_dir(self) -> Path:
         return self.home / ".claude" / "skills"
@@ -130,7 +130,11 @@ class ClaudeAgentCli(AgentCli):
         return f"{self.launch_cmd} --session-id {session_id}"
 
     def get_resume_cmd(self, session_id: str) -> str:
-        return f"claude --resume {session_id} --dangerously-skip-permissions --remote-control"
+        return f"claude --resume {session_id} --dangerously-skip-permissions"
+
+    def _build_cmd(self, base_cmd: str, params: dict) -> str:
+        cmd = super()._build_cmd(base_cmd, params)
+        return f"{cmd} --remote-control" if params.get("remote_control") else cmd
 
     # ------------------------------------------------------------------ transcripts
 
