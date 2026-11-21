@@ -23,7 +23,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 | A2 | Run `agentop open` on the PC | Browser opens the app signed in; the token is gone from the address bar | Not run |
 | A3 | Reload the page after a service update | The new version loads without a hard reload (no stale cache) | Not run |
 | A4 | Collapse and reopen the left and right panels, with buttons and with Ctrl+Shift+1 and Ctrl+Shift+0 | Panels toggle; the terminal refits | Not run |
-| A5 | In the desktop app, with the terminal focused: Ctrl+Shift+2, 3 to 5, 9; Q, W, E, R; A to K; L ([ui.md](ui.md#keys)) | Connection manager, features, Settings; focus moves to each panel and area; tabs switch; the tab closes and its session keeps running | Not run |
+| A5 | In the desktop app, with the terminal focused: Ctrl+Shift+2, 3 to 5, 9; Q, W, E, R; A to K; L ([0_10_ui.md](0_10_ui.md#keys)) | Connection manager, features, Settings; focus moves to each panel and area; tabs switch; the tab closes and its session keeps running | Not run |
 | A6 | With a terminal open, press Ctrl+W or close the tab | The browser asks before leaving | Not run |
 | A7 | Settings: switch theme, renderer, and font size, then reload | Each applies at once and is kept after reload | Not run |
 | A8 | Set the OS to light, then dark, with theme on System | The app follows the OS | Not run |
@@ -112,7 +112,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 ## H. Desktop app
 
-The app runs this computer's service (design 4.2), from its own copy of agentop in `~/.agentop-desktop`. v1.2.0 was run on macOS from a clean `~/.agentop-desktop` on 2026-11-18: setup listed the tools, installed, and Launch opened the app.
+The app runs this computer's service ([design 11](0_00_design.md#11-desktop-app)), from its own copy of agentop in `~/.agentop-desktop`. v1.2.0 was run on macOS from a clean `~/.agentop-desktop` on 2026-11-18: setup listed the tools, installed, and Launch opened the app.
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|

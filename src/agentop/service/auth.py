@@ -3,7 +3,7 @@
 The service token (in service.json) only adds a client. Each client then gets
 its own token, which expires after `client_ttl` unless the client renews it,
 and which can be revoked on its own. Only a hash of a client's token is kept.
-See docs/design.md, decision D7.
+See docs/0_00_design.md, section 6.1 and decision D7.
 
 Browsers cannot set headers on a WebSocket request, and a token in a URL ends
 up in logs. So a client spends its token on a ticket, which is short-lived,

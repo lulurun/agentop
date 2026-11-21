@@ -1,5 +1,5 @@
 /**
- * The middle panel's tabs (docs/ui.md): a left and a right area, each a tab
+ * The middle panel's tabs (docs/0_10_ui.md): a left and a right area, each a tab
  * bar showing one buffer at a time. Pure functions of a Layout, tested on their own.
  */
 

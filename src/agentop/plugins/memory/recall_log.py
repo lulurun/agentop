@@ -1,6 +1,6 @@
 """A record of recall searches and misses, to decide whether keyword search is enough.
 
-See docs/design.md, section 12.11.4: embeddings come in only if keyword
+See docs/0_12_03_memory.md, section 9: embeddings come in only if keyword
 search misses too often, so misses have to be counted. Each search notes what
 was searched for and how many messages and sessions it found. A miss is noted
 on purpose, once a recall has ended: nothing was found after trying variants,

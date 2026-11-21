@@ -1,5 +1,5 @@
 /**
- * The features a service offers (design 10.7): Sessions from the core, whose
+ * The features a service offers (docs/0_10_ui.md): Sessions from the core, whose
  * left panel also lists History, and one per enabled plugin that has a feature. Each has its own
  * layout: an optional left and right panel, and a main area of tabs.
  */

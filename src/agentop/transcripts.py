@@ -4,7 +4,7 @@ Only the files the tool reports for that session can be listed or read, so a
 request can name one of them but never reach anything else on disk.
 
 When the tool has deleted them, a plugin's archive may still have them: the
-Memory plugin offers one (design 12.11). An archive keeps the tool's own
+Memory plugin offers one (docs/0_12_03_memory.md). An archive keeps the tool's own
 layout under a folder per tool, so the same lookup finds them there.
 """
 

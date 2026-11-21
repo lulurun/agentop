@@ -1,4 +1,4 @@
-"""Projects and their Coordinator (docs/project.md)."""
+"""Projects and their Coordinator (docs/0_13_projects.md)."""
 
 import time
 

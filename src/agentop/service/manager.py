@@ -1,4 +1,4 @@
-"""Who runs this service, and so who can stop or restart it. See design 8.2."""
+"""Who runs this service, and so who can stop or restart it. See docs/0_00_design.md, section 7.1."""
 
 from __future__ import annotations
 

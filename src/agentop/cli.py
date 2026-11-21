@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""agentop: the command line. Commands are described in docs/cli.md and by `agentop <command> --help`."""
+"""agentop: the command line. Commands are described in docs/0_08_cli.md and by `agentop <command> --help`."""
 
 import argparse
 import json

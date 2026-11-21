@@ -1,5 +1,5 @@
 /**
- * The layout's keys (docs/ui.md, Keys): Ctrl+Shift and a physical key, so plain
+ * The layout's keys (docs/0_10_ui.md, Keys): Ctrl+Shift and a physical key, so plain
  * keys stay the terminal's (Ctrl+B is the tmux prefix) on any keyboard layout.
  */
 

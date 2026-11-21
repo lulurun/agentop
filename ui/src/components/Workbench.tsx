@@ -276,7 +276,7 @@ export function Workbench({
   feature: FeatureId;
   background: ReactNode;
   renderSession(props: Omit<SessionPaneProps, "client">): ReactNode;
-  /** Kept on the page but out of sight, so its terminals stay connected (design 10.7.3). */
+  /** Kept on the page but out of sight, so its terminals stay connected (docs/0_10_ui.md, Tabs). */
   hidden?: boolean;
 }) {
   const layout = useApp((s) => layoutOf(s, feature));

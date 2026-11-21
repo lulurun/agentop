@@ -3,7 +3,7 @@ import { SLOT_KEYS, type Slot, type UiPlugin } from "./types";
 
 /**
  * The plugin UIs built into this app, by plugin id: every `./{id}/index.tsx`
- * that exports `plugin`. A service never sends UI code (design 12.6).
+ * that exports `plugin`. A service never sends UI code (docs/0_12_00_plugins.md, UI).
  */
 const found = import.meta.glob<{ plugin?: UiPlugin }>("./*/index.tsx", { eager: true });
 

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useApp } from "../store";
 
 /**
- * A section of a left or right panel (docs/ui.md): a title that folds it shut or
+ * A section of a left or right panel (docs/0_10_ui.md): a title that folds it shut or
  * open, remembered in this browser by `id`, which is unique across the app.
  */
 export function Section({

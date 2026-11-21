@@ -1,6 +1,6 @@
 # Backlog
 
-Everything agreed, suggested, or still to check, and not done yet. It replaces the backlog in the old `plan.md` (section 9), the open items of its phases, and the November 2026 outside review (`review-2026-11.md`); both files are in git history. What is built is in [design.md](design.md).
+Everything agreed, suggested, or still to check, and not done yet. It replaces the backlog in the old `plan.md` (section 9), the open items of its phases, and the November 2026 outside review (`review-2026-11.md`); both files are in git history. What is built is described from [0_00_design.md](0_00_design.md).
 
 **Priorities**
 
@@ -40,7 +40,7 @@ Two places signal a PID read from a file, with no check that it is still the pro
 
 ### Service and UI updates in the header
 
-Update can follow `v*` releases (`update_from = "release"`, built 2026-11-18). The desktop app's header offers **Update agentop** (built 2026-11-20); the web app's header has no Update yet, only each service's Status (design 8.5).
+Update can follow `v*` releases (`update_from = "release"`, built 2026-11-18). The desktop app's header offers **Update agentop** (built 2026-11-20); the web app's header has no Update yet, only each service's Status ([design 7.4](0_00_design.md#74-releases-and-the-update-indicator)).
 
 ### Desktop app: say which copy is running
 
@@ -66,7 +66,7 @@ Each *read in code*; each rare, each small.
 | `service/auth.py` | `ClientStore` changes `_clients` on threadpool threads (`require_client` is sync) without a lock: "dictionary changed size" for one request | A lock around `_clients` |
 | `service/store.py:368` | `at_limit()` is checked outside the lock, so two starts at once can go over `max_active_sessions` | Check and record under one lock |
 | `agentclis/base.py:159` | `--model` goes into the shell command unquoted. Harmless today (only code sets it), injection if it ever came from a scenario or brief | `shlex.quote` |
-| `plugins/dialogue/model.py:82` | `meta.json` is written with `write_text` by the runner and the service; the workspace can read half a file | `jsonfile.write_json_atomic` |
+| `plugins/dialogue/model.py:82` | `meta.json` is written with `write_text` by the runner and the service; the Dialogues feature can read half a file | `jsonfile.write_json_atomic` |
 | `plugins/dialogue/model.py:144` | `DialogueMeta.load` falls back to the glob `*{id}`; a short id could match another dialogue | Require exactly one match |
 | `history.past_sessions` | `GET /history` writes to the registry (agent IDs it resolves), a side effect in a GET | Move the write into the history scan |
 | `ui/src/store.ts` | `act`, `loadHistory` and `resumeHistory` aren't tied to a connect attempt: a late reply can land on another service after a switch | Capture the connection id before the await; drop the result if it changed |
@@ -78,11 +78,11 @@ Each *read in code*; each rare, each small.
 
 *Read in code.* `register` and event handlers run under `wait_for(to_thread(...))`; a timeout leaves the thread running and holding a worker. `api.task` coroutines and async plugin routes run on the event loop, so a blocking call there stalls the whole service, though the `service/plugins.py` docstring says nothing a plugin does can block the loop for long. Re-import clears `sys.modules`, while a timed-out `register` thread keeps running against the old module.
 
-- Fix: call it "fault isolation" in the docstring and design 12, or run plugin tasks off the loop.
+- Fix: call it "fault isolation" in the docstring and [0_12_00_plugins.md](0_12_00_plugins.md#what-registerapi-gets), or run plugin tasks off the loop.
 
 ### Features and Memory navigation
 
-From design 10.7.6 and 12.11.3:
+From [0_10_ui.md](0_10_ui.md) and [0_12_03_memory.md 6](0_12_03_memory.md#6-the-memory-feature):
 
 - The feature in the URL (`/sessions`, `/dialogues/<id>`), for the back button, deep links and reloading in place.
 - A badge on a feature in the feature nav when something there needs attention.
@@ -92,41 +92,37 @@ From design 10.7.6 and 12.11.3:
 
 ### Sign-in and security
 
-- **Single-use pairing codes**, so the service token never leaves the machine. `agentop service pair` prints a short code (`K7QF-2M9X`), typed into the sign-in form instead of the token; once, 10 minutes. A setting turns the service token off for `POST /api/v2/auth/clients` (it can't be "loopback only": behind a proxy every request is from `127.0.0.1`). The CLI and desktop app would sign in by writing a code into `~/.agentop/state/`. Downside: every new browser, and every sign-in after 12 hours unused, needs a code from a shell. Email code (design 7.4) already covers most of the phone case; approving a device from one already signed in would be another login plugin.
-- **Remote control as a per-session option.** Every Claude session in `default` starts and resumes with `--remote-control` (and skip-permissions), an access path outside agentop's tokens (design 7.3). Keep it on by default, but offer it at start.
+- **Single-use pairing codes**, so the service token never leaves the machine. `agentop service pair` prints a short code (`K7QF-2M9X`), typed into the sign-in form instead of the token; once, 10 minutes. A setting turns the service token off for `POST /api/v2/auth/clients` (it can't be "loopback only": behind a proxy every request is from `127.0.0.1`). The CLI and desktop app would sign in by writing a code into `~/.agentop/state/`. Downside: every new browser, and every sign-in after 12 hours unused, needs a code from a shell. Email code ([0_12_00_plugins.md](0_12_00_plugins.md#email-code-email-code)) already covers most of the phone case; approving a device from one already signed in would be another login plugin.
+- **Remote control as a per-session option.** Every Claude session in `default` starts and resumes with `--remote-control` (and skip-permissions), an access path outside agentop's tokens ([design 6.3](0_00_design.md#63-remote-access)). Keep it on by default, but offer it at start.
 - **Rotate the service token by itself.** Today only `agentop service token --rotate` does.
 - **Close the plain HTTP path** to the devhost, `http://proxy-host:7700/agentop/` (the ops repo's nginx). It has no authentication and carries the token in the clear; the HTTPS address replaces it.
 
 ### Features
 
-- **Projects** in the core, replacing the Project groups idea: every session belongs to a project (a group of sessions and a shared folder, with a Coordinator session); projects are kept apart, each with its own Active sessions and History. Sessions becomes the `default` project, the `projects` plugin adds the owner's own projects, and each dialogue becomes a project. Started elsewhere and the session `owner` field go. Spec in [project.md](project.md).
-- A merged session list across services, and a window per service (client-only; a non-goal in design 2.2 for now).
+- **Projects**: the open questions in [0_13_projects.md 10](0_13_projects.md#10-open-questions): which files a Coordinator keeps by default, and whether it hears when one of its sessions goes idle.
+- A merged session list across services, and a window per service (client-only; a non-goal in [design 2.2](0_00_design.md#22-non-goals) for now).
 - An offline app shell for the web app, so it survives its service stopping.
 - Colour in the File viewer's diff view.
-- Memory: once recall misses have been noted for a while, read `plugins/memory/recall.jsonl` and decide on hybrid search with embeddings (design 12.11.4).
+- Memory: once recall misses have been noted for a while, read `plugins/memory/recall.jsonl` and decide on hybrid search with embeddings ([0_12_03_memory.md 9](0_12_03_memory.md#9-how-other-agents-remember-and-whether-keyword-search-is-enough)).
 
 ### Platforms and install
 
 - Signing and notarizing the macOS app (removes the Open Anyway step).
 - A Windows desktop app, running the service in WSL.
-- macOS hosts without the desktop app: `LaunchdManager` (design 8.2).
+- macOS hosts without the desktop app: `LaunchdManager` ([design 7.1](0_00_design.md#71-servicemanager)).
 - Non-git install kinds for `agentop service update`.
 - Not decided: whether the desktop setup should also ask each agent tool to run `agentop --version` (slow, and costs a model call).
 
-### Docs
-
-- `design.md` reads partly as a dated journal (about 1190 lines). Move the history into a changelog and keep the design current.
-
 ## To check by hand
 
-Not code: runs that need a real PC, display, or second machine. The cases are in [manual-tests.md](manual-tests.md).
+Not code: runs that need a real PC, display, or second machine. The cases are in [8_manual-tests.md](8_manual-tests.md).
 
 | What | Decides | Cases |
 |------|---------|-------|
 | Terminal in the desktop webview (was spike S1): WebGL vs DOM vs ghostty-web, a real Claude session, a `yes` flood, resize during output, Japanese IME, CJK width, emoji; Chromium as the baseline | The Linux desktop renderer default, and whether xterm.js stays | C2–C6, H8 |
 | Desktop networking (S2): from the `http://127.0.0.1` page, reach loopback, plain `http://` and `https://` on another machine | Whether WebKitGTK needs the plugin fallback | H5 |
-| tmux mouse and clipboard (S3): wheel scrollback, mouse to agents, OSC 52, Shift+drag | Design D3 (`mouse on`) | D1–D4 |
-| Browser reachability (S4), in Chrome and Firefox, the table in design 4.5 | The guidance in Connect to a service | B5–B11 |
+| tmux mouse and clipboard (S3): wheel scrollback, mouse to agents, OSC 52, Shift+drag | [Design D3](0_00_design.md#15-decisions) (`mouse on`) | D1–D4 |
+| Browser reachability (S4), in Chrome and Firefox, the table in [design 3.2](0_00_design.md#32-connecting-to-services) | The guidance in Connect to a service | B5–B11 |
 | Desktop updater end to end: an installed app finds and installs a newer release, sessions survive | That self-update works | H10–H12 |
 | The updater signing key (`~/.tauri/agentop-desktop.key`) is backed up somewhere besides the machine that made it. The repository secret is set | Losing it means reinstalling every app by hand | — |
 | Update on the real devhost install from the panel, and a commit that fails to start | That rollback works in production | G4, G5 |
@@ -137,6 +133,5 @@ Kept so they aren't proposed again.
 
 - **`agentop send` idle check and delivery confirmation** (review 1.2): on hold since 2026-11-18; the owner doesn't see sending into a busy session as a problem. A visible record of handoffs, built from the `[agentop send from …]` prompts Memory already indexes, was part of the same suggestion.
 - **Agent hooks or transcript tailing for busy/idle state** (2026-11-19): state stays on tmux signals; agent internals drift between versions.
-- **The handoff plugin** (queue, idle-only delivery, audit log, Handoffs view, cross-host handoff): dropped 2026-11-13 (design 12.10.3).
-- **Walking the old dashboard's parity table**: the old dashboard was removed on 2026-11-14 without it.
-- Deliberate, with their residual risk in design 7: open CORS with no `Origin` or `Host` allowlist, the global service-token lockout, `/fs/dirs` browsing the whole filesystem, skip-permissions agents.
+- **The handoff plugin** (queue, idle-only delivery, audit log, Handoffs view, cross-host handoff): dropped 2026-11-13 ([design D9](0_00_design.md#15-decisions)).
+- Deliberate, with their residual risk in [design 6](0_00_design.md#6-security): open CORS with no `Origin` or `Host` allowlist, the global service-token lockout, `/fs/dirs` browsing the whole filesystem, skip-permissions agents.

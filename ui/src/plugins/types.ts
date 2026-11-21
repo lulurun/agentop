@@ -65,7 +65,7 @@ export interface PluginView {
 }
 
 /**
- * A plugin's feature (docs/ui.md): a button in the feature nav, its left and
+ * A plugin's feature (docs/0_10_ui.md): a button in the feature nav, its left and
  * right panels (made of `Section`s), its background, and the views its tabs show.
  */
 export interface PluginFeature {

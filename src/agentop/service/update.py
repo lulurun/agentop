@@ -1,4 +1,4 @@
-"""Starts update.sh and reports on it. See design 8.4.
+"""Starts update.sh and reports on it. See docs/0_00_design.md, section 7.3.
 
 An update restarts the service, so it has to outlive the service. Under systemd
 it runs in a transient unit of its own, since stopping the service's unit could

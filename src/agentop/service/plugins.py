@@ -1,4 +1,4 @@
-"""The plugin loader. See docs/design.md, section 12.
+"""The plugin loader. See docs/0_12_00_plugins.md.
 
 A plugin is a folder under `agentop/plugins/` with a `plugin.toml` manifest and
 an `__init__.py` that defines `register(api)`. The loader finds them at service

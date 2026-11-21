@@ -1,18 +1,31 @@
-# Dialogue System
+# Dialogues plugin
 
 ## 1 Overview
 
-The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dialogue/`) orchestrates two agent CLI processes collaborating on a shared task. The orchestrator relays messages between them, enforcing a structured protocol so it can extract and forward only the agent's intended output.
+The Dialogues plugin (`src/agentop/plugins/dialogue/`, UI in `ui/src/plugins/dialogue/`) orchestrates two agent CLI processes collaborating on a shared task. The orchestrator relays messages between them, enforcing a structured protocol so it can extract and forward only the agent's intended output. How plugins work in general is in [0_12_00_plugins.md](0_12_00_plugins.md); the modules are listed in [0_03_architecture.md 5](0_03_architecture.md#5-dialogues-a-plugin).
 
-Dialogue data is persisted to `~/.agentop/projects/<scenario>_<brief>_<id>/`.
+Each dialogue is a project, `~/.agentop/projects/<scenario>_<brief>_<id>/`, owned by `dialogue` (older ones in `plugins/dialogue/dialogues/` are moved in on first use), with a Coordinator to design, start, stop and sum it up, started with the dialogue. Its agents are `readonly` and not `counted`. When the dialogue ends, the Coordinator is sent a note to read the turns and deliverables and write `summary.md` ([0_13_projects.md 7.3](0_13_projects.md#73-dialogues-plugin-dialogue)).
 
-Each dialogue is a project (`~/.agentop/projects/<scenario>_<brief>_<id>/`, owned by `dialogue`; older ones in `plugins/dialogue/dialogues/` are moved in on first use), with a Coordinator to design, start, stop and sum it up, started with the dialogue. Its agents are read-only and don't count towards the session limit. When the dialogue ends, the Coordinator is sent a note to read the turns and deliverables and write `summary.md` ([project.md](project.md#73-dialogues-plugin-dialogue)).
+The app has a Dialogues feature (section 8): a wizard starts one, and each one's two agents are shown side by side, live while it runs and as transcripts once it ends.
 
-The app has a Dialogues feature (section 8): a wizard starts one, and each one's two agents are shown side by side, live while it runs and as transcripts once it ends. Turning the plugin off in Status → Plugins (Status on the service switcher) stops any running dialogue (after a warning), keeps every saved one, and hides the view, the labels, and the `/api/v2/plugins/dialogue/` routes; `agentop dialogue` then says the plugin is off. The dialogue's agent sessions stay as ordinary sessions.
+### 1.1 A plugin, not core
+
+Dialogues are one way of using agents, not what an agent is, so they are a plugin ([design 12.1](0_00_design.md#121-core-and-plugins)). They were also the test of the plugin system: if the loader and its API can carry dialogues, they can carry the features after it.
+
+- **What the plugin holds:** the model, orchestrator, parser, status and scenarios, the routes under `/api/v2/plugins/dialogue/`, the `agentop dialogue` commands (through `register_cli`), the Dialogues feature, and the "dialogue" badge on session rows.
+- **What the core keeps:** nothing dialogue-specific, only the generic pieces dialogues need: starting a session in a project under a given short name, with the `readonly` and `counted` flags; `Actor` send and receive; stop. A dialogue's agents (`dia{id}a`, `dia{id}b`) are ordinary managed sessions in the dialogue's project.
+- **Done when**, and still true: the core test suites pass with both dialogue folders deleted.
+
+### 1.2 When the plugin is off, removed, or fails
+
+- The Dialogues feature, the session badges, and the `/plugins/dialogue/` routes disappear. `agentop dialogue` says the plugin is off.
+- A running dialogue is stopped as if its Stop button were pressed: the relay ends and the dialogue is saved as stopped. Status warns before turning the plugin off while any dialogue is running.
+- Saved dialogues are never deleted, and turning the plugin on again shows them all.
+- Sessions, terminals, history, and service control are unaffected.
 
 ## 2 How it works
 
-1. The app's New dialogue wizard or `agentop dialogue start` makes the dialogue's folder and brief, then launches two agent tmux sessions and a background orchestrator process. The agents are the plugin's own sessions (`owner: "dialogue"`): the session list leaves them out, their terminals are read-only, and their windows are kept at 80×40 whoever watches them, since the orchestrator reads replies off the screen.
+1. The app's New dialogue wizard or `agentop dialogue start` makes the dialogue's folder and brief, then launches two agent tmux sessions, its Coordinator, and a background orchestrator process. The agents are sessions in the dialogue's project, `readonly` and not `counted`: Sessions doesn't list them, their terminals are read-only, and their windows are kept at 80×40 whoever watches them, since the orchestrator reads replies off the screen.
 2. The orchestrator sends turn prompts to agent A, waits for a response, extracts the message body, and forwards it to agent B — then alternates.
 3. Agents signal completion by setting `status:complete` in their delimiter block.
 4. The orchestrator stops when it sees a complete signal, reaches `max_turns`, or is manually stopped.
@@ -200,12 +213,12 @@ This is handled transparently: the `Actor` types with its tool's `AgentCli.send_
 
 ## 8 In the app
 
-The Dialogues feature (`ui/src/plugins/dialogue/`), laid out as [ui.md](ui.md) says:
+The Dialogues feature (`ui/src/plugins/dialogue/`), laid out as [0_10_ui.md](0_10_ui.md) says:
 
 - **New dialogue** (in the left panel's Create new dialogue section, and on the background shown while no tab is open) opens the wizard in a tab: pick a scenario, fill in its brief's fields, pick each agent's tool and the maximum turns. Starting returns at once; the agents boot in the background, and the dialogue shows as Starting until its orchestrator runs.
 - **The left panel** has two sections, In progress and Finished. Picking a dialogue shows agent A in the left area and agent B in the right one, replacing the dialogue shown before.
 - **An agent's tab** shows its tmux session live and read-only while the dialogue runs (the service attaches with `tmux attach -f read-only,ignore-size` and drops anything typed, and the terminal scales its font to show the whole window). Once the dialogue has ended it shows the agent's messages from `turns.jsonl`, drawn as Markdown.
-- **The right panel** shows the dialogue's status, scenario, agents, times and folder; its stats (turns, messages and words per agent, how long it took, what ended it, format retries); its artifacts (the files under `deliverables/`) and its brief and progress, each opening in a tab; and Stop and Remove. Remove asks first, then stops the agents if they run and deletes the folder.
+- **The right panel** shows the dialogue's status, scenario, agents, times and folder; its stats (turns, messages and words per agent, how long it took, what ended it, format retries); its artifacts (the files under `deliverables/`) and its brief and progress, each opening in a tab; Open the Coordinator; and Stop and Remove. Remove asks first, then stops the agents if they run and deletes the folder.
 
 Routes, under `/api/v2/plugins/dialogue/`:
 
@@ -217,4 +230,5 @@ Routes, under `/api/v2/plugins/dialogue/`:
 | `GET` | `/dialogues/{id}/turns` | The messages, in order |
 | `GET` | `/dialogues/{id}/files`, `/dialogues/{id}/file?path=` | `brief.md`, `progress.md` and `deliverables/`; one of those files' text (first 1 MB). Nothing else in the folder can be read |
 | `POST` | `/dialogues/{id}/stop` | Stop it and close both agents |
+| `POST` | `/dialogues/{id}/coordinator` | Its Coordinator: running, or resumed or started now (Open the Coordinator in the right panel) |
 | `DELETE` | `/dialogues/{id}` | Remove it and everything in its folder |

@@ -7,7 +7,7 @@
 # signed with the updater key (secret TAURI_SIGNING_PRIVATE_KEY, and
 # TAURI_SIGNING_PRIVATE_KEY_PASSWORD if it has one). Installed apps read latest.json
 # from releases/latest, which is always this app: it is the only release. See
-# docs/design.md sections 4.2 and 8.5.
+# docs/0_00_design.md sections 7.4 and 11.
 name: desktop
 
 on:
@@ -68,7 +68,7 @@ jobs:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
           releaseName: "agentop-desktop ${{ github.ref_name }}"
-          releaseBody: "agentop-desktop. Install it from here; see docs/setup.md#desktop-app. Releases until the next major version update it in place."
+          releaseBody: "agentop-desktop. Install it from here; see docs/1_setup.md#desktop-app. Releases until the next major version update it in place."
           releaseDraft: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}

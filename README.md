@@ -37,12 +37,13 @@ My own first version of this was manual: one agent per tmux session, named after
 
 ## Core concepts
 
-- **Session.** One agent CLI running in one tmux session; its id is the tmux session name. A session agentop started is **managed**; one agentop finds already running is **external**, listed and attachable if it is in tmux. Managed sessions can be stopped, resumed, and sent text.
+- **Session.** One agent CLI running in one tmux session; its id is the tmux session name. A session agentop started is **managed**; one agentop finds already running is **external**, listed by `agentop list` but not in the app. Managed sessions can be stopped, resumed, and sent text.
 - **Ownership.** tmux owns the agents; agentop attaches to them.
 - **Service.** `agentop serve` runs on each machine that runs agents. It keeps the session list, bridges terminals over WebSocket, and serves the `/api/v2` API and the app at `/`. The service token signs a browser or app in; each one then gets its own token, which by default runs out after 12 hours unused and after 30 days in all; the app renews it while in use.
 - **App.** One UI, served by the service, in a browser or in the Tauri desktop app, which runs this computer's service while it is open. Sessions sit on the left, the agent's live terminal in the middle, details (token usage, changed files) on the right. The terminal is a real `tmux attach`, so everything the agent's TUI does works as it does in your own terminal. The layout adapts to a phone-width screen.
 - **Connections.** The app can add any agentop service it can reach, on this machine or another, and switch between them. It shows the connected service's status and can restart or update it.
-- **History.** Past conversations of each tool, in a workspace of their own: searched, filtered by tool, sorted, and resumed as new sessions.
+- **Project.** Every managed session belongs to a project, a group of sessions with a shared folder. Sessions is the `default` project, which you run yourself; any other project has a Coordinator session you talk to, which starts and routes work to the others.
+- **History.** Past sessions agentop started, in Sessions' left panel: filtered by keyword and tool, and resumed under their own name.
 - **CLI.** The `agentop` command does the same from a shell: start, stop, list, send, history, and service control.
 
 ## Plugins
@@ -51,16 +52,16 @@ Everything above is the **core**. It is always loaded and cannot be switched off
 
 - Each plugin is one folder under `src/agentop/plugins/`, with its UI under `ui/src/plugins/`, and a `plugin.toml` manifest.
 - A core loader finds them at service start and loads each one on its own. A plugin gets a narrow API: its own routes under `/api/v2/plugins/<id>/`, core events, supervised background tasks, a hook for being turned off, its own data folder, and `agentop` commands of its own.
-- Plugin UI goes into fixed slots in the app, such as a badge on a session row, a workspace in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
+- Plugin UI goes into fixed slots in the app, such as a badge on a session row, a feature in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
 - **A plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
 
-The plugins that ship with agentop are Dialogues, Waiting for input, the File viewer, Memory, Email code, and the Input bar. What each one does is in [docs/plugins.md](docs/plugins.md), and how they work in [design section 12](docs/design.md#12-plugins).
+The plugins that ship with agentop are Projects, Dialogues, Waiting for input, the File viewer, Memory, Email code, and the Input bar. How they work and what each one does is in [docs/0_12_00_plugins.md](docs/0_12_00_plugins.md).
 
 ## Requirements
 
 **To run**
 
-- Service and desktop app: Linux or macOS, with tmux and Python 3.13+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service (with `KillMode=process`, so stopping it leaves tmux running: [docs/setup.md](docs/setup.md)).
+- Service and desktop app: Linux or macOS, with tmux and Python 3.13+. On a computer you sign in to with a desktop (Linux or macOS), the desktop app starts `agentop serve` when it opens and stops it when it closes, with no system service to set up; your sessions keep running in tmux either way. On a host without a desktop, such as a dev server, run `agentop serve` yourself or under a system service (with `KillMode=process`, so stopping it leaves tmux running: [docs/1_setup.md](docs/1_setup.md)).
 - Web UI: any browser that can reach the service, a phone's included.
 - At least one agent CLI, signed in: `claude`, `codex`, or `agy`.
 
@@ -68,7 +69,7 @@ The plugins that ship with agentop are Dialogues, Waiting for input, the File vi
 
 - Service: Python 3.13+
 - UI: Node 20.19+ or 22.12+
-- Desktop app: Rust, plus the WebKitGTK 4.1 development files on Linux ([docs/setup.md](docs/setup.md))
+- Desktop app: Rust, plus the WebKitGTK 4.1 development files on Linux ([docs/1_setup.md](docs/1_setup.md))
 
 ## Quick Start
 
@@ -93,7 +94,7 @@ agentop serve                        # http://127.0.0.1:9775
 agentop open                         # opens the app, signed in
 ```
 
-That's all agentop needs. Running it as a system service or behind a proxy is optional, and up to you. Connecting to other machines, updating, and HTTPS are in [docs/setup.md](docs/setup.md).
+That's all agentop needs. Running it as a system service or behind a proxy is optional, and up to you. Connecting to other machines, updating, and HTTPS are in [docs/1_setup.md](docs/1_setup.md).
 
 ## Using agentop on another machine
 
@@ -114,7 +115,7 @@ ssh -N -L 9776:127.0.0.1:9775 build-box
 
 Then, in the app on your machine, open Connect to a service from the service menu and paste the connect-info string with the port changed to the tunnel's: `http://127.0.0.1:9776#token=…`. Use a port other than 9775 if your own machine runs a service too. Add `-f` to run the tunnel in the background, or put a `LocalForward 9776 127.0.0.1:9775` line under `Host build-box` in `~/.ssh/config`.
 
-To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` in a browser. An HTTPS proxy or TLS in the service are the other options, in [docs/setup.md](docs/setup.md#exposing-a-service).
+To open the remote app directly instead, use `http://127.0.0.1:9776/#token=…` in a browser. An HTTPS proxy or TLS in the service are the other options, in [docs/1_setup.md](docs/1_setup.md#exposing-a-service).
 
 ## Secure setup
 
@@ -151,14 +152,15 @@ For a service reachable from the internet, such as one behind an HTTPS proxy:
 
 ## Documentation
 
-- [Setup](docs/setup.md): running the service and the app
-- [CLI reference](docs/cli.md): every command and option
-- [Architecture](docs/architecture.md): code structure and modules
-- [Design](docs/design.md): the full design, including the plugin system (section 12)
-- [Plugins](docs/plugins.md): what each plugin does
-- [Dialogues](docs/dialogue.md): the Dialogues plugin in detail
-- [Manual tests](docs/manual-tests.md): checks that need a real PC
-- [Backlog](docs/backlog.md): everything not done yet, by priority
+- [Design](docs/0_00_design.md): start here; every part of agentop, with links to the docs below
+- [Setup](docs/1_setup.md): running the service and the app
+- [CLI reference](docs/0_08_cli.md): every command and option
+- [Architecture](docs/0_03_architecture.md): code structure and modules
+- [Projects](docs/0_13_projects.md): groups of sessions with a shared folder and a Coordinator
+- [Plugins](docs/0_12_00_plugins.md): how plugins work, and what each one does; the larger ones have their own `0_12_<number>_<id>.md`
+- [UI](docs/0_10_ui.md): the app's layout, where tabs open, and its keys
+- [Manual tests](docs/8_manual-tests.md): checks that need a real PC
+- [Backlog](docs/9_backlog.md): everything not done yet, by priority
 
 ## License
 

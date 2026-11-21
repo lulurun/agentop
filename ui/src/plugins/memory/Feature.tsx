@@ -1,5 +1,5 @@
 /**
- * The Memory feature (design 12.11.3, phase 6): search every past conversation on the
+ * The Memory feature (docs/0_12_03_memory.md, section 6): search every past conversation on the
  * service, read the one around a hit, and see its session's summary. A
  * search that didn't find what was wanted can be noted as a miss.
  */
@@ -160,7 +160,7 @@ function MessageRow({ hit, terms, current }: { hit: MessageHit; terms: string[];
   );
 }
 
-/** Note that the search didn't find what was wanted, for deciding on embeddings (design 12.11.4). */
+/** Note that the search didn't find what was wanted, for deciding on embeddings (docs/0_12_03_memory.md, section 9). */
 function MissForm({ plugin }: { plugin: PluginContext }) {
   const query = useMemory((s) => s.terms.join(" "));
   const [open, setOpen] = useState(false);

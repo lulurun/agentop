@@ -1,6 +1,6 @@
 """The Coordinator: the session working in a project's folder that the owner talks to. `default` has none.
 
-See docs/project.md, section 4.
+See docs/0_13_projects.md, section 4.
 """
 
 from __future__ import annotations

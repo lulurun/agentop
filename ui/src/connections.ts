@@ -2,7 +2,7 @@ import { addClient, ApiError, fetchHealth, NetworkError, ServiceClient, type Cli
 
 /**
  * The /api/v2 revision this app was built for. A service only ever adds to /api/v2, so the app
- * works with any revision; a higher one means this app is out of date. See docs/design.md, section 4.5.
+ * works with any revision; a higher one means this app is out of date. See docs/0_00_design.md, section 3.2.
  */
 export const API_VERSION = 1;
 
@@ -165,7 +165,7 @@ export interface ReachabilityNote {
   message: string;
 }
 
-/** What browser rules will do to a connection from this page. See docs/design.md, section 4.5. */
+/** What browser rules will do to a connection from this page. See docs/0_00_design.md, section 3.2. */
 export function reachabilityNote(pageUrl: string, target: string): ReachabilityNote | null {
   const page = new URL(pageUrl);
   if (!/^https?:$/.test(page.protocol)) return null; // the desktop app has no such rules

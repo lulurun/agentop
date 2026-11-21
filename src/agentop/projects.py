@@ -1,4 +1,4 @@
-"""Projects: a group of sessions and the folder they share, ~/.agentop/projects/<name>/. See docs/project.md.
+"""Projects: a group of sessions and the folder they share, ~/.agentop/projects/<name>/. See docs/0_13_projects.md.
 
 agentop's own record of a project is in its `.project/` folder: project.json here, sessions.json in registry.
 """

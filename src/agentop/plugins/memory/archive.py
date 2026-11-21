@@ -1,4 +1,4 @@
-"""Agentop's own copy of the agent tools' transcripts. See docs/design.md, section 12.11.
+"""Agentop's own copy of the agent tools' transcripts. See docs/0_12_03_memory.md.
 
 A sweep brings the archive up to date with the tools' files. The tools only
 append to a transcript, so a grown file costs only its new bytes. Nothing is

@@ -985,7 +985,7 @@ button.app-outdated:hover { background: var(--line); }
 .memory-note code { font-family: var(--code); font-size: 12px; }
 .memory-errors { margin: 0 0 6px; padding-left: 18px; color: var(--failed); font-size: 12px; }
 
-/* Features (design 10.7) */
+/* Features (docs/0_10_ui.md) */
 .features { display: flex; flex: none; gap: 2px; }
 .features button {
   padding: 4px 10px;
@@ -1165,7 +1165,7 @@ button.app-outdated:hover { background: var(--line); }
 .memory-made { margin: 0 0 8px; color: var(--quiet); font-size: 12px; }
 .memory-conversation .viewer-path { font-family: inherit; font-size: 13px; font-weight: 600; }
 
-/* A left or right panel's sections (docs/ui.md) */
+/* A left or right panel's sections (docs/0_10_ui.md) */
 .sidebar-scroll { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 12px; }
 .sidebar-scroll .session-list { flex: none; overflow: visible; }
 .section-title { margin: 10px 0 2px; padding: 0 8px; color: var(--quiet); font-size: 13px; font-weight: 500; }

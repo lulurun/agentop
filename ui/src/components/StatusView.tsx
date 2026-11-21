@@ -78,7 +78,7 @@ function updateSummary(info: UpdateInfo | null): string {
 }
 
 /**
- * The selected service's Status, in a tab (design 10.7.4): what it is, Stop,
+ * The selected service's Status, in a tab (docs/0_10_ui.md): what it is, Stop,
  * Restart and Update, the clients signed in to it, and its plugins.
  */
 export function StatusView({ onClose }: { onClose(): void }) {

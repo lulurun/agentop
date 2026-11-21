@@ -1,6 +1,6 @@
 """The messages table: what the user typed and what the agent wrote back, from the archive.
 
-See docs/design.md, section 12.11. What counts as a message is the
+See docs/0_12_03_memory.md, section 3. What counts as a message is the
 tool's call (`AgentCli.conversation_reader`), the same as the File viewer's.
 
 The table is derived. Deleting messages.sqlite and indexing again rebuilds it

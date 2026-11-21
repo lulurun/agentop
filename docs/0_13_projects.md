@@ -1,6 +1,6 @@
 # Projects
 
-Status: designed 2026-11-19, being built. Built: projects and their session lists, `readonly`/`counted`, `agentop send` by project, Resume keeping the name, dialogues as projects, Sessions showing `default` only, the Coordinator (`POST /api/v2/projects/{name}/coordinator`; `default` has none, 2026-11-21). the Projects plugin (feature, `/api/v2/plugins/projects/`, `agentop project create | remove`). A dialogue's Coordinator: started with the dialogue (or, for an older one, by Open the Coordinator in its right panel), told when it ends. It replaces the "Project groups" idea in the backlog.
+Status: built. What is still open is in section 10. Where projects sit in agentop is in [0_00_design.md section 13](0_00_design.md#13-projects).
 
 ## 1 What it is
 
@@ -8,7 +8,7 @@ A **project** is a group of sessions and a folder they share, the **project fold
 
 Each project other than `default` has a **Coordinator**: a session working in the project folder, the one the owner talks to. It sums up what the owner wants and routes the work to the project's other sessions, starting them when it decides one is needed or when asked. Talking to the Coordinator is the recommended way, not the only one: every session can be opened and used directly, unless its plugin made it read-only.
 
-In `default` the owner is the Coordinator: Sessions keeps the owner's manual way of working, for on-demand, occasional, unsure development or investigation, while a project is for work with a clear high-level goal ([design 12.1](design.md#121-core-and-plugins)). Its sessions are still kept apart from other projects', but nothing routes between them: the owner starts each one with New session in Sessions, which can start with no session at all.
+In `default` the owner is the Coordinator: Sessions keeps the owner's manual way of working, for on-demand, occasional, unsure development or investigation, while a project is for work with a clear high-level goal ([design 12.1](0_00_design.md#121-core-and-plugins)). Its sessions are still kept apart from other projects', but nothing routes between them: the owner starts each one with New session in Sessions, which can start with no session at all.
 
 | | `default` | Any other project |
 |---|---|---|
@@ -94,15 +94,16 @@ A session other than the Coordinator usually works in a repository under `<proje
 
 ## 6 For plugins
 
-Python, through the plugin API:
+Python, through the plugin API ([0_12_00_plugins.md](0_12_00_plugins.md#what-registerapi-gets)):
 
-- `api.projects.create(name, welcome, instructions)`, `list()`, `get(name)`, `remove(name, delete_folder)`: the plugin's own projects only.
-- `api.projects.start(project, name, tool, cwd, prompt, readonly=False, counted=True)`, and stop and resume.
-- Events when a project's sessions change, as for sessions today.
+- `api.create_project(name, welcome, instructions)`: make a project the plugin owns, write its Coordinator's instructions, and start the Coordinator.
+- `api.remove_project(name, delete_folder)`: stop its sessions and forget it; only the plugin's own.
+- `api.start_coordinator(name)`: the project's Coordinator, running, or resumed or started now.
+- Other sessions are started with the core's `ops.start(project=…, readonly=…, counted=…)`, and the plugin hears about them through the session events (`api.on`).
 
 The UI: the core's Active sessions and History sections, and its session tabs, take a project, so a plugin's feature reuses them as they are. The core's feature for `default` is Sessions.
 
-The core's commands work for every project: `agentop project list`, `agentop project show <name>`, and `agentop start --project <name> --name dev --cwd ~/.agentop/projects/<name>/code/<repo> [--tool claude] [--prompt "…"]` (from inside a session, `--project` defaults to its own). Creating and removing are the owning plugin's: `agentop project create | remove` (the `projects` plugin adds them to the core's `project` group) and `agentop dialogue start | remove`.
+The core's commands work for every project: `agentop project list`, `agentop project show <name>`, and `agentop start --project <name> --name dev --cwd ~/.agentop/projects/<name>/code/<repo> [--tool claude] [--prompt "…"]` (from inside a session, `--project` defaults to its own). Creating and removing are the owning plugin's: `agentop project create | remove`, which act on the Projects plugin's projects and need it on, and `agentop dialogue start | remove`.
 
 ## 7 Features
 

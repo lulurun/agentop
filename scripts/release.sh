@@ -2,7 +2,7 @@
 # Release agentop as vX.Y.Z: one tag for the code and the desktop app. Sets the
 # version in pyproject.toml, tauri.conf.json and Cargo.toml, commits, tags, and pushes.
 # For X (vX.0.0) the "desktop" workflow then builds and publishes agentop-desktop; any
-# other release is the tag alone. See docs/design.md 8.5.
+# other release is the tag alone. See docs/0_00_design.md 7.4.
 #
 # X is for the desktop app's wrapper (a download), Y for the UI (open pages reload), Z
 # for the service only (a restart). With no argument, the part is picked from what

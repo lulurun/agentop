@@ -27,7 +27,7 @@ The service binds `127.0.0.1:9775`. An SSH tunnel forwards it to `proxy-host:777
 and nginx there serves it at `http://proxy-host:7700/agentop/`.
 
 The proxy has no authentication, and plain HTTP carries the service token where a
-network observer could read it. This is accepted for now (see [backlog.md](backlog.md#sign-in-and-security)). The app
+network observer could read it. This is accepted for now (see [9_backlog.md](9_backlog.md#sign-in-and-security)). The app
 still opens there, but Connect to a service refuses that address: add the HTTPS one below.
 
 A separate ops repo owns this setup: the `agentop-api` systemd unit that runs `agentop serve`
@@ -189,7 +189,7 @@ Linux with no secret service running, it keeps them in `~/.agentop/state/desktop
 |--------|------|
 | `scripts/build-ui.sh [--clean]` | Builds the web UI into `src/agentop/service/webdist/`, which the service serves. `--clean` reinstalls `node_modules` |
 | `scripts/build-app.sh [--appimage]` | `build-ui.sh`, then the desktop app |
-| `scripts/release.sh [x\|y\|z\|X.Y.Z]` | Releases agentop as the next `vX.Y.Z`: X when `desktop/` changed since the last tag, else Y when `ui/` did, else Z (design 8.5), unless told. Sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. For X only (`vX.0.0`), the `desktop` workflow builds, signs, and publishes the release `agentop-desktop vX.0.0`; any other release is just the tag. Installed apps and services find either within the hour |
+| `scripts/release.sh [x\|y\|z\|X.Y.Z]` | Releases agentop as the next `vX.Y.Z`: X when `desktop/` changed since the last tag, else Y when `ui/` did, else Z ([design 7.4](0_00_design.md#74-releases-and-the-update-indicator)), unless told. Sets the version in `pyproject.toml`, `tauri.conf.json` and `Cargo.toml`, commits, tags, and pushes after asking. For X only (`vX.0.0`), the `desktop` workflow builds, signs, and publishes the release `agentop-desktop vX.0.0`; any other release is just the tag. Installed apps and services find either within the hour |
 
 The script runs only on `main`, clean and level with `origin/main`, and builds the UI
 and the app first, so nothing is tagged that doesn't build. The tag is also what
@@ -231,7 +231,7 @@ another machine, in order of preference:
 3. **TLS in the service itself**: set `host`, `tls_cert` and `tls_key` in
    `~/.agentop/config.toml` (or `--host`, `--tls-cert`, `--tls-key`).
 
-Plain HTTP on a non-loopback address is refused (design D6, since 2026-11-14): `agentop
+Plain HTTP on a non-loopback address is refused ([design D6](0_00_design.md#15-decisions)): `agentop
 serve` exits with an error when `host` isn't loopback and TLS isn't set, and Connect
 to a service won't test or add a plain `http://` address that isn't loopback. Anyone
 on the network path could otherwise read the token as it is sent, and every keystroke

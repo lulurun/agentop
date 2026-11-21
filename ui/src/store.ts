@@ -89,7 +89,7 @@ export interface AppState {
   removeConnection(id: string): void;
   /** Show a session in Sessions, by default in the left area in place of the session shown. */
   select(sessionId: string, mode?: OpenMode, area?: Area): void;
-  /** Open a tab in an area (docs/ui.md, Where tabs open) of the feature shown; a default-project session's tab always opens in Sessions. */
+  /** Open a tab in an area (docs/0_10_ui.md, Where tabs open) of the feature shown; a default-project session's tab always opens in Sessions. */
   openTab(content: TabContent, area: Area, mode?: OpenMode): void;
   /** Close the tabs of a feature whose content matches. */
   closeTabs(feature: FeatureId, matches: (content: TabContent) => boolean): void;

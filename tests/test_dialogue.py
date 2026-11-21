@@ -1,7 +1,7 @@
 """The Dialogues plugin: its routes, its command, and what turning it off does.
 
 The whole file is skipped when the plugin folder is gone, so the core suites
-can be run without it (design 12.9).
+can be run without it (docs/0_12_02_dialogue.md).
 """
 
 import json

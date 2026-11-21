@@ -1,4 +1,4 @@
-"""Projects: the owner's own projects, each run through a Coordinator. See docs/project.md, section 7.2.
+"""Projects: the owner's own projects, each run through a Coordinator. See docs/0_13_projects.md, section 7.2.
 
 The core keeps projects and their sessions; this plugin makes and removes its own, and its UI is the Projects feature.
 """

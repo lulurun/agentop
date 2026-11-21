@@ -1,4 +1,4 @@
-"""Memory: agentop's own record of conversations. See docs/design.md, section 12.11.
+"""Memory: agentop's own record of conversations. See docs/0_12_03_memory.md.
 
 The archive is a copy of every agent transcript on this host, kept up to date
 by a sweep at start, every few minutes, and when a session exits. After each
