@@ -43,6 +43,8 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
         assert command in normalized
     assert "focused expert recommendation" in normalized
     assert "acceptance criteria" in normalized
+    assert "Context is working memory; the project folder is durable memory" in normalized
+    assert "Reset only after the state needed to continue is written down" in normalized
     assert phrase not in coordinator.welcome_prompt(default)
     assert phrase not in coordinator.welcome_prompt(dialogue)
     assert phrase not in coordinator.member_header(project, "dev")

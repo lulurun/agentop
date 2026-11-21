@@ -112,6 +112,25 @@ Keep source at `<project>/code/<source-tree>` and start repository sessions ther
 - Copy the complete clean repository, including `.git`. Never overwrite an existing
   destination.
 
+## Reset context at a durable milestone
+
+Context is working memory; the project folder is durable memory. Decide when a
+milestone creates a clean boundary where carrying the whole conversation costs more
+than it helps. At that point, deliberately clear or reset the Coordinator's context
+before beginning the next phase.
+
+Reset only after the state needed to continue is written down and checked: the
+current objective and outcome, accepted decisions, artifacts and their paths,
+repository commits and deployment state, unresolved issues, active session or
+callback status, and the next likely objective. Do not clear in the middle of an
+unresolved decision or while an unrecorded result is still expected. After a reset,
+reconstruct state from the project documents and repositories rather than relying
+on the old conversation.
+
+Use judgment rather than a token or time interval. A completed design, accepted
+implementation slice, deployment, release, or other phase boundary is a useful
+signal when its state is durable.
+
 ## Review the pursuit
 
 When reporting or reflecting, ask whether the Coordinator retained the objective,
