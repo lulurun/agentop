@@ -41,7 +41,10 @@ def pick_tool(available: list[str]) -> str | None:
 def _skill_part(project: dict) -> str:
     if project.get("owner") != "projects":
         return ""
-    return f"\n## Coordinator skill\n\n{coordinator_skill()}\n"
+    return (
+        "\n\nThe following project-coordinator skill applies only to this Coordinator session:\n\n"
+        f"<project-coordinator-skill>\n{coordinator_skill()}\n</project-coordinator-skill>"
+    )
 
 
 def instructions(project: dict) -> str:
@@ -62,7 +65,6 @@ You are the Coordinator of the agentop project `{name}`. The owner talks to you:
 - `agentop start <name> --tool <codex|claude|antigravity> --cwd <dir> --prompt "<task>"` starts one in this project. A name is unique in the project, so plain names do: `dev`, `docs`, `deploy`. The session is told about this folder and about you.
 - `agentop send <name> "<prompt>"` types a prompt into one. When you need a result back, ask it to answer with `agentop send {projects.COORDINATOR} "<result>"`.
 - `agentop stop <name>` stops one.
-{_skill_part(project)}
 
 ## Your part
 
@@ -95,6 +97,7 @@ def welcome_prompt(project: dict) -> str:
     return (
         "You have just been started as a Coordinator in agentop; AGENTS.md in this folder says what that means. "
         f"Write the owner a short welcome. Start with \"{hello}\"{asks}. {unsaid} Then wait for their request."
+        f"{_skill_part(project)}"
     )
 
 
