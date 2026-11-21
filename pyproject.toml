@@ -36,6 +36,7 @@ include = ["agentop*"]
 "agentop.service" = ["webdist/**/*", "update.sh"]
 # The skills `agentop serve` installs for the agent tools.
 "agentop.skills" = ["*/**/*", "README.md"]
+"agentop.coordinator_skill" = ["SKILL.md"]
 # Each plugin folder is a package with its manifest beside it.
 "*" = ["plugin.toml"]
 

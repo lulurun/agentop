@@ -29,6 +29,18 @@ def test_the_coordinator_is_codex_then_claude_then_any():
     assert coordinator.pick_tool([]) is None
 
 
+def test_the_project_skill_is_only_for_projects_plugin_coordinators():
+    phrase = "The Coordinator owns pursuit of the project's objective"
+    project = {"name": "alpha", "folder": "/tmp/alpha", "owner": "projects"}
+    default = {"name": "default", "folder": "/tmp/default", "owner": "core"}
+    dialogue = {"name": "debate", "folder": "/tmp/debate", "owner": "dialogue"}
+
+    assert phrase in coordinator.instructions(project)
+    assert phrase not in coordinator.instructions(default)
+    assert phrase not in coordinator.instructions(dialogue)
+    assert phrase not in coordinator.member_header(project, "dev")
+
+
 def test_names_and_the_default_project(tmp_path, monkeypatch):
     monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
     assert projects.is_valid_name("my-app_2") and not projects.is_valid_name("My App") and not projects.is_valid_name("")
@@ -51,6 +63,7 @@ def test_the_instructions_are_written_once(tmp_path, monkeypatch):
     agents = projects.folder("alpha") / "AGENTS.md"
     assert "Coordinator of alpha" in agents.read_text() and "Run the alpha project." in agents.read_text()
     assert f"{projects.folder('alpha')}/code/<source-tree>" in agents.read_text()
+    assert "The Coordinator owns pursuit of the project's objective" in agents.read_text()
     assert (projects.folder("alpha") / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     agents.write_text("the owner's own")
     coordinator.write_instructions(found)
@@ -76,6 +89,7 @@ def test_a_session_outside_the_folder_is_told_about_its_project(fake_agents, qui
     ops.first_prompt(name, "build it")
     wait_for_screen(name, "[agentop project alpha] You are `dev`")
     wait_for_screen(name, "got: build it")
+    assert "The Coordinator owns pursuit" not in CapturePane.scrollback(name)
     assert registry.load()["sessions"][name]["project"] == "alpha"
 
 

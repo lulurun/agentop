@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agentop import projects
+from agentop.coordinator_skill import body as coordinator_skill
 
 # Codex first, then Claude, then whatever else is installed.
 PREFERRED = ("codex", "claude")
@@ -37,6 +38,12 @@ def pick_tool(available: list[str]) -> str | None:
     return available[0] if available else None
 
 
+def _skill_part(project: dict) -> str:
+    if project.get("owner") != "projects":
+        return ""
+    return f"\n## Coordinator skill\n\n{coordinator_skill()}\n"
+
+
 def instructions(project: dict) -> str:
     """The Coordinator's AGENTS.md."""
     name, folder = project["name"], project["folder"]
@@ -55,6 +62,7 @@ You are the Coordinator of the agentop project `{name}`. The owner talks to you:
 - `agentop start <name> --tool <codex|claude|antigravity> --cwd <dir> --prompt "<task>"` starts one in this project. A name is unique in the project, so plain names do: `dev`, `docs`, `deploy`. The session is told about this folder and about you.
 - `agentop send <name> "<prompt>"` types a prompt into one. When you need a result back, ask it to answer with `agentop send {projects.COORDINATOR} "<result>"`.
 - `agentop stop <name>` stops one.
+{_skill_part(project)}
 
 ## Your part
 

@@ -121,6 +121,7 @@ def test_links_to_the_bundle_stay_and_broken_links_are_replaced(bundle, tmp_path
 
 def test_the_shipped_skills_are_found():
     assert {"handoff", "recall"} <= {p.name for p in skills.bundled()}
+    assert "project-coordinator" not in {p.name for p in skills.bundled()}
 
 
 def test_prepare_installs_skills_only_for_installed_tools(bundle, bare_path, tmp_path, monkeypatch):
