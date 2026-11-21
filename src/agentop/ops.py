@@ -84,9 +84,9 @@ def _place(agent: AgentCli, name: str | None, short_name: str, project: str, rea
 
 
 def _launch_params(params: dict | None, cwd: str, project: str) -> dict:
-    """The owner's own sessions, in `default`, get remote control; a project's session outside its folder gets the folder."""
+    """The owner's own sessions get remote control; a Coordinator's session outside its folder gets the folder."""
     params = dict(params or {})
-    if project == projects.DEFAULT:
+    if not projects.has_coordinator(project):
         params["remote_control"] = True
         return params
     folder = os.path.realpath(projects.folder(project))
@@ -108,7 +108,7 @@ def first_prompt(name: str, prompt: str, project: str | None = None, display_nam
     display_name = display_name or record.get("display_name") or _bare(name)
     agent = _agent(record.get("tool") or "")
     found = projects.get(project)
-    if found and project != projects.DEFAULT and display_name != projects.COORDINATOR:
+    if found and projects.has_coordinator(project) and display_name != projects.COORDINATOR:
         prompt = f"{coordinator.member_header(found, display_name)}\n\n{prompt.strip()}"
     # Before the tool is ready, a paste is dropped without a word.
     time.sleep(agent.boot_seconds)

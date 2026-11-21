@@ -106,6 +106,11 @@ def fill_in(name: str, welcome: str, instructions: str) -> dict:
     return get(name)
 
 
+def has_coordinator(name: str) -> bool:
+    """The one difference between projects: `default` is driven by the owner, every other one by its Coordinator."""
+    return name != DEFAULT
+
+
 def ensure_default() -> dict:
     found = get(DEFAULT)
     return found or create(DEFAULT, CORE)

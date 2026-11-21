@@ -497,8 +497,8 @@ class SessionStore:
 
     async def ensure_coordinator(self, project: str, available: list[str]) -> dict | None:
         """Start the project's Coordinator unless it runs: resumed if it ran before, else new, with its welcome. None if there is no tool."""
-        if project == projects.DEFAULT:
-            raise StoreError(400, "The default project has no Coordinator")
+        if not projects.has_coordinator(project):
+            raise StoreError(400, f"The {project} project has no Coordinator")
         found = await asyncio.to_thread(projects.get, project)
         if found is None:
             raise StoreError(404, f"No project called {project}")

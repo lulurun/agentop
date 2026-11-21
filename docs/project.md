@@ -17,6 +17,8 @@ In `default` the owner is the Coordinator: Sessions keeps the owner's manual way
 | Sessions started by | The owner, with New session | The Coordinator (`agentop start`); no New session |
 | Claude `--remote-control` | On | Off |
 
+Both run on the same code: one session store, registry, start, resume and stop, and the same API, keyed by project. The rows above are the only differences on the service, and they all follow from `projects.has_coordinator`. In the UI, Projects reuses Sessions' sections, tabs and right panel and only hides New session.
+
 Projects are kept apart: a session sees, and sends to, the sessions of its own project; Active sessions and History are per project.
 
 | Project | Owner | Shown in | Coordinator's job |
