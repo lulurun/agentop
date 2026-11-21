@@ -137,7 +137,7 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         assert "You run this project" in (projects.folder("alpha") / "AGENTS.md").read_text()
         instructions = (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "git status --porcelain=v1 --untracked-files=all" in instructions
-        assert "Do not direct a session to source outside the project folder" in instructions
+        assert "start repository sessions there" in instructions
         assert service.http.post(f"{base}/alpha/coordinator").json()["id"] == coordinator_row["id"]
         # Not its own: the default project, and a project that isn't there.
         assert service.http.delete(f"{base}/default").status_code == 404
