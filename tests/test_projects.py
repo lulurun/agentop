@@ -130,7 +130,8 @@ def test_a_session_outside_the_folder_is_told_about_its_project(fake_agents, qui
 
 
 def test_the_coordinator_starts_once_with_its_welcome_and_is_resumed_after(fake_agents, quick_boot):
-    projects.create("alpha", "projects")
+    # Not the projects plugin's: its skill makes the welcome too long to wait for here.
+    projects.create("alpha", "someplugin")
     with run_service() as service:
         assert service.http.post("/projects/default/coordinator").status_code == 400
         first = service.http.post("/projects/alpha/coordinator")
