@@ -28,8 +28,9 @@ NUDGE = (
 
 @dataclass
 class Turn:
-    started: float
-    busy: bool = False
+    # A yield counts for the next turn end after it. The screen can't bound a turn's start: a short turn's
+    # yield can land before the tick that sees its output, and a pause before the final text ends busy.
+    after: float
     handled: float | None = None
     nudges: int = 0
     reminded: dict = field(default_factory=dict)
@@ -69,22 +70,20 @@ class Checker:
             screen = self.watcher.screens.get(row["id"])
             if screen is None:
                 continue
-            turn = self.turns.setdefault(row["id"], Turn(started=now))
-            if screen.busy and not turn.busy:
-                turn.started = screen.changed_at
-            turn.busy = screen.busy
+            turn = self.turns.setdefault(row["id"], Turn(after=now))
             since = screen.waiting_since
             if since is None or turn.handled == since or now - since < self.quiet_seconds:
                 continue
             turn.handled = since
             if row.get("display_name") == projects.COORDINATOR:
                 self._coordinator(row, turn)
+                turn.after = since
             else:
                 self._member(row, turn)
 
     def _coordinator(self, row: dict, turn: Turn) -> None:
         project = row["project"]
-        yielded = [e for e in pursuit.events(project, turn.started) if e["kind"] == "yield"]
+        yielded = [e for e in pursuit.events(project, turn.after) if e["kind"] == "yield"]
         if yielded:
             turn.nudges = 0
             return

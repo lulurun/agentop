@@ -177,6 +177,47 @@ def test_a_coordinator_turn_without_a_yield_is_nudged_twice_at_most(alpha, monke
     assert kinds.count("nudge") == 3 and kinds.count("nudge.ignored") == 1
 
 
+def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha, monkeypatch):
+    sent = []
+    screens = Screens()
+    checker = Checker(lambda p, row, text: sent.append(row["display_name"]),
+                      watcher=Watcher(screens.list_panes, screens.capture))
+    clock = [time.time()]
+    monkeypatch.setattr(pursuit.time, "time", lambda: clock[0])
+
+    def output(at):
+        clock[0] = at
+        screens.activity = int(at)
+        screens.text["%1"] += "x"
+        checker.tick(rows(), at)
+
+    def yield_at(at):
+        clock[0] = at
+        pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "D"})
+
+    start = clock[0]
+    checker.tick(rows(), start)
+    # A short turn: the yield lands before the tick that first sees the turn's output.
+    yield_at(start + 9)
+    output(start + 10)
+    checker.tick(rows(), start + 15)
+    checker.tick(rows(), start + 80)
+    assert sent == []
+    # A pause before the final text ends busy, so the final text looks like a new turn.
+    output(start + 100)
+    yield_at(start + 101)
+    checker.tick(rows(), start + 106)
+    output(start + 110)
+    checker.tick(rows(), start + 115)
+    checker.tick(rows(), start + 180)
+    assert sent == []
+    output(start + 200)
+    checker.tick(rows(), start + 205)
+    checker.tick(rows(), start + 270)
+    assert sent == ["Coordinator"]
+    assert [e["kind"] for e in pursuit.events(alpha)].count("nudge") == 1
+
+
 def test_a_quiet_task_session_is_reminded_then_the_coordinator_is_told(alpha):
     sent = []
     screens = Screens()
