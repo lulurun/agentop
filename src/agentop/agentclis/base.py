@@ -124,6 +124,18 @@ class AgentCli:
         """Where the tool looks for the user's skills, or None when agentop installs none for it."""
         return None
 
+    # The models a session can be started with: name as typed -> the tool's own ID.
+    # Empty: the tool's default only.
+    models: dict[str, str] = {}
+
+    def model_id(self, name: str) -> str:
+        """The tool's ID for a model named by its name or ID, ignoring case. Raises ValueError."""
+        for label, model in self.models.items():
+            if name.strip().lower() in (label.lower(), model.lower()):
+                return model
+        offered = ", ".join(f'"{label}"' for label in self.models) or "none, only its default"
+        raise ValueError(f"{self.name} can't start with model {name!r}. Models: {offered}")
+
     # Where the program was found (agentclis.installed), or None before that.
     executable: Optional[str] = None
 

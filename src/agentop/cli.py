@@ -110,6 +110,13 @@ def _own_project(args) -> str:
 def cmd_start(args):
     cwd = os.path.expanduser(args.cwd)
     project = _own_project(args)
+    params = {}
+    if args.model:
+        try:
+            params["model"] = agentclis.get_agent(args.tool).model_id(args.model)
+        except ValueError as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
     print(f"Starting {args.tool} session '{args.session_name}' in {cwd}, project {project} …")
     from agentop.results import OpsError, StartFailed
 
@@ -120,7 +127,7 @@ def cmd_start(args):
         ]
         if taken:
             raise OpsError(f"A session called {args.session_name} is already in {project}. Pick another name")
-        result = _ops().start(args.tool, cwd, args.session_name, project=project)
+        result = _ops().start(args.tool, cwd, args.session_name, params, project=project)
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if isinstance(exc, StartFailed) and exc.name:
@@ -136,6 +143,8 @@ def cmd_start(args):
     print(f"Started:  {name}")
     print(f"  PID:    {result.pid}")
     print(f"  Tool:   {args.tool}")
+    if params:
+        print(f"  Model:  {params['model']}")
     print(f"  CWD:    {cwd}")
     print(f"  Attach: tmux attach-session -t {name}")
 
@@ -588,6 +597,7 @@ def main():
     p_start.add_argument("--tool", required=True, choices=agentclis.names())
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
     p_start.add_argument("--project", help="The project to start it in (default: this session's, else default)")
+    p_start.add_argument("--model", help='Its model (default: the tool\'s own). Claude takes "Sonnet 5.5"; codex and antigravity, none')
     p_start.add_argument("--prompt", help="Its first prompt, typed in once it is up, after a line about its project")
 
     # history

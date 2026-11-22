@@ -77,3 +77,22 @@ def test_resume_goes_through_the_same_start(fake_agents, cwd):
 def test_an_unknown_tool_is_an_error(fake_agents, cwd):
     with pytest.raises(OpsError, match="Unknown tool"):
         ops.start("nosuchtool", cwd, "demo")
+
+
+def test_claude_starts_only_with_sonnet_5_5():
+    from agentop.agentclis.claude import ClaudeAgentCli
+
+    claude = ClaudeAgentCli()
+    assert claude.model_id("Sonnet 5.5") == claude.model_id("sonnet 5.5") == "claude-sonnet-5-5"
+    assert claude._build_cmd(claude.launch_cmd, {"model": "claude-sonnet-5-5"}).endswith(" --model claude-sonnet-5-5")
+    with pytest.raises(ValueError, match='"Sonnet 5.5"'):
+        claude.model_id("opus")
+
+
+def test_codex_and_antigravity_take_no_model():
+    from agentop.agentclis.antigravity import AntigravityAgentCli
+    from agentop.agentclis.codex import CodexAgentCli
+
+    for agent in (CodexAgentCli(), AntigravityAgentCli()):
+        with pytest.raises(ValueError, match="only its default"):
+            agent.model_id("Sonnet 5.5")

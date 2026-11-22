@@ -77,6 +77,8 @@ class ClaudeAgentCli(AgentCli):
     name = "claude"
     add_dir_flag = "--add-dir"
 
+    models = {"Sonnet 5.5": "claude-sonnet-5-5"}
+
     # Shown under the input box, and not on the trust prompt.
     READY_MARKER = "shift+tab to cycle"
 

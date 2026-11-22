@@ -42,7 +42,7 @@ Use agentop's project-scoped commands directly:
 
 ```bash
 agentop project show
-agentop start <name> --tool <codex|claude|antigravity> --cwd <project>/code/<repo> --prompt "<bounded task>"
+agentop start <name> --tool <codex|claude|antigravity> --cwd <project>/code/<repo> [--model "Sonnet 5.5"] --prompt "<bounded task>"
 agentop send <name> "<follow-up or feedback>"
 agentop stop <name>
 ```
@@ -54,6 +54,9 @@ explicitly wants cross-project work.
 
 Starting a session creates it in this project when run by the Coordinator. Give it
 the repository under `code/` as its cwd and include the task in the first prompt.
+Without `--model` a session runs its tool's default model. To run a claude session
+on Sonnet 5.5, add `--model "Sonnet 5.5"`; it is the only model `--model` takes, and
+codex and antigravity take none.
 For a result needed by the Coordinator, tell the session exactly what to return
 with `agentop send Coordinator "<result>"`. A send is asynchronous: inspect the
 returned artifact and callback when it arrives rather than treating delivery as
