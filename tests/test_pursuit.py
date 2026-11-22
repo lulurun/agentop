@@ -103,12 +103,11 @@ def test_yield_checks_each_reason(alpha):
 
 def test_review_counts_passive_turns_and_shows_the_trend(alpha):
     for _ in range(3):
-        pursuit.log(alpha, "nudge", count=1)
-    pursuit.log(alpha, "nudge.ignored")
+        pursuit.log(alpha, "turn.unreasoned")
     pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "wait"})
     text, path, m = review.run(alpha)
     assert m["turn_ends"] == 4 and m["passive"] == 3 and m["passive_rate"] == 0.75
-    assert "ignored two nudges" in text and "ended without a stop reason" in text and "no default but waiting" in text
+    assert "ended without a stop reason" in text and "no default but waiting" in text
     assert "Q? Recommended: R Default: wait" in text and "First review" in text
     assert path.parent.name == "reviews" and pursuit.REFLECTION_PLACEHOLDER in path.read_text()
 
@@ -147,7 +146,7 @@ def run_turn(checker, screens, pane, start, quiet=70):
     checker.tick(rows(), start + quiet)
 
 
-def test_a_coordinator_turn_without_a_yield_is_nudged_twice_at_most(alpha, monkeypatch):
+def test_a_coordinator_turn_without_a_yield_is_logged_not_prompted(alpha, monkeypatch):
     sent = []
     screens = Screens()
     checker = Checker(lambda p, row, text: sent.append((row["display_name"], text)),
@@ -167,20 +166,53 @@ def test_a_coordinator_turn_without_a_yield_is_nudged_twice_at_most(alpha, monke
 
     checker.tick(rows(), clock[0])
     turn()
-    assert len(sent) == 1 and sent[0][0] == "Coordinator" and "agentop yield" in sent[0][1]
     turn(yielding=True)
-    assert len(sent) == 1
-    for _ in range(4):
+    for _ in range(3):
         turn()
-    assert len(sent) == 3
+    assert sent == []
+    assert [e["kind"] for e in pursuit.events(alpha)].count("turn.unreasoned") == 4
+
+
+def test_yield_clear_clears_the_coordinator_then_tells_it_once_to_carry_on(alpha, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from agentop import ops
+
+    delivered, sent = [], []
+    monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text, project)))
+    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
+    screens = Screens()
+    checker = Checker(lambda p, row, text: sent.append((row["display_name"], text)),
+                      watcher=Watcher(screens.list_panes, screens.capture))
+    clock = [time.time()]
+    monkeypatch.setattr(pursuit.time, "time", lambda: clock[0])
+    checker.tick(rows(), clock[0])
+
+    def turn(during=None):
+        clock[0] += 100
+        screens.activity = int(clock[0])
+        screens.text["%1"] += "x"
+        checker.tick(rows(), clock[0])
+        if during:
+            during()
+        checker.tick(rows(), clock[0] + 5)
+        checker.tick(rows(), clock[0] + 70)
+
+    fields = dict.fromkeys(("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")
+    turn(lambda: cli.run_yield(SimpleNamespace(kind="owner", project=None, clear=True, **{
+        **fields, "question": "Q?", "recommend": "R", "default": "D"})))
+    assert delivered == [("Coordinator", "/clear", "alpha")]
+    assert "context is cleared" in capsys.readouterr().out
+    assert len(sent) == 1 and sent[0][0] == "Coordinator" and "STATE.md" in sent[0][1]
+    turn(lambda: pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "D"}))
+    assert len(sent) == 1
     kinds = [e["kind"] for e in pursuit.events(alpha)]
-    assert kinds.count("nudge") == 3 and kinds.count("nudge.ignored") == 1
+    assert kinds.count("clear") == 1 and kinds.count("resume") == 1 and "turn.unreasoned" not in kinds
 
 
 def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha, monkeypatch):
-    sent = []
     screens = Screens()
-    checker = Checker(lambda p, row, text: sent.append(row["display_name"]),
+    checker = Checker(lambda p, row, text: None,
                       watcher=Watcher(screens.list_panes, screens.capture))
     clock = [time.time()]
     monkeypatch.setattr(pursuit.time, "time", lambda: clock[0])
@@ -190,6 +222,9 @@ def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha,
         screens.activity = int(at)
         screens.text["%1"] += "x"
         checker.tick(rows(), at)
+
+    def unreasoned():
+        return [e["kind"] for e in pursuit.events(alpha)].count("turn.unreasoned")
 
     def yield_at(at):
         clock[0] = at
@@ -202,7 +237,7 @@ def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha,
     output(start + 10)
     checker.tick(rows(), start + 15)
     checker.tick(rows(), start + 80)
-    assert sent == []
+    assert unreasoned() == 0
     # A pause before the final text ends busy, so the final text looks like a new turn.
     output(start + 100)
     yield_at(start + 101)
@@ -210,12 +245,11 @@ def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha,
     output(start + 110)
     checker.tick(rows(), start + 115)
     checker.tick(rows(), start + 180)
-    assert sent == []
+    assert unreasoned() == 0
     output(start + 200)
     checker.tick(rows(), start + 205)
     checker.tick(rows(), start + 270)
-    assert sent == ["Coordinator"]
-    assert [e["kind"] for e in pursuit.events(alpha)].count("nudge") == 1
+    assert unreasoned() == 1
 
 
 def test_a_quiet_task_session_is_reminded_then_the_coordinator_is_told(alpha):

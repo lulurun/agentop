@@ -121,13 +121,13 @@ Only a Projects project's Coordinator works under them; a dialogue's does not.
 
 Every yield is also refused while a report waits for the Coordinator's decision, or while `STATE.md` is missing a section, still has no objective once tasks exist, or is older than the last closed task.
 
-**Idle checks** (on the service's scan tick, through the attention plugin's `Watcher`, so tmux only). A Coordinator turn ends when its screen has gone quiet for 60 seconds; if no `yield` was recorded since the turn end before it, agentop types a nudge into it: carry on, or record why it stops. Two nudges in a row at most; a third silent turn is logged as `nudge.ignored`. The 60 seconds keep a nudge out of a prompt the owner is still typing. A turn is bounded by the previous turn end, not by its screen starting to change: a yield is often recorded before the tick that sees the turn's output, or before a pause and the final text, and it still counts, but only once. A task's session that goes quiet with its round unreported is reminded once; if it goes quiet again, the Coordinator is told to look at it. This answers the second open question this doc had: a Coordinator now hears when one of its sessions goes idle without reporting.
+**Idle checks** (on the service's scan tick, through the attention plugin's `Watcher`, so tmux only). A Coordinator turn ends when its screen has gone quiet for 60 seconds; if no `yield` was recorded since the turn end before it, agentop logs `turn.unreasoned`, which review counts. It types nothing into the session: the screen can't tell a turn from the owner's `/clear`, a draft left in the prompt or a popup, and each prompt into a long context costs a turn of usage. A turn is bounded by the previous turn end, not by its screen starting to change: a yield is often recorded before the tick that sees the turn's output, or before a pause and the final text, and it still counts, but only once. `agentop yield … --clear` records the yield and sends `/clear`, which runs when the turn ends; at the next turn end agentop types one prompt into the Coordinator to read AGENTS.md, the skill and `STATE.md` and carry on. agentop knows it sent that clear, so this prompt never fires on a guess. The 60 seconds keep it out of a prompt the owner is still typing. A task's session that goes quiet with its round unreported is reminded once; if it goes quiet again, the Coordinator is told to look at it. This answers the second open question this doc had: a Coordinator now hears when one of its sessions goes idle without reporting.
 
 **State** (`STATE.md`): Objective, Where things are, Decisions, Open questions for the owner, Next. It is the Coordinator's durable memory and what it reads after a `/clear`.
 
 **Review** (`agentop review`). It measures the Coordinator from `events.jsonl` and `tasks.json`, since the last review (`--all`: since the start), and writes `reviews/<time>.md`:
 
-- turn ends by kind, and those without a reason (nudged), as a share;
+- turn ends by kind, and those without a reason (`turn.unreasoned`), as a share; an owner's `/clear` or a draft can add one, so it reads as a trend, not a count of faults;
 - the share handed back to the owner, with each question, recommendation and default listed, for the owner to judge whether it was needed;
 - tasks opened, accepted, failed, rounds used, accepted in round 1, median time to a report, blocked and quiet reports, untracked sessions, tasks waiting over two hours;
 - findings, each with what to do, and the trend of the main shares against the last review;
@@ -195,4 +195,4 @@ Its feature, commands and routes go away. Its projects' sessions are stopped, af
 
 - Whether review should also judge the transcripts (an LLM reading the turns that ended `owner` or `blocked`, and saying whether they were needed), beyond what the event log counts.
 - Whether the Projects feature should show the tasks and the latest review beside the sessions (the route is there).
-- Whether the idle check should tell an owner typing from an agent writing, so it could nudge sooner than 60 seconds.
+- Whether the idle check can tell an agent's turn from an owner's `/clear`, a draft or a popup on the screen alone; until it can, it only logs, and prompts only after a clear agentop sent.

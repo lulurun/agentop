@@ -48,7 +48,7 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     for command in ("agentop project show", "agentop task start", "agentop task accept", "agentop yield", "agentop review"):
         assert command in normalized
     assert "agentop yield owner --question" in normalized.split("<project-coordinator-skill>")[0]
-    assert 'agentop send --no-header Coordinator "/clear"' in normalized
+    assert "agentop yield done … --clear" in normalized
     assert phrase in coordinator.resume_prompt(project)
     assert phrase not in coordinator.welcome_prompt(dialogue)
     assert "agentop yield" not in coordinator.welcome_prompt(dialogue)

@@ -70,7 +70,7 @@ def register_cli(cli) -> None:
         "yield",
         lambda args: run_yield(args),
         help="End a Coordinator's turn with its reason: done, waiting, owner or blocked",
-        description="Record why the Coordinator stops now. Each reason is checked; agentop nudges a turn that ends without one.",
+        description="Record why the Coordinator stops now. Each reason is checked; a turn that ends without one is counted in agentop review.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "  done     --evidence: what shows the objective or request is met (needs a fresh review)\n"
@@ -92,6 +92,10 @@ def register_cli(cli) -> None:
         ("note", "anything else to record"),
     ):
         turn.add_argument(f"--{flag}", default="", help=text)
+    turn.add_argument(
+        "--clear", action="store_true",
+        help="Then clear the Coordinator's context once this turn ends; agentop tells it to carry on after",
+    )
 
     review = cli.command(
         "review",
@@ -349,7 +353,12 @@ def run_yield(args) -> None:
         event = pursuit.yield_turn(project, args.kind, fields)
     except pursuit.PursuitError as exc:
         _fail(f"{exc}. If it can't be fixed now, the next action is the fix.")
-    if args.kind == "waiting":
+    if args.clear:
+        if not _send(projects.COORDINATOR, "/clear", project):
+            _fail("recorded, but the clear wasn't sent")
+        pursuit.log(project, "clear")
+        print("Recorded. End your turn with a short message to the owner; then your context is cleared, and agentop tells you to carry on.")
+    elif args.kind == "waiting":
         print(f"Recorded: waiting on {event['sessions']}. End your turn; their reports will come to you.")
     elif args.kind == "owner":
         print("Recorded. Put the question, your recommendation and the default in your message to the owner, then end your turn.")

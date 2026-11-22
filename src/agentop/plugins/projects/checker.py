@@ -1,5 +1,5 @@
-"""Watches Projects sessions on the scan tick: a Coordinator turn that ends without `agentop yield` is nudged,
-and a task's session that goes quiet without reporting is reminded, then the Coordinator is told.
+"""Watches Projects sessions on the scan tick: a Coordinator turn that ends without `agentop yield` is logged,
+one that cleared its context is told to carry on, and a quiet task session is reminded, then the Coordinator told.
 
 Turns are told apart by the screen, as the attention plugin does (tmux only, no transcripts).
 """
@@ -15,14 +15,12 @@ from agentop.plugins.attention import Watcher
 
 from . import pursuit
 
-# An owner typing a prompt also changes the screen; waiting this long keeps a nudge out of a half-typed one.
+# An owner typing a prompt also changes the screen; waiting this long keeps a prompt out of a half-typed one.
 QUIET_SECONDS = 60.0
-MAX_NUDGES = 2
 
-NUDGE = (
-    "[agentop] Your turn ended without a stop reason. If your context was just cleared, first read AGENTS.md, "
-    "COORDINATOR_SKILL.md and STATE.md. Then either take the next best action toward the objective, or, if you "
-    "really must stop, record why with agentop yield done, waiting, owner or blocked (agentop yield --help)."
+RESUME = (
+    "[agentop] Your context was cleared. Read AGENTS.md, COORDINATOR_SKILL.md and STATE.md, run agentop task list, "
+    "then take the next best action toward the objective."
 )
 
 
@@ -32,7 +30,6 @@ class Turn:
     # yield can land before the tick that sees its output, and a pause before the final text ends busy.
     after: float
     handled: float | None = None
-    nudges: int = 0
     reminded: dict = field(default_factory=dict)
 
 
@@ -83,18 +80,13 @@ class Checker:
 
     def _coordinator(self, row: dict, turn: Turn) -> None:
         project = row["project"]
-        yielded = [e for e in pursuit.events(project, turn.after) if e["kind"] == "yield"]
-        if yielded:
-            turn.nudges = 0
-            return
-        if turn.nudges >= MAX_NUDGES:
-            if turn.nudges == MAX_NUDGES:
-                pursuit.log(project, "nudge.ignored")
-                turn.nudges += 1
-            return
-        turn.nudges += 1
-        pursuit.log(project, "nudge", count=turn.nudges)
-        self._deliver(project, row, NUDGE)
+        kinds = {e["kind"] for e in pursuit.events(project, turn.after)}
+        if "clear" in kinds:
+            pursuit.log(project, "resume")
+            self._deliver(project, row, RESUME)
+        elif "yield" not in kinds:
+            # Not typed into the session: the screen can't tell a turn from an owner's /clear, a draft or a popup.
+            pursuit.log(project, "turn.unreasoned")
 
     def _member(self, row: dict, turn: Turn) -> None:
         project = row["project"]

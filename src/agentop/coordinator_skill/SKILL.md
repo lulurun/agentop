@@ -7,7 +7,7 @@ You own the project's objective. Your job is pursuit: choose the next best actio
 
 ## The loop
 
-On every turn, including one started by a task's report or an agentop nudge:
+On every turn, including one started by a task's report or by agentop after a clear:
 
 1. Read what arrived. After a `/clear` or a resume, read `STATE.md`, `agentop task list` and `agentop project show` first.
 2. Name the next best action toward the objective. Ask: what would a capable lead do now, without asking anyone?
@@ -95,7 +95,7 @@ At a milestone (a design accepted, an implementation slice accepted, a deploymen
 1. Bring `STATE.md` up to date.
 2. Run `agentop review`. Read its findings, write your reflection in the report's last section, and keep one concrete change in `STATE.md` under Decisions.
 3. Tell the owner the report's path and its top findings, in two or three lines.
-4. If carrying the whole conversation costs more than it helps, reset: `agentop yield done …` (or `waiting`), then make the last action `agentop send --no-header Coordinator "/clear"`. After the clear, read AGENTS.md, this skill, `STATE.md` and `agentop task list`, and carry on.
+4. If carrying the whole conversation costs more than it helps, reset: make the last action `agentop yield done … --clear` (or `waiting … --clear`). Your context is cleared when the turn ends, and agentop then tells you to carry on: read AGENTS.md, this skill, `STATE.md` and `agentop task list`, and take the next action.
 
 Don't reset in the middle of a decision, or while a report is due and not yet recorded in `STATE.md`.
 

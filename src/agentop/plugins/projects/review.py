@@ -43,9 +43,9 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     window = [e for e in pursuit.events(project, since) if e["at"] <= now]
     yields = [e for e in window if e["kind"] == "yield"]
-    nudges = [e for e in window if e["kind"] == "nudge"]
+    unreasoned = [e for e in window if e["kind"] == "turn.unreasoned"]
     by_kind = {k: sum(1 for e in yields if e.get("type") == k) for k in pursuit.KINDS}
-    turn_ends = len(yields) + len(nudges)
+    turn_ends = len(yields) + len(unreasoned)
 
     tasks = pursuit.load_tasks(project)
     closed = [t for t in tasks if t["status"] != "open" and t.get("closed_at", 0) >= since]
@@ -66,9 +66,8 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
         "until": now,
         "turn_ends": turn_ends,
         "yields": by_kind,
-        "passive": len(nudges),
-        "ignored_nudges": sum(1 for e in window if e["kind"] == "nudge.ignored"),
-        "passive_rate": _ratio(len(nudges), turn_ends),
+        "passive": len(unreasoned),
+        "passive_rate": _ratio(len(unreasoned), turn_ends),
         "owner_rate": _ratio(by_kind["owner"], turn_ends),
         "opened": sum(1 for e in window if e["kind"] == "task.open"),
         "accepted": len(accepted),
@@ -91,9 +90,6 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
 def findings(m: dict) -> list[tuple[str, str, str]]:
     """(severity, what, what to do), most severe first."""
     found = []
-    if m["ignored_nudges"]:
-        found.append(("high", f"{m['ignored_nudges']} times the Coordinator ignored two nudges in a row",
-                      "Every turn ends with agentop yield; a nudge is answered by acting or yielding, never by silence."))
     if m["passive"] and (m["passive_rate"] or 0) > PASSIVE_LIMIT:
         found.append(("high", f"{m['passive']} of {m['turn_ends']} turns ended without a stop reason ({_pct(m['passive_rate'])})",
                       "Before ending a turn, name the next action and take it; stop only for done, waiting, owner or blocked."))
