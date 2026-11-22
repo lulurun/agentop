@@ -160,6 +160,7 @@ function useReplace(session: Session) {
         tool: session.tool!,
         cwd: session.cwd,
         name: session.display_name.replace(/[^A-Za-z0-9_-]/g, "-").slice(0, 32) || null,
+        project: session.project ?? null,
         resume: resume ? { session_id: session.session_id! } : null,
       }),
     );

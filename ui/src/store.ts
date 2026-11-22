@@ -755,8 +755,9 @@ export const useApp = create<AppState>((set, get) => {
       if (!created) return;
       const past = (content: TabContent) => content.kind === "past" && content.historyId === item.id;
       const session: TabContent = { kind: "session", sessionId: created.id };
-      updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), featureForProject(get(), item.project));
-      showFeature("sessions");
+      const feature = featureForProject(get(), item.project);
+      updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), feature);
+      showFeature(feature);
       void get().loadHistory();
     },
 
