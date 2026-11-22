@@ -13,7 +13,7 @@ let mails: string;
 /** A service with the Email code plugin on, sending to a fake mail server. */
 async function withEmailCode(enabled = true) {
   s = new Service("alpha");
-  const port = s.port + 1000;
+  const port = s.port + 10000; // clear of every worker's block of service ports
   mails = join(s.root, "mails.jsonl");
   smtp = s.track(spawn(PYTHON, [resolve("../tests/fake_smtp.py"), String(port), mails], { stdio: ["ignore", "pipe", "ignore"] }));
   await new Promise((ready) => smtp!.stdout!.once("data", ready));

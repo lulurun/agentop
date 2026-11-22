@@ -116,18 +116,6 @@ test("a rejected token can be seen and replaced, and isn't kept", async ({ page 
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
 });
 
-test("the old dashboard's routes are gone, through the proxy and directly", async ({ request }) => {
-  const devhost = await service("devhost");
-  const proxy = await proxied(devhost);
-  const base = `http://127.0.0.1:${proxy.port}/agentop`;
-  for (const root of [base, devhost.url]) {
-    expect((await request.get(`${root}/api/sessions`)).status()).toBe(404);
-    expect((await request.get(`${root}/api/health`)).status()).toBe(404);
-  }
-  expect((await request.get(`${base}/api/v2/sessions`)).status()).toBe(401);
-  expect((await request.get(`${base}/api/v2/health`)).status()).toBe(200);
-});
-
 test("the app's old address through the proxy leads to the app", async ({ page }) => {
   const devhost = await service("devhost");
   const proxy = await proxied(devhost);

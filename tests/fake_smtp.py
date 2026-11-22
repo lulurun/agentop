@@ -55,7 +55,7 @@ class FakeSmtp:
         self.port = self._server.server_address[1]
 
     def __enter__(self) -> Self:
-        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+        threading.Thread(target=self._server.serve_forever, args=(0.05,), daemon=True).start()
         return self
 
     def __exit__(self, *_exc) -> None:

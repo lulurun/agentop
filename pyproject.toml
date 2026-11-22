@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.27", "websockets>=13"]
+dev = ["pytest>=8", "pytest-xdist>=3", "httpx>=0.27", "websockets>=13"]
 
 [project.scripts]
 # `agentop.cli`, not a bare `cli`: a top-level `cli` module collides with any
@@ -42,6 +42,8 @@ include = ["agentop*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Each test has its own tmux server, home and ports. `-n 0` runs one at a time.
+addopts = "-n 8"
 pythonpath = ["src"]
 
 [tool.ruff.lint]

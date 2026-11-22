@@ -42,7 +42,7 @@ def write_plugin(root: Path, plugin_id: str, code: str | None, toml: str | None 
 
 
 # Each fails while loading: (code, plugin.toml, part of the reason it fails with).
-# register-hangs sleeps past the time limit that tests/test_plugins.py sets, 1s.
+# register-hangs sleeps past the time limit that tests/test_plugins.py sets, 0.5s.
 BROKEN = {
     "bad-toml": (None, "id = [unclosed\n", "plugin.toml can't be read"),
     "no-name": ("def register(api): pass\n", 'id = "no-name"\nversion = "1"\nplugin_api = 1\n', "'name' must be a str"),
@@ -52,7 +52,7 @@ BROKEN = {
     "no-register": ("X = 1\n", None, "defines no register"),
     "import-raises": ("raise RuntimeError('boom at import')\n", None, "RuntimeError: boom at import"),
     "register-raises": ("def register(api):\n    raise ValueError('boom in register')\n", None, "ValueError: boom in register"),
-    "register-hangs": ("import time\ndef register(api):\n    time.sleep(3)\n", None, "register() took longer"),
+    "register-hangs": ("import time\ndef register(api):\n    time.sleep(1)\n", None, "register() took longer"),
     "bad-event": ("def register(api):\n    api.on('nope', print)\n", None, "Unknown event 'nope'"),
 }
 

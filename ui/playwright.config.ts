@@ -6,7 +6,7 @@ export default defineConfig({
   globalSetup: "./e2e/leftovers.ts",
   globalTeardown: "./e2e/leftovers.ts",
   timeout: 45_000,
-  workers: 1,
+  workers: 4,
   use: { viewport: { width: 1360, height: 820 } },
   reporter: [["list"]],
 });

@@ -18,6 +18,8 @@ from pathlib import Path
 import httpx
 import pytest
 
+from tests.conftest import kill_tmux_server
+
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -83,7 +85,7 @@ class ByHand:
         if self.process.poll() is None:
             self.process.terminate()
             self.process.wait(10)
-        subprocess.run(["tmux", "-L", self.env["AGENTOP_TMUX_SOCKET"], "kill-server"], capture_output=True, check=False)
+        kill_tmux_server(self.env["AGENTOP_TMUX_SOCKET"])
 
 
 @pytest.fixture
@@ -99,24 +101,17 @@ def by_hand(tmp_path):
         service.close()
 
 
-def test_it_can_restart_stop_and_update_itself(by_hand):
-    s = by_hand()
-    info = s.http.get("/service").json()
-    assert info["manager"] == "self"
-    assert info["capabilities"] == {"stop": True, "restart": True, "update": True}
-
-
 def test_restart_keeps_the_process_and_runs_the_code_again(by_hand):
     s = by_hand()
-    time.sleep(1.2)
     before = s.http.get("/service").json()
-    assert before["uptime_seconds"] >= 1
+    assert before["manager"] == "self"
+    assert before["capabilities"] == {"stop": True, "restart": True, "update": True}
     assert s.http.post("/admin/restart").status_code == 202
     s.wait_down()
     s.wait_up()
     after = s.http.get("/service").json()
     assert after["pid"] == before["pid"] == s.process.pid
-    assert after["uptime_seconds"] < before["uptime_seconds"]
+    assert after["started_at"] > before["started_at"]
     assert s.process.poll() is None
 
 
@@ -164,15 +159,14 @@ def test_an_update_restarts_it_and_ends(by_hand, tmp_path):
     marker = tmp_path / "restarted"
     script = stand_in(tmp_path, f'eval "$AGENTOP_RESTART_CMD" && touch {marker}')
     s = by_hand(AGENTOP_UPDATE_SCRIPT=str(script))
-    time.sleep(1.2)
-    before = s.http.get("/service").json()["uptime_seconds"]
+    before = s.http.get("/service").json()["started_at"]
     assert s.http.post("/admin/update").status_code == 202
     deadline = time.monotonic() + 20
     while not marker.exists() and time.monotonic() < deadline:
         time.sleep(0.1)
     assert marker.exists()
     s.wait_up()
-    assert s.http.get("/service").json()["uptime_seconds"] < before
+    assert s.http.get("/service").json()["started_at"] > before
     # The updater was this process's child before the restart. It is reaped, not left running.
     deadline = time.monotonic() + 10
     while s.http.get("/admin/update").json()["running"] and time.monotonic() < deadline:

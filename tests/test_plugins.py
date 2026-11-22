@@ -94,8 +94,8 @@ def env(tmp_path, monkeypatch):
     out = tmp_path / "out" / "events.txt"
     out.parent.mkdir()
     monkeypatch.setenv("PLUGIN_TEST_OUT", str(out))
-    monkeypatch.setattr(plugin_mod, "REGISTER_TIMEOUT_SECONDS", 1.0)
-    monkeypatch.setattr(plugin_mod, "HANDLER_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(plugin_mod, "REGISTER_TIMEOUT_SECONDS", 0.5)
+    monkeypatch.setattr(plugin_mod, "HANDLER_TIMEOUT_SECONDS", 0.2)
 
     class Env:
         def __init__(self):
@@ -421,7 +421,7 @@ def test_a_crashing_task_fails_the_plugin(env):
 
 @pytest.mark.parametrize(
     "body",
-    ["raise RuntimeError('handler boom')", "import time; time.sleep(2)"],
+    ["raise RuntimeError('handler boom')", "import time; time.sleep(0.5)"],
     ids=["raises", "hangs"],
 )
 def test_repeated_handler_errors_fail_the_plugin(env, body):

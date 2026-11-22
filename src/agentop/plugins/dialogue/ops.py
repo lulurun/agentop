@@ -16,6 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from agentop import ops as agent_ops
+from agentop.agent_instance import wait_for_exit
 from agentop.agentclis import get_agent
 from agentop.results import OpsError
 from agentop.tmux import Session
@@ -296,7 +297,7 @@ def _settle_interrupted(meta: DialogueMeta) -> None:
 def _close_session(name: str) -> None:
     if name and Session.has(name):
         Session.send_keys(name, "/exit", "Enter")
-        time.sleep(3)
+        wait_for_exit(name, 3)
         Session.kill(name)
 
 

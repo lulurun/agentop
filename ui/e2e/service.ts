@@ -9,7 +9,7 @@ const AGENT = `#!/bin/sh
 mkdir -p "$HOME/.claude/sessions" && echo "{\\"sessionId\\": \\"fake-$$\\"}" > "$HOME/.claude/sessions/$$.json"
 echo "fake agent ready"
 echo "shift+tab to cycle"
-while read line; do echo "got: $line"; done
+while read line; do echo "got: $line"; [ "$line" = /exit ] && exit 0; done
 `;
 // Installed, but the shell reports it missing, so the start fails at once.
 const BROKEN = `#!/bin/sh
@@ -31,7 +31,8 @@ touch ${root}/updating
 
 const PYTHON = `${process.env.HOME}/.pyenv/versions/3.13.9/bin/python`;
 
-let nextPort = 19800 + Math.floor(Math.random() * 1000);
+// Workers running at once each get their own block of ports.
+let nextPort = 19800 + Number(process.env.TEST_PARALLEL_INDEX ?? 0) * 500 + Math.floor(Math.random() * 400);
 
 const live = new Set<Service>();
 // A failed or interrupted test may never reach its afterEach, so the worker cleans up as it goes.
@@ -82,6 +83,8 @@ export class Service {
       AGENTOP_TMUX_SOCKET: this.socket,
       // Never the real updater, which would act on this checkout.
       AGENTOP_UPDATE_SCRIPT: join(bin, "update.sh"),
+      // No asking the checkout's real remote what's newer: that takes seconds, from every service.
+      GIT_ALLOW_PROTOCOL: "file",
       PYTHONPATH: resolve("../src"),
     };
   }

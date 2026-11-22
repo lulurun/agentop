@@ -55,29 +55,38 @@ class AgentInstance:
         return StopResult(sent_exit=sent_exit, exited=exited, forced=not exited, tmux_killed=tmux_killed)
 
     def agent_running(self) -> bool:
-        """True while the shell in the session's pane still has a live child: the agent."""
-        for pane_pid in Session.list_panes(self.session):
-            try:
-                children = psutil.Process(int(pane_pid)).children()
-            except (ValueError, psutil.Error):
-                continue
-            for child in children:
-                try:
-                    if child.status() != psutil.STATUS_ZOMBIE:
-                        return True
-                except psutil.Error:
-                    pass
-        return False
+        return agent_running(self.session)
 
     def _wait_for_exit(self, timeout: float) -> bool:
-        deadline = time.monotonic() + timeout
-        while True:
-            if not self.agent_running():
-                return True
-            if time.monotonic() >= deadline:
-                return False
-            time.sleep(_POLL)
+        return wait_for_exit(self.session, timeout)
 
     def attach(self, stop_event: threading.Event) -> AgentInstance:
         self.actor.attach(stop_event)
         return self
+
+
+def agent_running(session: str) -> bool:
+    """True while the shell in the session's pane still has a live child: the agent."""
+    for pane_pid in Session.list_panes(session):
+        try:
+            children = psutil.Process(int(pane_pid)).children()
+        except (ValueError, psutil.Error):
+            continue
+        for child in children:
+            try:
+                if child.status() != psutil.STATUS_ZOMBIE:
+                    return True
+            except psutil.Error:
+                pass
+    return False
+
+
+def wait_for_exit(session: str, timeout: float) -> bool:
+    """Whether the agent in `session` exited within `timeout` seconds."""
+    deadline = time.monotonic() + timeout
+    while True:
+        if not agent_running(session):
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(_POLL)

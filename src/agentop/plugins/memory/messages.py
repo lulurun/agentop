@@ -71,6 +71,20 @@ def reader_for(relative: Path) -> tuple[conversation.Reader, dict] | None:
 # ---------------------------------------------------------------- the table
 
 
+def _use_wal(db: sqlite3.Connection) -> None:
+    # Switching a new file to WAL fails at once, without the busy timeout,
+    # while another connection is opening it too (the sweep and a request at start).
+    deadline = time.monotonic() + 10
+    while True:
+        try:
+            db.execute("PRAGMA journal_mode=WAL")
+            return
+        except sqlite3.OperationalError:
+            if time.monotonic() > deadline:
+                raise
+            time.sleep(0.05)
+
+
 class Messages:
     def __init__(self, path: Path, archive_dir: Path):
         self.path = path
@@ -79,7 +93,7 @@ class Messages:
     def _connect(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         db = sqlite3.connect(self.path, timeout=30)
-        db.execute("PRAGMA journal_mode=WAL")
+        _use_wal(db)
         had_index = db.execute(
             "SELECT 1 FROM sqlite_master WHERE name = 'messages_fts'"
         ).fetchone()

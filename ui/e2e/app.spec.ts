@@ -92,8 +92,7 @@ test("an old token is renewed when the app comes back on screen", async ({ page 
   expect(after.clientId).toBe(before.clientId);
 });
 
-test("a service restart long after a renewal keeps the app signed in", async ({ page }) => {
-  test.setTimeout(120_000);
+test("a service restart after a renewal keeps the app signed in with the new token", async ({ page }) => {
   const s = await service("alpha");
   await page.goto(s.signedInUrl);
   await startSession(page, s, "demo");
@@ -110,16 +109,20 @@ test("a service restart long after a renewal keeps the app signed in", async ({ 
   await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect.poll(async () => (await savedConnections(page))[0].token).not.toBe(before.token);
   const [after] = await savedConnections(page);
-  // The new token is used, and then the old one's grace runs out.
-  const headers = { Authorization: `Bearer ${after.token}` };
-  expect((await page.request.get(`${s.url}/api/v2/sessions`, { headers })).status()).toBe(200);
-  await page.waitForTimeout(62_000);
+  // The old token still works for its grace, so only what the app sends shows it moved on.
+  const sent: string[] = [];
+  page.on("request", (request) => {
+    const auth = request.headers()["authorization"];
+    if (auth) sent.push(auth);
+  });
   await s.stop();
   await expect(page.getByText("Reconnecting…")).toBeVisible();
   await s.start();
   await expect(page.getByText("Reconnecting…")).toBeHidden({ timeout: 20_000 });
   await expect(row(page, "demo")).toBeVisible();
   expect((await savedConnections(page))[0].token).toBe(after.token);
+  expect(sent).toContain(`Bearer ${after.token}`);
+  expect(sent).not.toContain(`Bearer ${before.token}`);
 });
 
 test("an expired sign-in asks for the service token again", async ({ page }) => {

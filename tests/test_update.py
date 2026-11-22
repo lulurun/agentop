@@ -108,7 +108,7 @@ def install(tmp_path):
     www = tmp_path / "www"
     handler = functools.partial(Quiet, directory=str(www))
     server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
+    threading.Thread(target=server.serve_forever, args=(0.05,), daemon=True).start()
     yield Install(tmp_path, server.server_address[1])
     server.shutdown()
 

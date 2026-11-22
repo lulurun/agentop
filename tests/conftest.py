@@ -4,6 +4,7 @@ import os
 import stat
 import subprocess
 import uuid
+from pathlib import Path
 
 import pytest
 
@@ -62,7 +63,7 @@ def tmux_server(tmp_path, monkeypatch):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     script = bin_dir / "fakeagent"
-    script.write_text('#!/bin/sh\necho "fake agent ready"\nwhile read line; do echo "got: $line"; done\n')
+    script.write_text('#!/bin/sh\necho "fake agent ready"\nwhile read line; do echo "got: $line"; [ "$line" = /exit ] && exit 0; done\n')
     script.chmod(script.stat().st_mode | stat.S_IEXEC)
 
     socket = f"agentop-test-{uuid.uuid4().hex[:8]}"
@@ -78,7 +79,14 @@ def tmux_server(tmp_path, monkeypatch):
 
     yield socket
 
+    kill_tmux_server(socket)
+
+
+def kill_tmux_server(socket):
+    """End a private tmux server and remove its socket file, which kill-server leaves behind."""
     subprocess.run(["tmux", "-L", socket, "kill-server"], capture_output=True, check=False)
+    folder = Path(os.environ.get("TMUX_TMPDIR", "/tmp")) / f"tmux-{os.getuid()}"
+    (folder / socket).unlink(missing_ok=True)
 
 
 @pytest.fixture

@@ -2,7 +2,6 @@
 
 import shutil
 import time
-import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -159,23 +158,19 @@ def test_turning_it_off_stops_it(client):
 
 
 @pytest.mark.skipif(shutil.which("tmux") is None, reason="needs tmux")
-def test_watches_the_first_pane_of_the_first_window(monkeypatch):
-    monkeypatch.setenv(tmux.SOCKET_ENV, f"agentop-test-{uuid.uuid4().hex[:8]}")
+def test_watches_the_first_pane_of_the_first_window(tmux_server):
     name = "attn-test"
     tmux.run("new-session", "-d", "-s", name, "-x", "80", "-y", "24", "printf agent; sleep 30")
     # Another window and a split, both made active, are not what is watched.
     tmux.run("split-window", "-t", f"={name}:", "printf split; sleep 30")
     tmux.run("new-window", "-t", f"={name}:", "printf other; sleep 30")
-    try:
-        deadline = time.time() + 3
-        while time.time() < deadline:
-            panes = attention.list_panes() or {}
-            if name in panes and "agent" in attention.capture(panes[name][2]):
-                break
-            time.sleep(0.05)
-        activity, _size, pane_id = panes[name]
-        assert activity > time.time() - 10
-        assert "agent" in attention.capture(pane_id)
-        assert "agent" not in tmux.CapturePane.screen(name)  # the active pane is the new window
-    finally:
-        tmux.run("kill-server")
+    deadline = time.time() + 3
+    while time.time() < deadline:
+        panes = attention.list_panes() or {}
+        if name in panes and "agent" in attention.capture(panes[name][2]):
+            break
+        time.sleep(0.05)
+    activity, _size, pane_id = panes[name]
+    assert activity > time.time() - 10
+    assert "agent" in attention.capture(pane_id)
+    assert "agent" not in tmux.CapturePane.screen(name)  # the active pane is the new window
