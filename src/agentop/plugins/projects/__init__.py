@@ -1,6 +1,6 @@
-"""Projects: the owner's own projects, each run through a Coordinator. See docs/0_13_projects.md, section 7.2.
+"""Projects: the owner's own projects, each run through a Coordinator. See docs/0_13_projects.md, sections 4.3 and 7.2.
 
-The core keeps projects and their sessions; this plugin makes and removes its own, and its UI is the Projects feature.
+The core keeps projects and their sessions; this plugin makes and removes its own, checks its Coordinators' turns, and its UI is the Projects feature.
 """
 
 # No `from __future__ import annotations`: FastAPI reads the request body's model,
@@ -12,8 +12,26 @@ def register(api) -> None:
     from pydantic import BaseModel
 
     from agentop import ops, projects
+    from agentop.agentclis import get_agent
+    from agentop.tmux import PasteError
 
+    from . import pursuit, review
+    from .checker import Checker
     from .texts import INSTRUCTIONS, WELCOME
+
+    def deliver(project: str, row: dict, text: str) -> None:
+        agent = get_agent(row.get("tool") or "")
+        tmux_name = (row.get("tmux") or {}).get("session")
+        if agent is None or not tmux_name:
+            return
+        try:
+            agent.deliver(tmux_name, text)
+        except PasteError as exc:
+            api.log.warning("%s/%s: %s", project, row.get("display_name"), exc)
+
+    checker = Checker(deliver)
+    api.on("scan", checker.tick)
+    api.on_disable(checker.reset)
 
     class NewProject(BaseModel):
         name: str
@@ -42,6 +60,16 @@ def register(api) -> None:
         if row is None:
             raise HTTPException(409, "No agent tool is installed")
         return row
+
+    @api.router.get("/projects/{name}/pursuit")
+    async def pursuit_state(name: str):
+        own(name)
+        latest = pursuit.latest_review(name)
+        return {
+            "tasks": pursuit.load_tasks(name),
+            "measure": {k: v for k, v in review.measure(name, 0.0).items() if k != "closed_tasks"},
+            "latest_review": str(latest) if latest else None,
+        }
 
     @api.router.delete("/projects/{name}")
     async def remove_project(name: str, delete_folder: bool = False):

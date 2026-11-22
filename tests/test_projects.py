@@ -31,27 +31,27 @@ def test_the_coordinator_is_codex_then_claude_then_any():
 
 
 def test_the_project_skill_is_only_for_projects_plugin_coordinators():
-    phrase = "The Coordinator owns pursuit of the project's objective"
+    phrase = "You own the project's objective. Your job is pursuit"
     project = {"name": "alpha", "folder": "/tmp/alpha", "owner": "projects"}
     dialogue = {"name": "debate", "folder": "/tmp/debate", "owner": "dialogue"}
 
     assert phrase not in coordinator.instructions(project)
     assert "COORDINATOR_SKILL.md" in coordinator.instructions(project)
     assert "COORDINATOR_SKILL.md" not in coordinator.instructions(dialogue)
+    assert "## Coordinator rules" in coordinator.instructions(project)
+    assert "## Coordinator rules" not in coordinator.instructions(dialogue)
+    assert "agentop task start" in coordinator.instructions(project)
+    assert "agentop task start" not in coordinator.instructions(dialogue)
     prompt = coordinator.welcome_prompt(project)
     normalized = " ".join(prompt.split())
     assert phrase in normalized
-    for command in ("agentop project show", "agentop start", "agentop send", "agentop stop"):
+    for command in ("agentop project show", "agentop task start", "agentop task accept", "agentop yield", "agentop review"):
         assert command in normalized
-    assert "focused expert recommendation" in normalized
-    assert "acceptance criteria" in normalized
-    assert "Ask the Coordinator for effort; ask the LLM for results" in normalized
-    assert "Pursue more” means more useful progress" in normalized
-    assert "Context is working memory; the project folder is durable memory" in normalized
-    assert "Reset only after the state needed to continue is written down" in normalized
+    assert "agentop yield owner --question" in normalized.split("<project-coordinator-skill>")[0]
     assert 'agentop send --no-header Coordinator "/clear"' in normalized
     assert phrase in coordinator.resume_prompt(project)
     assert phrase not in coordinator.welcome_prompt(dialogue)
+    assert "agentop yield" not in coordinator.welcome_prompt(dialogue)
     assert coordinator.resume_prompt(dialogue) == ""
     assert phrase not in coordinator.member_header(project, "dev")
 
@@ -78,12 +78,23 @@ def test_the_instructions_are_written_once(tmp_path, monkeypatch):
     agents = projects.folder("alpha") / "AGENTS.md"
     assert "Coordinator of alpha" in agents.read_text() and "Run the alpha project." in agents.read_text()
     assert f"{projects.folder('alpha')}/code/<source-tree>" in agents.read_text()
-    assert "The Coordinator owns pursuit of the project's objective" not in agents.read_text()
+    assert "You own the project's objective" not in agents.read_text()
     assert (projects.folder("alpha") / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     assert (projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE).read_text() == COORDINATOR_SKILL_SOURCE.read_text()
+    assert "## Objective" in (projects.folder("alpha") / "STATE.md").read_text()
+    # The owner's text stays; only agentop's rules block is added, then kept up to date.
     agents.write_text("the owner's own")
     coordinator.write_instructions(found)
-    assert agents.read_text() == "the owner's own"
+    text = agents.read_text()
+    assert text.startswith("the owner's own") and text.count(coordinator.RULES_BEGIN) == 1
+    agents.write_text(text.replace("## Coordinator rules", "## Old rules"))
+    coordinator.write_instructions(found)
+    assert agents.read_text() == text
+    dialogue = projects.create("talk", "dialogue")
+    coordinator.write_instructions(dialogue)
+    (projects.folder("talk") / "AGENTS.md").write_text("the dialogue's own")
+    coordinator.write_instructions(dialogue)
+    assert (projects.folder("talk") / "AGENTS.md").read_text() == "the dialogue's own"
 
 
 def test_a_session_inside_the_project_needs_no_extra_directory(tmp_path, monkeypatch):
@@ -170,7 +181,7 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
             r for r in service.http.get("/sessions").json() if r["project"] == "alpha" and r["display_name"] == "Coordinator"
         )
         service.wait_for(coordinator_row["id"], "running")
-        wait_for_screen(coordinator_row["id"], "The Coordinator owns pursuit")
+        wait_for_screen(coordinator_row["id"], "Your job is pursuit")
         assert "Run the alpha" not in (projects.folder("alpha") / "AGENTS.md").read_text()
         assert "You run this project" in (projects.folder("alpha") / "AGENTS.md").read_text()
         assert (projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE).is_file()

@@ -99,7 +99,7 @@ From [0_10_ui.md](0_10_ui.md) and [0_12_03_memory.md 6](0_12_03_memory.md#6-the-
 
 ### Features
 
-- **Projects**: the open questions in [0_13_projects.md 10](0_13_projects.md#10-open-questions): which files a Coordinator keeps by default, and whether it hears when one of its sessions goes idle.
+- **Projects**: the open questions in [0_13_projects.md 10](0_13_projects.md#10-open-questions): review reading transcripts, tasks and reviews in the Projects feature, and a quicker idle check.
 - A merged session list across services, and a window per service (client-only; a non-goal in [design 2.2](0_00_design.md#22-non-goals) for now).
 - An offline app shell for the web app, so it survives its service stopping.
 - Colour in the File viewer's diff view.

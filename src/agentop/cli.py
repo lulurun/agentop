@@ -107,9 +107,27 @@ def _own_project(args) -> str:
     return here[1] if here else "default"
 
 
+def _tracked_coordinator(project: str) -> bool:
+    """Whether this runs in a Projects project's Coordinator, which delegates through `agentop task start`."""
+    from agentop import projects
+
+    here = _ops().current_session()
+    found = projects.get(project)
+    return bool(here and here[1] == project and here[2] == projects.COORDINATOR and found and found.get("owner") == "projects")
+
+
 def cmd_start(args):
     cwd = os.path.expanduser(args.cwd)
     project = _own_project(args)
+    if _tracked_coordinator(project) and not args.untracked:
+        print(
+            "Error: a Coordinator delegates with agentop task start, which records the goal, criteria and artifact. "
+            "Add --untracked only for a session that is not a task (it shows in agentop review)",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    if args.prompt == "-":
+        args.prompt = sys.stdin.read()
     params = {}
     if args.model:
         try:
@@ -134,6 +152,10 @@ def cmd_start(args):
             print(f"The tmux session was kept: tmux attach-session -t {exc.name}", file=sys.stderr)
         sys.exit(1)
     name = result.name
+    if args.untracked and _tracked_coordinator(project):
+        from agentop.plugins.projects import pursuit
+
+        pursuit.log(project, "start.untracked", session=args.session_name)
     if args.prompt:
         print("Typing in the first prompt once it is up …")
         try:
@@ -196,6 +218,23 @@ def cmd_stop(args):
     print("Done.")
 
 
+def deliver(target: str, text: str, project: str):
+    """Send a prompt as `agentop send` does, through the service when it runs. Raises OpsError."""
+    from agentop.results import OpsError, Sent
+    from agentop.service import config
+
+    # Through the service, where it queues with the Input bar's prompts; without one, nothing else is typing.
+    answer = _service_api(config.load(), "POST", "/send", {"target": target, "text": text, "project": project}, timeout=60)
+    if answer is None:
+        return _ops().send(target, text, project=project)
+    if answer[0] >= 400:
+        detail = answer[1].get("detail")
+        if isinstance(detail, dict):
+            raise OpsError(detail.get("message", ""), matches=detail.get("matches") or [])
+        raise OpsError(f"the service refused: {detail or answer[0]}")
+    return Sent(answer[1]["name"], answer[1]["tmux"])
+
+
 def cmd_send(args):
     text = sys.stdin.read() if args.prompt in (None, "-") else args.prompt
     from agentop.tmux import Session
@@ -204,23 +243,10 @@ def cmd_send(args):
     sender = f"{here[1]}/{here[2]}" if here else Session.current()
     if sender and not args.no_header:
         text = f"[agentop send from {sender}]\n{text.strip()}"
-    from agentop.results import OpsError, Sent
-    from agentop.service import config
+    from agentop.results import OpsError
 
-    project = _own_project(args)
-    # Through the service, where it queues with the Input bar's prompts; without one, nothing else is typing.
-    answer = _service_api(config.load(), "POST", "/send", {"target": args.target, "text": text, "project": project}, timeout=60)
     try:
-        if answer is None:
-            sent = _ops().send(args.target, text, project=project)
-        elif answer[0] >= 400:
-            detail = answer[1].get("detail")
-            if isinstance(detail, dict):
-                raise OpsError(detail.get("message", ""), matches=detail.get("matches") or [])
-            print(f"Error: the service refused: {detail or answer[0]}", file=sys.stderr)
-            sys.exit(1)
-        else:
-            sent = Sent(answer[1]["name"], answer[1]["tmux"])
+        sent = deliver(args.target, text, _own_project(args))
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if not exc.matches:
@@ -598,7 +624,8 @@ def main():
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
     p_start.add_argument("--project", help="The project to start it in (default: this session's, else default)")
     p_start.add_argument("--model", help='Its model (default: the tool\'s own). Claude takes "Sonnet 5.5"; codex and antigravity, none')
-    p_start.add_argument("--prompt", help="Its first prompt, typed in once it is up, after a line about its project")
+    p_start.add_argument("--prompt", help="Its first prompt, typed in once it is up, after a line about its project; '-' reads it from stdin")
+    p_start.add_argument("--untracked", action="store_true", help="From a Projects Coordinator: start a session that is not a task")
 
     # history
     p_history = sub.add_parser(

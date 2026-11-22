@@ -3,6 +3,7 @@
 from pathlib import Path
 
 PATH = Path(__file__).with_name("SKILL.md")
+RULES = Path(__file__).with_name("RULES.md")
 
 
 def body() -> str:
@@ -14,3 +15,7 @@ def body() -> str:
     if not separator or not content.strip():
         raise ValueError("Coordinator skill has no body")
     return content.strip()
+
+
+def rules() -> str:
+    return RULES.read_text().strip()

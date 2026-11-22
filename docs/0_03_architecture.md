@@ -159,7 +159,7 @@ Everything agentop writes is under `~/.agentop` (`AGENTOP_HOME` moves it):
 | `service.json` | The service's name and service token, mode `0600` |
 | `state/clients.json` | The signed-in clients, with a hash of each one's token, mode `0600` |
 | `state/` | What agentop rewrites as it runs: the sessions lock, `plugins.json`, `update-status.json`, `update.pid` |
-| `projects/{name}/` | Each project's folder ([0_13_projects.md](0_13_projects.md)), with agentop's record of it in `.project/`: `project.json` and the project's `sessions.json`. `default` is the Sessions feature's; each dialogue is one too |
+| `projects/{name}/` | Each project's folder ([0_13_projects.md](0_13_projects.md)), with agentop's record of it in `.project/`: `project.json` and the project's `sessions.json`, and for a Projects project the pursuit record `tasks.json` and `events.jsonl` (`plugins/projects/pursuit.py`). `default` is the Sessions feature's; each dialogue is one too |
 | `logs/` | `serve.log` (a service started by hand), `update.log` |
 | `plugins/{id}/` | Each plugin's own files: `store.json` from `api.store`, and anything else under `api.data_dir`. The Memory archive is `plugins/memory/` |
 
