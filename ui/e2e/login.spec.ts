@@ -15,7 +15,7 @@ async function withEmailCode(enabled = true) {
   s = new Service("alpha");
   const port = s.port + 1000;
   mails = join(s.root, "mails.jsonl");
-  smtp = spawn(PYTHON, [resolve("../tests/fake_smtp.py"), String(port), mails], { stdio: ["ignore", "pipe", "ignore"] });
+  smtp = s.track(spawn(PYTHON, [resolve("../tests/fake_smtp.py"), String(port), mails], { stdio: ["ignore", "pipe", "ignore"] }));
   await new Promise((ready) => smtp!.stdout!.once("data", ready));
   const home = join(s.root, "state");
   mkdirSync(join(home, "plugins", "email-code"), { recursive: true });

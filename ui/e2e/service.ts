@@ -1,7 +1,8 @@
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
+import { PREFIX, wipe } from "./leftovers";
 
 // Like Claude Code, it records its session ID by PID, so its transcript can be found.
 const AGENT = `#!/bin/sh
@@ -32,16 +33,26 @@ const PYTHON = `${process.env.HOME}/.pyenv/versions/3.13.9/bin/python`;
 
 let nextPort = 19800 + Math.floor(Math.random() * 1000);
 
+const live = new Set<Service>();
+// A failed or interrupted test may never reach its afterEach, so the worker cleans up as it goes.
+process.once("exit", () => live.forEach((s) => s.destroy()));
+for (const signal of ["SIGTERM", "SIGHUP"] as const) {
+  process.once(signal, () => process.exit(128 + (signal === "SIGTERM" ? 15 : 1)));
+}
+
 /** A real service with its own state and its own private tmux server. */
 export class Service {
-  readonly root = mkdtempSync(join(tmpdir(), "agentop-e2e-"));
-  readonly socket = `agentop-e2e-${Math.random().toString(36).slice(2, 10)}`;
+  readonly root = mkdtempSync(join(tmpdir(), PREFIX));
+  readonly socket = basename(this.root);
   process: ChildProcess | null = null;
+  private readonly children: ChildProcess[] = [];
 
   constructor(
     readonly name: string,
     readonly port = nextPort++,
   ) {
+    live.add(this);
+    writeFileSync(join(this.root, "owner"), String(process.pid));
     const bin = join(this.root, "bin");
     mkdirSync(bin);
     mkdirSync(join(this.root, "project"));
@@ -137,13 +148,21 @@ export class Service {
     return `${this.url}/#token=${this.token}`;
   }
 
+  /** Another process of this test's, ended with it. */
+  track(child: ChildProcess) {
+    this.children.push(child);
+    return child;
+  }
+
   async dispose() {
     await this.stop();
-    try {
-      this.tmux("kill-server");
-    } catch {
-      // Already gone.
-    }
-    rmSync(this.root, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    this.destroy();
+  }
+
+  destroy() {
+    live.delete(this);
+    for (const child of this.children.splice(0)) child.kill("SIGKILL");
+    wipe(this.root, this.socket, this.process?.pid);
+    this.process = null;
   }
 }
