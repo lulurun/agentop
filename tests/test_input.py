@@ -142,7 +142,9 @@ def test_the_excerpt_keeps_the_first_prompt_and_the_latest_messages():
 
 
 def test_the_answer_must_carry_a_verdict():
-    assert reception.parse('Sure: {"verdict": "Clear", "reason": "new topic"}') == ("clear", "new topic")
+    assert reception.parse('Sure: {"current_work": "a release", "verdict": "Clear", "reason": "new topic"}') == {
+        "verdict": "clear", "reason": "new topic", "work": "a release", "message": ""
+    }
     with pytest.raises(ValueError):
         reception.parse('{"verdict": "maybe"}')
     with pytest.raises(ValueError):
