@@ -11,10 +11,11 @@
 | Security: tokens, sign-in, and which way to reach a service from elsewhere (Tailscale, for one person) | [docs/0_06_security.md](docs/0_06_security.md) |
 | Service and app setup | [docs/1_setup.md](docs/1_setup.md) |
 | Build and release (UI, desktop app) | [docs/1_setup.md](docs/1_setup.md#building-and-releasing), `scripts/` |
+| Coordinator dogfooding: dated notes from watching real Coordinators, before deciding fixes | [docs/7_coordinator-dogfooding.md](docs/7_coordinator-dogfooding.md) |
 | Manual tests (real user and PC) | [docs/8_manual-tests.md](docs/8_manual-tests.md) |
 | Backlog: everything not done yet, by priority | [docs/9_backlog.md](docs/9_backlog.md) |
 
-A doc of its own holds the detail of its part; `0_00_design.md` sums each part up and links there. Doc names sort in reading order: the index is `0_00_design.md`; a section's own doc is `0_<section, 2 digits>_<name>.md` (`0_03_architecture.md`); the plugins page is `0_12_00_plugins.md`, and a plugin's own doc is `0_12_<number>_<id>.md`, with the number from the table there. The other docs are `1_setup.md`, `8_manual-tests.md` and `9_backlog.md`.
+A doc of its own holds the detail of its part; `0_00_design.md` sums each part up and links there. Doc names sort in reading order: the index is `0_00_design.md`; a section's own doc is `0_<section, 2 digits>_<name>.md` (`0_03_architecture.md`); the plugins page is `0_12_00_plugins.md`, and a plugin's own doc is `0_12_<number>_<id>.md`, with the number from the table there. The other docs are `1_setup.md`, `7_coordinator-dogfooding.md`, `8_manual-tests.md` and `9_backlog.md`.
 
 ## Key facts
 
