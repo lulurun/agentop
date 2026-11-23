@@ -165,7 +165,7 @@ Keeps agentop's own copy of every agent transcript on the host, never deleted, t
 
 ### Input bar (`input`)
 
-A box below a session's terminal to type prompts in, with buttons for Esc, the arrows, Enter, Tab, Shift-Tab and digits, and ^B for tmux's prefix. While it shows, the terminal is only watched. It holds the draft outside tmux, so a prompt another session sends (a Coordinator's reply from `agentop send`) doesn't join it, and its prompts queue with `agentop send`'s in the service. Each device chooses between the bar and typing in the terminal. See [0_12_04_input.md](0_12_04_input.md).
+A box below a session's terminal to type prompts in, with buttons for Esc, the arrows, Enter, Tab, Shift-Tab and digits, and ^B for tmux's prefix. While it shows, the terminal is only watched. It holds the draft outside tmux, so a prompt another session sends (a Coordinator's reply from `agentop send`) doesn't join it, and its prompts queue with `agentop send`'s in the service. Each device chooses between the bar and typing in the terminal. With reception on (by default for a Projects Coordinator), a prompt that looks like new work is held, and the bar offers to clear the session's context first. See [0_12_04_input.md](0_12_04_input.md).
 
 ### Waiting for input (`attention`)
 

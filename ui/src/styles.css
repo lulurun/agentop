@@ -1247,6 +1247,7 @@ button.app-outdated:hover { background: var(--line); }
 .input-bar[data-mode="terminal"] .input-toggle:hover { color: var(--text); }
 
 .composer {
+  position: relative;
   display: grid;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1319,6 +1320,87 @@ button.app-outdated:hover { background: var(--line); }
 .composer-tools .input-send[data-empty]:hover:not(:disabled) { background: var(--line); color: var(--text); }
 .composer[data-prefix] .input-send { background: var(--starting); }
 .input-error { margin: 8px 10px 0; padding: 6px 9px; border-radius: 6px; background: color-mix(in srgb, var(--failed) 14%, transparent); color: var(--failed); font-size: 12.5px; }
+.input-note { margin: 8px 10px 0; padding: 6px 9px; border-radius: 6px; background: color-mix(in srgb, var(--running) 13%, transparent); color: var(--running); font-size: 12.5px; }
+
+/* Reception: a prompt held back while it is checked, or while the owner decides whether to clear first */
+.composer[data-reception="checking"],
+.composer[data-reception="clearing"] { border-color: color-mix(in srgb, var(--action) 55%, var(--line)); }
+.composer[data-reception="checking"]::before,
+.composer[data-reception="clearing"]::before {
+  content: "";
+  position: absolute;
+  inset: -1px -1px auto;
+  height: 2px;
+  border-radius: 10px 10px 0 0;
+  background: linear-gradient(90deg, transparent, var(--action), transparent) 0 0 / 40% 100% no-repeat;
+  animation: reception-sweep 1.3s ease-in-out infinite;
+}
+@keyframes reception-sweep { from { background-position: -40% 0; } to { background-position: 140% 0; } }
+.composer[data-reception="ask"],
+.composer[data-reception="ask"]:focus-within { border-color: var(--starting); box-shadow: 0 0 0 3px color-mix(in srgb, var(--starting) 16%, transparent); }
+.composer[data-reception="checking"] textarea,
+.composer[data-reception="clearing"] textarea { color: var(--quiet); }
+
+.reception { display: flex; align-items: center; gap: 10px; margin: 6px 6px 0; padding: 7px 10px; border-radius: 7px; font-size: 12.5px; }
+.reception[data-phase="checking"],
+.reception[data-phase="clearing"] { color: var(--quiet); }
+.reception-status { flex: 1; min-width: 0; }
+.reception-pulse { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--action); animation: reception-pulse 1.1s ease-in-out infinite; }
+@keyframes reception-pulse { 50% { opacity: 0.3; transform: scale(0.7); } }
+
+.reception[data-phase="ask"] {
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--starting) 11%, transparent);
+  border: 1px solid color-mix(in srgb, var(--starting) 30%, transparent);
+}
+.reception-message { flex: 1 1 260px; display: grid; gap: 2px; min-width: 0; }
+.reception-message strong { color: var(--starting); font-size: 13px; font-weight: 600; }
+.reception-message span { color: var(--text); line-height: 1.45; }
+.reception-actions { flex: none; display: flex; align-items: center; gap: 6px; }
+.reception button { font: inherit; font-size: 12.5px; white-space: nowrap; border-radius: 6px; }
+.reception-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  background: var(--starting);
+  color: var(--action-ink);
+  font-weight: 600;
+}
+.reception-primary:hover { background: color-mix(in srgb, var(--starting) 85%, var(--text)); }
+.reception-secondary { height: 30px; padding: 0 11px; border: 1px solid var(--line); background: var(--surface); color: var(--text); }
+.reception-secondary:hover { background: var(--raised); }
+.reception-link { height: 28px; padding: 0 6px; border: 0; background: none; color: var(--quiet); text-decoration: underline; text-underline-offset: 3px; }
+.reception-link:hover { color: var(--text); }
+.reception button:focus-visible { outline: 2px solid var(--action); outline-offset: 2px; }
+
+.composer-tools .input-reception { position: relative; font-family: var(--ui); }
+.composer-tools .input-reception[aria-pressed="true"] { color: var(--running); }
+.composer-tools .input-reception[aria-pressed="true"]::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--running);
+}
+@media (max-width: 720px) {
+  .reception[data-phase="ask"] { gap: 8px; }
+  .reception-actions { flex: 1 1 100%; flex-wrap: wrap; min-width: 0; }
+  .reception-primary { flex: 1 1 100%; justify-content: center; }
+  .reception-secondary { flex: 1; }
+}
+@media (pointer: coarse) {
+  .reception-primary, .reception-secondary { height: 38px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .composer[data-reception]::before, .reception-pulse { animation: none; }
+}
 @media (pointer: coarse) {
   .composer-tools button { min-width: 36px; height: 36px; font-size: 13.5px; }
   .composer-tools .input-send { width: 40px; height: 36px; }

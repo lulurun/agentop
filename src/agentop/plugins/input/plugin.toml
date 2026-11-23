@@ -1,7 +1,7 @@
 id = "input"
 name = "Input bar"
 version = "0.1.0"
-description = "A box below a session's terminal to type prompts in, with buttons for keys like Esc and the arrows. It holds your draft, so a prompt another session sends doesn't join it. While the bar shows, the terminal is only watched; its ⌨ button switches back to typing in the terminal, for that device."
+description = "A box below a session's terminal to type prompts in, with buttons for keys like Esc and the arrows. It holds your draft, so a prompt another session sends doesn't join it. While the bar shows, the terminal is only watched; its ⌨ button switches back to typing in the terminal, for that device. With reception on (by default for a project's Coordinator), a prompt that looks like new work is held, and the bar offers to clear the session's context first."
 plugin_api = 1
 default_enabled = true
 ui = ["terminal-input"]

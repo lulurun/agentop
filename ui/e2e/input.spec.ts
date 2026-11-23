@@ -113,3 +113,57 @@ test("with a keyboard, Enter sends and Shift+Enter is a new line", async ({ page
   await expect(screen(page)).toContainText("got: first");
   await expect(prompt).toHaveValue("");
 });
+
+test("reception holds a prompt that looks like new work, and clears first when asked", async ({ page }) => {
+  await withInputBar(page);
+  const SHOTS = process.env.RECEPTION_SHOTS;
+  const reception = page.getByRole("button", { name: "Reception" });
+  await expect(reception).toHaveAttribute("aria-pressed", "false");
+  await reception.click();
+  await expect(reception).toHaveAttribute("aria-pressed", "true");
+
+  let answer = () => ({ id: "c1", verdict: "clear", reason: "The session is fixing the login flow; this asks for a deployment guide.", by: "test" });
+  let hold: Promise<void> = Promise.resolve();
+  await page.route("**/plugins/input/sessions/*/check", async (route) => {
+    await hold;
+    await route.fulfill({ json: answer() });
+  });
+
+  const prompt = page.getByLabel("Prompt for phone");
+  let release = () => {};
+  hold = new Promise((resolve) => (release = resolve));
+  await prompt.fill("Please write the deployment guide for the new service, with rollback steps");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Checking it against the current work…")).toBeVisible();
+  if (SHOTS) await page.locator(".input-bar").screenshot({ path: `${SHOTS}/checking.png` });
+  release();
+
+  await expect(page.getByText("This looks like new work")).toBeVisible();
+  await expect(prompt).toHaveValue(/deployment guide/);
+  if (SHOTS) await page.locator(".input-bar").screenshot({ path: `${SHOTS}/ask.png` });
+  await page.getByRole("button", { name: "Clear context & send" }).click();
+  await expect(screen(page)).toContainText("got: /clear");
+  await expect(screen(page)).toContainText("got: Please write the deployment guide");
+  await expect(page.getByText("Context cleared, then sent")).toBeVisible();
+  await expect(prompt).toHaveValue("");
+
+  await prompt.fill("Another long prompt that the check will hold back");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("This looks like new work")).toBeVisible();
+  if (SHOTS) {
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.locator(".input-bar").screenshot({ path: `${SHOTS}/ask-dark.png` });
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("This looks like new work")).toHaveCount(0);
+  await expect(prompt).toHaveValue("Another long prompt that the check will hold back");
+  await page.keyboard.press("Enter");
+  await page.getByRole("button", { name: "Send as is" }).click();
+  await expect(screen(page)).toContainText("got: Another long prompt");
+
+  answer = () => ({ id: "c2", verdict: "keep", reason: "A follow-up.", by: "test" });
+  await prompt.fill("And a follow-up the check keeps in the same context");
+  await page.keyboard.press("Enter");
+  await expect(screen(page)).toContainText("got: And a follow-up");
+  await expect(page.getByText("This looks like new work")).toHaveCount(0);
+});
