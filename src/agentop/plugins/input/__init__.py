@@ -100,7 +100,7 @@ def register(api):
             if result["verdict"] != "pass" or result["reason"].startswith("the check failed"):
                 reception.log(
                     log_path, kind="check", session=reception.key(row), check=result["id"], verdict=result["verdict"],
-                    reason=result["reason"], work=result.get("work"), message=result.get("message"), by=result["by"],
+                    reason=result["reason"], work=result.get("work"), message=result.get("message"), transcript=row.get("session_id"), by=result["by"],
                     ms=result.get("ms"), chars=len(body.text),
                 )
             return result

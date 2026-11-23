@@ -12,10 +12,11 @@ from typing import Optional
 
 import psutil
 
+from agentop import tmux
 from agentop.agentclis.base import AgentCli, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, StartResult, saved_session
-from agentop.tmux import Session
+from agentop.tmux import CapturePane, Session
 
 LOG = logging.getLogger(__name__)
 
@@ -83,6 +84,8 @@ class CodexAgentCli(AgentCli):
     _START_TOLERANCE_MS = 30_000
     # Codex's own background processes, which share the name but are not agents.
     _HELPERS = ("app-server", "codex-code-mode-host")
+    # The status line under the prompt: "<model> · <folder> · <thread name, or its first message cut with …>".
+    _FOOTER_RE = re.compile(r"^\s*\S[^·\n]* · (?P<cwd>[~/][^·\n]*?) · (?P<name>[^·\n]+?)\s*$", re.MULTILINE)
     _RESUME_RE = re.compile(r"\bresume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
 
     def __init__(self, home: Optional[Path] = None) -> None:
@@ -217,7 +220,7 @@ class CodexAgentCli(AgentCli):
         return self._logged_thread_id(pid, started)
 
     def _thread_id(self, pid: int) -> Optional[str]:
-        """The thread a running codex works on: from its log, else from `codex resume <id>`."""
+        """The thread a running codex works on: from its log, its pane's footer, else from `codex resume <id>`."""
         try:
             process = psutil.Process(pid)
             start = process.create_time()
@@ -225,13 +228,60 @@ class CodexAgentCli(AgentCli):
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             return None
         key = (pid, start)
-        found = self._logged_thread_id(pid, start)
+        # A TUI on a shared app-server (Codex Desktop's) logs no thread ids, and moves to a new thread on /clear.
+        found = self._logged_thread_id(pid, start) or self._footer_thread_id(pid)
         if not found:
             resumed = self._RESUME_RE.search(cmdline)
             found = self._threads.get(key) or (resumed.group(1) if resumed else None)
         if found:
             self._threads[key] = found
         return found
+
+    def _footer_thread_id(self, pid: int) -> str | None:
+        """The thread the footer of this process's tmux pane names, matched among threads in its folder."""
+        pane = self._pane_of(pid)
+        if not pane:
+            return None
+        footers = list(self._FOOTER_RE.finditer(CapturePane.screen(pane)))
+        if not footers:
+            return None
+        cwd = str(Path(footers[-1]["cwd"].strip()).expanduser())
+        name = footers[-1]["name"].strip()
+        prefix = name[:-1].rstrip() if name.endswith("…") else None
+        db_path = self.dir / "state_5.sqlite"
+        if not db_path.exists():
+            return None
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=2) as conn:
+                if prefix:
+                    match, args = "substr(COALESCE(name, title, first_user_message), 1, ?) = ?", (len(prefix), prefix)
+                else:
+                    match, args = "COALESCE(name, title) = ?", (name,)
+                row = conn.execute(
+                    f"""
+                    SELECT id FROM threads
+                    WHERE cwd = ? AND (archived IS NULL OR archived = 0) AND {match}
+                    ORDER BY COALESCE(recency_at_ms, updated_at_ms, created_at_ms) DESC
+                    LIMIT 1
+                    """,
+                    (cwd, *args),
+                ).fetchone()
+        except sqlite3.Error:
+            return None
+        return row[0] if row else None
+
+    @staticmethod
+    def _pane_of(pid: int) -> str | None:
+        try:
+            r = tmux.run("list-panes", "-a", "-F", "#{pane_pid} #{session_name}", text=True)
+            chain = {pid} | {p.pid for p in psutil.Process(pid).parents()}
+        except (*tmux._ERRORS, psutil.NoSuchProcess, psutil.AccessDenied):
+            return None
+        for line in r.stdout.splitlines() if r.returncode == 0 else []:
+            pane_pid, _, name = line.partition(" ")
+            if pane_pid.isdigit() and int(pane_pid) in chain:
+                return name
+        return None
 
     def _thread_by_id(self, thread_id: str) -> Optional[dict]:
         db_path = (self.dir / "state_5.sqlite")

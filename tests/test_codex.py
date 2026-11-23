@@ -11,9 +11,11 @@ import psutil
 import pytest
 
 from agentop.agentclis.codex import CodexAgentCli
+from agentop.tmux import CapturePane
 
 THREAD_A = "01a18bcf-f7bc-7af3-91b5-74bcf3f51fca"
 THREAD_B = "01a19215-cdb4-7361-9271-43cddf1afd12"
+THREAD_C = "01a20835-9fc9-7cc1-8f3d-9440bcd6fa01"
 
 
 @pytest.fixture
@@ -83,6 +85,33 @@ def test_resume_on_the_command_line_names_the_thread(home, monkeypatch):
     agent = CodexAgentCli()
     monkeypatch.setattr(psutil.Process, "cmdline", lambda self: ["codex", "resume", THREAD_A])
     assert title(agent) == "Resumed talk"
+
+
+def footer(home, monkeypatch, line: str):
+    with sqlite3.connect(home / "state_5.sqlite") as db:
+        for column in ("name TEXT", "recency_at_ms INT", "updated_at_ms INT"):
+            db.execute(f"ALTER TABLE threads ADD COLUMN {column}")
+        db.execute("UPDATE threads SET name = title, recency_at_ms = 5000")
+        db.execute("INSERT INTO threads VALUES (?, NULL, 'please make a plan for the release', 0, NULL, 4000, '/w', 0, NULL, 4000, 4000)", (THREAD_C,))
+    monkeypatch.setattr(CodexAgentCli, "_pane_of", staticmethod(lambda pid: "s"))
+    monkeypatch.setattr(CapturePane, "screen", staticmethod(lambda pane: f"› Ask Codex to do anything\n\n  {line}\n  ? for shortcuts\n"))
+
+
+def test_on_a_shared_app_server_the_footer_names_the_thread_after_a_clear(home, monkeypatch):
+    agent = CodexAgentCli()
+    monkeypatch.setattr(psutil.Process, "cmdline", lambda self: ["codex", "resume", THREAD_A])
+    footer(home, monkeypatch, "GPT-6-Sol medium · /w · After /new")
+    assert title(agent) == "After /new"
+
+
+def test_a_footer_cut_short_matches_the_first_message(home, monkeypatch):
+    footer(home, monkeypatch, "GPT-6-Sol medium · /w · please make a plan for the…")
+    assert CodexAgentCli().get_session_meta(os.getpid(), "/w").get("session_id") == THREAD_C
+
+
+def test_a_footer_in_another_folder_names_nothing(home, monkeypatch):
+    footer(home, monkeypatch, "GPT-6-Sol medium · /elsewhere · After /new")
+    assert title(CodexAgentCli()) is None
 
 
 @pytest.mark.parametrize(
