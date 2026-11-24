@@ -293,7 +293,6 @@ export const MainArea = memo(function MainArea() {
   const status = useApp((s) => selectedSession(s)?.status);
   const attachable = useApp((s) => !!selectedSession(s)?.attachable);
   const linkState = useApp((s) => s.link.state);
-  const setDialog = useApp((s) => s.setDialog);
   const client = useActiveClient();
   const linked = linkState === "connected" || linkState === "reconnecting";
   const feature = useApp(currentFeature);
@@ -331,16 +330,7 @@ export const MainArea = memo(function MainArea() {
             feature="sessions"
             hidden={feature !== "sessions"}
             renderSession={renderSession}
-            background={
-              <div className="placard">
-                <h2>Start a session, or pick one from the list</h2>
-                <div className="placard-actions">
-                  <button type="button" className="primary" onClick={() => setDialog("new-session")}>
-                    New session
-                  </button>
-                </div>
-              </div>
-            }
+            background={null}
           />
           {feature !== "sessions" && (
             <Workbench

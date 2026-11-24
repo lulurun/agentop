@@ -3,6 +3,7 @@ import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import { startProxy } from "./proxy";
 import { Service } from "./service";
+import { startFromPrompt } from "./start";
 
 /**
  * The real setup: a service on this machine, and a devhost reached through a
@@ -41,11 +42,7 @@ async function proxied(s: Service, options?: Parameters<typeof startProxy>[1]) {
 const terminalText = (page: Page) => page.getByTestId("terminal").locator(".xterm-rows");
 
 async function startSession(page: Page, s: Service, name: string) {
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
-  await dialog.getByLabel("Name").fill(name);
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name });
 }
 
 test("the app on a local service connects to a devhost through the proxy", async ({ page }) => {

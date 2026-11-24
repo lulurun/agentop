@@ -78,11 +78,8 @@ const SessionRow = memo(function SessionRow({ session, selected }: { session: Se
 
 /** Sessions' left panel: the default project's sections. */
 export const Sidebar = memo(function Sidebar() {
-  const setDialog = useApp((s) => s.setDialog);
-  const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   return (
     <div className="sidebar-scroll">
-      {linked && <CreateSection id="sessions:create" title="Create new session" label="New session" onClick={() => setDialog("new-session")} />}
       <SessionSections project="default" />
     </div>
   );
@@ -105,7 +102,7 @@ export function CreateSection({ id, title, label, onClick }: { id: string; title
 export const SessionSections = memo(function SessionSections({ project, canStart = true }: { project: string; canStart?: boolean }) {
   const sessions = useApp((s) => s.sessions);
   const selected = useApp(selectedId);
-  const setDialog = useApp((s) => s.setDialog);
+  const openTab = useApp((s) => s.openTab);
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
   const maxActive = useApp((s) => s.history.maxActive);
   const pastOpen = useApp(focusedPastId);
@@ -138,7 +135,7 @@ export const SessionSections = memo(function SessionSections({ project, canStart
                   {canStart && (
                     <>
                       {" "}
-                      <button type="button" className="link" onClick={() => setDialog("new-session", project)}>
+                      <button type="button" className="link" onClick={() => openTab({ kind: "start" }, "left")}>
                         Start one
                       </button>
                     </>

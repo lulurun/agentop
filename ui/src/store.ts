@@ -24,7 +24,7 @@ export type LinkState =
   | { state: "reconnecting"; service: ServiceInfo; socketBlocked?: boolean }
   | { state: "failed"; failure: ConnectFailure };
 
-type Dialog = "new-session" | "add-service" | "settings" | null;
+type Dialog = "add-service" | "settings" | null;
 
 /** History, in Sessions' left panel: the past sessions agentop started, for the active connection. */
 export interface HistoryState {
@@ -67,7 +67,6 @@ export interface AppState {
   switcherOpen: boolean;
   dialog: Dialog;
   /** The project New session starts its session in. */
-  dialogProject: string;
   error: string | null;
 
   init(): Promise<void>;
@@ -224,11 +223,20 @@ type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "feature
  */
 export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature(state)): Layout {
   const saved = state.layouts[state.activeId]?.[feature];
-  if (saved) return saved;
-  if (feature !== "sessions") return EMPTY_LAYOUT;
+  if (feature !== "sessions") return saved ?? EMPTY_LAYOUT;
+  if (saved) return withStart(saved);
   const selected = state.selected[state.activeId];
-  if (!selected) return EMPTY_LAYOUT;
-  return derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0"));
+  if (!selected) return withStart(EMPTY_LAYOUT);
+  return withStart(derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0")));
+}
+
+const startAdded = new WeakMap<Layout, Layout>();
+
+/** Sessions' layout with its start buffer, the same object each time for the same layout, as selectors need. */
+function withStart(layout: Layout): Layout {
+  let found = startAdded.get(layout);
+  if (!found) startAdded.set(layout, (found = tabs.withStartTab(layout)));
+  return found;
 }
 
 /** The past session whose tab has focus in the feature shown, if one does. */
@@ -628,7 +636,6 @@ export const useApp = create<AppState>((set, get) => {
     folded: loadFolded(),
     switcherOpen: false,
     dialog: null,
-    dialogProject: "default",
     error: null,
 
     async init() {
@@ -791,7 +798,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     setSwitcherOpen: (switcherOpen) => set({ switcherOpen }),
-    setDialog: (dialog, project = "default") => set({ dialog, dialogProject: project, switcherOpen: false }),
+    setDialog: (dialog) => set({ dialog, switcherOpen: false }),
     openStatus(id) {
       set({ switcherOpen: false, dialog: null });
       if (id !== get().activeId) get().switchTo(id);

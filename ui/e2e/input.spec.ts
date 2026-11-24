@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
+import { startFromPrompt } from "./start";
 
 let s: Service;
 
@@ -22,11 +23,7 @@ async function withInputBar(page: Page) {
   writeFileSync(join(s.root, "state", "state", "plugins.json"), JSON.stringify({ input: { enabled: true } }));
   await s.start();
   await page.goto(s.signedInUrl);
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
-  await dialog.getByLabel("Name").fill("phone");
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "phone" });
   await expect(screen(page)).toContainText("fake agent ready", { timeout: 15_000 });
 }
 

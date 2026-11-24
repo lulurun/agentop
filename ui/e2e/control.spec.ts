@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { join } from "node:path";
 import { Service } from "./service";
+import { startFromPrompt } from "./start";
 
 const cleanup: (() => unknown)[] = [];
 test.afterEach(async () => {
@@ -24,11 +25,7 @@ async function open(page: Page, s: Service) {
 }
 
 async function startSession(page: Page, s: Service, name: string) {
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
-  await dialog.getByLabel("Name").fill(name);
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name });
   await expect(page.getByTestId("terminal").locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
 }
 
@@ -58,7 +55,8 @@ test("a session's name and description can be edited in place", async ({ page })
   await page.keyboard.press("Enter");
   await expect(page.locator(".sidebar")).toContainText("renamed");
 
-  await details.getByRole("button", { name: "Add a description" }).click();
+  // A session started from a prompt has its title as its description.
+  await details.getByRole("button", { name: "work on first" }).click();
   await details.getByLabel("Description").fill("fixing the login bug");
   await page.keyboard.press("Enter");
   await expect(details.getByRole("button", { name: "fixing the login bug" })).toBeVisible();

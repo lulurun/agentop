@@ -625,7 +625,7 @@ def main():
     p_start.add_argument("--tool", required=True, choices=agentclis.names())
     p_start.add_argument("--cwd", default=os.path.expanduser("~"), help="Working directory (default: home directory)")
     p_start.add_argument("--project", help="The project to start it in (default: this session's, else default)")
-    p_start.add_argument("--model", help='Its model (default: the tool\'s own). Claude takes "Sonnet 5.5"; codex and antigravity, none')
+    p_start.add_argument("--model", help='Its model by name or ID (default: the tool\'s own), such as "Opus 5.5" or "GPT-6.2-Sol"')
     p_start.add_argument("--prompt", help="Its first prompt, typed in once it is up, after a line about its project; '-' reads it from stdin")
     p_start.add_argument("--untracked", action="store_true", help="From a Projects Coordinator: start a session that is not a task")
     p_start.add_argument(

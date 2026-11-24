@@ -7,6 +7,7 @@ import { areasOf, canSplit, other, sessionOf, type Area, type Group, type Tab } 
 import type { FeatureId } from "../features";
 import { connectionName } from "../connections";
 import { PastSessionView } from "./HistoryView";
+import { StartView } from "./StartView";
 import { StatusView } from "./StatusView";
 
 function baseName(path: string): string {
@@ -21,6 +22,7 @@ function useTabLabel(tab: Tab): { label: string; title: string; status?: string 
   const service = useApp((s) => connectionName(activeConnection(s), s.link.state === "connected" || s.link.state === "reconnecting" ? s.link.service.name : undefined));
   const { content } = tab;
   if (content.kind === "status") return { label: "Status", title: `Status of ${service}` };
+  if (content.kind === "start") return { label: "New", title: "Start a session from a prompt" };
   if (content.kind === "past") return { label: past?.name ?? "Past session", title: past ? `Past session in ${past.cwd}` : "Past session" };
   if (content.kind === "plugin") {
     const view = UI_PLUGINS[content.plugin]?.feature?.views[content.view];
@@ -257,6 +259,7 @@ function GroupView({
           ? null
           : tab?.content.kind === "file" ? <FileTab key={tab.id} file={tab.content.file} />
           : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(feature, area, tab.id)} />
+          : tab?.content.kind === "start" ? <StartView key={tab.id} />
           : tab?.content.kind === "past" ? <PastSessionView key={tab.id} historyId={tab.content.historyId} onClose={() => closeTab(feature, area, tab.id)} />
           : tab?.content.kind === "plugin" ? <PluginTab key={tab.id} pluginId={tab.content.plugin} view={tab.content.view} viewKey={tab.content.key} />
           : null}

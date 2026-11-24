@@ -7,7 +7,6 @@ import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
 import { AppOutdated, ServiceSwitcher, UpdateBadge } from "./ServiceSwitcher";
 import { MainArea } from "./MainArea";
-import { NewSessionDialog } from "./NewSessionDialog";
 import { SettingsDialog } from "./SettingsDialog";
 import { Sidebar } from "./Sidebar";
 import { GearIcon, ToolbarIcon } from "./icons";
@@ -156,7 +155,6 @@ export function App() {
         </aside>
       )}
       {(showLeft || showRight) && <div className="scrim" onClick={() => { if (showLeft) toggleLeft(); if (showRight) toggleRight(); }} />}
-      {dialog === "new-session" && <NewSessionDialog />}
       {dialog === "add-service" && <AddServiceDialog />}
       {dialog === "settings" && <SettingsDialog />}
       {error && (

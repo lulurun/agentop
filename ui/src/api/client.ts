@@ -22,6 +22,12 @@ export type PluginInfo = components["schemas"]["PluginInfo"];
 export type ClientToken = components["schemas"]["ClientToken"];
 export type ClientInfo = components["schemas"]["ClientInfo"];
 export type LoginMethod = components["schemas"]["LoginMethod"];
+export type StartDecision = components["schemas"]["StartDecision"];
+export type StartLaunch = components["schemas"]["StartLaunch"];
+export type StartTool = components["schemas"]["StartTool"];
+export type StartSettings = components["schemas"]["StartSettings"];
+export type StartSettingsPatch = components["schemas"]["StartSettingsPatch"];
+export type StartRecent = components["schemas"]["StartRecent"];
 
 export class ApiError extends Error {
   constructor(
@@ -140,6 +146,12 @@ export class ServiceClient {
   close = (id: string) => this.request("DELETE", `/sessions/${encodeURIComponent(id)}`);
   patch = (id: string, body: PatchSession) =>
     this.request<Session>("PATCH", `/sessions/${encodeURIComponent(id)}`, body);
+  probeStart = (prompt: string) => this.request<StartDecision>("POST", "/start/probe", { prompt });
+  launchStart = (body: StartLaunch) => this.request<Session>("POST", "/start/launch", body);
+  recentStarts = () => this.get<StartRecent[]>("/start/recent");
+  startModels = () => this.get<StartTool[]>("/start/models");
+  startSettings = () => this.get<StartSettings>("/start/settings");
+  saveStartSettings = (body: StartSettingsPatch) => this.request<StartSettings>("PUT", "/start/settings", body);
   plugins = () => this.get<PluginInfo[]>("/plugins");
   setPluginEnabled = (id: string, enabled: boolean) =>
     this.request<PluginInfo>("PATCH", `/plugins/${encodeURIComponent(id)}`, { enabled });

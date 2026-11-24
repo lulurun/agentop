@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
+import { startFromPrompt } from "./start";
 
 const cleanup: (() => unknown)[] = [];
 test.afterEach(async () => {
@@ -153,20 +154,20 @@ test("history is under the active sessions: filtered, opened, deleted, and resum
   await expect(right).toContainText("3 B in 1 file");
   await expect(right).toContainText("Not recorded by codex.");
   await history.getByRole("button", { name: /scratch/ }).click();
-  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["scratch"]);
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["New", "scratch"]);
   await view.getByRole("button", { name: "Delete" }).click();
   await view.getByRole("button", { name: "Keep" }).click();
   await view.getByRole("button", { name: "Delete" }).click();
   await view.getByRole("button", { name: "Delete for good" }).click();
   await expect(pastRows(page)).toHaveText(["docs", "fix-login"]);
-  await expect(page.getByRole("main").getByRole("tab")).toHaveCount(0);
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["New"]);
   expect(existsSync(join(s.root, ".claude/projects/-project/ccc.jsonl"))).toBe(false);
 
   await history.getByRole("button", { name: /fix-login/ }).click();
   await view.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByTestId("terminal").locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
   // Under its own name, and no longer in History.
-  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["fix-login"]);
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["New", "fix-login"]);
   await expect(page.getByRole("navigation", { name: "Sessions", exact: true }).getByText(/^fix-login$/)).toBeVisible();
   await expect(pastRows(page)).toHaveText(["docs"]);
   await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("1/20");
@@ -187,18 +188,14 @@ test("resuming waits for a session to close once the active sessions are at the 
   await page.getByRole("region", { name: "History" }).getByRole("button", { name: /fix-login/ }).click();
   await expect(view.getByRole("button", { name: "Resume" })).toBeEnabled();
 
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
-  await dialog.getByLabel("Name").fill("busy");
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "busy" });
   await expect(page.getByRole("region", { name: "Active sessions" })).toContainText("1/1");
 
   await page.getByRole("region", { name: "History" }).getByRole("button", { name: /fix-login/ }).click();
   await expect(view.getByRole("button", { name: "Resume" })).toBeDisabled();
   await expect(view).toContainText("Active sessions are at the limit. Close a session to resume this one.");
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Start session" })).toBeDisabled();
+  await page.getByRole("main").getByRole("tab", { name: "New", exact: true }).click();
+  await expect(page.locator(".start-note")).toContainText("starting one closes the Sessions session idle longest");
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
@@ -209,11 +206,7 @@ test("an empty history says so", async ({ page }) => {
 
 test("each feature keeps its tabs, and Sessions keeps its terminal connected", async ({ page }) => {
   const s = await open(page);
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
-  await dialog.getByLabel("Name").fill("keeper");
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "keeper" });
   const terminal = page.getByTestId("terminal");
   await expect(terminal.locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
 
@@ -225,7 +218,7 @@ test("each feature keeps its tabs, and Sessions keeps its terminal connected", a
   await expect(page.getByRole("main").getByRole("tab")).toHaveText(["Status"]);
 
   await page.keyboard.press("Control+Shift+Digit3");
-  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["keeper"]);
+  await expect(page.getByRole("main").getByRole("tab")).toHaveText(["New", "keeper"]);
   await terminal.click();
   await page.keyboard.type("still connected\n");
   await expect(terminal.locator(".xterm-rows")).toContainText("got: still connected", { timeout: 15_000 });
@@ -314,11 +307,7 @@ test("the New dialogue wizard asks for every field, then starts two agents watch
 
 test("a session in a dialogue is labelled in the list", async ({ page }) => {
   const s = await open(page);
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(join(s.root, "project"));
-  await dialog.getByLabel("Name").fill("agent-a");
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "agent-a" });
   const row = page.locator(".session-row").filter({ hasText: "agent-a" });
   await expect(row).toBeVisible();
   await expect(row).not.toContainText("Dialogue");

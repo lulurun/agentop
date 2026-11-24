@@ -19,6 +19,8 @@ export type TabContent =
   | { kind: "session"; sessionId: string }
   | { kind: "file"; file: FileRef }
   | { kind: "status" }
+  /** Sessions' start buffer: a session from its first prompt (docs/0_04_start.md). */
+  | { kind: "start" }
   /** A past session from the History list, by its ID there (`HistoryItem.id`), to resume or delete. */
   | { kind: "past"; historyId: string }
   /** One of a plugin's views, named by the plugin's feature (`UiPlugin.feature.views`). */
@@ -90,7 +92,7 @@ export function sameContent(a: TabContent, b: TabContent): boolean {
     return a.plugin === b.plugin && a.view === b.view && (a.key ?? null) === (b.key ?? null);
   }
   if (a.kind === "past" && b.kind === "past") return a.historyId === b.historyId;
-  return a.kind === b.kind && a.kind === "status";
+  return a.kind === b.kind && (a.kind === "status" || a.kind === "start");
 }
 
 /**
@@ -106,6 +108,16 @@ export function sessionOf(content: TabContent): string | undefined {
 /** Only sessions and files make sense twice, side by side. */
 export function canSplit(content: TabContent): boolean {
   return content.kind === "session" || content.kind === "file";
+}
+
+export const START_TAB: Tab = { id: "start", content: { kind: "start" }, pinned: true };
+
+/** The layout with Sessions' start buffer in it: pinned first in the left area, unless it was moved. The same layout when it is. */
+export function withStartTab(layout: Layout): Layout {
+  if (findOpen(layout, START_TAB.content)) return layout;
+  const left = layout.left;
+  if (!left) return { ...layout, left: { tabs: [START_TAB], active: START_TAB.id }, focused: layout.right ? layout.focused : "left" };
+  return { ...layout, left: { ...left, tabs: [START_TAB, ...left.tabs], active: left.active ?? START_TAB.id } };
 }
 
 /** A layout of one pinned tab, the default of a feature that opens with one. */
@@ -267,6 +279,7 @@ function validContent(content: unknown): boolean {
     case "file":
       return !!c.file && typeof (c.file as FileRef).path === "string";
     case "status":
+    case "start":
       return true;
     case "past":
       return typeof c.historyId === "string";

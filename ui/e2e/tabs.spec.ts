@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
+import { startFromPrompt } from "./start";
 
 const services: Service[] = [];
 
@@ -25,12 +26,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function startSession(page: Page, name: string, cwd: string) {
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(cwd);
-  await dialog.getByText("claude", { exact: true }).click();
-  await dialog.getByLabel("Name").fill(name);
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd: cwd, name: name, tool: "claude" });
   await expect(page.getByRole("tab", { name, selected: true })).toBeVisible();
   await expect(shownTerminals(page).first().locator(".xterm-rows")).toContainText("fake agent ready", { timeout: 15_000 });
 }
@@ -49,16 +45,17 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
   await startSession(page, "two", other);
 
   const main = page.locator(".main");
-  // Starting "two" took the place of "one".
-  await expect(main.getByRole("tab")).toHaveText(["two"]);
+  // Each start opens a tab beside the start buffer, the newest first.
+  await expect(main.getByRole("tab")).toHaveText(["New", "two", "one"]);
 
-  await row(page, "one").click({ modifiers: ["ControlOrMeta"] });
-  await expect(main.getByRole("tab")).toHaveText(["two", "one"]);
+  // Clicking a session already in a tab shows that tab.
+  await row(page, "one").click();
+  await expect(main.getByRole("tab")).toHaveText(["New", "two", "one"]);
   await expect(main.getByRole("tab", { name: "one" })).toHaveAttribute("aria-selected", "true");
   // Ctrl+Shift+A to K pick the active area's tabs by position.
-  await page.keyboard.press("Control+Shift+KeyA");
-  await expect(main.getByRole("tab", { name: "two" })).toHaveAttribute("aria-selected", "true");
   await page.keyboard.press("Control+Shift+KeyS");
+  await expect(main.getByRole("tab", { name: "two" })).toHaveAttribute("aria-selected", "true");
+  await page.keyboard.press("Control+Shift+KeyD");
   await expect(main.getByRole("tab", { name: "one" })).toHaveAttribute("aria-selected", "true");
 
   await row(page, "two").click({ button: "right" });
@@ -77,13 +74,16 @@ test("clicking a session switches the tab, and a new tab or the side keeps both"
 
   await page.getByRole("region", { name: "Right area" }).getByRole("button", { name: "Close two" }).click();
   await expect(page.getByRole("region", { name: "Right area" })).toHaveCount(0);
-  await expect(main.getByRole("tab")).toHaveText(["two", "one"]);
+  await expect(main.getByRole("tab")).toHaveText(["New", "two", "one"]);
 
   await page.reload();
-  await expect(page.locator(".main").getByRole("tab")).toHaveText(["two", "one"]);
-  // Ctrl+Shift+L closes the active tab; the session keeps running.
+  await expect(page.locator(".main").getByRole("tab")).toHaveText(["New", "two", "one"]);
+  // Ctrl+Shift+L closes the active tab; the session keeps running. The start buffer can't be closed.
   await page.keyboard.press("Control+Shift+KeyL");
-  await expect(page.locator(".main").getByRole("tab")).toHaveCount(1);
+  await expect(page.locator(".main").getByRole("tab")).toHaveText(["New", "two"]);
+  await page.keyboard.press("Control+Shift+KeyA");
+  await page.keyboard.press("Control+Shift+KeyL");
+  await expect(page.locator(".main").getByRole("tab")).toHaveText(["New", "two"]);
   await expect(row(page, "one")).toBeVisible();
 });
 
@@ -96,8 +96,8 @@ test("a session shown before keeps its terminal, and only the last few are kept"
     mkdirSync(cwd);
     await startSession(page, name, cwd);
   }
-  // Each start took the place of the one before it, which stays on the page out of sight.
-  await expect(page.locator(".main").getByRole("tab")).toHaveText(["four"]);
+  // Each start opened a tab; the last few shown stay on the page out of sight.
+  await expect(page.locator(".main").getByRole("tab")).toHaveText(["New", "four", "three", "two", "one"]);
   await expect(page.getByTestId("terminal")).toHaveCount(3);
   await expect(shownTerminals(page)).toHaveCount(1);
 
@@ -123,7 +123,7 @@ test("a session shown before keeps its terminal, and only the last few are kept"
 
   // Closing a kept session's tab lets it go.
   await page.getByRole("button", { name: "Close one" }).click();
-  await expect(page.getByTestId("terminal")).toHaveCount(0);
+  await expect(page.getByTestId("terminal")).toHaveCount(2);
 });
 
 test("a file from the right panel opens in the right group, beside the terminal", async ({ page }) => {
@@ -142,7 +142,7 @@ test("a file from the right panel opens in the right group, beside the terminal"
 
   const left = page.getByRole("region", { name: "Left area" });
   const right = page.getByRole("region", { name: "Right area" });
-  await expect(left.getByRole("tab")).toHaveText(["demo"]);
+  await expect(left.getByRole("tab")).toHaveText(["New", "demo"]);
   await expect(right.getByRole("tab")).toHaveText(["hello.py"]);
   await expect(right).toHaveAttribute("data-focused", "true");
   await expect(right.getByLabel("Contents of src/hello.py")).toHaveText("print('hello')\nprint('again')\n");
@@ -161,7 +161,7 @@ test("a file from the right panel opens in the right group, beside the terminal"
   // A file can still be moved to the left.
   await right.getByRole("tab", { name: "hello.py" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Move to the left area" }).click();
-  await expect(left.getByRole("tab")).toHaveText(["demo", "hello.py"]);
+  await expect(left.getByRole("tab")).toHaveText(["New", "demo", "hello.py"]);
   await expect(right.getByRole("tab")).toHaveText(["notes.txt"]);
 });
 
@@ -237,7 +237,7 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
 
   // A link to a file beside it opens that file in a tab.
   await preview.getByRole("link", { name: "the other page" }).click();
-  await expect(main.getByRole("tab")).toHaveText(["demo", "guide.md", "other.md"]);
+  await expect(main.getByRole("tab")).toHaveText(["New", "demo", "guide.md", "other.md"]);
   await expect(main.getByLabel("Preview of docs/other.md").getByRole("heading", { name: "Other page" })).toBeVisible();
 });
 
@@ -255,7 +255,7 @@ test("an image file opens drawn in the middle of the tab", async ({ page }) => {
   await details.getByRole("button", { name: "dot.PNG" }).click();
 
   const main = page.locator(".main");
-  await expect(main.getByRole("tab")).toHaveText(["demo", "dot.PNG"]);
+  await expect(main.getByRole("tab")).toHaveText(["New", "demo", "dot.PNG"]);
   const image = main.getByRole("img", { name: "dot.PNG" });
   await expect(image).toHaveAttribute("src", /^data:image\/png;base64,/);
   expect(await image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth)).toBe(1);
@@ -286,14 +286,14 @@ test("a file in the Changed list opens as its diff, and Open file shows its text
   const details = page.locator(".details");
   await details.getByRole("button", { name: "app.py" }).click();
   const main = page.locator(".main");
-  await expect(main.getByRole("tab")).toHaveText(["demo", "app.py (diff)"]);
+  await expect(main.getByRole("tab")).toHaveText(["New", "demo", "app.py (diff)"]);
   const diff = main.getByLabel("Changes to app.py");
   await expect(diff.locator('.diff-row[data-kind="del"]')).toHaveText(["2-two"]);
   await expect(diff.locator('.diff-row[data-kind="add"]')).toHaveText(["2+deux"]);
   await expect(main.locator(".viewer-meta")).toHaveText("+1 −1");
 
   await main.getByRole("button", { name: "Open file" }).click();
-  await expect(main.getByRole("tab")).toHaveText(["demo", "app.py (diff)", "app.py"]);
+  await expect(main.getByRole("tab")).toHaveText(["New", "demo", "app.py (diff)", "app.py"]);
   await expect(main.getByLabel("Contents of app.py")).toHaveText("one\ndeux\nthree\n");
 
   // A deleted file opens too, as its removed lines, with nothing to open.

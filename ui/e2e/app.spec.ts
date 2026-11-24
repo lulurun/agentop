@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
+import { startFromPrompt } from "./start";
 
 const services: Service[] = [];
 
@@ -29,12 +30,7 @@ test.beforeEach(async ({ page }) => {
 const terminalText = (page: Page) => page.getByTestId("terminal").locator(".xterm-rows");
 
 async function startSession(page: Page, s: Service, name: string, tool = "claude", cwd = join(s.root, "project")) {
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Working directory").fill(cwd);
-  await dialog.getByText(tool, { exact: true }).click();
-  await dialog.getByLabel("Name").fill(name);
-  await dialog.getByRole("button", { name: "Start session" }).click();
+  await startFromPrompt(page, { cwd, name, tool });
 }
 
 const row = (page: Page, name: string) => page.getByRole("navigation", { name: "Sessions" }).getByRole("button", { name });
@@ -230,12 +226,10 @@ test("only the agent tools installed on the service can be picked", async ({ pag
   rmSync(join(created.root, "bin", "codex"));
   const s = await created.start();
   await page.goto(s.signedInUrl);
-  await page.getByRole("button", { name: "New session", exact: true }).first().click();
-  const agents = page.getByRole("dialog").getByRole("group", { name: "Agent" });
-  await expect(agents.getByRole("radio")).toHaveCount(2);
-  await expect(agents.getByText("claude", { exact: true })).toBeVisible();
-  await expect(agents.getByText("antigravity", { exact: true })).toBeVisible();
-  await expect(agents.getByText("codex", { exact: true })).toHaveCount(0);
+  await page.getByPlaceholder("What should the new session do?").fill("look around");
+  await page.getByRole("button", { name: "Start a session with this prompt" }).click();
+  const agents = page.locator(".start-row").first().getByLabel("Agent").locator("option");
+  await expect(agents).toHaveText(["claude", "antigravity"]);
 });
 
 test("the service installs its skills for claude as it starts", async () => {
@@ -247,7 +241,7 @@ test("the service installs its skills for claude as it starts", async () => {
 test("a failed start shows why, and what can be done", async ({ page }) => {
   const s = await service("alpha");
   await page.goto(s.signedInUrl);
-  await startSession(page, s, "broken", "antigravity");
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "broken", tool: "antigravity", wait: false });
   await expect(page.getByText(/agy is not installed/)).toBeVisible({ timeout: 15_000 });
   await expect(terminalText(page)).toContainText("command not found");
   await page.getByRole("button", { name: "Dismiss" }).click();
@@ -456,9 +450,7 @@ test("switching sessions shows one Files section, for the selected session's dir
   writeFileSync(join(second, "second-only.txt"), "x");
   await page.goto(s.signedInUrl);
   await startSession(page, s, "one", "claude", first);
-  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
   await startSession(page, s, "two", "claude", second);
-  await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
 
   const details = page.locator(".details");
   for (const [name, mine, theirs] of [
@@ -480,7 +472,7 @@ test("the WebGL renderer draws the terminal", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("agentop.renderer", "auto"));
   const s = await service("alpha");
   await page.goto(s.signedInUrl);
-  await startSession(page, s, "demo");
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "demo", wait: false });
   await expect(page.getByTestId("terminal").locator("canvas").first()).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId("terminal").locator(".xterm-rows")).toHaveCount(0);
 });
