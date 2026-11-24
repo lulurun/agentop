@@ -259,7 +259,10 @@ test("an agent exit curtains the terminal and offers to close the session", asyn
   const curtain = page.getByRole("region", { name: "Session exited" });
   await expect(curtain).toContainText("demo has exited", { timeout: 10_000 });
   await expect(page.locator(".terminal[data-locked]")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close session" })).toBeFocused();
+  await expect(curtain).toBeFocused();
+  await page.keyboard.press("Enter");
+  await page.waitForTimeout(300);
+  await expect(curtain).toBeVisible();
 
   // The shell is still behind the curtain, but nothing typed reaches it.
   await curtain.click({ position: { x: 5, y: 5 } });

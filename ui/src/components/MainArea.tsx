@@ -175,11 +175,12 @@ function useReplace(session: Session) {
 function ExitedCurtain({ session }: { session: Session }) {
   const act = useApp((s) => s.act);
   const replaceWith = useReplace(session);
-  const closeButton = useRef<HTMLButtonElement>(null);
-  useEffect(() => closeButton.current?.focus(), []);
+  // The curtain, not Close, takes focus: a key meant for something else, such as the Enter that started the session, must not close it.
+  const curtain = useRef<HTMLDivElement>(null);
+  useEffect(() => curtain.current?.focus(), []);
 
   return (
-    <div className="curtain" role="region" aria-label="Session exited">
+    <div ref={curtain} tabIndex={-1} className="curtain" role="region" aria-label="Session exited">
       <div className="curtain-card" role="status">
         <p className="curtain-title">{session.display_name} has exited</p>
         <p className="curtain-text">The agent is no longer running. Close the session to remove its terminal.</p>
@@ -189,7 +190,7 @@ function ExitedCurtain({ session }: { session: Session }) {
               Resume
             </button>
           )}
-          <button ref={closeButton} type="button" className="primary" onClick={() => void act((client) => client.close(session.id))}>
+          <button type="button" className="primary" onClick={() => void act((client) => client.close(session.id))}>
             Close session
           </button>
         </div>

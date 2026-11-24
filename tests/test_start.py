@@ -130,3 +130,42 @@ def test_each_tool_starts_with_its_catalogue_models():
     for agent in (claude, CodexAgentCli(), AntigravityAgentCli()):
         assert sorted({m.tier for m in agent.models}) == sorted(TIERS)
     assert CodexAgentCli().model_id("GPT-6.2-Sol") == "gpt-6.2-sol"
+
+
+TRUST_NO = "Quick safety check\n❯ No, exit\n  Yes, I trust this folder\nEnter to confirm · Esc to cancel"
+TRUST_YES = "Quick safety check\n  No, exit\n❯ Yes, I trust this folder\nEnter to confirm · Esc to cancel"
+
+
+def _run_trust_hook(monkeypatch, screens):
+    """Play screens to the Claude hook, each Down moving to the next; return the keys it sent."""
+    from agentop.agentclis.claude import ClaudeAgentCli
+
+    sent = []
+    state = {"i": 0}
+
+    def screen(_name):
+        return screens[min(state["i"], len(screens) - 1)]
+
+    def send_keys(_name, *keys):
+        sent.extend(keys)
+        state["i"] += 1
+
+    monkeypatch.setattr(time, "sleep", lambda s: None)
+    monkeypatch.setattr(CapturePane, "screen", staticmethod(screen))
+    monkeypatch.setattr(Session, "send_keys", staticmethod(send_keys))
+    ClaudeAgentCli().post_start_hook("s")
+    return sent
+
+
+def test_trust_is_accepted_only_once_yes_is_selected(monkeypatch):
+    assert _run_trust_hook(monkeypatch, [TRUST_NO, TRUST_YES]) == ["Down", "Enter"]
+
+
+def test_a_half_drawn_trust_dialog_gets_no_keys(monkeypatch):
+    half = "Quick safety check: Is this a project you created or one you trust?"
+    assert _run_trust_hook(monkeypatch, [half]) == []
+
+
+def test_a_dropped_down_is_sent_again_and_enter_never_lands_on_no(monkeypatch):
+    sent = _run_trust_hook(monkeypatch, [TRUST_NO, TRUST_NO, TRUST_YES])
+    assert sent[-1] == "Enter" and sent.count("Enter") == 1 and sent.count("Down") == 2

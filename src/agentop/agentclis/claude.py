@@ -85,6 +85,8 @@ class ClaudeAgentCli(AgentCli):
 
     # Shown under the input box, and not on the trust prompt.
     READY_MARKER = "shift+tab to cycle"
+    TRUST_YES = "yes, i trust this folder"
+    TRUST_DONE = "enter to confirm"
 
     @property
     def launch_cmd(self) -> str:
@@ -241,17 +243,23 @@ class ClaudeAgentCli(AgentCli):
         """
         from agentop.tmux import CapturePane, Session
 
-        for _ in range(40):
+        moved = False
+        for tick in range(40):
             time.sleep(0.25)
             content = CapturePane.screen(tmux_session).lower()
             if self.READY_MARKER in content:
                 return
-            if "trust" in content or "safety check" in content:
-                time.sleep(0.1)
-                # "No, exit" is the default selection, so Enter alone declines
-                # and claude quits. Move down to "Yes, I trust this folder".
-                Session.send_keys(tmux_session, "Down", "Enter")
+            # Keys sent while the dialog is still drawing are dropped, and an
+            # Enter on its default "No, exit" quits claude: press Enter only
+            # once "Yes, I trust this folder" is shown selected.
+            if self.TRUST_YES not in content or self.TRUST_DONE not in content:
+                continue
+            if _selected(content, self.TRUST_YES):
+                Session.send_keys(tmux_session, "Enter")
                 return
+            if not moved or tick % 4 == 0:
+                Session.send_keys(tmux_session, "Down")
+                moved = True
 
     def token_usage(self, path: Path) -> Optional[dict]:
         if not TRANSCRIPT.search(path.name):
@@ -323,3 +331,8 @@ def _sum_usage(records) -> Optional[dict]:
             value = usage.get(k)
             totals[k] += value if isinstance(value, int) else 0
     return totals if seen else None
+
+
+def _selected(screen: str, option: str) -> bool:
+    """Whether the menu cursor is on the line with option."""
+    return any("❯" in line and option in line for line in screen.splitlines())

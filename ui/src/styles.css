@@ -423,6 +423,7 @@ button.app-outdated:hover { background: var(--line); }
   background: color-mix(in srgb, var(--term-bg) 45%, transparent);
   backdrop-filter: blur(1.5px);
 }
+.curtain:focus { outline: none; }
 .curtain-card {
   width: min(380px, 100%);
   padding: 16px 18px;
