@@ -3,6 +3,7 @@
 | Task | Where to look |
 |------|---------------|
 | Start here: every part of agentop, and why it is built that way | [docs/0_00_design.md](docs/0_00_design.md) |
+| Sessions' start from a prompt: the probe, choosing a tool and model, idle closing | [docs/0_04_start.md](docs/0_04_start.md) |
 | CLI commands | [docs/0_08_cli.md](docs/0_08_cli.md) |
 | Code structure | [docs/0_03_architecture.md](docs/0_03_architecture.md) |
 | UI layout: names of its parts, where tabs open, keys | [docs/0_10_ui.md](docs/0_10_ui.md) |

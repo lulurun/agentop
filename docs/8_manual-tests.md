@@ -78,7 +78,7 @@ These are the tests that need a real person at a real PC: a display, a keyboard,
 
 | ID | Steps | Expected | Result |
 |----|-------|----------|--------|
-| E1 | New session with Claude, Codex, and Antigravity, in a chosen directory | Loading steps show; the terminal opens focused when ready | Seen working (Claude, Codex) |
+| E1 | A session from the start buffer with Claude, Codex, and Antigravity, in a chosen directory | Loading steps show; the terminal opens focused when ready | Seen working (Claude, Codex) |
 | E2 | Start with a directory that doesn't exist, or a tool that fails | The error shows, with Try again and Dismiss | Not run |
 | E3 | Stop session: click Stop session, then Cancel | Nothing happens to the session | Not run |
 | E4 | Type a half-finished prompt in a Claude session, then Stop session and confirm | The draft is not sent; the agent exits; the session disappears | Not run |

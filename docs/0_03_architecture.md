@@ -40,6 +40,7 @@ src/agentop/
   agent_instance.py      Wires AgentCli + Actor into one runtime object
   launcher.py            Starts an agent in its own tmux session, the same way for every tool
   oneshot.py             Runs a tool's one-shot command (ask), with no tmux
+  starting.py            Sessions' start from a prompt: the probe, the chooser, tidying, its record (docs/0_04_start.md)
   transcripts.py         A session's transcript files, from the tool or a plugin's archive, and History's stats
   files.py               A session folder's files and git changes
   scanner.py             Process detection and session building
@@ -98,7 +99,8 @@ The interface, with the default for each thing that differs:
 | Typing into it | `deliver(session, text)`, which every prompt goes through: it takes the pane out of copy mode, then calls `send_text(session, text)` (bracketed paste, then Enter; no Enter if the paste failed; Codex waits a moment before Enter), `idle_seconds` (how long the screen must stay still before a reply is finished), `boot_seconds` (how long a dialogue waits before its first prompt) |
 | Saved sessions | `get_saved_sessions()`, `delete_session()` |
 | What it's doing | `get_session_meta()`: session ID, AI title, token usage, bridge URL, from one read of the tool's files |
-| One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries. Claude (`claude --print`) and Codex (`codex exec`) have it |
+| One-shot prompts | `ask_cmd(system)`, `ask(prompt, system, cwd, model)`, `ask_model`: one prompt in, one answer out, no tools and no session saved; the Memory plugin's summaries, reception, the start probe. Claude (`claude --print`), Codex (`codex exec`) and Antigravity (`agy -p`, its conversation deleted after) have it |
+| Models and quota | `models` (each a `Model`: label, ID, tier), what `--model` takes and the start chooser picks from; `quota()`, the tool's own record of its usage limits, or None (Codex's rollouts have one) |
 | Its transcripts | `transcripts_root()` (the tool's own folder), `archive_files(root)` (what the Memory archive copies), `transcript_files(session_id, root)` (one session's files), `conversation_reader(path)` (how to read one as prompts and replies), `side_conversation(path)` (a subagent's, left out of History's message counts), `token_usage(path)` (the tokens one file records), `searchable(relative)` (whether it goes in the Memory search table) |
 
 ### 2.2 The tools
@@ -113,7 +115,7 @@ The interface, with the default for each thing that differs:
 
 ### 2.3 Getting the host ready (`service/host.py`, `skills/`)
 
-`agentop serve` calls `host.prepare()` before it listens. It finds the installed tools, and stops with an error when there are none. For each one with a `skills_dir()` (Claude Code and Codex) it installs or updates the skills that ship in `src/agentop/skills/`: each is copied with a `.agentop` marker file, and a copy with the marker is replaced when the skill changes. A folder or link of the user's own with the same name is left alone and logged; a broken link, such as one to where the repo used to keep the skills, is replaced. The installed tools' names go to `GET /api/v2/tools` (`installed`), and the New session dialog offers only those.
+`agentop serve` calls `host.prepare()` before it listens. It finds the installed tools, and stops with an error when there are none. For each one with a `skills_dir()` (Claude Code and Codex) it installs or updates the skills that ship in `src/agentop/skills/`: each is copied with a `.agentop` marker file, and a copy with the marker is replaced when the skill changes. A folder or link of the user's own with the same name is left alone and logged; a broken link, such as one to where the repo used to keep the skills, is replaced. The installed tools' names go to `GET /api/v2/tools` (`installed`), and the start buffer chooses only among those.
 
 ## 3 Actor layer
 

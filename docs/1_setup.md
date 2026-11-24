@@ -18,7 +18,7 @@ agentop open                         # opens the app, signed in
 
 As it starts, `agentop serve` checks the host:
 
-- It looks for each agent tool's program (`claude`, `codex`, `agy`) on the PATH of the user's login shell, where sessions run, and on its own. It refuses to start when it finds none. The New session dialog offers only the tools it found; restart the service after installing another.
+- It looks for each agent tool's program (`claude`, `codex`, `agy`) on the PATH of the user's login shell, where sessions run, and on its own. It refuses to start when it finds none. Sessions starts sessions only with the tools it found; restart the service after installing another.
 - It installs or updates agentop's skills ([src/agentop/skills/](../src/agentop/skills/README.md)) for each tool found that takes them: Claude Code in `~/.claude/skills/`, and Codex in `~/.codex/skills/`.
 
 ## A devhost, behind a proxy host

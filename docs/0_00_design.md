@@ -6,7 +6,7 @@ The first doc to read. Each section says what a part of agentop is and why; wher
 |---------|-----------|
 | [1 Summary](#1-summary), [2 Goals and non-goals](#2-goals-and-non-goals) | |
 | [3 Architecture](#3-architecture) | [0_03_architecture.md](0_03_architecture.md) |
-| [4 Sessions](#4-sessions) | |
+| [4 Sessions](#4-sessions) | [0_04_start.md](0_04_start.md) (starting from a prompt) |
 | [5 Terminal](#5-terminal) | |
 | [6 Security](#6-security) | [0_06_security.md](0_06_security.md) |
 | [7 Service lifecycle](#7-service-lifecycle) | [1_setup.md](1_setup.md) |
@@ -202,7 +202,7 @@ The app's History lists only what is worth reopening: sessions agentop started, 
   - A resume records the ID it resumes. The record keeps the latest ID the scanner reports, so `/clear` is followed.
 - **Resuming keeps the name**: the session comes back under the same record and name. If a live session in the project has taken the name meanwhile, Resume asks for another.
 - **What a transcript holds** (`GET /history/{id}/stats`): the prompts and replies of the main conversation, tokens summed over every file the tool keeps for it, subagents included, and the files' size on disk, from the Memory archive when the tool has deleted them. Each tool's `AgentCli.token_usage` reads its own records.
-- **The active-session limit.** At most `max_active_sessions` (default 20) counted sessions agentop started are active at once, in every state until closed. The service refuses a start or resume past it (409), and the app disables Resume and Start session.
+- **The active-session limit.** At most `max_active_sessions` (default 20) counted sessions agentop started are active at once, in every state until closed. The service refuses a start or resume past it (409), and the app disables Resume. A start from Sessions' start buffer first closes the `default` session idle longest ([4.7](#47-starting-from-a-prompt)).
 - `agentop history` (the CLI) still lists every saved session of every tool; only the app narrows.
 
 How History looks in the app is in [0_10_ui.md](0_10_ui.md#sessions).
@@ -211,7 +211,7 @@ How History looks in the app is in [0_10_ui.md](0_10_ui.md#sessions).
 
 `agentop send <target> "<prompt>"` types a prompt into another live managed session and submits it, as if the user had typed it there ([0_08_cli.md 1.4](0_08_cli.md#14-send)). The `handoff` skill uses it to pass a side task, such as a deploy, from a session with expensive context to another session, so the side task's logs and retries stay out of the first one. Nothing comes back by itself: the user switches to the target to follow it. When the sender needs a result, the prompt asks the target to reply with its own `agentop send`, in a line or two, and to ask for nothing back.
 
-**Transport: tmux only.** The prompt is typed into the target's terminal the way each tool takes a paste (`AgentCli.deliver`, a bracketed paste then Enter). Agentop does not call any LLM API, and does not run work headless (`claude -p`, `codex exec`); the one headless use is the Memory plugin's summaries. Why:
+**Transport: tmux only.** The prompt is typed into the target's terminal the way each tool takes a paste (`AgentCli.deliver`, a bracketed paste then Enter). Agentop does not call any LLM API, and does not run work headless (`claude -p`, `codex exec`); the headless uses are short judgements about a session, never its work: the Memory plugin's summaries, the input bar's reception, and Sessions' start probe ([4.7](#47-starting-from-a-prompt)). Why:
 
 - The agent CLIs are built to run in a terminal, and tmux is the native way to run them. Agentop's job is to bring those tmux sessions into one window, not to become a different agent runtime.
 - Every handoff runs in an ordinary session: the user can see it, attach, answer questions, take over, or stop it. Nothing runs hidden.
@@ -221,6 +221,10 @@ How History looks in the app is in [0_10_ui.md](0_10_ui.md#sessions).
 **One queue.** `agentop send` goes through the service, `POST /api/v2/send` (it types the prompt itself only when no service answers), so it and the Input bar type in one process, where a lock per tmux session makes a prompt wait for the one before it and never land between another's paste and its Enter.
 
 A prompt sent to a busy session is queued by the tool itself. Delivery only when the target is idle was considered and is on hold ([backlog](9_backlog.md#declined-or-on-hold)); a draft the user is typing is kept apart by the Input bar ([0_12_04_input.md](0_12_04_input.md)).
+
+### 4.7 Starting from a prompt
+
+Sessions starts a session from its first prompt. The owner types it in the **start buffer**, the pinned first tab of Sessions' left area (there is no New session), and a one-shot cheap-model call, the **probe**, gives a title and name, how hard the task is (a tier), and the working directory, from the folders of recent sessions and the repositories under the usual roots. Code then picks the tool and model for that tier, by the owner's order and the quota each tool has left, unless the prompt names them. The row shows the choice for 3 seconds, to be changed before an agent starts working, then the session starts with the prompt word for word and opens in a tab beside the buffer. On a timer, a `default` session idle for 24 hours is closed, and a start at the limit closes the one idle longest. Projects are untouched. It is also a trial of choosing a tool and model per task, for the Coordinator later, so every choice and the owner's changes to it are recorded. The detail is in [0_04_start.md](0_04_start.md).
 
 ## 5 Terminal
 
@@ -579,6 +583,7 @@ The choices that shape agentop, with what was chosen and what it was weighed aga
 | D10 | Busy and idle state (2026-11-19) | tmux signals only (the screen) | Agent hooks or transcript tailing: agent internals drift between versions |
 | D11 | Desktop app (2026-11-16) | A thin wrapper that runs this computer's service and shows its page | A client with its own bundled UI, which fell behind the service after every update |
 | D12 | Releases (2026-11-20) | One `v*` series; a GitHub release only for a new major version, which is a new wrapper | A release per tag, with the app replacing itself on each |
+| D13 | Starting a Sessions session (2026-11-24) | From its first prompt: a one-shot probe judges the task (tier, folder, title), code picks the tool and model by tier and quota ([0_04_start.md](0_04_start.md)) | A long-running reception session every prompt goes to, which piles up unrelated context; or the probe naming the model itself, which weighs quota badly |
 
 ## 16 Sources
 
