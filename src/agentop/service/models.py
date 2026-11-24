@@ -307,3 +307,82 @@ class ClientInfo(BaseModel):
     ends_at: float | None
     # The client making this request.
     current: bool
+
+
+class StartProbe(BaseModel):
+    prompt: str = Field(min_length=1, max_length=100_000)
+
+
+class StartDecision(BaseModel):
+    id: str
+    title: str
+    name: str
+    kind: str
+    tier: str
+    tool: str | None
+    model: str | None
+    cwd: str | None
+    cwd_sure: bool
+    reason: str
+    why: str
+    candidates: list[str]
+    by: str | None = None
+    error: str | None = None
+    ms: int
+
+
+class StartLaunch(BaseModel):
+    prompt: str = Field(min_length=1, max_length=100_000)
+    tool: str
+    cwd: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    title: str = ""
+    model: str | None = None
+    probe: str | None = None
+    # What the owner changed of the probe's choice, for the record: tool, model, name, cwd.
+    changed: list[str] = []
+
+
+class StartModel(BaseModel):
+    label: str
+    id: str
+    tier: str
+
+
+class QuotaWindowModel(BaseModel):
+    name: str
+    used_percent: float
+    resets_at: float | None = None
+
+
+class StartTool(BaseModel):
+    name: str
+    installed: bool
+    can_probe: bool
+    ask_model: str | None
+    models: list[StartModel]
+    quota: list[QuotaWindowModel] | None
+
+
+class StartSettings(BaseModel):
+    probe_tool: str
+    probe_model: str | None
+    tool_order: list[str]
+    idle_hours: float
+
+
+class StartSettingsPatch(BaseModel):
+    probe_tool: str | None = None
+    probe_model: str | None = None
+    tool_order: list[str] | None = None
+    idle_hours: float | None = None
+
+
+class StartRecent(BaseModel):
+    session: str
+    title: str
+    tool: str | None
+    model: str | None
+    cwd: str | None
+    at: float | None
+    closed_why: str | None

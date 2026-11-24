@@ -16,6 +16,7 @@ import shutil
 import string
 import threading
 from collections.abc import Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -26,6 +27,22 @@ from agentop.results import SavedSession, StartFailed, StartResult
 from agentop.tmux import Session
 
 ProgressCallback = Callable[[str], None]
+
+TIERS = ("light", "standard", "complex")
+
+
+@dataclass(frozen=True)
+class Model:
+    label: str
+    id: str
+    tier: str
+
+
+@dataclass(frozen=True)
+class QuotaWindow:
+    name: str
+    used_percent: float
+    resets_at: Optional[float] = None
 
 _typing: dict[str, threading.Lock] = {}
 _typing_guard = threading.Lock()
@@ -124,17 +141,21 @@ class AgentCli:
         """Where the tool looks for the user's skills, or None when agentop installs none for it."""
         return None
 
-    # The models a session can be started with: name as typed -> the tool's own ID.
+    # The models a session can be started with, and Sessions' start picks from by tier.
     # Empty: the tool's default only.
-    models: dict[str, str] = {}
+    models: tuple[Model, ...] = ()
 
     def model_id(self, name: str) -> str:
         """The tool's ID for a model named by its name or ID, ignoring case. Raises ValueError."""
-        for label, model in self.models.items():
-            if name.strip().lower() in (label.lower(), model.lower()):
-                return model
-        offered = ", ".join(f'"{label}"' for label in self.models) or "none, only its default"
+        for model in self.models:
+            if name.strip().lower() in (model.label.lower(), model.id.lower()):
+                return model.id
+        offered = ", ".join(f'"{m.label}"' for m in self.models) or "none, only its default"
         raise ValueError(f"{self.name} can't start with model {name!r}. Models: {offered}")
+
+    def quota(self) -> Optional[list[QuotaWindow]]:
+        """The tool's usage limits as its own records last saw them, or None when it keeps none."""
+        return None
 
     # Where the program was found (agentclis.installed), or None before that.
     executable: Optional[str] = None
@@ -147,8 +168,8 @@ class AgentCli:
     # The model ask_cmd uses, for the record of what wrote an answer.
     ask_model: Optional[str] = None
 
-    def ask_cmd(self, system: str) -> Optional[list[str]]:
-        """The command that answers one prompt on stdin, or None if the tool can't."""
+    def ask_cmd(self, system: str, model: Optional[str] = None) -> Optional[list[str]]:
+        """The command that answers one prompt on stdin with `model` (default ask_model), or None if the tool can't."""
         return None
 
     def ask(
@@ -158,9 +179,10 @@ class AgentCli:
         cwd: Path,
         timeout: float = 180,
         stop: Callable[[], bool] = lambda: False,
+        model: Optional[str] = None,
     ) -> str:
         """Answer one prompt. Raises RuntimeError with the reason when it can't, or when stop() turns true."""
-        cmd = self.ask_cmd(system)
+        cmd = self.ask_cmd(system, model) if model else self.ask_cmd(system)
         if cmd is None:
             raise RuntimeError(f"{self.name} can't answer a one-shot prompt")
         cmd[0] = self.executable or shutil.which(cmd[0]) or cmd[0]

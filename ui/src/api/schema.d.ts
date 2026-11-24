@@ -523,6 +523,92 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/start/launch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Launch */
+        post: operations["launch_start_launch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/start/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Models */
+        get: operations["models_start_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/start/probe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Probe */
+        post: operations["probe_start_probe_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/start/recent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent */
+        get: operations["recent_start_recent_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/start/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Settings */
+        get: operations["get_settings_start_settings_get"];
+        /** Put Settings */
+        put: operations["put_settings_start_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tickets": {
         parameters: {
             query?: never;
@@ -869,6 +955,15 @@ export interface components {
             /** Owner */
             owner?: string | null;
         };
+        /** QuotaWindowModel */
+        QuotaWindowModel: {
+            /** Name */
+            name: string;
+            /** Resets At */
+            resets_at?: number | null;
+            /** Used Percent */
+            used_percent: number;
+        };
         /** ResumeRef */
         ResumeRef: {
             /** Session Id */
@@ -995,6 +1090,132 @@ export interface components {
             tool: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /** StartDecision */
+        StartDecision: {
+            /** By */
+            by?: string | null;
+            /** Candidates */
+            candidates: string[];
+            /** Cwd */
+            cwd: string | null;
+            /** Cwd Sure */
+            cwd_sure: boolean;
+            /** Error */
+            error?: string | null;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+            /** Model */
+            model: string | null;
+            /** Ms */
+            ms: number;
+            /** Name */
+            name: string;
+            /** Reason */
+            reason: string;
+            /** Tier */
+            tier: string;
+            /** Title */
+            title: string;
+            /** Tool */
+            tool: string | null;
+            /** Why */
+            why: string;
+        };
+        /** StartLaunch */
+        StartLaunch: {
+            /**
+             * Changed
+             * @default []
+             */
+            changed: string[];
+            /** Cwd */
+            cwd: string;
+            /** Model */
+            model?: string | null;
+            /** Name */
+            name: string;
+            /** Probe */
+            probe?: string | null;
+            /** Prompt */
+            prompt: string;
+            /**
+             * Title
+             * @default
+             */
+            title: string;
+            /** Tool */
+            tool: string;
+        };
+        /** StartModel */
+        StartModel: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Tier */
+            tier: string;
+        };
+        /** StartProbe */
+        StartProbe: {
+            /** Prompt */
+            prompt: string;
+        };
+        /** StartRecent */
+        StartRecent: {
+            /** At */
+            at: number | null;
+            /** Closed Why */
+            closed_why: string | null;
+            /** Cwd */
+            cwd: string | null;
+            /** Model */
+            model: string | null;
+            /** Session */
+            session: string;
+            /** Title */
+            title: string;
+            /** Tool */
+            tool: string | null;
+        };
+        /** StartSettings */
+        StartSettings: {
+            /** Idle Hours */
+            idle_hours: number;
+            /** Probe Model */
+            probe_model: string | null;
+            /** Probe Tool */
+            probe_tool: string;
+            /** Tool Order */
+            tool_order: string[];
+        };
+        /** StartSettingsPatch */
+        StartSettingsPatch: {
+            /** Idle Hours */
+            idle_hours?: number | null;
+            /** Probe Model */
+            probe_model?: string | null;
+            /** Probe Tool */
+            probe_tool?: string | null;
+            /** Tool Order */
+            tool_order?: string[] | null;
+        };
+        /** StartTool */
+        StartTool: {
+            /** Ask Model */
+            ask_model: string | null;
+            /** Can Probe */
+            can_probe: boolean;
+            /** Installed */
+            installed: boolean;
+            /** Models */
+            models: components["schemas"]["StartModel"][];
+            /** Name */
+            name: string;
+            /** Quota */
+            quota: components["schemas"]["QuotaWindowModel"][] | null;
         };
         /** Ticket */
         Ticket: {
@@ -2243,6 +2464,204 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranscriptListing"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    launch_start_launch_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartLaunch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionModel"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    models_start_models_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartTool"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_start_probe_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartProbe"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartDecision"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_start_recent_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartRecent"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_start_settings_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_settings_start_settings_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StartSettingsPatch"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartSettings"];
                 };
             };
             /** @description Validation Error */

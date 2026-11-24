@@ -10,7 +10,8 @@ from typing import Optional
 
 import psutil
 
-from agentop.agentclis.base import AgentCli
+from agentop import oneshot
+from agentop.agentclis.base import AgentCli, Model
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines
 from agentop.results import SavedSession, saved_session
 
@@ -65,9 +66,44 @@ class AntigravityAgentCli(AgentCli):
     name = "antigravity"
     idle_seconds = 15.0
 
+    models = (
+        Model("Gemini 3.8 Flash (Low)", "gemini-3.8-flash-low", "light"),
+        Model("Gemini 3.8 Flash (High)", "gemini-3.8-flash-high", "standard"),
+        Model("Claude Opus 4.6 (Thinking)", "claude-opus-4-6-thinking", "complex"),
+    )
+
+    ask_model = "gemini-3.8-flash-low"
+
+    def ask_cmd(self, system: str, model: Optional[str] = None) -> list[str]:
+        # agy has no system prompt flag, and print mode takes the prompt only as -p's
+        # own value (`-p=…`), never from stdin: ask() puts both there.
+        return ["agy", "--model", model or self.ask_model, "--output-format", "json", "--disable-slash-commands"]
+
+    def ask(self, prompt, system, cwd, timeout=180, stop=lambda: False, model=None) -> str:
+        cmd = self.ask_cmd(system, model)
+        cmd[0] = self.executable or shutil.which(cmd[0]) or cmd[0]
+        cmd.append(f"-p={system}\n\n{prompt}")
+        return self.ask_answer(oneshot.run(self.name, cmd, "", cwd, timeout, stop))
+
+    def ask_answer(self, stdout: str) -> str:
+        lines = [line for line in stdout.splitlines() if line.strip()]
+        try:
+            result = json.loads(lines[-1])
+        except (IndexError, ValueError):
+            raise RuntimeError(f"agy printed no result: {stdout.strip()[:200]!r}") from None
+        # Print mode keeps its conversation like any other; an answer isn't a session to list or archive.
+        conversation = str(result.get("conversation_id") or "")
+        if re.fullmatch(r"[0-9a-f-]{36}", conversation):
+            shutil.rmtree(self.transcripts_root() / conversation, ignore_errors=True)
+        if result.get("status") != "SUCCESS":
+            raise RuntimeError(f"agy: {str(result.get('status') or result)[:200]}")
+        return str(result.get("response") or "").strip()
+
     def matches(self, proc_name: str, cmdline: str) -> bool:
         name_lower = proc_name.lower()
         cmd_lower = cmdline.lower()
+        if any(word in ("-p", "--print", "--prompt") or word.startswith(("-p=", "--print=", "--prompt=")) for word in cmd_lower.split()[1:]):
+            return False
         if name_lower in ("agy", "antigravity") or name_lower.startswith("agy"):
             return True
         # May run as `node /path/to/bin/agy …`

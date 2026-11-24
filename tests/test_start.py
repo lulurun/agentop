@@ -115,20 +115,18 @@ def test_an_unknown_tool_is_an_error(fake_agents, cwd):
         ops.start("nosuchtool", cwd, "demo")
 
 
-def test_claude_starts_only_with_sonnet_5_5():
+def test_each_tool_starts_with_its_catalogue_models():
+    from agentop.agentclis.antigravity import AntigravityAgentCli
+    from agentop.agentclis.base import TIERS
     from agentop.agentclis.claude import ClaudeAgentCli
+    from agentop.agentclis.codex import CodexAgentCli
 
     claude = ClaudeAgentCli()
     assert claude.model_id("Sonnet 5.5") == claude.model_id("sonnet 5.5") == "claude-sonnet-5-5"
-    assert claude._build_cmd(claude.launch_cmd, {"model": "claude-sonnet-5-5"}).endswith(" --model claude-sonnet-5-5")
-    with pytest.raises(ValueError, match='"Sonnet 5.5"'):
-        claude.model_id("opus")
-
-
-def test_codex_and_antigravity_take_no_model():
-    from agentop.agentclis.antigravity import AntigravityAgentCli
-    from agentop.agentclis.codex import CodexAgentCli
-
-    for agent in (CodexAgentCli(), AntigravityAgentCli()):
-        with pytest.raises(ValueError, match="only its default"):
-            agent.model_id("Sonnet 5.5")
+    assert claude.model_id("claude-opus-5-5") == "claude-opus-5-5"
+    assert claude._build_cmd(claude.launch_cmd, {"model": "claude-opus-5-5"}).endswith(" --model claude-opus-5-5")
+    with pytest.raises(ValueError, match='"Opus 5.5"'):
+        claude.model_id("gpt-6.2-sol")
+    for agent in (claude, CodexAgentCli(), AntigravityAgentCli()):
+        assert sorted({m.tier for m in agent.models}) == sorted(TIERS)
+    assert CodexAgentCli().model_id("GPT-6.2-Sol") == "gpt-6.2-sol"

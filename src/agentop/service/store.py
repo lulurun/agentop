@@ -18,7 +18,7 @@ from dataclasses import asdict
 
 import psutil
 
-from agentop import coordinator, ops, projects, registry
+from agentop import coordinator, ops, projects, registry, starting
 from agentop.results import OpsError
 from agentop.tmux import Session
 
@@ -27,6 +27,8 @@ LOG = logging.getLogger(__name__)
 TICK_SECONDS = 2.0
 DEFAULT_MAX_ACTIVE = 20
 META_EVERY_TICKS = 5
+# About a minute.
+TIDY_EVERY_TICKS = 30
 PRUNE_EVERY_TICKS = 300
 
 META_KEYS = ("session_id", "ai_title", "token_usage", "bridge_url", "bridge_session_id", "remote_name", "claude_status")
@@ -234,6 +236,43 @@ class SessionStore:
                 await self.refresh(with_meta=self._ticks % META_EVERY_TICKS == 0)
             except Exception:
                 LOG.exception("Session refresh failed")
+            if self._ticks % TIDY_EVERY_TICKS == 0:
+                try:
+                    await self.close_idle()
+                except Exception:
+                    LOG.exception("Closing idle sessions failed")
+
+    async def close_idle(self) -> list[str]:
+        """Stop the default project's sessions idle for the start settings' idle_hours (docs/0_04_start.md 5)."""
+        hours = (await asyncio.to_thread(starting.settings))["idle_hours"]
+        if not hours:
+            return []
+        activity = await asyncio.to_thread(starting.last_activity)
+        closed = []
+        for row in starting.idle_to_close(self.list(), activity, hours):
+            if await self._tidy_away(row, f"idle for {hours:g}h"):
+                closed.append(row["id"])
+        return closed
+
+    async def make_room(self) -> dict | None:
+        """At the limit, stop the default session idle longest. Raises StoreError when none has been idle long enough."""
+        if not self.at_limit():
+            return None
+        activity = await asyncio.to_thread(starting.last_activity)
+        row = starting.room_to_make(self.list(), activity)
+        if row is None or not await self._tidy_away(row, "closed to make room for a new session"):
+            raise StoreError(409, f"{self.max_active} sessions are active, and every Sessions session was used in the last 10 minutes. Close one to start another")
+        return row
+
+    async def _tidy_away(self, row: dict, why: str) -> bool:
+        try:
+            await self.stop(row["id"])
+        except StoreError as exc:
+            LOG.warning("Could not close %s (%s): %s", row["id"], why, exc.message)
+            return False
+        LOG.info("Closed %s: %s", row["id"], why)
+        await asyncio.to_thread(starting.record, {"event": "closed", "session": row["id"], "name": row.get("display_name"), "why": why})
+        return True
 
     # ------------------------------------------------------------------ reading
 
@@ -366,7 +405,7 @@ class SessionStore:
             for row in self._sessions.values()
         )
 
-    def _free_name(self, project: str, base: str) -> str:
+    def free_name(self, project: str, base: str) -> str:
         name, n = base, 2
         while self._name_taken(project, name):
             suffix = f"-{n}"
@@ -382,6 +421,8 @@ class SessionStore:
         display_name: str | None = None,
         project: str = projects.DEFAULT,
         prompt: str | None = None,
+        model: str | None = None,
+        description: str | None = None,
     ) -> dict:
         """Validate, record the session as `starting`, and begin starting it in the background.
 
@@ -397,10 +438,15 @@ class SessionStore:
         agent = ops.get_agent(tool)
         if not agent:
             raise StoreError(400, f"Unknown tool: {tool}")
+        if model:
+            try:
+                model = agent.model_id(model)
+            except ValueError as exc:
+                raise StoreError(400, str(exc)) from None
         cwd = os.path.abspath(os.path.expanduser(cwd))
         if not os.path.isdir(cwd):
             raise StoreError(400, f"Not a directory: {cwd}")
-        short_name = name or self._free_name(project, _default_name(cwd))
+        short_name = name or self.free_name(project, _default_name(cwd))
         if not ops.is_valid_short_name(short_name):
             raise StoreError(400, "Name must be 1-32 letters, digits, '-' or '_', starting with a letter or digit")
         shown = display_name or short_name
@@ -424,6 +470,10 @@ class SessionStore:
             "status": "starting",
             "step": "creating",
         }
+        if model:
+            record["model"] = model
+        if description:
+            record["description"] = description
         if resume_id is not None:
             # Known before the agent says so, so History drops it at once.
             record["agent_session_id"] = resume_id
@@ -432,7 +482,7 @@ class SessionStore:
             self._starting[session_id] = record
             await self._refresh_locked(with_meta=False)
 
-        task = asyncio.create_task(self._run_start(session_id, tool, cwd, short_name, resume_id, display_name, prompt))
+        task = asyncio.create_task(self._run_start(session_id, tool, cwd, short_name, resume_id, display_name, prompt, model))
         self._start_tasks.add(task)
         task.add_done_callback(self._start_tasks.discard)
         return self.get(session_id)
@@ -455,6 +505,7 @@ class SessionStore:
         resume_id: str | None,
         display_name: str | None,
         prompt: str | None = None,
+        model: str | None = None,
     ) -> None:
         loop = asyncio.get_running_loop()
 
@@ -464,7 +515,7 @@ class SessionStore:
         try:
             if resume_id is None:
                 await asyncio.to_thread(
-                    ops.start, tool, cwd, short_name, None, session_id, on_progress, self._starting[session_id]["project"]
+                    ops.start, tool, cwd, short_name, {"model": model} if model else None, session_id, on_progress, self._starting[session_id]["project"]
                 )
             else:
                 await asyncio.to_thread(

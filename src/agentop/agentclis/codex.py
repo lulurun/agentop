@@ -13,7 +13,7 @@ from typing import Optional
 import psutil
 
 from agentop import tmux
-from agentop.agentclis.base import AgentCli, files_under
+from agentop.agentclis.base import AgentCli, Model, QuotaWindow, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, StartResult, saved_session
 from agentop.tmux import CapturePane, Session
@@ -104,12 +104,36 @@ class CodexAgentCli(AgentCli):
         after = words.index("codex") + 1 if "codex" in words else 1
         return words[after : after + 1] != ["exec"]
 
+    models = (
+        Model("GPT-6-Luna", "gpt-6-luna", "light"),
+        Model("GPT-6.1-Terra", "gpt-6.1-terra", "standard"),
+        Model("GPT-6.2-Sol", "gpt-6.2-sol", "complex"),
+    )
+
+    def quota(self) -> Optional[list[QuotaWindow]]:
+        """From the newest rollout that recorded Codex's limits; a window past its reset counts as unused."""
+        limits = _latest_rate_limits(self.dir / "sessions")
+        if limits is None:
+            return None
+        now = time.time()
+        windows = []
+        for key in ("primary", "secondary"):
+            window = limits.get(key)
+            if not isinstance(window, dict) or not isinstance(window.get("used_percent"), (int, float)):
+                continue
+            minutes = window.get("window_minutes") or 0
+            resets = window.get("resets_at")
+            name = "5h" if minutes == 300 else "weekly" if minutes == 10080 else f"{minutes}m"
+            used = 0.0 if isinstance(resets, (int, float)) and resets < now else float(window["used_percent"])
+            windows.append(QuotaWindow(name, used, resets))
+        return windows or None
+
     # ------------------------------------------------------------------ one-shot prompts
 
     # The fast, cheap model is plenty for summaries.
     ask_model = "gpt-6-luna"
 
-    def ask_cmd(self, system: str) -> list[str]:
+    def ask_cmd(self, system: str, model: Optional[str] = None) -> list[str]:
         # --ephemeral writes no rollout, so an answer never becomes a session to
         # archive. --ignore-user-config skips the user's MCP servers and
         # settings (sign-in still comes from ~/.codex), and with the shell tool
@@ -127,7 +151,7 @@ class CodexAgentCli(AgentCli):
             "--color",
             "never",
             "--model",
-            self.ask_model,
+            model or self.ask_model,
             "-c",
             "model_reasoning_effort=low",
             "-c",
@@ -472,3 +496,34 @@ class CodexAgentCli(AgentCli):
             if token_usage:
                 meta["token_usage"] = token_usage
         return meta
+
+
+# Only the end of a rollout is read: the newest record is wanted, and rollouts grow to megabytes.
+_TAIL_BYTES = 256 * 1024
+_ROLLOUTS_READ = 12
+
+
+def _latest_rate_limits(sessions: Path) -> Optional[dict]:
+    """The newest `rate_limits` with a usage window, from the latest rollouts. A rollout records other limits too (`premium`), with none."""
+    try:
+        days = sorted((d for d in sessions.glob("*/*/*") if d.is_dir()), reverse=True)[:3]
+        files = sorted((f for d in days for f in d.glob("rollout-*.jsonl")), key=lambda f: f.stat().st_mtime, reverse=True)
+    except OSError:
+        return None
+    for path in files[:_ROLLOUTS_READ]:
+        try:
+            with path.open("rb") as fh:
+                fh.seek(max(0, path.stat().st_size - _TAIL_BYTES))
+                lines = fh.read().decode("utf-8", "replace").splitlines()
+        except OSError:
+            continue
+        for line in reversed(lines):
+            if '"rate_limits"' not in line:
+                continue
+            try:
+                limits = (json.loads(line).get("payload") or {}).get("rate_limits") or {}
+            except ValueError:
+                continue
+            if isinstance(limits, dict) and (limits.get("primary") or limits.get("secondary")):
+                return limits
+    return None

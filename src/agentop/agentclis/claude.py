@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-from agentop.agentclis.base import AgentCli, files_under
+from agentop.agentclis.base import AgentCli, Model, files_under
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, saved_session
 
@@ -77,7 +77,11 @@ class ClaudeAgentCli(AgentCli):
     name = "claude"
     add_dir_flag = "--add-dir"
 
-    models = {"Sonnet 5.5": "claude-sonnet-5-5"}
+    models = (
+        Model("Haiku 5.5", "claude-haiku-5-5", "light"),
+        Model("Sonnet 5.5", "claude-sonnet-5-5", "standard"),
+        Model("Opus 5.5", "claude-opus-5-5", "complex"),
+    )
 
     # Shown under the input box, and not on the trust prompt.
     READY_MARKER = "shift+tab to cycle"
@@ -105,12 +109,12 @@ class ClaudeAgentCli(AgentCli):
     # The cheapest model is plenty for summaries.
     ask_model = "haiku"
 
-    def ask_cmd(self, system: str) -> list[str]:
+    def ask_cmd(self, system: str, model: Optional[str] = None) -> list[str]:
         return [
             "claude",
             "--print",
             "--model",
-            self.ask_model,
+            model or self.ask_model,
             "--no-session-persistence",
             "--tools",
             "",
