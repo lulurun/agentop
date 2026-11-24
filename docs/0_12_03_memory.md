@@ -74,11 +74,15 @@ A title, a few sentences, and keywords for each session, written by a model and 
 
 ## 6 The Memory feature
 
-Search in the app, laid out as [0_10_ui.md](0_10_ui.md) says:
+Search in the app, laid out as [0_10_ui.md](0_10_ui.md) says, with no left panel:
 
-- **Left panel**: the search box (on Enter, not as you type, so the recall log isn't filled with partial words), the CLI, and how far back. Results come as in `agentop recall`: **Sessions about this** from their summaries (title, snippet, matching keywords), then **Messages** (the snippet, the prompt it answered, tool, date, project). The search words are marked. **Didn't find it?** notes a miss.
-- **Middle panel**: a session's conversation in a tab, the whole session, opened with the hit in the middle and outlined, the search words marked, links clickable. A click on another result replaces the conversation shown; Ctrl+click opens it in a tab of its own. With no tabs, the background says what is kept.
-- **Right panel**: the focused conversation's summary (title, sentences, keywords, which model wrote it and when) and the session: tool, directory, ID, first and last message, count.
+- **Left area**: the **Search** tab, pinned first, as Sessions' start buffer is. The search box (on Enter, not as you type, so the recall log isn't filled with partial words), the CLI and how far back. With no search, the sessions newest first by their last message (`GET /sessions`), 50 at a time, each with its title, or its first prompt until it is summarized. After a search, the results under **All**, **Sessions** and **Mentions**, as a web search has All, Images and Maps:
+  - **Sessions**: those whose summary matches (title, snippet, matching keywords), then those with matching messages, most matches first, each with its count of mentions.
+  - **Mentions**: the matching messages, best first: the snippet, the prompt it answered, tool, date, project, and its session.
+  - **All**: the first 3 sessions, then the mentions.
+  - The search words are marked. **Didn't find it?** notes a miss. Clearing the box goes back to the recent sessions.
+- **Right area**: a session's conversation in a tab, the whole session; from a mention, opened with it in the middle and outlined. The search words are marked and links are clickable. A click on another session or mention replaces the conversation shown; Ctrl+click opens it in a tab of its own.
+- **Right panel**: the conversation's summary (title, sentences, keywords, which model wrote it and when) and the session: tool, directory, ID, first and last message, count. It follows the focused tab, and while the Search tab has focus, the conversation beside it.
 - Not built: Resume from a conversation, and jumping from a Sessions or History row to its conversation ([backlog](9_backlog.md#features-and-memory-navigation)).
 
 ## 7 Recall misses
@@ -95,7 +99,8 @@ Under `/api/v2/plugins/memory/`:
 | `POST` | `/sweep` | Sweep now |
 | `GET` | `/search?q=&tool=&project=&since=&limit=` | Messages |
 | `GET` | `/search/sessions?q=&tool=&project=&since=&limit=` | Sessions, by their summaries |
-| `GET` | `/recall?q=&tool=&project=&since=&limit=` | The app's search: sessions and messages in one call, noted once in the recall log |
+| `GET` | `/sessions?tool=&since=&limit=&offset=` | Sessions newest first by their last message, with their title or first prompt |
+| `GET` | `/recall?q=&tool=&project=&since=&limit=` | The app's search: sessions by their summary and by their messages, and the messages, in one call, noted once in the recall log |
 | `GET` | `/conversation?session=&tool=&around=&radius=` | A session's messages, or those around one |
 | `GET` | `/summary?session=&tool=`, `/session?session=&tool=` | A session's summary; its details |
 | `PATCH` | `/summaries` | Turn summaries on or off |

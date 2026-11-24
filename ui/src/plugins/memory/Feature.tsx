@@ -1,7 +1,6 @@
 /**
- * The Memory feature (docs/0_12_03_memory.md, section 6): search every past conversation on the
- * service, read the one around a hit, and see its session's summary. A
- * search that didn't find what was wanted can be noted as a miss.
+ * The Memory feature (docs/0_12_03_memory.md, section 6): a search tab of recent sessions and
+ * results, a conversation beside it opened at a hit, and its session's summary.
  */
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { platform } from "../../platform";
@@ -9,6 +8,7 @@ import type { PluginContext } from "../types";
 import { Section } from "../../components/Section";
 import {
   keyOf,
+  loadRecent,
   openConversation,
   runSearch,
   SINCE_DAYS,
@@ -19,6 +19,8 @@ import {
   type Message,
   type MessageHit,
   type Miss,
+  type RecentSession,
+  type Scope,
   type SessionHit,
   type SessionInfo,
 } from "./state";
@@ -96,52 +98,65 @@ function ToolBadge({ tool }: { tool: string }) {
   );
 }
 
-// ------------------------------------------------------------------ the left panel
+// ------------------------------------------------------------------ the search tab
 
-function SessionRow({ hit, terms, current }: { hit: SessionHit; terms: string[]; current: boolean }) {
+/** Opens the conversation beside the search; Ctrl or Cmd-click in a tab of its own. */
+function open(tool: string, session: string, at: number | undefined, event: { ctrlKey: boolean; metaKey: boolean }) {
+  openConversation(tool, session, at, event.ctrlKey || event.metaKey);
+}
+
+function SessionResult({ hit, terms, current }: { hit: RecentSession | SessionHit; terms: string[]; current: boolean }) {
+  const found = "mentions" in hit ? hit : null;
+  const text = found?.snippet || hit.summary || "";
   return (
     <li>
-      <button
-        type="button"
-        className="memory-hit"
-        aria-current={current || undefined}
-        onClick={(event) => openConversation(hit.tool, hit.session, undefined, event.ctrlKey || event.metaKey)}
-      >
-        <span className="memory-hit-title">
-          <Marked text={hit.title} terms={terms} />
+      <button type="button" className="memory-result" aria-current={current || undefined} onClick={(event) => open(hit.tool, hit.session, undefined, event)}>
+        <span className="memory-result-meta">
+          <ToolBadge tool={hit.tool} />
+          {hit.project && <span className="memory-hit-project">{shortPath(hit.project)}</span>}
+          <span>{when(hit.last_at)}</span>
+          <span>{hit.messages.toLocaleString()} messages</span>
         </span>
-        <span className="memory-hit-text">
-          <Marked text={hit.snippet} terms={terms} />
+        <span className="memory-result-title">
+          <Marked text={hit.title || hit.prompt || `${hit.tool} session ${hit.session.slice(0, 8)}`} terms={terms} />
         </span>
-        {hit.matched.length > 0 && (
+        {text && (
+          <span className="memory-hit-text">
+            <Marked text={text} terms={terms} />
+          </span>
+        )}
+        {found && (found.matched.length > 0 || found.mentions > 0) && (
           <span className="memory-hit-keywords">
-            {hit.matched.slice(0, 6).map((k) => (
+            {found.mentions > 0 && <span className="memory-mentions">{found.mentions === 1 ? "1 mention" : `${found.mentions} mentions`}</span>}
+            {found.matched.slice(0, 6).map((k) => (
               <span key={k} className="memory-keyword">
                 {k}
               </span>
             ))}
           </span>
         )}
-        <span className="memory-hit-meta">
-          <ToolBadge tool={hit.tool} />
-          <span>{day(hit.last_at)}</span>
-          {hit.project && <span className="memory-hit-project">{shortPath(hit.project)}</span>}
-        </span>
       </button>
     </li>
   );
 }
 
-function MessageRow({ hit, terms, current }: { hit: MessageHit; terms: string[]; current: boolean }) {
+function MentionResult({ hit, terms, current }: { hit: MessageHit; terms: string[]; current: boolean }) {
+  const title = useMemory((s) => s.titles[keyOf(hit.tool, hit.session)]);
   return (
     <li>
       <button
         type="button"
-        className="memory-hit"
+        className="memory-result"
         data-role={hit.role}
         aria-current={current || undefined}
-        onClick={(event) => openConversation(hit.tool, hit.session, hit.id, event.ctrlKey || event.metaKey)}
+        onClick={(event) => open(hit.tool, hit.session, hit.id, event)}
       >
+        <span className="memory-result-meta">
+          <ToolBadge tool={hit.tool} />
+          {hit.project && <span className="memory-hit-project">{shortPath(hit.project)}</span>}
+          <span>{when(hit.at)}</span>
+        </span>
+        <span className="memory-result-session">{title || `${hit.tool} session ${hit.session.slice(0, 8)}`}</span>
         {hit.prompt && (
           <span className="memory-hit-prompt">
             You asked: <Marked text={hit.prompt} terms={terms} />
@@ -149,11 +164,6 @@ function MessageRow({ hit, terms, current }: { hit: MessageHit; terms: string[];
         )}
         <span className="memory-hit-text">
           <strong>{hit.role === "user" ? "You" : "Agent"}:</strong> <Marked text={hit.snippet} terms={terms} />
-        </span>
-        <span className="memory-hit-meta">
-          <ToolBadge tool={hit.tool} />
-          <span>{when(hit.at)}</span>
-          {hit.project && <span className="memory-hit-project">{shortPath(hit.project)}</span>}
         </span>
       </button>
     </li>
@@ -243,130 +253,196 @@ function MissForm({ plugin }: { plugin: PluginContext }) {
   );
 }
 
-export function SearchPanel({ plugin }: { plugin: PluginContext }) {
-  useClientState(plugin.client);
-  const { query, tool, sinceDays, terms, results, searching, error } = useMemory();
+/** Sessions shown first under All, as a web search shows a few images above the pages. */
+const ALL_SESSIONS = 3;
+
+function Results({ plugin }: { plugin: PluginContext }) {
+  const { results, terms, scope, searching } = useMemory();
   const current = useCurrentConversation();
   const currentKey = current ? keyOf(...current) : null;
   const target = useMemory((s) => (currentKey ? s.targets[currentKey] : undefined));
+  if (!results) return null;
+  const { sessions, messages } = results;
+  const isCurrent = (tool: string, session: string, at?: number) => keyOf(tool, session) === currentKey && target === at;
+  const sessionList = (shown: SessionHit[]) => (
+    <ul className="memory-results-list" aria-label="Sessions">
+      {shown.map((hit) => (
+        <SessionResult key={keyOf(hit.tool, hit.session)} hit={hit} terms={terms} current={isCurrent(hit.tool, hit.session)} />
+      ))}
+    </ul>
+  );
+  const mentionList = (
+    <ul className="memory-results-list" aria-label="Mentions">
+      {messages.map((hit) => (
+        <MentionResult key={hit.id} hit={hit} terms={terms} current={isCurrent(hit.tool, hit.session, hit.id)} />
+      ))}
+    </ul>
+  );
+  const nothing = sessions.length === 0 && messages.length === 0;
+  return (
+    <div className="memory-results" aria-busy={searching || undefined}>
+      {nothing ? (
+        <p className="memory-empty">Nothing has all of: {terms.join(" ")}. Try part of a word, another spelling, or another language.</p>
+      ) : scope === "sessions" ? (
+        sessions.length ? sessionList(sessions) : <p className="memory-empty">No session matches.</p>
+      ) : scope === "mentions" ? (
+        messages.length ? mentionList : <p className="memory-empty">No message has all of: {terms.join(" ")}</p>
+      ) : (
+        <>
+          {sessions.length > 0 && (
+            <div className="memory-group">
+              <h3 className="memory-group-title">Sessions</h3>
+              {sessionList(sessions.slice(0, ALL_SESSIONS))}
+              {sessions.length > ALL_SESSIONS && (
+                <button type="button" className="memory-more" onClick={() => useMemory.setState({ scope: "sessions" })}>
+                  All {sessions.length} sessions
+                </button>
+              )}
+            </div>
+          )}
+          {messages.length > 0 && mentionList}
+        </>
+      )}
+      <div className="memory-miss-row">
+        <MissForm plugin={plugin} />
+      </div>
+    </div>
+  );
+}
+
+function Recent({ plugin }: { plugin: PluginContext }) {
+  const recent = useMemory((s) => s.recent);
+  const more = useMemory((s) => s.recentMore);
+  const current = useCurrentConversation();
+  const currentKey = current ? keyOf(...current) : null;
+  const target = useMemory((s) => (currentKey ? s.targets[currentKey] : undefined));
+  if (!recent) return <p className="memory-empty">Loading…</p>;
+  if (!recent.length) return <p className="memory-empty">No conversations recorded yet. They come in with each sweep, every 5 minutes.</p>;
+  return (
+    <div className="memory-results">
+      <ul className="memory-results-list" aria-label="Recent sessions">
+        {recent.map((hit) => (
+          <SessionResult
+            key={keyOf(hit.tool, hit.session)}
+            hit={hit}
+            terms={[]}
+            current={keyOf(hit.tool, hit.session) === currentKey && target === undefined}
+          />
+        ))}
+      </ul>
+      {more && (
+        <button type="button" className="memory-more" onClick={() => void loadRecent(plugin.client, true)}>
+          More sessions
+        </button>
+      )}
+    </div>
+  );
+}
+
+const SCOPES: [Scope, string][] = [
+  ["all", "All"],
+  ["sessions", "Sessions"],
+  ["mentions", "Mentions"],
+];
+
+/** The search tab, pinned first in the left area: the box, then recent sessions, or the results by scope. */
+export function SearchView({ plugin }: { plugin: PluginContext }) {
+  useClientState(plugin.client);
+  const { query, tool, sinceDays, results, scope, searching, error } = useMemory();
+  const sessions = useMemory((s) => s.recent?.length ?? 0);
+
+  useEffect(() => {
+    void loadRecent(plugin.client);
+    // A sweep brings in new messages, and a session's summary after it.
+    return plugin.onEvent(() => void loadRecent(plugin.client));
+  }, [plugin]);
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    useMemory.setState({ scope: "all" });
     void runSearch(plugin.client);
   }
 
   function setFilter(change: Partial<{ tool: string; sinceDays: number }>) {
     useMemory.setState(change);
+    void loadRecent(plugin.client);
     if (useMemory.getState().results) void runSearch(plugin.client);
   }
 
+  function clear() {
+    useMemory.setState({ query: "", results: null, terms: [], error: null });
+  }
+
+  const counts: Record<Scope, number | undefined> = {
+    all: undefined,
+    sessions: results?.sessions.length,
+    mentions: results?.messages.length,
+  };
   return (
-    <>
-      <Section id="memory:search" title="Search">
-      <form className="memory-search-form" role="search" onSubmit={submit}>
-        <div className="memory-search-row">
+    <div className="memory-search">
+      <div className="memory-search-inner">
+        <form className="memory-search-form" role="search" onSubmit={submit}>
           <input
             type="search"
             aria-label="Search past conversations"
             placeholder="Words, part of a name, a link…"
             value={query}
             autoFocus
-            onChange={(event) => useMemory.setState({ query: event.target.value })}
+            onChange={(event) => {
+              useMemory.setState({ query: event.target.value });
+              if (!event.target.value) clear();
+            }}
           />
           <button type="submit" className="primary" disabled={searching || !query.trim()}>
             Search
           </button>
-        </div>
-        <div className="memory-search-row">
-          <select aria-label="CLI" value={tool} onChange={(event) => setFilter({ tool: event.target.value })}>
-            <option value="">All CLIs</option>
-            {TOOLS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-          <select aria-label="Since" value={sinceDays} onChange={(event) => setFilter({ sinceDays: Number(event.target.value) })}>
-            {SINCE_DAYS.map((d) => (
-              <option key={d} value={d}>
-                {SINCE_LABELS[d]}
-              </option>
-            ))}
-          </select>
-        </div>
-      </form>
-        {error && <p className="form-error memory-pad">{error}</p>}
-        {!results && <p className="session-empty">Every word must match, anywhere in a message, ignoring case. Quotes keep a phrase together.</p>}
-      </Section>
-        {results && (
-          <>
-            <Section id="memory:sessions" title="Sessions about this" extra={<span className="session-count">{results.sessions.length}</span>}>
-            {results.sessions.length === 0 ? (
-              <p className="session-empty">No session summary matches.</p>
-            ) : (
-              <ul className="memory-hits" aria-label="Sessions">
-                {results.sessions.map((hit) => (
-                  <SessionRow
-                    key={keyOf(hit.tool, hit.session)}
-                    hit={hit}
-                    terms={terms}
-                    current={keyOf(hit.tool, hit.session) === currentKey && target === undefined}
-                  />
-                ))}
-              </ul>
-            )}
-            </Section>
-            <Section id="memory:messages" title="Messages" extra={<span className="session-count">{results.messages.length}</span>}>
-            {results.messages.length === 0 ? (
-              <p className="session-empty">No message has all of: {terms.join(" ")}</p>
-            ) : (
-              <ul className="memory-hits" aria-label="Messages">
-                {results.messages.map((hit) => (
-                  <MessageRow key={hit.id} hit={hit} terms={terms} current={keyOf(hit.tool, hit.session) === currentKey && target === hit.id} />
-                ))}
-              </ul>
-            )}
-            <div className="memory-pad">
-              <MissForm plugin={plugin} />
+        </form>
+        <div className="memory-search-bar">
+          {results ? (
+            <div className="memory-scopes" role="tablist" aria-label="Results">
+              {SCOPES.map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="tab"
+                  className="memory-scope"
+                  aria-selected={scope === id}
+                  onClick={() => useMemory.setState({ scope: id })}
+                >
+                  {label}
+                  {counts[id] !== undefined && <span className="memory-scope-count">{counts[id]}</span>}
+                </button>
+              ))}
             </div>
-            </Section>
-          </>
-        )}
-    </>
-  );
-}
-
-// ------------------------------------------------------------------ the main area
-
-interface Counts {
-  messages: { messages: number; sessions: number };
-  summaries: { summaries: number };
-  recall: { searches: number; misses: number };
-}
-
-export function Background({ plugin }: { plugin: PluginContext }) {
-  const [counts, setCounts] = useState<Counts | null>(null);
-  useEffect(() => {
-    let live = true;
-    plugin.client.get<Counts>("/status").then(
-      (found) => live && setCounts(found),
-      () => undefined,
-    );
-    return () => {
-      live = false;
-    };
-  }, [plugin.client]);
-  return (
-    <div className="placard">
-      <h2>Search past conversations</h2>
-      <p>
-        Find a name, a place or a link from any conversation with an agent on this service, then read the conversation around it.
-        {counts &&
-          ` ${counts.messages.messages.toLocaleString()} prompts and replies from ${counts.messages.sessions.toLocaleString()} sessions are kept, ${counts.summaries.summaries.toLocaleString()} of them summarized.`}
-      </p>
+          ) : (
+            <h2 className="memory-recent-title">Recent sessions{sessions > 0 && <span className="memory-scope-count">{sessions}</span>}</h2>
+          )}
+          <div className="memory-filters">
+            <select aria-label="CLI" value={tool} onChange={(event) => setFilter({ tool: event.target.value })}>
+              <option value="">All CLIs</option>
+              {TOOLS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+            <select aria-label="Since" value={sinceDays} onChange={(event) => setFilter({ sinceDays: Number(event.target.value) })}>
+              {SINCE_DAYS.map((d) => (
+                <option key={d} value={d}>
+                  {SINCE_LABELS[d]}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {error && <p className="form-error">{error}</p>}
+        {results ? <Results plugin={plugin} /> : <Recent plugin={plugin} />}
+      </div>
     </div>
   );
 }
+
+// ------------------------------------------------------------------ the conversations
 
 export function ConversationView({ plugin, viewKey = "" }: { plugin: PluginContext; viewKey?: string }) {
   const [tool, session] = splitKey(viewKey);
@@ -408,7 +484,8 @@ export function ConversationView({ plugin, viewKey = "" }: { plugin: PluginConte
     } else element.scrollTop = 0;
   }, [messages, target]);
 
-  const title = info?.summary?.title || `${tool} session ${session.slice(0, 8)}`;
+  const known = useMemory((s) => s.titles[viewKey]);
+  const title = info?.summary?.title || known || `${tool} session ${session.slice(0, 8)}`;
   let body: ReactNode;
   if (error) {
     body = (
@@ -570,7 +647,7 @@ export function DetailsPanel({ plugin }: { plugin: PluginContext }) {
   if (!current) {
     return (
       <Section id="memory:session" title="Session">
-        <p className="detail-empty">Open a search result to see its session.</p>
+        <p className="detail-empty">Open a session to see its summary and details.</p>
       </Section>
     );
   }

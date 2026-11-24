@@ -131,7 +131,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 | Slot | `plugin` key | Where it draws |
 |------|--------------|----------------|
-| `feature` | `feature` | A feature in the feature nav: a label, left and right panels, a background, and the views its tabs show ([0_10_ui.md](0_10_ui.md#rules-for-plugins)) |
+| `feature` | `feature` | A feature in the feature nav: a label, left and right panels, a background, the views its tabs show, and a pinned home view ([0_10_ui.md](0_10_ui.md#rules-for-plugins)) |
 | `right-panel` | `rightPanel` | A section in Sessions' right panel |
 | `session-badge` | `sessionBadge` | A badge on a session row |
 | `settings-section` | `settingsSection` | A section in the service's Status, under Plugins |

@@ -71,6 +71,8 @@ export interface PluginView {
 export interface PluginFeature {
   label: string;
   views: Record<string, PluginView>;
+  /** The view of its default tab, pinned first in the left area as Sessions' start buffer is. */
+  home?: string;
   /** The middle panel with no areas. */
   background?: ComponentType<{ plugin: PluginContext }>;
   left?: ComponentType<{ plugin: PluginContext }>;

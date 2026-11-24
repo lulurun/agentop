@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { PluginContext, UiPlugin } from "../types";
-import { ConversationView, DetailsPanel, Background, SearchPanel, tabLabel } from "./Feature";
+import { ConversationView, DetailsPanel, SearchView, tabLabel } from "./Feature";
 
 interface Status {
   folder: string;
@@ -140,10 +140,10 @@ export const plugin: UiPlugin = {
   feature: {
     label: "Memory",
     views: {
+      search: { label: "Search", Component: SearchView },
       conversation: { label: "Conversation", Component: ConversationView, tabLabel },
     },
-    background: Background,
-    left: SearchPanel,
+    home: "search",
     right: DetailsPanel,
   },
   settingsSection: ArchiveStatus,

@@ -162,6 +162,11 @@ def register(api):
             wanted.set()  # start on the backlog now, not at the next sweep
         return await asyncio.to_thread(status)
 
+    @api.router.get("/sessions")
+    async def recent_sessions(limit: int = 50, offset: int = 0, tool: str | None = None, since: float | None = None):
+        """Sessions by their last message, newest first."""
+        return await asyncio.to_thread(summaries.recent, max(1, min(limit, 200)), max(0, offset), tool, since)
+
     @api.router.get("/search/sessions")
     async def search_sessions(
         q: str, limit: int = 5, tool: str | None = None, project: str | None = None, since: float | None = None
@@ -185,16 +190,22 @@ def register(api):
     async def recall(
         q: str, limit: int = 50, tool: str | None = None, project: str | None = None, since: float | None = None
     ):
-        """The app's search: sessions by their summary, then messages, noted in the recall log."""
+        """The app's search: sessions by their summary, then by their messages, and the messages; noted in the recall log."""
 
         def run() -> dict:
             limit_ = max(1, min(limit, 200))
-            found = {
-                "sessions": summaries.search(q, 10, tool, project, since),
-                "messages": messages.search(q, limit_, tool, project, since),
-            }
-            recall_log.search(q, len(found["messages"]), len(found["sessions"]), "app")
-            return found
+            by_summary = summaries.search(q, 20, tool, project, since)
+            mentions = {(h["tool"], h["session"]): h["mentions"] for h in messages.search_sessions(q, 100, tool, project, since)}
+            for hit in by_summary:
+                hit["mentions"] = mentions.get((hit["tool"], hit["session"]), 0)
+            found = {(h["tool"], h["session"]) for h in by_summary}
+            rest = summaries.recent(len(mentions), only=[key for key in mentions if key not in found])
+            for hit in rest:
+                hit.update(mentions=mentions[(hit["tool"], hit["session"])], keywords=[], matched=[], snippet="")
+            rest.sort(key=lambda h: (-h["mentions"], -(h["last_at"] or 0)))
+            result = {"sessions": by_summary + rest, "messages": messages.search(q, limit_, tool, project, since)}
+            recall_log.search(q, len(result["messages"]), len(by_summary), "app")
+            return result
 
         return await asyncio.to_thread(run)
 

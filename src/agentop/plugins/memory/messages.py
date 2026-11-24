@@ -250,38 +250,11 @@ class Messages:
         terms = split_terms(query)
         if not terms or not self.path.exists():
             return []
-        long_terms = [t for t in terms if len(t) >= 3]
-        where, params = [], []
-        for term in terms:
-            if len(term) < 3:
-                where.append("m.text LIKE ? ESCAPE '\\'")
-                params.append(
-                    "%"
-                    + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                    + "%"
-                )
-        for column, value in (("m.tool", tool), ("m.project", project)):
-            if value:
-                where.append(f"{column} = ?")
-                params.append(value)
-        if since is not None:
-            where.append("m.at >= ?")
-            params.append(since)
+        source, params, ranked = _matching(terms, tool, project, since)
         columns = "m.id, m.tool, m.session, m.project, m.turn, m.at, m.role, m.text"
-        if long_terms:
-            match = " AND ".join('"' + t.replace('"', '""') + '"' for t in long_terms)
-            sql = f"SELECT {columns} FROM messages_fts f JOIN messages m ON m.id = f.rowid WHERE messages_fts MATCH ?"
-            sql += (
-                "".join(f" AND {w}" for w in where)
-                + " ORDER BY f.rank, m.at DESC LIMIT ?"
-            )
-            params = [match, *params, limit]
-        else:
-            sql = f"SELECT {columns} FROM messages m" + (
-                " WHERE " + " AND ".join(where) if where else ""
-            )
-            sql += " ORDER BY m.at DESC LIMIT ?"
-            params = [*params, limit]
+        order = "f.rank, m.at DESC" if ranked else "m.at DESC"
+        sql = f"SELECT {columns} {source} ORDER BY {order} LIMIT ?"
+        params = [*params, limit]
         db = self._connect()
         try:
             rows = db.execute(sql, params).fetchall()
@@ -316,6 +289,30 @@ class Messages:
             return hits
         finally:
             db.close()
+
+    def search_sessions(
+        self,
+        query: str,
+        limit: int = 50,
+        tool: str | None = None,
+        project: str | None = None,
+        since: float | None = None,
+    ) -> list[dict]:
+        """Sessions with messages holding every term, most such messages first."""
+        terms = split_terms(query)
+        if not terms or not self.path.exists():
+            return []
+        source, params, _ = _matching(terms, tool, project, since)
+        sql = (
+            f"SELECT m.tool, m.session, COUNT(*) AS n, MAX(m.at) {source} AND m.session IS NOT NULL"
+            " GROUP BY m.tool, m.session ORDER BY n DESC, MAX(m.at) DESC LIMIT ?"
+        )
+        db = self._connect()
+        try:
+            rows = db.execute(sql, [*params, limit]).fetchall()
+        finally:
+            db.close()
+        return [{"tool": t, "session": s, "mentions": n} for t, s, n, _ in rows]
 
     def session(self, tool: str | None, session: str) -> dict | None:
         """What the table knows of a session: its tool, project, first and last message, and how many."""
@@ -355,6 +352,31 @@ class Messages:
             {"id": id_, "role": role, "at": at, "text": text}
             for id_, role, at, text in rows
         ]
+
+
+def _matching(
+    terms: list[str], tool: str | None, project: str | None, since: float | None
+) -> tuple[str, list, bool]:
+    """The FROM and WHERE of the messages holding every term, their parameters, and whether ranked by the index."""
+    where, params = ["1"], []
+    for term in terms:
+        if len(term) < 3:
+            # Trigrams need three characters.
+            where.append("m.text LIKE ? ESCAPE '\\'")
+            params.append("%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%")
+    for column, value in (("m.tool", tool), ("m.project", project)):
+        if value:
+            where.append(f"{column} = ?")
+            params.append(value)
+    if since is not None:
+        where.append("m.at >= ?")
+        params.append(since)
+    long_terms = [t for t in terms if len(t) >= 3]
+    if not long_terms:
+        return "FROM messages m WHERE " + " AND ".join(where), params, False
+    match = " AND ".join('"' + t.replace('"', '""') + '"' for t in long_terms)
+    source = "FROM messages_fts f JOIN messages m ON m.id = f.rowid WHERE messages_fts MATCH ? AND " + " AND ".join(where)
+    return source, [match, *params], True
 
 
 def split_terms(query: str) -> list[str]:

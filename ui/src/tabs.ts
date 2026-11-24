@@ -112,12 +112,12 @@ export function canSplit(content: TabContent): boolean {
 
 export const START_TAB: Tab = { id: "start", content: { kind: "start" }, pinned: true };
 
-/** The layout with Sessions' start buffer in it: pinned first in the left area, unless it was moved. The same layout when it is. */
-export function withStartTab(layout: Layout): Layout {
-  if (findOpen(layout, START_TAB.content)) return layout;
+/** The layout with a feature's pinned tab in it (Sessions' start buffer): first in the left area, unless it was moved. The same layout when it is. */
+export function withPinnedTab(layout: Layout, pinned: Tab = START_TAB): Layout {
+  if (findOpen(layout, pinned.content)) return layout;
   const left = layout.left;
-  if (!left) return { ...layout, left: { tabs: [START_TAB], active: START_TAB.id }, focused: layout.right ? layout.focused : "left" };
-  return { ...layout, left: { ...left, tabs: [START_TAB, ...left.tabs], active: left.active ?? START_TAB.id } };
+  if (!left) return { ...layout, left: { tabs: [pinned], active: pinned.id }, focused: layout.right ? layout.focused : "left" };
+  return { ...layout, left: { ...left, tabs: [pinned, ...left.tabs], active: left.active ?? pinned.id } };
 }
 
 /** A layout of one pinned tab, the default of a feature that opens with one. */

@@ -15,7 +15,8 @@ import {
 import { platform } from "./platform";
 import { applyTheme, loadSettings, saveSettings, type Settings } from "./settings";
 import * as tabs from "./tabs";
-import type { Area, Layout, OpenMode, TabContent } from "./tabs";
+import type { Area, Layout, OpenMode, Tab, TabContent } from "./tabs";
+import { UI_PLUGINS } from "./plugins/registry";
 import { isKnownFeature, isStaleTab, pluginOf, featuresFor, type FeatureId } from "./features";
 
 export type LinkState =
@@ -223,19 +224,39 @@ type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "feature
  */
 export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature(state)): Layout {
   const saved = state.layouts[state.activeId]?.[feature];
-  if (feature !== "sessions") return saved ?? EMPTY_LAYOUT;
-  if (saved) return withStart(saved);
+  if (feature !== "sessions") {
+    const home = homeTab(feature);
+    return home ? withPinned(saved ?? EMPTY_LAYOUT, home) : (saved ?? EMPTY_LAYOUT);
+  }
+  if (saved) return withPinned(saved, tabs.START_TAB);
   const selected = state.selected[state.activeId];
-  if (!selected) return withStart(EMPTY_LAYOUT);
-  return withStart(derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0")));
+  if (!selected) return withPinned(EMPTY_LAYOUT, tabs.START_TAB);
+  return withPinned(
+    derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0")),
+    tabs.START_TAB,
+  );
 }
 
-const startAdded = new WeakMap<Layout, Layout>();
+const homeTabs = new Map<string, Tab>();
 
-/** Sessions' layout with its start buffer, the same object each time for the same layout, as selectors need. */
-function withStart(layout: Layout): Layout {
-  let found = startAdded.get(layout);
-  if (!found) startAdded.set(layout, (found = tabs.withStartTab(layout)));
+/** A plugin feature's pinned tab, from its UI's `home` view; the same object each time. */
+function homeTab(feature: FeatureId): Tab | undefined {
+  const plugin = pluginOf(feature);
+  const view = plugin && UI_PLUGINS[plugin]?.feature?.home;
+  if (!plugin || !view) return undefined;
+  const key = `${plugin}:${view}`;
+  if (!homeTabs.has(key)) homeTabs.set(key, { id: "home", content: { kind: "plugin", plugin, view }, pinned: true });
+  return homeTabs.get(key);
+}
+
+const pinnedAdded = new WeakMap<Layout, WeakMap<Tab, Layout>>();
+
+/** A layout with its pinned tab, the same object each time for the same layout, as selectors need. */
+function withPinned(layout: Layout, pinned: Tab): Layout {
+  let byTab = pinnedAdded.get(layout);
+  if (!byTab) pinnedAdded.set(layout, (byTab = new WeakMap()));
+  let found = byTab.get(pinned);
+  if (!found) byTab.set(pinned, (found = tabs.withPinnedTab(layout, pinned)));
   return found;
 }
 

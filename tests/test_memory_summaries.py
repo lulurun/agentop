@@ -150,6 +150,35 @@ def test_a_session_is_found_by_its_summary_words_and_keywords(table):
     assert summaries.get(None, "lunch")["made_by"] == "claude haiku"
 
 
+def test_recent_lists_sessions_newest_first_with_a_title_or_the_first_prompt(table):
+    summaries = sm.Summaries(table)
+    say(table, "old", "where should we go", "Go before 6am", at=OLD - 500)
+    say(table, "new", "fix the build", "fixed", tool="codex")
+    summaries.summarize(next(d for d in summaries.due(NOW) if d.session == "old"), lambda p, s: answer(), "t")
+
+    recent = summaries.recent()
+    assert [(r["session"], r["title"], r["prompt"], r["messages"]) for r in recent] == [
+        ("new", None, "fix the build", 2),
+        ("old", "Lunch plans", "where should we go", 2),
+    ]
+    assert [r["session"] for r in summaries.recent(limit=1, offset=1)] == ["old"]
+    assert [r["session"] for r in summaries.recent(tool="claude")] == ["old"]
+    assert [r["session"] for r in summaries.recent(since=OLD - 100)] == ["new"]
+    assert [r["session"] for r in summaries.recent(only=[("claude", "old"), ("claude", "new")])] == ["old"]
+    assert summaries.recent(only=[]) == []
+
+
+def test_sessions_are_found_by_their_mentions_most_first(table):
+    say(table, "one", "sushi please", "ok")
+    say(table, "two", "sushi again", "more sushi", at=OLD - 500)
+    say(table, "none", "ramen", "ok")
+    assert table.search_sessions("sushi") == [
+        {"tool": "claude", "session": "two", "mentions": 2},
+        {"tool": "claude", "session": "one", "mentions": 1},
+    ]
+    assert table.search_sessions("ok", tool="codex") == []
+
+
 def test_a_new_summary_replaces_the_old_one_in_search(table):
     summaries = sm.Summaries(table)
     say(table, "s", *["m"] * 10)
@@ -330,6 +359,15 @@ def test_the_plugin_summarizes_after_its_sweep_and_finds_the_session(plugin_clie
     assert [h["session"] for h in hits] == ["s1"]
     summary = plugin_client.get("/api/v2/plugins/memory/summary", params={"session": "s1"}, headers=AUTH).json()
     assert summary["title"] == "Lunch plans"
+
+
+def test_the_app_lists_recent_sessions_and_finds_them_by_their_mentions(plugin_client):
+    wait_for(plugin_client, lambda s: s["summaries"]["summaries"] == 1)
+    recent = plugin_client.get("/api/v2/plugins/memory/sessions", headers=AUTH).json()
+    assert [(r["session"], r["title"]) for r in recent] == [("s1", "Lunch plans")]
+    found = plugin_client.get("/api/v2/plugins/memory/recall", params={"q": "before 6am"}, headers=AUTH).json()
+    assert [(h["session"], h["mentions"], h["title"]) for h in found["sessions"]] == [("s1", 1, "Lunch plans")]
+    assert [m["session"] for m in found["messages"]] == ["s1"]
 
 
 def test_summaries_can_be_turned_off(plugin_client):

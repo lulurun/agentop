@@ -423,59 +423,96 @@ test("a service with no plugins says so in its Status", async ({ page }) => {
   await expect(page.getByText("This service has no plugins.")).toBeVisible();
 });
 
-test("the Memory feature searches past conversations, opens one at the hit, and notes a miss", async ({ page }) => {
+test("Memory lists recent sessions, searches them like the web, and opens a session or a mention beside the search", async ({ page }) => {
   const s = new Service("box");
   cleanup.push(() => s.dispose());
-  const log = join(s.root, ".claude/projects/-work-lunch");
-  mkdirSync(log, { recursive: true });
-  const say = (uuid: string, type: "user" | "assistant", text: string, minute: number) => ({
-    type,
-    uuid,
-    sessionId: "lunch-1",
-    cwd: "/work/lunch",
-    timestamp: `2026-10-01T12:${String(minute).padStart(2, "0")}:00Z`,
-    message: { role: type, content: type === "user" ? text : [{ type: "text", text }] },
-  });
-  const records = [
-    say("u1", "user", "Where should we eat on Friday?", 0),
-    say("a1", "assistant", "Yamada recommended Sushi Dai, see https://example.com/sushidai", 1),
-    ...Array.from({ length: 30 }, (_, i) => say(`f${i}`, i % 2 ? "assistant" : "user", `Filler message ${i}`, 2 + i)),
-  ];
-  writeFileSync(join(log, "lunch-1.jsonl"), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  const write = (sessionId: string, cwd: string, day: number, texts: [string, string, number][]) => {
+    const folder = join(s.root, `.claude/projects/${cwd.replaceAll("/", "-")}`);
+    mkdirSync(folder, { recursive: true });
+    const records = texts.map(([uuid, text, minute], i) => {
+      const type = i % 2 ? "assistant" : "user";
+      return {
+        type,
+        uuid,
+        sessionId,
+        cwd,
+        timestamp: `2026-10-0${day}T12:${String(minute).padStart(2, "0")}:00Z`,
+        message: { role: type, content: type === "user" ? text : [{ type: "text", text }] },
+      };
+    });
+    writeFileSync(join(folder, `${sessionId}.jsonl`), records.map((r) => JSON.stringify(r)).join("\n") + "\n");
+  };
+  write("lunch-1", "/work/lunch", 1, [
+    ["u1", "Where should we eat on Friday?", 0],
+    ["a1", "Yamada recommended Sushi Dai, see https://example.com/sushidai", 1],
+    ...Array.from({ length: 30 }, (_, i): [string, string, number] => [`f${i}`, `Filler message ${i}`, 2 + i]),
+  ]);
+  write("build-2", "/work/ci", 2, [
+    ["u2", "Fix the CI build", 0],
+    ["a2", "Fixed the build", 1],
+  ]);
   await s.start();
   await page.goto(s.signedInUrl);
   await expect(page.locator(".link-connected")).toBeVisible();
 
+  // No left panel: the search is the left area's pinned tab, over the sessions newest first.
   await features(page).getByRole("button", { name: "Memory" }).click();
-  await expect(page.locator(".main .placard")).toContainText("Search past conversations");
-  const panel = page.locator(".sidebar");
-  await panel.getByRole("searchbox", { name: "Search past conversations" }).fill("sushi");
-  await panel.getByRole("searchbox", { name: "Search past conversations" }).press("Enter");
-  const hits = panel.getByRole("list", { name: "Messages" });
-  await expect(hits.getByRole("button")).toHaveCount(1);
-  await expect(hits.locator("mark").first()).toHaveText("Sushi");
-  await expect(hits).toContainText("You asked: Where should we eat on Friday?");
-  await hits.getByRole("button").click();
+  await expect(page.getByRole("button", { name: "Toggle left panel" })).toHaveCount(0);
+  const memory = page.locator('.workbench[data-feature="plugin:memory"]');
+  const left = memory.locator('.tab-group[data-area="left"]');
+  const right = memory.locator('.tab-group[data-area="right"]');
+  await expect(left.getByRole("tab", { name: "Search" })).toBeVisible();
+  const recent = left.getByRole("list", { name: "Recent sessions" });
+  await expect(recent.getByRole("button")).toHaveCount(2);
+  await expect(recent.getByRole("button").first()).toContainText("Fix the CI build");
+  await expect(recent.getByRole("button").nth(1)).toContainText("Where should we eat on Friday?");
 
-  const tab = page.getByRole("main").locator(".memory-conversation");
-  await expect(tab.locator(".message")).toHaveCount(32);
-  const hit = tab.locator(".message[data-hit]");
+  // A session opens in the right area, and the right panel shows it.
+  await recent.getByRole("button").nth(1).click();
+  await expect(right.locator(".memory-conversation .message")).toHaveCount(32);
+  await expect(page.locator(".details")).toContainText("lunch-1");
+  await expect(page.locator(".details")).toContainText("Not summarized yet");
+
+  // Results by scope: a session found by its mention, and the mention itself.
+  const box = left.getByRole("searchbox", { name: "Search past conversations" });
+  await box.fill("sushi");
+  await box.press("Enter");
+  const scopes = left.getByRole("tablist", { name: "Results" });
+  await expect(scopes.getByRole("tab", { name: "All" })).toHaveAttribute("aria-selected", "true");
+  await expect(scopes.getByRole("tab", { name: "Sessions" })).toContainText("1");
+  await scopes.getByRole("tab", { name: "Sessions" }).click();
+  await expect(left.getByRole("list", { name: "Sessions" })).toContainText("1 mention");
+  await scopes.getByRole("tab", { name: "Mentions" }).click();
+  const mentions = left.getByRole("list", { name: "Mentions" });
+  await expect(mentions.getByRole("button")).toHaveCount(1);
+  await expect(mentions.locator("mark").first()).toHaveText("Sushi");
+  await expect(mentions).toContainText("You asked: Where should we eat on Friday?");
+
+  // A mention opens its session beside the search, scrolled to it.
+  await mentions.getByRole("button").click();
+  const hit = right.locator(".memory-conversation .message[data-hit]");
   await expect(hit).toContainText("Yamada recommended");
   await expect(hit.getByRole("link", { name: "https://example.com/sushidai" })).toBeVisible();
   await expect(hit).toBeInViewport();
   await expect(page.locator(".details")).toContainText("lunch-1");
-  await expect(page.locator(".details")).toContainText("32");
-  await expect(page.locator(".details")).toContainText("Not summarized yet");
 
-  await panel.getByRole("searchbox", { name: "Search past conversations" }).fill("ramen");
-  await panel.locator("form[role=search]").getByRole("button", { name: "Search" }).click();
-  await expect(panel).toContainText("No message has all of: ramen");
-  await panel.getByRole("button", { name: "Didn't find it?" }).click();
-  await panel.getByRole("textbox", { name: "What were you looking for?" }).fill("the ramen shop");
-  await panel.getByRole("button", { name: "Note the miss" }).click();
-  await expect(panel.getByRole("status")).toContainText("“sushi”, “ramen”");
+  // Back on the search, the right panel still shows the conversation beside it.
+  await box.click();
+  await expect(page.locator(".details")).toContainText("lunch-1");
+
+  await box.fill("ramen");
+  await left.locator("form[role=search]").getByRole("button", { name: "Search" }).click();
+  await expect(left).toContainText("Nothing has all of: ramen");
+  await left.getByRole("button", { name: "Didn't find it?" }).click();
+  await left.getByRole("textbox", { name: "What were you looking for?" }).fill("the ramen shop");
+  await left.getByRole("button", { name: "Note the miss" }).click();
+  await expect(left.getByRole("status")).toContainText("“sushi”, “ramen”");
   const noted = readFileSync(join(s.root, "state/plugins/memory/recall.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
   expect(noted.at(-1)).toMatchObject({ type: "miss", kind: "nothing", looked_for: "the ramen shop", tried: ["sushi", "ramen"] });
+
+  // Clearing the box goes back to the recent sessions.
+  await box.fill("");
+  await expect(recent.getByRole("button")).toHaveCount(2);
 });
 
 test("a project is made with a name, opens its Coordinator, and keeps its sessions out of Sessions", async ({ page }) => {

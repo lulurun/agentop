@@ -250,6 +250,61 @@ class Summaries:
             db.close()
         return _public(dict(row)) if row else None
 
+    def recent(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        tool: str | None = None,
+        since: float | None = None,
+        only: list[tuple[str, str]] | None = None,
+    ) -> list[dict]:
+        """Sessions by their last message, newest first, with their summary's title, or else their first prompt."""
+        if not self.path.exists() or only == []:
+            return []
+        where, params = ["m.session IS NOT NULL"], []
+        if tool:
+            where.append("m.tool = ?")
+            params.append(tool)
+        if only:
+            where.append("(m.tool, m.session) IN (VALUES " + ", ".join("(?, ?)" for _ in only) + ")")
+            params.extend(value for pair in only for value in pair)
+        having = ""
+        if since is not None:
+            having = " HAVING MAX(m.at) >= ?"
+            params.append(since)
+        db = self._connect()
+        try:
+            rows = db.execute(
+                f"""
+                SELECT m.tool, m.session, MAX(m.project), MIN(m.at), MAX(m.at), COUNT(*), s.title, s.summary,
+                    (SELECT text FROM messages p WHERE p.session = m.session AND p.tool = m.tool AND p.role = 'user'
+                     ORDER BY p.at, p.id LIMIT 1)
+                FROM messages m
+                LEFT JOIN summaries s ON s.tool = m.tool AND s.session = m.session
+                WHERE {" AND ".join(where)}
+                GROUP BY m.tool, m.session{having}
+                ORDER BY MAX(m.at) DESC
+                LIMIT ? OFFSET ?
+                """,
+                [*params, limit, offset],
+            ).fetchall()
+        finally:
+            db.close()
+        return [
+            {
+                "tool": tool_,
+                "session": session,
+                "project": project,
+                "first_at": first_at,
+                "last_at": last_at,
+                "messages": count,
+                "title": title,
+                "summary": summary,
+                "prompt": snippet(prompt, [], 200) if prompt else None,
+            }
+            for tool_, session, project, first_at, last_at, count, title, summary, prompt in rows
+        ]
+
     def search(
         self,
         query: str,
