@@ -537,7 +537,10 @@ def cmd_service_status(args):
     if status >= 400:
         print(f"Something answered on {settings.host}:{settings.port}, but refused: {info.get('detail', status)}")
         return
-    print(f"{info['name']}: running on {settings.host}:{settings.port}, version {info['version']}")
+    # The package version is stale in a checkout (an editable install keeps the one it was installed at).
+    commit = info.get("commit")
+    version = f"{info.get('ref') or info['version']} ({commit})" if commit else info["version"]
+    print(f"{info['name']}: running on {settings.host}:{settings.port}, version {version}")
     print(_MANAGERS.get(info["manager"], "It can't stop, restart, or update itself."))
 
 

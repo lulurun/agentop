@@ -323,3 +323,14 @@ def test_started_commit_stays_when_the_checkout_moves(monkeypatch):
     assert admin.started_commit() == "aaaaaaa"
     monkeypatch.setattr(admin, "_git_commit", lambda: "bbbbbbb")
     assert admin.started_commit() == "aaaaaaa"
+
+
+def test_service_status_shows_the_ref_and_commit_not_the_package_version(monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from agentop import cli
+
+    info = {"name": "host", "version": "2.5.0", "ref": "main", "commit": "a6cf512", "manager": "systemd"}
+    monkeypatch.setattr(cli, "_service_api", lambda *a, **k: (200, info))
+    cli.cmd_service_status(SimpleNamespace())
+    assert "version main (a6cf512)" in capsys.readouterr().out
