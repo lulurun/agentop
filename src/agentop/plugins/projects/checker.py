@@ -1,5 +1,5 @@
-"""Watches Projects sessions on the scan tick: a Coordinator turn that ends without `agentop yield` is logged,
-one that cleared its context is told to carry on, and a quiet task session is reminded, then the Coordinator told.
+"""Watches Projects sessions on the scan tick: a Coordinator turn that cleared its context is told to carry on,
+and a quiet task session is reminded, then the Coordinator told.
 
 Turns are told apart by the screen, as the attention plugin does (tmux only, no transcripts).
 """
@@ -26,8 +26,8 @@ RESUME = (
 
 @dataclass
 class Turn:
-    # A yield counts for the next turn end after it. The screen can't bound a turn's start: a short turn's
-    # yield can land before the tick that sees its output, and a pause before the final text ends busy.
+    # A clear counts for the next turn end after it. The screen can't bound a turn's start: a short turn's
+    # clear can land before the tick that sees its output, and a pause before the final text ends busy.
     after: float
     handled: float | None = None
     reminded: dict = field(default_factory=dict)
@@ -80,13 +80,10 @@ class Checker:
 
     def _coordinator(self, row: dict, turn: Turn) -> None:
         project = row["project"]
-        kinds = {e["kind"] for e in pursuit.events(project, turn.after)}
-        if "clear" in kinds:
+        # Turns without a yield aren't counted: an idle screen also changes (Codex's usage warnings, /status, a draft).
+        if any(e["kind"] == "clear" for e in pursuit.events(project, turn.after)):
             pursuit.log(project, "resume")
             self._deliver(project, row, RESUME)
-        elif "yield" not in kinds:
-            # Not typed into the session: the screen can't tell a turn from an owner's /clear, a draft or a popup.
-            pursuit.log(project, "turn.unreasoned")
 
     def _member(self, row: dict, turn: Turn) -> None:
         project = row["project"]

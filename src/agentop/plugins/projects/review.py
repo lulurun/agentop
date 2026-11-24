@@ -10,7 +10,6 @@ from agentop import projects
 
 from . import pursuit
 
-PASSIVE_LIMIT = 0.2
 OWNER_LIMIT = 0.4
 FIRST_ROUND_LIMIT = 0.5
 STALE_TASK_SECONDS = 2 * 3600
@@ -43,9 +42,7 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
     now = time.time() if now is None else now
     window = [e for e in pursuit.events(project, since) if e["at"] <= now]
     yields = [e for e in window if e["kind"] == "yield"]
-    unreasoned = [e for e in window if e["kind"] == "turn.unreasoned"]
     by_kind = {k: sum(1 for e in yields if e.get("type") == k) for k in pursuit.KINDS}
-    turn_ends = len(yields) + len(unreasoned)
 
     tasks = pursuit.load_tasks(project)
     closed = [t for t in tasks if t["status"] != "open" and t.get("closed_at", 0) >= since]
@@ -64,11 +61,9 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
     return {
         "since": since,
         "until": now,
-        "turn_ends": turn_ends,
+        "stops": len(yields),
         "yields": by_kind,
-        "passive": len(unreasoned),
-        "passive_rate": _ratio(len(unreasoned), turn_ends),
-        "owner_rate": _ratio(by_kind["owner"], turn_ends),
+        "owner_rate": _ratio(by_kind["owner"], len(yields)),
         "opened": sum(1 for e in window if e["kind"] == "task.open"),
         "accepted": len(accepted),
         "failed": len(closed) - len(accepted),
@@ -90,13 +85,8 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
 def findings(m: dict) -> list[tuple[str, str, str]]:
     """(severity, what, what to do), most severe first."""
     found = []
-    if m["passive"] and (m["passive_rate"] or 0) > PASSIVE_LIMIT:
-        found.append(("high", f"{m['passive']} of {m['turn_ends']} turns ended without a stop reason ({_pct(m['passive_rate'])})",
-                      "Before ending a turn, name the next action and take it; stop only for done, waiting, owner or blocked."))
-    elif m["passive"]:
-        found.append(("medium", f"{m['passive']} turns ended without a stop reason", "Yield at the end of every turn."))
-    if m["turn_ends"] >= 3 and (m["owner_rate"] or 0) > OWNER_LIMIT:
-        found.append(("high", f"{_pct(m['owner_rate'])} of turns handed back to the owner",
+    if m["stops"] >= 3 and (m["owner_rate"] or 0) > OWNER_LIMIT:
+        found.append(("high", f"{_pct(m['owner_rate'])} of stops handed back to the owner",
                       "For each question below, ask: was the default good enough to proceed on? If so, proceed next time."))
     weak_defaults = [e for e in m["owner_asks"] if e.get("default", "").lower().strip(" .") in ("wait", "nothing", "none", "stop")]
     if weak_defaults:
@@ -126,7 +116,7 @@ def _trend(m: dict, before: dict | None) -> list[str]:
     if not before:
         return ["First review: no trend yet."]
     lines = []
-    for key, label in (("passive_rate", "Passive turn ends"), ("owner_rate", "Handed to the owner"), ("first_round_rate", "Accepted in round 1")):
+    for key, label in (("owner_rate", "Handed to the owner"), ("first_round_rate", "Accepted in round 1")):
         lines.append(f"- {label}: {_pct(before.get(key))} → {_pct(m.get(key))}")
     return lines
 
@@ -142,8 +132,7 @@ def render(project: str, m: dict, found: list, before: dict | None) -> str:
         "",
         "## Numbers",
         "",
-        f"- Turn ends: {m['turn_ends']}. Done {y['done']}, waiting {y['waiting']}, owner {y['owner']}, blocked {y['blocked']}, "
-        f"without a reason {m['passive']} ({_pct(m['passive_rate'])})",
+        f"- Stops: {m['stops']}. Done {y['done']}, waiting {y['waiting']}, owner {y['owner']}, blocked {y['blocked']}",
         f"- Tasks: {m['opened']} opened, {m['accepted']} accepted, {m['failed']} failed, {len(m['open'])} open. "
         f"Accepted in round 1: {_pct(m['first_round_rate'])}. "
         f"Rounds used: " + ", ".join(f"{n}: {c}" for n, c in m["rounds"].items()),
@@ -204,6 +193,6 @@ def run(project: str, since: float | None = None, write: bool = True) -> tuple[s
         folder.mkdir(exist_ok=True)
         path = folder / f"{time.strftime('%Y-%m-%d-%H%M%S', time.localtime(m['until']))}.md"
         path.write_text(text)
-        keep = ("turn_ends", "passive", "passive_rate", "owner_rate", "first_round_rate", "accepted", "failed")
+        keep = ("stops", "owner_rate", "first_round_rate", "accepted", "failed")
         pursuit.log(project, "review", path=str(path), findings=len(found), metrics={k: m[k] for k in keep})
     return text, path, m

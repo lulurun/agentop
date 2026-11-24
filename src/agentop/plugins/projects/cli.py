@@ -70,7 +70,7 @@ def register_cli(cli) -> None:
         "yield",
         lambda args: run_yield(args),
         help="End a Coordinator's turn with its reason: done, waiting, owner or blocked",
-        description="Record why the Coordinator stops now. Each reason is checked; a turn that ends without one is counted in agentop review.",
+        description="Record why the Coordinator stops now. Each reason is checked.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "  done     --evidence: what shows the objective or request is met (needs a fresh review)\n"

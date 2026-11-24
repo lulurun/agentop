@@ -4,6 +4,16 @@ Dated notes from watching real Projects Coordinators at work, judged against [0_
 
 Each note is tagged **Coordinator** (how it pursued) or **agentop** (what the tools did, or got wrong), and says what evidence it rests on. A project's Coordinator may keep its own notes in its folder (manabi has `COORDINATOR_DOGFOODING.md`); those are its view, this is the owner's.
 
+## Method
+
+A session outside the projects (a Claude Code session in the agentop repo, not an agentop session) reads a project's history after the fact and writes the note here. It needs no agentop support, and it doesn't trust agentop's own numbers: it checks them against the agents' own records.
+
+1. Timeline from `.project/events.jsonl` (yields, tasks, reviews, quiet notices), from the last note's end.
+2. The Coordinator's real turns from its transcript: for Codex, the rollouts in `~/.codex/sessions/` whose `session_meta` cwd is the project folder (each `/clear` starts a new one); `task_complete` ends a turn, and one with an `error` (no reply) is a failed turn, such as the usage limit.
+3. Match the two: every turn should end with a yield; an event with no turn behind it is agentop's fault, not the Coordinator's.
+4. Owner prompts from the transcripts and `~/.agentop/plugins/input/reception.jsonl`; the live screen (`tmux capture-pane`) for what's happening now.
+5. Judge against [0_13_projects.md section 4.1](0_13_projects.md#41-pursuit-philosophy): pursuit, checking evidence, hand-backs to the owner, and whether the work still serves what the owner asked.
+
 ## 2026-11-23: manabi, 11-22 21:10 to 11-23 13:54
 
 The first stretch under the pursuit tools (`b550d18` and after). Codex Coordinator; tasks t1 to t44. Read from `.project/events.jsonl`, `tasks.json`, `reviews/` and the Codex transcripts.
@@ -39,3 +49,24 @@ The first stretch under the pursuit tools (`b550d18` and after). Codex Coordinat
 ## 2026-11-23 night: reception read the wrong conversation
 
 - **agentop**: after two Clear & sends, a design question building on the t49 difficulty pilot got `clear`, and the owner sent it as is. Every check since the fix had named "the GitHub migration" as the current work: reception was reading `01a1f3ba…`, the Coordinator's first thread from 11-19, not the one on screen. The Coordinator's Codex TUI runs on Codex Desktop's shared app-server, which logs threads under its own pid, so agentop's lookup by the TUI's pid found nothing and fell back to the id in `codex resume 01a1f3ba…`; each `/clear` makes a new thread that nothing followed. The same stale id fed the session's title, token use and resume command. Fixed: when the log has no thread, the Codex footer under the prompt (`model · folder · thread name`) names it, matched among threads in that folder. With the right conversation the message would have passed without a check (2 prompts since the clear). The reception record now notes which conversation each check read.
+
+## 2026-11-24: manabi and kql-article, 11-23 21:00 to 11-24 09:00
+
+Read by the method above. manabi: t49 to t64. kql-article: its whole history, t1 to t15.
+
+**Coordinator, good**
+
+- Both ended every real turn with a yield: kql-article 11 of 11, manabi 36 of 38 (the other 2 failed on the usage limit before any reply).
+- Verified before accepting. kql-article reran measurements and figures itself and matched them byte for byte; all 13 tasks passed in round 1. manabi rejected 6 rounds for real faults (t61 a stale README, t63 a scorer false positive).
+- kql-article asked the owner once (00:56: is there a test environment for the authenticated fetch, which costs quota), with a recommendation and a default.
+- manabi read t58's pause as Claude's usage limit correctly, and gave it instructions for when it resumed.
+
+**Coordinator, weak**
+
+- manabi: at 01:21 the owner asked for templates for all E1–E6 nodes "if you think the template writing system is completed". The Coordinator set its own bar for complete and spent about 7 hours (t56 to t64) on tighter gates for one node, E5-N03, which keeps failing them, without asking the owner whether that much rigor is wanted. Watch whether it reaches the bulk run or keeps refining.
+
+**agentop**
+
+- `turn.unreasoned` was almost all false: 64 in kql-article and 24 in manabi had no turn behind them. An idle Codex screen changes: account-wide usage warnings ("less than 25% / 10% / 5% of your 5h limit") land in every Codex pane at once, so 6 were logged in both projects within a millisecond; the owner's `/status` (08:12 kql-article, 08:42 manabi) changed it too. manabi's 08:40 review said 50% passive when all 4 were false, and the Coordinator took the blame and wrote a process change into `STATE.md`, as on 11-23. Fixed: the count is removed (the checker, review, the Coordinator rules and skill); review counts recorded stop reasons only. The screen can't tell a turn from a redraw, so it can't be made accurate with tmux alone.
+- Usage limits still aren't seen, twice more. 04:30: t59's report arrived as manabi's Coordinator hit the Codex 5h limit; it sat 2 h 40 min until the owner's "Please continue" at 07:10. 08:47 to 08:49: t64's worker and then the Coordinator hit it, so the "t64 has gone quiet twice" notice became a failed turn; both wait for 12:10 with nothing to prompt them. One ChatGPT Plus account runs both Coordinators and the Codex workers, so the projects drain each other. Codex marks it in the transcript (`task_complete` with an `error`), which could drive a fix. Not urgent: it loses time, not work, and "please continue" recovers it.
+- Before the nudge was removed (11-22), it typed "your turn ended without a stop reason" right after kql-article's `owner` yield, so the same question went to the owner three times. Gone with the nudge.

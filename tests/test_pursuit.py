@@ -101,20 +101,19 @@ def test_yield_checks_each_reason(alpha):
     assert pursuit.yield_turn(alpha, "done", {"evidence": "it works"})["type"] == "done"
 
 
-def test_review_counts_passive_turns_and_shows_the_trend(alpha):
+def test_review_counts_stops_and_shows_the_trend(alpha):
     for _ in range(3):
-        pursuit.log(alpha, "turn.unreasoned")
-    pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "wait"})
+        pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "wait"})
     text, path, m = review.run(alpha)
-    assert m["turn_ends"] == 4 and m["passive"] == 3 and m["passive_rate"] == 0.75
-    assert "ended without a stop reason" in text and "no default but waiting" in text
+    assert m["stops"] == 3 and m["owner_rate"] == 1.0
+    assert "of stops handed back to the owner" in text and "no default but waiting" in text
     assert "Q? Recommended: R Default: wait" in text and "First review" in text
     assert path.parent.name == "reviews" and pursuit.REFLECTION_PLACEHOLDER in path.read_text()
 
-    pursuit.yield_turn(alpha, "owner", {"question": "Q2?", "recommend": "R", "default": "Go ahead with R"})
+    pursuit.log(alpha, "yield", type="waiting")
     text, _, m = review.run(alpha)
-    assert m["turn_ends"] == 1 and m["passive"] == 0
-    assert "Passive turn ends: 75% → 0%" in text
+    assert m["stops"] == 1 and m["owner_rate"] == 0.0
+    assert "Handed to the owner: 100% → 0%" in text
 
 
 class Screens:
@@ -146,7 +145,7 @@ def run_turn(checker, screens, pane, start, quiet=70):
     checker.tick(rows(), start + quiet)
 
 
-def test_a_coordinator_turn_without_a_yield_is_logged_not_prompted(alpha, monkeypatch):
+def test_a_coordinator_turn_without_a_yield_is_neither_logged_nor_prompted(alpha, monkeypatch):
     sent = []
     screens = Screens()
     checker = Checker(lambda p, row, text: sent.append((row["display_name"], text)),
@@ -170,7 +169,7 @@ def test_a_coordinator_turn_without_a_yield_is_logged_not_prompted(alpha, monkey
     for _ in range(3):
         turn()
     assert sent == []
-    assert [e["kind"] for e in pursuit.events(alpha)].count("turn.unreasoned") == 4
+    assert {e["kind"] for e in pursuit.events(alpha)} == {"yield"}
 
 
 def test_yield_clear_clears_the_coordinator_then_tells_it_once_to_carry_on(alpha, monkeypatch, capsys):
@@ -207,12 +206,13 @@ def test_yield_clear_clears_the_coordinator_then_tells_it_once_to_carry_on(alpha
     turn(lambda: pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "D"}))
     assert len(sent) == 1
     kinds = [e["kind"] for e in pursuit.events(alpha)]
-    assert kinds.count("clear") == 1 and kinds.count("resume") == 1 and "turn.unreasoned" not in kinds
+    assert kinds.count("clear") == 1 and kinds.count("resume") == 1
 
 
-def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha, monkeypatch):
+def test_a_clear_before_the_final_screen_output_counts_for_that_turn_only(alpha, monkeypatch):
+    sent = []
     screens = Screens()
-    checker = Checker(lambda p, row, text: None,
+    checker = Checker(lambda p, row, text: sent.append(text),
                       watcher=Watcher(screens.list_panes, screens.capture))
     clock = [time.time()]
     monkeypatch.setattr(pursuit.time, "time", lambda: clock[0])
@@ -223,33 +223,33 @@ def test_a_yield_before_the_final_screen_output_counts_for_that_turn_only(alpha,
         screens.text["%1"] += "x"
         checker.tick(rows(), at)
 
-    def unreasoned():
-        return [e["kind"] for e in pursuit.events(alpha)].count("turn.unreasoned")
+    def resumed():
+        return len(sent)
 
-    def yield_at(at):
+    def clear_at(at):
         clock[0] = at
-        pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "D"})
+        pursuit.log(alpha, "clear")
 
     start = clock[0]
     checker.tick(rows(), start)
-    # A short turn: the yield lands before the tick that first sees the turn's output.
-    yield_at(start + 9)
+    # A short turn: the clear lands before the tick that first sees the turn's output.
+    clear_at(start + 9)
     output(start + 10)
     checker.tick(rows(), start + 15)
     checker.tick(rows(), start + 80)
-    assert unreasoned() == 0
+    assert resumed() == 1
     # A pause before the final text ends busy, so the final text looks like a new turn.
     output(start + 100)
-    yield_at(start + 101)
+    clear_at(start + 101)
     checker.tick(rows(), start + 106)
     output(start + 110)
     checker.tick(rows(), start + 115)
     checker.tick(rows(), start + 180)
-    assert unreasoned() == 0
+    assert resumed() == 2
     output(start + 200)
     checker.tick(rows(), start + 205)
     checker.tick(rows(), start + 270)
-    assert unreasoned() == 1
+    assert resumed() == 2
 
 
 def test_a_quiet_task_session_is_reminded_then_the_coordinator_is_told(alpha):
