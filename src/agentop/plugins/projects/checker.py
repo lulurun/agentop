@@ -17,6 +17,8 @@ from . import pursuit
 
 # An owner typing a prompt also changes the screen; waiting this long keeps a prompt out of a half-typed one.
 QUIET_SECONDS = 60.0
+# A task session can sit on a still screen through a long test run or model call, so a short wait nags busy agents.
+TASK_QUIET_SECONDS = 2 * 3600.0
 
 RESUME = (
     "[agentop] Your context was cleared. Read AGENTS.md, COORDINATOR_SKILL.md and STATE.md, run agentop task list, "
@@ -34,9 +36,11 @@ class Turn:
 
 
 class Checker:
-    def __init__(self, deliver: Callable[[str, str, str], None], quiet_seconds: float = QUIET_SECONDS, watcher=None):
+    def __init__(self, deliver: Callable[[str, str, str], None], quiet_seconds: float = QUIET_SECONDS,
+                 task_quiet_seconds: float = TASK_QUIET_SECONDS, watcher=None):
         self._deliver = deliver
         self.quiet_seconds = quiet_seconds
+        self.task_quiet_seconds = task_quiet_seconds
         self.watcher = watcher or Watcher(quiet_seconds=4.0)
         self.turns: dict[str, Turn] = {}
         self._rows: list[dict] = []
@@ -69,10 +73,12 @@ class Checker:
                 continue
             turn = self.turns.setdefault(row["id"], Turn(after=now))
             since = screen.waiting_since
-            if since is None or turn.handled == since or now - since < self.quiet_seconds:
+            coordinator = row.get("display_name") == projects.COORDINATOR
+            quiet = self.quiet_seconds if coordinator else self.task_quiet_seconds
+            if since is None or turn.handled == since or now - since < quiet:
                 continue
             turn.handled = since
-            if row.get("display_name") == projects.COORDINATOR:
+            if coordinator:
                 self._coordinator(row, turn)
                 turn.after = since
             else:

@@ -286,10 +286,13 @@ def test_a_quiet_task_session_is_reminded_then_the_coordinator_is_told(alpha):
     now = time.time()
     checker.tick(rows(), now)
     run_turn(checker, screens, "%2", now + 10)
+    assert sent == []
+    checker.tick(rows(), now + 20 + checker.task_quiet_seconds)
     assert sent == ["dev"]
-    run_turn(checker, screens, "%2", now + 100)
+    later = now + 3 * checker.task_quiet_seconds
+    run_turn(checker, screens, "%2", later, quiet=checker.task_quiet_seconds + 10)
     assert sent == ["dev", "Coordinator"]
-    run_turn(checker, screens, "%2", now + 200)
+    run_turn(checker, screens, "%2", later * 2, quiet=checker.task_quiet_seconds + 10)
     assert sent == ["dev", "Coordinator"]
     assert [e["kind"] for e in pursuit.events(alpha)].count("task.quiet") == 1
 
