@@ -49,6 +49,18 @@ def test_a_named_tool_or_model_is_kept_only_when_real():
     assert starting.parse(answer(tool="codex"), [], ["claude"])["tool"] is None
 
 
+def test_the_task_is_the_prompt_less_the_ask_for_a_session():
+    asked = "please open a new session for dev agentop"
+    assert starting.parse(answer(task=""), [], INSTALLED, asked)["task"] == ""
+    assert starting.parse(answer(task="fix the login bug"), [], INSTALLED, "open codex to fix the login bug")["task"] == "fix the login bug"
+    # No task, or one longer than the prompt, hands the prompt over as typed.
+    assert starting.parse(answer(), [], INSTALLED, asked)["task"] == asked
+    assert starting.parse(answer(task=asked + " and add tests"), [], INSTALLED, asked)["task"] == asked
+    long = "x " * starting.TASK_CHARS
+    assert starting.parse(answer(task="x"), [], INSTALLED, long)["task"] == long
+    assert '"task": null' in starting.build_prompt(long, [], INSTALLED)
+
+
 def quota(used):
     return [{"name": "5h", "used_percent": used, "resets_at": None}]
 
@@ -82,6 +94,7 @@ def test_a_probe_that_fails_still_gives_a_start(home, monkeypatch):
     got = starting.probe("please look at why the deploy script hangs on step three", INSTALLED, ask=broken)
     assert got["error"] == "agy took over 40s" and got["cwd"] is None and got["tier"] == "standard"
     assert got["title"].startswith("please look at why") and got["tool"] == "codex"
+    assert got["task"] == "please look at why the deploy script hangs on step three"
     events = [json.loads(line) for line in (home / "agentop/projects/default/.project/starts.jsonl").read_text().splitlines()]
     assert events[-1]["event"] == "probe" and events[-1]["error"] == "agy took over 40s"
 
@@ -177,5 +190,8 @@ def test_launch_starts_with_the_prompt_and_records_it(fake_agents, monkeypatch):
         live.wait_for(created["id"], "running")
         recent = live.http.get("/start/recent").json()
         assert recent[0]["session"] == created["id"] and recent[0]["title"] == "Say hello"
+        r = live.http.post("/start/launch", json={"prompt": "", "tool": "fakeagent", "cwd": cwd, "name": "Waits", "changed": ["prompt"]})
+        assert r.status_code == 202, r.text
+        live.wait_for(r.json()["id"], "running")
         tools = {t["name"]: t for t in live.http.get("/start/models").json()}
         assert tools["fakeagent"]["models"] == [] and "can_probe" in tools["fakeagent"]

@@ -26,12 +26,12 @@ async def launch(body: StartLaunch, ctx: Ctx):
     name = ctx.store.free_name(projects.DEFAULT, starting.slug(body.name) or "session")
     await ctx.store.make_room()
     row = await ctx.store.create(
-        body.tool, body.cwd, name, project=projects.DEFAULT, prompt=body.prompt, model=body.model, description=body.title or None
+        body.tool, body.cwd, name, project=projects.DEFAULT, prompt=body.prompt.strip() or None, model=body.model, description=body.title or None
     )
     await asyncio.to_thread(
         starting.record,
         {"event": "launched", "probe": body.probe, "session": row["id"], "name": name, "title": body.title,
-         "tool": body.tool, "model": body.model, "cwd": row["cwd"], "changed": body.changed},
+         "tool": body.tool, "model": body.model, "cwd": row["cwd"], "prompt": body.prompt, "changed": body.changed},
     )
     return row
 

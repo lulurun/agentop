@@ -9,7 +9,7 @@ import { useApp } from "./store";
 export const COUNTDOWN_MS = 3000;
 const DRAFT_KEY = "agentop.start.draft";
 
-export type Field = "tool" | "model" | "cwd" | "name";
+export type Field = "tool" | "model" | "cwd" | "name" | "prompt";
 
 export interface Choice {
   tool: string;
@@ -17,6 +17,8 @@ export interface Choice {
   cwd: string;
   name: string;
   title: string;
+  /** The session's first prompt: the probe's task, "" for none. */
+  prompt: string;
 }
 
 export interface Pending {
@@ -88,6 +90,7 @@ export const useStart = create<StartState>()((set, get) => {
             cwd: decision.cwd ?? "",
             name: decision.name,
             title: decision.title,
+            prompt: decision.task,
           };
           const known = !!decision.cwd && !!decision.tool;
           update(key, (p) => ({ ...p, decision, choice, phase: known ? "counting" : "asking", deadline: known ? Date.now() + COUNTDOWN_MS : undefined }));
@@ -118,14 +121,14 @@ export const useStart = create<StartState>()((set, get) => {
       stopTimer(key);
       const p = find(key);
       if (!p?.choice || p.phase === "launching" || p.phase === "launched") return;
-      const { tool, model, cwd, name, title } = p.choice;
+      const { tool, model, cwd, name, title, prompt } = p.choice;
       if (!tool || !cwd) {
         update(key, (q) => ({ ...q, phase: "asking", deadline: undefined }));
         return;
       }
       update(key, (q) => ({ ...q, phase: "launching", deadline: undefined, error: undefined }));
       client
-        .launchStart({ prompt: p.prompt, tool, model, cwd, name, title, probe: p.decision?.id ?? null, changed: p.changed })
+        .launchStart({ prompt, tool, model, cwd, name, title, probe: p.decision?.id ?? null, changed: p.changed })
         .then(
           (session) => {
             update(key, (q) => ({ ...q, phase: "launched", sessionId: session.id }));

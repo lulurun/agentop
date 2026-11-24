@@ -85,7 +85,7 @@ export function StartView() {
     <div className="start-view">
       <div className="start-inner">
         <h2 className="start-title">Start a session</h2>
-        <p className="start-lede">Say what the session should do. agentop picks the agent, model and folder, then hands your prompt over word for word.</p>
+        <p className="start-lede">Say what the session should do. agentop picks the agent, model and folder, then hands your prompt over, less any words that only asked for the session.</p>
         <div className="composer start-composer">
           <textarea
             ref={box}
@@ -223,6 +223,7 @@ function PendingRow({ pending: p, tools }: { pending: Pending; tools: StartTool[
         )}
       </div>
       {!editing && <Chips tool={choice.tool} model={choice.model} cwd={choice.cwd} tools={tools} />}
+      {!editing && choice.prompt !== p.prompt && <FirstPrompt prompt={choice.prompt} />}
       {decision && (decision.why || decision.reason) && (
         <p className="start-why">
           {[decision.why, decision.reason].filter(Boolean).join(" — ")}
@@ -241,6 +242,15 @@ function PendingRow({ pending: p, tools }: { pending: Pending; tools: StartTool[
         </div>
       )}
     </li>
+  );
+}
+
+function FirstPrompt({ prompt }: { prompt: string }) {
+  if (!prompt) return <p className="start-prompt start-first">No first prompt: the session opens and waits for you.</p>;
+  return (
+    <p className="start-prompt start-first">
+      <span className="start-first-label">First prompt</span> {prompt}
+    </p>
   );
 }
 
@@ -295,6 +305,10 @@ function ChoiceEditor({ pending: p, tools }: { pending: Pending; tools: StartToo
           <input value={choice.name} maxLength={32} spellCheck={false} onChange={(e) => change(p.key, "name", e.target.value)} />
         </label>
       </div>
+      <label className="field">
+        First prompt
+        <textarea rows={3} value={choice.prompt} placeholder="None: the session opens and waits" onChange={(e) => change(p.key, "prompt", e.target.value)} />
+      </label>
     </div>
   );
 }

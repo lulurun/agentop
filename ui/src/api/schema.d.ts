@@ -1115,6 +1115,8 @@ export interface components {
             name: string;
             /** Reason */
             reason: string;
+            /** Task */
+            task: string;
             /** Tier */
             tier: string;
             /** Title */
@@ -1139,7 +1141,10 @@ export interface components {
             name: string;
             /** Probe */
             probe?: string | null;
-            /** Prompt */
+            /**
+             * Prompt
+             * @default
+             */
             prompt: string;
             /**
              * Title

@@ -21,6 +21,8 @@ ROOTS = ("workspace", "code", "src", "projects", "repos")
 RECENT_DAYS = 30
 MAX_CANDIDATES = 40
 PROMPT_CHARS = 6_000
+# A longer prompt is handed over as typed: the probe would spend its time copying it out.
+TASK_CHARS = 1_500
 PROBE_TIMEOUT = 40
 # A session idle less than this is still in use, and never closed to make room.
 MIN_IDLE_FOR_ROOM = 600
@@ -159,7 +161,13 @@ Answer with one JSON object and nothing else:
  "model": "<a model, only if the prompt names a model to use, else null>",
  "cwd": "<the folder to work in, or \\"none\\">",
  "cwd_sure": true | false,
- "reason": "<one sentence: why this tier and folder>"}
+ "reason": "<one sentence: why this tier and folder>",
+ "task": "<the prompt for the new session's agent>"}
+task: the prompt word for word, with only the words that ask for the session taken out: asking to open or
+start one, and saying which tool, model, folder or project it is for ("open a new session for dev X", "start a
+codex session in X to", "with Opus"). Never reword, shorten or add to what is left. "" when what is left asks
+the agent for nothing: "please open a new session for dev agentop" -> "". The prompt unchanged when it asks
+for no session.
 Tier: light for a quick question, a lookup, or a small mechanical edit; standard for ordinary work in one place;
 complex for design, debugging something unclear, a change across many files, or anything that needs deep reasoning.
 cwd: a folder the prompt names, or the one of <folders> the task is about (a repository named in the prompt, its
@@ -179,10 +187,11 @@ def _catalogue_text(installed: list[str]) -> str:
 
 def build_prompt(prompt: str, folders: list[str], installed: list[str]) -> str:
     cut = prompt if len(prompt) <= PROMPT_CHARS else prompt[:PROMPT_CHARS] + " …"
+    long = "\n\nThis prompt is long: answer \"task\": null." if len(prompt) > TASK_CHARS else ""
     return (
         f"<tools>\n{_catalogue_text(installed)}\n</tools>\n\n"
         f"<folders>\n{chr(10).join(folders) or '(none)'}\n</folders>\n\n"
-        f"<prompt>\n{cut}\n</prompt>"
+        f"<prompt>\n{cut}\n</prompt>{long}"
     )
 
 
@@ -196,7 +205,7 @@ def fallback(prompt: str) -> dict:
     words = prompt.split()
     title = " ".join(words[:6]) + (" …" if len(words) > 6 else "")
     return {"title": title[:80], "name": slug(" ".join(words[:3])) or "session", "kind": "code", "tier": "standard",
-            "tool": None, "model": None, "cwd": None, "cwd_sure": False, "reason": ""}
+            "tool": None, "model": None, "cwd": None, "cwd_sure": False, "reason": "", "task": prompt}
 
 
 def _named(agent_name, model_name, installed: list[str]) -> tuple[Optional[str], Optional[str]]:
@@ -218,7 +227,15 @@ def _named(agent_name, model_name, installed: list[str]) -> tuple[Optional[str],
     return tool, model
 
 
-def parse(answer: str, folders: list[str], installed: list[str]) -> dict:
+def _task(given, prompt: str) -> str:
+    """The probe's task, or the prompt itself when the probe added to it rather than took out."""
+    if not isinstance(given, str) or len(prompt) > TASK_CHARS:
+        return prompt
+    task = given.strip()
+    return task if len(task) <= len(prompt.strip()) else prompt
+
+
+def parse(answer: str, folders: list[str], installed: list[str], prompt: str = "") -> dict:
     """The probe's answer, checked: anything unusable becomes the fallback's. Raises ValueError with no JSON."""
     found = re.search(r"\{.*\}", answer, re.DOTALL)
     if not found:
@@ -247,6 +264,7 @@ def parse(answer: str, folders: list[str], installed: list[str]) -> dict:
         "cwd": cwd,
         "cwd_sure": bool(data.get("cwd_sure")) and cwd is not None,
         "reason": str(data.get("reason") or "").strip()[:300],
+        "task": _task(data.get("task"), prompt),
     }
 
 
@@ -337,7 +355,7 @@ def probe(prompt: str, installed: list[str], ask: Optional[Callable[[str, str], 
     else:
         try:
             answer = ask(build_prompt(prompt, folders, installed), SYSTEM)
-            found = parse(answer, folders, installed)
+            found = parse(answer, folders, installed, prompt)
         except (RuntimeError, ValueError) as exc:
             found, decision["error"] = fallback(prompt), str(exc)[:300]
     decision.update(found)
@@ -349,7 +367,7 @@ def probe(prompt: str, installed: list[str], ask: Optional[Callable[[str, str], 
     decision.update(picked)
     decision["candidates"] = folders[:6]
     record({"event": "probe", "id": decision["id"], "prompt": prompt[:PROMPT_CHARS], "answer": answer[:2000],
-            "decision": {k: decision[k] for k in ("title", "name", "kind", "tier", "tool", "model", "cwd", "cwd_sure", "reason")},
+            "decision": {k: decision[k] for k in ("title", "name", "kind", "tier", "tool", "model", "cwd", "cwd_sure", "reason", "task")},
             "quota": seen, "why": decision["why"], "by": decision["by"], "error": decision["error"], "ms": decision["ms"],
             "candidates": folders})
     return decision

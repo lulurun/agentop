@@ -324,6 +324,8 @@ class StartDecision(BaseModel):
     cwd: str | None
     cwd_sure: bool
     reason: str
+    # The first prompt for the session: the prompt less what asked for the session; "" for none.
+    task: str
     why: str
     candidates: list[str]
     by: str | None = None
@@ -332,14 +334,15 @@ class StartDecision(BaseModel):
 
 
 class StartLaunch(BaseModel):
-    prompt: str = Field(min_length=1, max_length=100_000)
+    # "" starts the session with no first prompt.
+    prompt: str = Field(default="", max_length=100_000)
     tool: str
     cwd: str = Field(min_length=1)
     name: str = Field(min_length=1)
     title: str = ""
     model: str | None = None
     probe: str | None = None
-    # What the owner changed of the probe's choice, for the record: tool, model, name, cwd.
+    # What the owner changed of the probe's choice, for the record: tool, model, name, cwd, prompt.
     changed: list[str] = []
 
 
