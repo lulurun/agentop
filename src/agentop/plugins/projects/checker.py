@@ -17,6 +17,9 @@ from . import pursuit
 
 # An owner typing a prompt also changes the screen; waiting this long keeps a prompt out of a half-typed one.
 QUIET_SECONDS = 60.0
+# Codex refuses /clear while a turn runs, so a yield's clear waits for the screen to go still; its spinner
+# ticks every second while busy.
+CLEAR_SECONDS = 5.0
 # A task session can sit on a still screen through a long test run or model call, so a short wait nags busy agents.
 TASK_QUIET_SECONDS = 2 * 3600.0
 
@@ -74,6 +77,8 @@ class Checker:
             turn = self.turns.setdefault(row["id"], Turn(after=now))
             since = screen.waiting_since
             coordinator = row.get("display_name") == projects.COORDINATOR
+            if coordinator and since is not None and now - since >= CLEAR_SECONDS:
+                self._clear(row)
             quiet = self.quiet_seconds if coordinator else self.task_quiet_seconds
             if since is None or turn.handled == since or now - since < quiet:
                 continue
@@ -92,6 +97,13 @@ class Checker:
                for e in pursuit.events(project, turn.after)):
             pursuit.log(project, "resume")
             self._deliver(project, row, RESUME)
+
+    def _clear(self, row: dict) -> None:
+        project = row["project"]
+        pending = pursuit.pending_clear(project)
+        if pending is not None:
+            self._deliver(project, row, "/clear")
+            pursuit.log(project, "clear", type=pending.get("type"))
 
     def _member(self, row: dict, turn: Turn) -> None:
         project = row["project"]

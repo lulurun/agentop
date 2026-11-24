@@ -356,9 +356,7 @@ def run_yield(args) -> None:
         _fail(f"{exc}. If it can't be fixed now, the next action is the fix.")
     clear = getattr(args, "clear", False) or (args.kind in pursuit.CLEARING_KINDS and not getattr(args, "keep", False))
     if clear:
-        if not _send(projects.COORDINATOR, "/clear", project):
-            _fail("recorded, but the clear wasn't sent")
-        pursuit.log(project, "clear", type=args.kind)
+        pursuit.log(project, "clear.pending", type=args.kind)
         then = ("the next report or prompt reaches you with a note to reread STATE.md"
                 if args.kind in pursuit.CLEARING_KINDS else "agentop tells you to carry on")
         print(f"Recorded. End your turn with a short message to the owner; then your context is cleared, and {then}.")

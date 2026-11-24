@@ -116,6 +116,12 @@ WAKE_NOTE = (
 )
 
 
+def pending_clear(project: str) -> dict | None:
+    """The yield's clear.pending event when its /clear hasn't been sent yet."""
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "clear.pending")), None)
+    return last if last is not None and last["kind"] == "clear.pending" else None
+
+
 def wake_note(project: str) -> str:
     """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, else ""; logs the wake."""
     last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "resume", "woken")), None)

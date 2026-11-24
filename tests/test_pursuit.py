@@ -200,11 +200,12 @@ def test_yield_clear_clears_the_coordinator_then_tells_it_once_to_carry_on(alpha
     fields = dict.fromkeys(("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")
     turn(lambda: cli.run_yield(SimpleNamespace(kind="owner", project=None, clear=True, **{
         **fields, "question": "Q?", "recommend": "R", "default": "D"})))
-    assert delivered == [("Coordinator", "/clear", "alpha")]
+    assert delivered == []
     assert "context is cleared" in capsys.readouterr().out
-    assert len(sent) == 1 and sent[0][0] == "Coordinator" and "STATE.md" in sent[0][1]
+    assert sent[0] == ("Coordinator", "/clear")
+    assert len(sent) == 2 and sent[1][0] == "Coordinator" and "STATE.md" in sent[1][1]
     turn(lambda: pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "D"}))
-    assert len(sent) == 1
+    assert len(sent) == 2
     kinds = [e["kind"] for e in pursuit.events(alpha)]
     assert kinds.count("clear") == 1 and kinds.count("resume") == 1
 
@@ -226,12 +227,32 @@ def test_done_and_waiting_clear_by_default_and_keep_stops_it(alpha, monkeypatch,
                                                                    "default": "D", **flags}))
 
     run("waiting", clear=False, keep=False)
-    assert delivered == [("Coordinator", "/clear", "alpha")]
+    assert delivered == []
+    assert pursuit.pending_clear(alpha)["type"] == "waiting"
     assert "context is cleared" in capsys.readouterr().out
     run("waiting", clear=False, keep=True)
     run("owner", clear=False, keep=False)
-    assert len(delivered) == 1
-    assert [e["kind"] for e in pursuit.events(alpha)].count("clear") == 1
+    assert [e["kind"] for e in pursuit.events(alpha)].count("clear.pending") == 1
+
+
+def test_a_yields_clear_waits_until_the_coordinators_screen_is_still(alpha, monkeypatch):
+    sent = []
+    screens = Screens()
+    checker = Checker(lambda p, row, text: sent.append(text), watcher=Watcher(screens.list_panes, screens.capture))
+    now = time.time()
+    checker.tick(rows(), now)
+    pursuit.log(alpha, "clear.pending", type="waiting")
+    for at in range(1, 30, 2):
+        screens.activity = int(now + at)
+        screens.text["%1"] += "x"
+        checker.tick(rows(), now + at)
+    checker.tick(rows(), now + 35)
+    assert sent == []
+    checker.tick(rows(), now + 41)
+    assert sent == ["/clear"]
+    assert pursuit.pending_clear(alpha) is None
+    checker.tick(rows(), now + 50)
+    assert sent == ["/clear"]
 
 
 def test_a_waiting_clear_is_not_resumed_and_the_next_report_says_the_context_was_cleared(alpha, monkeypatch):
@@ -251,7 +272,7 @@ def test_a_waiting_clear_is_not_resumed_and_the_next_report_says_the_context_was
     cli.run_yield(SimpleNamespace(kind="waiting", project=None, clear=False, keep=False, **dict.fromkeys(
         ("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")))
     run_turn(checker, screens, "%1", now + 10)
-    assert sent == []
+    assert sent == ["/clear"]
 
     monkeypatch.setattr(ops, "current_session", lambda: ("dev-1", "alpha", "dev"))
     write(alpha, "results/dev.md")
