@@ -902,6 +902,18 @@
             "title": "Plugins",
             "type": "integer"
           },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The tag or branch this process started from, as `main` or `v2.7.0`",
+            "title": "Ref"
+          },
           "started_at": {
             "anyOf": [
               {

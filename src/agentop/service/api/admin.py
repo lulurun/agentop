@@ -69,6 +69,26 @@ def started_commit() -> str | None:
     return _started["commit"]
 
 
+def started_ref() -> str | None:
+    """The tag HEAD is exactly at, else its branch, as of startup."""
+    if "ref" not in _started:
+        _started["ref"] = _git_ref()
+    return _started["ref"]
+
+
+def _git_ref() -> str | None:
+    if not (REPO_ROOT / ".git").exists():
+        return None
+    for args in (["describe", "--tags", "--exact-match", "HEAD"], ["symbolic-ref", "--short", "-q", "HEAD"]):
+        try:
+            r = subprocess.run(["git", "-C", str(REPO_ROOT), *args], capture_output=True, text=True, timeout=3, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if r.stdout.strip():
+            return r.stdout.strip()
+    return None
+
+
 def _git_commit() -> str | None:
     if not (REPO_ROOT / ".git").exists():
         return None
@@ -170,6 +190,7 @@ async def service(ctx: Ctx):
         "api_version": API_VERSION,
         "name": ctx.identity.name,
         "commit": await asyncio.to_thread(started_commit),
+        "ref": await asyncio.to_thread(started_ref),
         "checkout_commit": await asyncio.to_thread(_git_commit),
         "uptime_seconds": int(time.time() - ctx.started_at),
         "started_at": ctx.started_at,

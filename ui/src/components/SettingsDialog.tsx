@@ -58,7 +58,7 @@ export function SettingsDialog() {
           <div>
             <dt>{connectionName(connection, service.name)}</dt>
             <dd>
-              {service.commit ? `${service.version} (${service.commit})` : service.version}
+              {service.commit ? `${service.ref ?? service.version} (${service.commit})` : service.version}
               {service.checkout_commit && service.commit && service.checkout_commit !== service.commit && `, ${service.checkout_commit} after a restart`}
             </dd>
           </div>

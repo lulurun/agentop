@@ -18,6 +18,7 @@ class ServiceInfo(BaseModel):
     api_version: int = Field(description="Revision of /api/v2. A client built for a lower one should be updated")
     name: str
     commit: str | None = Field(description="The commit this process started from")
+    ref: str | None = Field(None, description="The tag or branch this process started from, as `main` or `v2.7.0`")
     checkout_commit: str | None = Field(
         None, description="The commit checked out now. When it differs from commit, a restart runs it"
     )

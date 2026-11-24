@@ -1019,6 +1019,11 @@ export interface components {
              * @description How many plugins the service found, in any state
              */
             plugins: number;
+            /**
+             * Ref
+             * @description The tag or branch this process started from, as `main` or `v2.7.0`
+             */
+            ref?: string | null;
             /** Started At */
             started_at?: number | null;
             /** Tls */

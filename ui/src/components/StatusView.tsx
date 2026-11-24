@@ -204,7 +204,7 @@ export function StatusView({ onClose }: { onClose(): void }) {
             <div className="detail-row"><dt>Connection</dt><dd>{isEncrypted(connection.url) ? "Encrypted" : isLoopback(connection.url) ? "This computer" : "Not encrypted"}</dd></div>
             {info && (
               <>
-                <div className="detail-row"><dt>Version</dt><dd>{info.commit ? `${info.version} (${info.commit})` : info.version}</dd></div>
+                <div className="detail-row"><dt>Version</dt><dd>{info.commit ? `${info.ref ?? info.version} (${info.commit})` : info.version}</dd></div>
                 {info.checkout_commit && info.commit && info.checkout_commit !== info.commit && (
                   <div className="detail-row"><dt>Checked out</dt><dd>{info.checkout_commit}, not running yet: Restart runs it</dd></div>
                 )}
