@@ -21,6 +21,7 @@ STATE_SECTIONS = ("Objective", "Where things are", "Decisions", "Open questions 
 REVIEWS_DIR = "reviews"
 REFLECTION_PLACEHOLDER = "(The Coordinator writes this.)"
 KINDS = ("done", "waiting", "owner", "blocked")
+CLEARING_KINDS = ("done", "waiting")
 
 OBJECTIVE_PLACEHOLDER = '(What the project is for, and what "done" means.)'
 STATE_TEMPLATE = """# State of {name}

@@ -209,6 +209,31 @@ def test_yield_clear_clears_the_coordinator_then_tells_it_once_to_carry_on(alpha
     assert kinds.count("clear") == 1 and kinds.count("resume") == 1
 
 
+def test_done_and_waiting_clear_by_default_and_keep_stops_it(alpha, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from agentop import ops
+
+    delivered = []
+    monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text, project)))
+    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
+    pursuit.open_task(alpha, "dev", "claude", "/x", "Add login", ["tests pass"], "results/dev.md")
+    touch_state(alpha)
+    fields = dict.fromkeys(("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")
+
+    def run(kind, **flags):
+        cli.run_yield(SimpleNamespace(kind=kind, project=None, **{**fields, "question": "Q?", "recommend": "R",
+                                                                   "default": "D", **flags}))
+
+    run("waiting", clear=False, keep=False)
+    assert delivered == [("Coordinator", "/clear", "alpha")]
+    assert "context is cleared" in capsys.readouterr().out
+    run("waiting", clear=False, keep=True)
+    run("owner", clear=False, keep=False)
+    assert len(delivered) == 1
+    assert [e["kind"] for e in pursuit.events(alpha)].count("clear") == 1
+
+
 def test_a_clear_before_the_final_screen_output_counts_for_that_turn_only(alpha, monkeypatch):
     sent = []
     screens = Screens()

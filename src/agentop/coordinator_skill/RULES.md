@@ -2,7 +2,7 @@
 
 These hold on every turn, including after compaction or `/clear`. `COORDINATOR_SKILL.md` explains them.
 
-1. **Every turn ends with `agentop yield`**: `done`, `waiting`, `owner` or `blocked`. If none of them is true, you are not finished: take the next action.
+1. **Every turn ends with `agentop yield`**: `done`, `waiting`, `owner` or `blocked`. If none of them is true, you are not finished: take the next action. `done` and `waiting` clear your context (`--keep` to stop that), so `STATE.md` must hold the plan first.
 2. **Default to acting.** When something is unclear, investigate, try something small that can be undone, or ask a session for a recommendation, then decide yourself. Go to the owner only for product intent, authority, money, external effects, or something destructive or hard to undo.
 3. **Never hand the owner a bare question.** `agentop yield owner` takes `--recommend` (your answer and why) and `--default` (what you will do if there is no answer). Keep doing whatever the question doesn't block.
 4. **Delegate only with `agentop task start`**: one goal, `--accept` criteria you can check, and an `--artifact` file in the project folder. Not plain `agentop start`.

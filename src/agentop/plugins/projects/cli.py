@@ -94,8 +94,9 @@ def register_cli(cli) -> None:
         turn.add_argument(f"--{flag}", default="", help=text)
     turn.add_argument(
         "--clear", action="store_true",
-        help="Then clear the Coordinator's context once this turn ends; agentop tells it to carry on after",
+        help="owner, blocked: also clear the Coordinator's context once this turn ends (done and waiting always do)",
     )
+    turn.add_argument("--keep", action="store_true", help="done, waiting: keep the context instead of clearing it")
 
     review = cli.command(
         "review",
@@ -353,11 +354,13 @@ def run_yield(args) -> None:
         event = pursuit.yield_turn(project, args.kind, fields)
     except pursuit.PursuitError as exc:
         _fail(f"{exc}. If it can't be fixed now, the next action is the fix.")
-    if args.clear:
+    clear = getattr(args, "clear", False) or (args.kind in pursuit.CLEARING_KINDS and not getattr(args, "keep", False))
+    if clear:
         if not _send(projects.COORDINATOR, "/clear", project):
             _fail("recorded, but the clear wasn't sent")
         pursuit.log(project, "clear")
-        print("Recorded. End your turn with a short message to the owner; then your context is cleared, and agentop tells you to carry on.")
+        print("Recorded. End your turn with a short message to the owner; then your context is cleared, and agentop "
+              "tells you to carry on from STATE.md.")
     elif args.kind == "waiting":
         print(f"Recorded: waiting on {event['sessions']}. End your turn; their reports will come to you.")
     elif args.kind == "owner":
