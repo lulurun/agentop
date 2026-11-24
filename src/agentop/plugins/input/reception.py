@@ -210,6 +210,15 @@ def resume_note(row: dict) -> str:
     return f"[agentop] Your context was cleared before this message. Read {read}{tasks}, then answer the owner:\n\n"
 
 
+def wake_note(row: dict) -> str:
+    """The note for a Projects Coordinator whose yield cleared its context, on the first prompt after it."""
+    if row.get("display_name") != projects.COORDINATOR or not owned_by_projects(row):
+        return ""
+    from agentop.plugins.projects import pursuit
+
+    return pursuit.wake_note(row["project"])
+
+
 def log(path: Path, **fields) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "a") as f:

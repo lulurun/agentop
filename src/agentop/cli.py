@@ -245,10 +245,17 @@ def cmd_send(args):
     sender = f"{here[1]}/{here[2]}" if here else Session.current()
     if sender and not args.no_header:
         text = f"[agentop send from {sender}]\n{text.strip()}"
+    from agentop import projects
     from agentop.results import OpsError
 
+    project = _own_project(args)
+    found = projects.get(project) if project and args.target == projects.COORDINATOR else None
+    if found and found.get("owner") == "projects":
+        from agentop.plugins.projects import pursuit
+
+        text = pursuit.wake_note(project) + text
     try:
-        sent = deliver(args.target, text, _own_project(args))
+        sent = deliver(args.target, text, project)
     except OpsError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         if not exc.matches:

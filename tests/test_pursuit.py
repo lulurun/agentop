@@ -234,6 +234,32 @@ def test_done_and_waiting_clear_by_default_and_keep_stops_it(alpha, monkeypatch,
     assert [e["kind"] for e in pursuit.events(alpha)].count("clear") == 1
 
 
+def test_a_waiting_clear_is_not_resumed_and_the_next_report_says_the_context_was_cleared(alpha, monkeypatch):
+    from types import SimpleNamespace
+
+    from agentop import ops
+
+    delivered, sent = [], []
+    monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text)))
+    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
+    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+    touch_state(alpha)
+    screens = Screens()
+    checker = Checker(lambda p, row, text: sent.append(text), watcher=Watcher(screens.list_panes, screens.capture))
+    now = time.time()
+    checker.tick(rows(), now)
+    cli.run_yield(SimpleNamespace(kind="waiting", project=None, clear=False, keep=False, **dict.fromkeys(
+        ("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")))
+    run_turn(checker, screens, "%1", now + 10)
+    assert sent == []
+
+    monkeypatch.setattr(ops, "current_session", lambda: ("dev-1", "alpha", "dev"))
+    write(alpha, "results/dev.md")
+    cli.run_task(SimpleNamespace(task_command="report", project=None, summary="done", blocked=False), None)
+    assert delivered[-1][1].startswith(pursuit.WAKE_NOTE)
+    assert pursuit.wake_note(alpha) == ""
+
+
 def test_a_clear_before_the_final_screen_output_counts_for_that_turn_only(alpha, monkeypatch):
     sent = []
     screens = Screens()

@@ -236,7 +236,7 @@ def task_report(args, project: str) -> None:
         f"Check it yourself against: {criteria}. Then agentop task accept {name} --checked \"…\", "
         f"agentop task reject {name} --feedback \"…\", or agentop task fail {name} --note \"…\"."
     )
-    sent = _send(projects.COORDINATOR, notice, project)
+    sent = _send(projects.COORDINATOR, pursuit.wake_note(project) + notice, project)
     print(f"Reported round {rounds} of {task['id']}." + (" The Coordinator has been told." if sent else ""))
     print("Wait for the Coordinator's answer; don't start other work.")
 
@@ -358,9 +358,10 @@ def run_yield(args) -> None:
     if clear:
         if not _send(projects.COORDINATOR, "/clear", project):
             _fail("recorded, but the clear wasn't sent")
-        pursuit.log(project, "clear")
-        print("Recorded. End your turn with a short message to the owner; then your context is cleared, and agentop "
-              "tells you to carry on from STATE.md.")
+        pursuit.log(project, "clear", type=args.kind)
+        then = ("the next report or prompt reaches you with a note to reread STATE.md"
+                if args.kind in pursuit.CLEARING_KINDS else "agentop tells you to carry on")
+        print(f"Recorded. End your turn with a short message to the owner; then your context is cleared, and {then}.")
     elif args.kind == "waiting":
         print(f"Recorded: waiting on {event['sessions']}. End your turn; their reports will come to you.")
     elif args.kind == "owner":

@@ -110,6 +110,21 @@ def events(project: str, since: float = 0.0) -> list[dict]:
     return found
 
 
+WAKE_NOTE = (
+    "[agentop] Your context was cleared before this message. Read AGENTS.md, COORDINATOR_SKILL.md and STATE.md, "
+    "run agentop task list, then act on it:\n\n"
+)
+
+
+def wake_note(project: str) -> str:
+    """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, else ""; logs the wake."""
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "resume", "woken")), None)
+    if last is None or last["kind"] != "clear":
+        return ""
+    log(project, "woken")
+    return WAKE_NOTE
+
+
 def resolve_artifact(project: str, path: str) -> Path:
     """The artifact's absolute path, which must be inside the project folder. Raises PursuitError."""
     root = projects.folder(project).resolve()

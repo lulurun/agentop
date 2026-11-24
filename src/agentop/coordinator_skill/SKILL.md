@@ -26,7 +26,7 @@ On every turn, including one started by a task's report or by agentop after a cl
 
 agentop checks each reason. It refuses `waiting` with nothing pending, and any yield while a report waits for your decision or while `STATE.md` is out of date. A refusal names the next action: take it.
 
-`done` and `waiting` also clear your context when the turn ends; agentop then tells you to carry on from `STATE.md` and `agentop task list`. So before them, write in `STATE.md` what the next turn needs: the plan's next tasks under Next, and why under Decisions. Pass `--keep` only when the next turn needs this conversation, such as a discussion with the owner still going. `owner` and `blocked` keep the context, since the answer will refer to this question; add `--clear` if it doesn't need it.
+`done` and `waiting` also clear your context when the turn ends; the next report or prompt then reaches you with a note to reread `STATE.md` and `agentop task list`. So before them, write in `STATE.md` what the next turn needs: the plan's next tasks under Next, and why under Decisions. Pass `--keep` only when the next turn needs this conversation, such as a discussion with the owner still going. `owner` and `blocked` keep the context, since the answer will refer to this question; add `--clear` if it doesn't need it.
 
 Signs you are about to stop too early:
 
@@ -97,7 +97,7 @@ At a milestone (a design accepted, an implementation slice accepted, a deploymen
 1. Bring `STATE.md` up to date.
 2. Run `agentop review`. Read its findings, write your reflection in the report's last section, and keep one concrete change in `STATE.md` under Decisions.
 3. Tell the owner the report's path and its top findings, in two or three lines.
-4. End with `agentop yield done` or `waiting`, which clears your context; agentop then tells you to carry on: read AGENTS.md, this skill, `STATE.md` and `agentop task list`, and take the next action.
+4. End with `agentop yield done` or `waiting`, which clears your context. The next message tells you to read AGENTS.md, this skill, `STATE.md` and `agentop task list` before you act on it.
 
 ## How you are judged
 

@@ -133,7 +133,7 @@ def register(api):
                 settle(tmux_name)
                 agent.deliver(tmux_name, reception.resume_note(row) + body.text)
             elif body.text.strip():
-                agent.deliver(tmux_name, body.text)
+                agent.deliver(tmux_name, reception.wake_note(row) + body.text)
             else:
                 with typing(tmux_name):
                     Session.leave_mode(tmux_name)

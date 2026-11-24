@@ -87,7 +87,9 @@ class Checker:
     def _coordinator(self, row: dict, turn: Turn) -> None:
         project = row["project"]
         # Turns without a yield aren't counted: an idle screen also changes (Codex's usage warnings, /status, a draft).
-        if any(e["kind"] == "clear" for e in pursuit.events(project, turn.after)):
+        # After done or waiting there is nothing to carry on with, and a prompt would only yield and clear again.
+        if any(e["kind"] == "clear" and e.get("type") not in pursuit.CLEARING_KINDS
+               for e in pursuit.events(project, turn.after)):
             pursuit.log(project, "resume")
             self._deliver(project, row, RESUME)
 
@@ -111,7 +113,7 @@ class Checker:
                 None,
             )
             if coordinator is not None:
-                self._deliver(project, coordinator, (
+                self._deliver(project, coordinator, pursuit.wake_note(project) + (
                     f"[agentop task {task['id']}] {task['session']} has gone quiet twice without reporting round "
                     f"{len(task['rounds'])}. Look at its screen and decide: answer it, reject with feedback, or fail it."
                 ))
