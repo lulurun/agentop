@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import fcntl
 import json
+import math
 import os
 import re
 import time
@@ -17,14 +18,26 @@ from agentop import projects
 
 from . import track
 
-MAX_FILE_BYTES = 1_000_000
-_EXECUTION = re.compile(r"^EXECUTION_M(\d+)\.md$")
-_TASK_HEAD = re.compile(r"^(P\d+_M\d+A\d+-\d+)  session `([^`]*)`  (\S+)(?: \((.*)\))?\s*$")
-_TASK_ID = re.compile(r"^P(\d+)_(M(\d+)A\d+)-\d+$")
-_NOTE_HEAD = re.compile(r"^(P\d+_(M(\d+)A\d+) note (\d+))  by: (\S+)\s*$")
-_TIMES = re.compile(r"^Opened (.+?)(?: · closed (.+?))? · rounds (\d+) · (\S+)\s*$")
-_OUT = re.compile(r"^- round (\d+): (BLOCKED: )?(.*)$")
-_EVAL = re.compile(r"^- round (\d+) (rejected|accepted|failed): (.*)$")
+MAX_DOC_BYTES = 1_000_000
+# One journal line or one EXECUTION entry; files are streamed, so records past any size stay readable.
+MAX_RECORD_BYTES = 256_000
+MAX_STREAM_BYTES = 64_000_000
+MAX_SNAPSHOT_BYTES = 64_000_000
+MAX_ROUNDS = 100
+MAX_FIELD_CHARS = 100_000
+STATUSES = ("open", "accepted", "failed")
+EVENTS = ("open", "report", "reject", "accept", "fail")
+
+_N = r"\d{1,9}"
+_EXECUTION = re.compile(rf"^EXECUTION_M({_N})\.md$")
+_TASK_HEAD = re.compile(rf"^(P{_N}_M{_N}A{_N}-{_N})  session `([^`]*)`  (\S+)(?: \((.*)\))?\s*$")
+_TASK_ID = re.compile(rf"^P({_N})_(M{_N}A{_N})-{_N}$")
+_LOOSE_ID = re.compile(rf"^t{_N}$")
+_ACTION = re.compile(rf"^M{_N}A{_N}$")
+_NOTE_HEAD = re.compile(rf"^(P({_N})_(M({_N})A{_N}) note ({_N}))  by: (\S+)\s*$")
+_TIMES = re.compile(rf"^Opened (.+?)(?: · closed (.+?))? · rounds ({_N}) · (\S+)\s*$")
+_OUT = re.compile(rf"^- round ({_N}): (BLOCKED: )?(.*)$")
+_EVAL = re.compile(rf"^- round ({_N}) (rejected|accepted|failed): (.*)$")
 
 
 @contextmanager
@@ -48,48 +61,103 @@ class _Reader:
         self.base = projects.folder(project).resolve()
         self.issues: list[str] = []
 
+    def name(self, path: Path) -> str:
+        return str(path.relative_to(self.base)) if path.is_relative_to(self.base) else path.name
+
     def inside(self, path: Path) -> Path | None:
         try:
             resolved = path.resolve()
         except OSError:
             return None
         if resolved != self.base and self.base not in resolved.parents:
-            self.issues.append(f"{path.relative_to(self.base) if path.is_relative_to(self.base) else path.name} points outside the project; skipped")
+            self.issues.append(f"{self.name(path)} points outside the project; skipped")
             return None
         return resolved
 
-    def text(self, path: Path) -> str | None:
+    def _open(self, path: Path):
         resolved = self.inside(path)
         if resolved is None or not resolved.is_file():
             return None
         try:
-            with open(resolved, "rb") as f:
-                data = f.read(MAX_FILE_BYTES + 1)
+            return open(resolved, "rb")
         except OSError:
             return None
-        if len(data) > MAX_FILE_BYTES:
-            self.issues.append(f"{path.name} is over {MAX_FILE_BYTES} bytes; only its start is shown")
-            data = data[:MAX_FILE_BYTES]
+
+    def text(self, path: Path, limit: int = MAX_DOC_BYTES) -> str | None:
+        f = self._open(path)
+        if f is None:
+            return None
+        with f:
+            data = f.read(limit + 1)
+        if len(data) > limit:
+            self.issues.append(f"{self.name(path)} is over {limit} bytes; only its start is shown")
+            data = data[:limit]
         return data.decode("utf-8", errors="replace")
 
+    def lines(self, path: Path):
+        """The file's lines, decoded; a line over MAX_RECORD_BYTES comes as None, and reading stops at MAX_STREAM_BYTES."""
+        f = self._open(path)
+        if f is None:
+            return
+        total = 0
+        with f:
+            while True:
+                line = f.readline(MAX_RECORD_BYTES + 1)
+                if not line:
+                    return
+                total += len(line)
+                if len(line) > MAX_RECORD_BYTES and not line.endswith(b"\n"):
+                    while (rest := f.readline(MAX_RECORD_BYTES)) and not rest.endswith(b"\n"):
+                        total += len(rest)
+                    total += len(rest)
+                    yield None
+                else:
+                    yield line.rstrip(b"\r\n").decode("utf-8", errors="replace")
+                if total > MAX_STREAM_BYTES:
+                    self.issues.append(f"{self.name(path)} is over {MAX_STREAM_BYTES} bytes; the rest isn't read")
+                    return
 
-def _minute(text: str | None) -> float | None:
+
+def _minute(text) -> float | None:
+    if not isinstance(text, str):
+        return None
     try:
-        return time.mktime(time.strptime((text or "").strip(), "%Y-%m-%d %H:%M"))
-    except ValueError:
+        return time.mktime(time.strptime(text.strip(), "%Y-%m-%d %H:%M"))
+    except (ValueError, OverflowError):
         return None
 
 
-def _split_entries(text: str) -> list[tuple[str, str]]:
-    """(heading line without '## ', whole entry) for each '## ' entry of an EXECUTION file."""
-    entries, current = [], None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            current = [line]
-            entries.append(current)
-        elif current is not None:
-            current.append(line)
-    return [(lines[0][3:], "\n".join(lines).strip()) for lines in entries]
+def _number(value) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    try:
+        value = float(value)
+    except OverflowError:
+        return None
+    return value if math.isfinite(value) and value >= 0 else None
+
+
+def _count(value) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and 0 < value <= MAX_ROUNDS else None
+
+
+def _text(value) -> str | None:
+    return value[:MAX_FIELD_CHARS] if isinstance(value, str) and value else None
+
+
+def _generation(value) -> int | None:
+    return value if isinstance(value, int) and not isinstance(value, bool) and value > 0 else None
+
+
+def _id_in(tid, n: int) -> bool:
+    """A task ID that belongs to direction n: P{n}_M{m}A{a}-{k}, or t{k} (its direction is recorded beside it)."""
+    if not isinstance(tid, str):
+        return False
+    found = _TASK_ID.match(tid)
+    return int(found[1]) == n if found else bool(_LOOSE_ID.match(tid))
+
+
+# --- Markdown ---
 
 
 def parse_task_entry(heading: str, raw: str) -> dict | None:
@@ -102,7 +170,7 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
              "opened_at": None, "closed_minute": None, "rounds_count": None, "md_status": None,
              "input": None, "rounds": [], "checked": None, "note": None}
     times = _TIMES.match(lines[0]) if lines else None
-    if times:
+    if times and _count(int(times[3])):
         entry.update(opened_at=_minute(times[1]), closed_minute=times[2], rounds_count=int(times[3]), md_status=times[4])
     else:
         entry["ambiguous"] = True
@@ -118,22 +186,23 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
     last = None
     for line in lines[out_at + 1:eval_at]:
         found = _OUT.match(line)
-        if found:
+        if found and _count(int(found[1])):
             last = rounds.setdefault(int(found[1]), {"round": int(found[1])})
             last.update(summary=found[3], blocked=bool(found[2]))
+        elif found:
+            entry["ambiguous"], last = True, None
         elif last is not None and line.strip():
             last["summary"] += "\n" + line
     last, last_key = None, None
     for line in lines[eval_at + 1:]:
         found = _EVAL.match(line)
-        if found:
+        if found and _count(int(found[1])):
             n, kind, text = int(found[1]), found[2], found[3]
             key = {"rejected": "feedback", "accepted": "checked", "failed": "note"}[kind]
-            if key == "feedback":
-                last = rounds.setdefault(n, {"round": n})
-            else:
-                last = entry
+            last = rounds.setdefault(n, {"round": n}) if key == "feedback" else entry
             last[key], last_key = text, key
+        elif found:
+            entry["ambiguous"], last = True, None
         elif last is not None and line.strip():
             last[last_key] += "\n" + line
     count = max([entry["rounds_count"] or 0, *rounds])
@@ -168,123 +237,235 @@ def _parse_note(heading: str, raw: str, generation: int) -> dict | None:
         return None
     lines = raw.splitlines()[1:]
     date = lines[0].strip() if lines else ""
-    return {"id": head[1], "generation": generation, "action": head[2], "milestone": int(head[3]),
-            "number": int(head[4]), "by": head[5], "recorded": date, "recorded_at": _minute(date),
+    return {"id": head[1], "generation": int(head[2]), "action": head[3], "milestone": int(head[4]),
+            "number": int(head[5]), "by": head[6], "recorded": date, "recorded_at": _minute(date),
             "body": "\n".join(lines[1:]).strip()}
 
 
-def _journal(reader: _Reader, project: str) -> list[dict]:
-    text = reader.text(track.root(project) / "tasks.jsonl")
-    if text is None:
-        return []
-    found, bad = [], 0
-    for line in text.splitlines():
+def _entries(reader: _Reader, path: Path):
+    """(heading, raw entry) for each '## ' entry, streamed; an entry over MAX_RECORD_BYTES comes with raw None."""
+    heading, body, size, over = None, [], 0, False
+    for line in reader.lines(path):
+        if line is not None and line.startswith("## "):
+            if heading is not None:
+                yield heading, None if over else "\n".join(body).strip()
+            heading, body, size, over = line[3:], [line], len(line), False
+            continue
+        if heading is None:
+            continue
+        size += MAX_RECORD_BYTES + 1 if line is None else len(line) + 1
+        if size > MAX_RECORD_BYTES:
+            over, body = True, []
+        elif not over:
+            body.append(line)
+    if heading is not None:
+        yield heading, None if over else "\n".join(body).strip()
+
+
+def _bare_entry(tid: str, raw: str | None) -> dict:
+    return {"id": tid, "raw": raw, "ambiguous": raw is not None, "rounds": [], "input": None, "md_status": None,
+            "closed_minute": None, "rounds_count": None, "opened_at": None, "session": None, "tool": None,
+            "model": None, "checked": None, "note": None}
+
+
+def _execution(reader: _Reader, path: Path, n: int, entries: dict, notes: list) -> None:
+    where = reader.name(path)
+    for heading, raw in _entries(reader, path):
+        tid = heading.split()[0] if heading.split() else ""
+        note_head = _NOTE_HEAD.match(heading)
+        if (note_head and int(note_head[2]) != n) or (_TASK_ID.match(tid) and not _id_in(tid, n)):
+            reader.issues.append(f"{where}: '{heading[:60]}' belongs to another direction; skipped")
+            continue
+        if raw is None:
+            reader.issues.append(f"{where}: '{heading[:60]}' is over {MAX_RECORD_BYTES} bytes; its text isn't shown")
+            if _TASK_ID.match(tid):
+                entries.setdefault(tid, _bare_entry(tid, None))
+            continue
+        if note_head:
+            notes.append(_parse_note(heading, raw, n))
+            continue
+        entry = parse_task_entry(heading, raw)
+        if entry is not None:
+            entries[entry["id"]] = entry
+        elif _TASK_ID.match(tid):
+            entries.setdefault(tid, _bare_entry(tid, raw))
+        else:
+            reader.issues.append(f"{where}: an entry '## {heading[:60]}' isn't a task or a note; skipped")
+
+
+# --- tasks.jsonl and tasks.json ---
+
+
+def _clean_event(event) -> tuple[dict | None, bool]:
+    """The event's fields the reader uses, checked; (None, _) when it can't be joined, and whether a field was dropped."""
+    if not isinstance(event, dict):
+        return None, False
+    n = _generation(event.get("direction"))
+    if n is None or not _id_in(event.get("id"), n):
+        return None, False
+    fields = {
+        "id": event["id"], "direction": n,
+        "event": event.get("event") if event.get("event") in EVENTS else None,
+        "status": event.get("status") if event.get("status") in STATUSES else None,
+        "at": _number(event.get("at")),
+        "round": _count(event.get("round")),
+        "action": event.get("action") if isinstance(event.get("action"), str) and _ACTION.match(event["action"]) else None,
+        "session": _text(event.get("session")),
+    }
+    dropped = any(event.get(k) is not None and fields[k] is None for k in ("event", "status", "at", "round", "action", "session"))
+    return fields, dropped
+
+
+def _journal(reader: _Reader, project: str, n: int) -> dict[str, list[dict]]:
+    found: dict[str, list[dict]] = {}
+    bad = oversized = dropped = 0
+    for line in reader.lines(track.root(project) / "tasks.jsonl"):
+        if line is None:
+            oversized += 1
+            continue
         if not line.strip():
             continue
         try:
-            event = json.loads(line)
-        except ValueError:
+            event, lost = _clean_event(json.loads(line))
+        except (ValueError, RecursionError):
+            event, lost = None, False
+        if event is None:
             bad += 1
             continue
-        if isinstance(event, dict) and isinstance(event.get("id"), str):
-            found.append(event)
-        else:
-            bad += 1
-    if bad:
-        reader.issues.append(f"track/tasks.jsonl has {bad} unreadable line{'s' if bad > 1 else ''}; skipped")
+        dropped += lost
+        if event["direction"] == n:
+            found.setdefault(event["id"], []).append(event)
+    for count, what in ((bad, "unreadable"), (oversized, f"over {MAX_RECORD_BYTES} bytes")):
+        if count:
+            reader.issues.append(f"track/tasks.jsonl has {count} line{'s' if count > 1 else ''} {what}; skipped")
+    if dropped:
+        reader.issues.append(f"track/tasks.jsonl has {dropped} line{'s' if dropped > 1 else ''} with invalid fields; those fields are ignored")
     return found
 
 
 def _snapshot(reader: _Reader, project: str) -> list[dict] | None:
     """tasks.json's tasks, or None when it is missing or unreadable."""
-    text = reader.text(projects.meta_dir(project) / "tasks.json")
-    if text is None:
+    path = projects.meta_dir(project) / "tasks.json"
+    f = reader._open(path)
+    if f is None:
         return None
+    with f:
+        data = f.read(MAX_SNAPSHOT_BYTES + 1)
     try:
-        data = json.loads(text)
-        tasks = data["tasks"]
-        assert isinstance(tasks, list)
-    except (ValueError, KeyError, TypeError, AssertionError):
+        if len(data) > MAX_SNAPSHOT_BYTES:
+            raise ValueError
+        tasks = json.loads(data)["tasks"]
+        if not isinstance(tasks, list):
+            raise TypeError
+    except (ValueError, KeyError, TypeError, RecursionError):
         reader.issues.append(".project/tasks.json is unreadable; tasks are shown from the track alone")
         return None
-    return [t for t in tasks if isinstance(t, dict) and isinstance(t.get("id"), str)]
-
-
-def _number(value) -> float | None:
-    return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+    return [t for t in tasks if isinstance(t, dict)]
 
 
 def _from_snapshot(task: dict) -> dict:
+    raw_rounds = task.get("rounds") if isinstance(task.get("rounds"), list) else []
     rounds = []
-    for i, r in enumerate(task.get("rounds") or [], 1):
+    for i, r in enumerate(raw_rounds[:MAX_ROUNDS], 1):
         r = r if isinstance(r, dict) else {}
         rounds.append({"round": i, "sent_at": _number(r.get("sent_at")), "reported_at": _number(r.get("reported_at")),
-                       "summary": r.get("summary"), "blocked": bool(r.get("blocked")),
-                       "artifact_present": r.get("artifact_present"), "feedback": r.get("feedback")})
+                       "summary": _text(r.get("summary")),
+                       "blocked": r.get("blocked") if isinstance(r.get("blocked"), bool) else None,
+                       "artifact_present": r.get("artifact_present") if isinstance(r.get("artifact_present"), bool) else None,
+                       "feedback": _text(r.get("feedback"))})
     accept = task.get("accept")
+    accept = [a for a in accept if isinstance(a, str)][:MAX_ROUNDS * 10] if isinstance(accept, list) else []
     return {
-        "session": task.get("session"), "tool": task.get("tool"), "model": task.get("model"),
-        "status": task.get("status"), "opened_at": _number(task.get("opened_at")),
-        "closed_at": _number(task.get("closed_at")),
-        "input": {"goal": task.get("goal") or "", "accept": accept if isinstance(accept, list) else [],
-                  "artifact": str(task.get("artifact") or ""), "brief": task.get("brief") or None},
-        "rounds": rounds, "checked": task.get("checked"), "note": task.get("note"),
+        "session": _text(task.get("session")), "tool": _text(task.get("tool")), "model": _text(task.get("model")),
+        "action": task.get("action") if isinstance(task.get("action"), str) and _ACTION.match(task["action"]) else None,
+        "status": task.get("status") if task.get("status") in STATUSES else None,
+        "opened_at": _number(task.get("opened_at")), "closed_at": _number(task.get("closed_at")),
+        "goal": _text(task.get("goal")), "accept": accept or None, "artifact": _text(task.get("artifact")),
+        "brief": _text(task.get("brief")), "rounds": rounds,
+        "checked": _text(task.get("checked")), "note": _text(task.get("note")),
     }
 
 
-def _task_row(tid: str, n: int, entry: dict | None, events: list[dict], stored: dict | None) -> dict:
-    sources = [name for name, have in (("markdown", entry), ("journal", events), ("tasks.json", stored)) if have]
-    base = _from_snapshot(stored) if stored else None
+# --- rows ---
+
+
+def _first(*values):
+    return next((v for v in values if v is not None), None)
+
+
+def _merge_input(stored: dict, entry: dict | None) -> dict | None:
+    md = (entry or {}).get("input") or {}
+    goal, artifact = _first(stored.get("goal"), md.get("goal")), _first(stored.get("artifact"), md.get("artifact"))
+    accept, brief = _first(stored.get("accept"), md.get("accept")), _first(stored.get("brief"), md.get("brief"))
+    if goal is None and artifact is None and not accept:
+        return None
+    return {"goal": goal or "", "accept": accept or [], "artifact": artifact or "", "brief": brief}
+
+
+def _merge_rounds(stored: list[dict], md: list[dict], count: int) -> list[dict]:
+    rounds = []
+    for i in range(1, count + 1):
+        s = stored[i - 1] if i <= len(stored) else {}
+        m = md[i - 1] if i <= len(md) else {}
+        rounds.append({
+            "round": i, "sent_at": s.get("sent_at"), "reported_at": s.get("reported_at"),
+            "summary": _first(s.get("summary"), m.get("summary")),
+            "blocked": bool(_first(s.get("blocked"), m.get("blocked"))),
+            "artifact_present": s.get("artifact_present"),
+            "feedback": _first(s.get("feedback"), m.get("feedback")),
+        })
+    return rounds
+
+
+def _task_row(tid: str, n: int, entry: dict | None, events: list[dict], raw_stored: dict | None) -> dict:
+    sources = [name for name, have in (("markdown", entry), ("journal", events), ("tasks.json", raw_stored)) if have]
+    stored = _from_snapshot(raw_stored) if raw_stored else {}
+    md = entry or {}
     last = events[-1] if events else {}
-    closing = next((e for e in reversed(events) if e.get("event") in ("accept", "fail")), None)
-    opening = next((e for e in events if e.get("event") == "open"), None)
-    md_status = (entry or {}).get("md_status")
+    closings = [e for e in events if e["event"] in ("accept", "fail")]
+    closing = closings[-1] if closings else None
+    closed_event_at = next((e["at"] for e in reversed(closings) if e["at"] is not None), None)
+    opening = next((e for e in events if e["event"] == "open"), None)
+    md_status = {"reported": "open"}.get(md.get("md_status"), md.get("md_status"))
+    md_status = md_status if md_status in STATUSES else None
 
-    status = last.get("status") or (base or {}).get("status") or (
-        {"reported": "open"}.get(md_status, md_status) if md_status else None)
-    closed_at, approximate = _number((closing or {}).get("at")), False
-    if closed_at is None and base:
-        closed_at = base["closed_at"]
-    if closed_at is None and status not in (None, "open") and entry:
-        closed_at = _minute(entry.get("closed_minute"))
+    status = _first(last.get("status"), stored.get("status"), md_status)
+    if closing and closing["status"] in ("accepted", "failed"):
+        status = closing["status"]
+    closed_at, approximate = _first(closed_event_at, stored.get("closed_at")), False
+    if closed_at is None and status not in (None, "open"):
+        closed_at = _minute(md.get("closed_minute"))
         approximate = closed_at is not None
+    if status == "open":
+        closed_at, approximate = None, False
 
-    if base:
-        rounds, task_input, checked, note = base["rounds"], base["input"], base["checked"], base["note"]
-    elif entry:
-        rounds, task_input, checked, note = entry["rounds"], entry["input"], entry.get("checked"), entry.get("note")
-    else:
-        rounds, task_input, checked, note = [], None, None, None
-    rounds_count = max(len(rounds), int(last.get("round") or 0), (entry or {}).get("rounds_count") or 0)
-    if len(rounds) < rounds_count:
-        rounds = rounds + [{"round": i} for i in range(len(rounds) + 1, rounds_count + 1)]
+    journal_rounds = max((e["round"] or 0 for e in events), default=0)
+    count = min(MAX_ROUNDS, max(len(stored.get("rounds", [])), len(md.get("rounds", [])), journal_rounds, md.get("rounds_count") or 0))
+    rounds = _merge_rounds(stored.get("rounds", []), md.get("rounds", []), count)
     current = rounds[-1] if rounds else {}
-    reported = bool(current.get("summary") or current.get("reported_at")) or (
-        not base and (last.get("event") == "report" or md_status == "reported"))
+    reported = bool(current.get("summary") or current.get("reported_at")) or last.get("event") == "report" or (
+        md.get("md_status") == "reported" and not events)
     if status == "open":
         state = "awaiting review" if reported else "awaiting report"
-    elif status in ("accepted", "failed"):
-        state = status
     else:
         state = status or "unknown"
 
-    action = last.get("action") or (opening or {}).get("action") or (stored or {}).get("action")
-    if action is None and entry:
-        found = _TASK_ID.match(tid)
-        action = found[2] if found else None
-    def pick(key):
-        return (base or {}).get(key) or (entry or {}).get(key) or last.get(key)
-
+    action = _first(last.get("action"), (opening or {}).get("action"), stored.get("action"))
+    if action is None and _TASK_ID.match(tid):
+        action = _TASK_ID.match(tid)[2]
+    opened_at = _first(stored.get("opened_at"), (opening or {}).get("at"))
     return {
         "id": tid, "generation": n, "action": action, "unlinked": action is None,
-        "session": pick("session"), "tool": pick("tool"), "model": pick("model"),
+        "session": _first(stored.get("session"), md.get("session"), last.get("session")),
+        "tool": _first(stored.get("tool"), md.get("tool")), "model": _first(stored.get("model"), md.get("model")),
         "status": status, "state": state, "blocked": bool(current.get("blocked")) and status == "open" and reported,
-        "opened_at": (base or {}).get("opened_at") or _number((opening or {}).get("at")) or (entry or {}).get("opened_at"),
-        "opened_approx": not base and not opening and bool(entry and entry.get("opened_at")),
+        "opened_at": _first(opened_at, md.get("opened_at")),
+        "opened_approx": opened_at is None and md.get("opened_at") is not None,
         "closed_at": closed_at, "closed_approx": approximate,
-        "input": task_input, "rounds": rounds, "checked": checked, "note": note,
+        "input": _merge_input(stored, entry), "rounds": rounds,
+        "checked": _first(stored.get("checked"), md.get("checked")), "note": _first(stored.get("note"), md.get("note")),
         "sources": sources,
-        "raw": entry["raw"] if entry and entry["ambiguous"] and not base else None,
+        "raw": md.get("raw") if md.get("ambiguous") else None,
     }
 
 
@@ -301,13 +482,19 @@ def generations(reader: _Reader, project: str) -> list[int]:
     if reader.inside(folder) is None or not folder.is_dir():
         return []
     return sorted((int(p.name) for p in folder.iterdir()
-                   if p.name.isdigit() and p.is_dir() and reader.inside(p) is not None), reverse=True)
+                   if re.fullmatch(_N, p.name) and int(p.name) > 0 and p.is_dir() and reader.inside(p) is not None),
+                  reverse=True)
 
 
 def read(project: str, wanted: int | None = None) -> dict:
     """The progress of one direction, the current one by default; a direction that isn't there falls back to it."""
     with _shared_lock(project):
         return _read(project, wanted)
+
+
+def _placeholder(direction: str) -> bool:
+    body = track._section(direction, "Direction")
+    return not body or body == track.DIRECTION_PLACEHOLDER
 
 
 def _read(project: str, wanted: int | None) -> dict:
@@ -333,45 +520,30 @@ def _read(project: str, wanted: int | None) -> dict:
     plan = reader.text(folder / "PLAN.md")
     result.update(direction=direction, plan=plan)
     result["missing"].update(direction=direction is None, plan=plan is None)
-    result["direction_placeholder"] = direction is not None and not track.direction_text(project, n)
+    result["direction_placeholder"] = direction is not None and _placeholder(direction)
 
     entries: dict[str, dict] = {}
     files = []
     if reader.inside(folder) is not None:
         files = sorted((p for p in folder.iterdir() if _EXECUTION.match(p.name)), key=lambda p: int(_EXECUTION.match(p.name)[1]))
     for path in files:
-        text = reader.text(path)
-        if text is None:
+        if reader.inside(path) is None or not path.is_file():
             continue
         result["missing"]["executions"] = False
-        for heading, raw in _split_entries(text):
-            note = _parse_note(heading, raw, n)
-            if note:
-                result["notes"].append(note)
-                continue
-            entry = parse_task_entry(heading, raw)
-            if entry is None:
-                tid = heading.split()[0] if heading.split() else ""
-                if _TASK_ID.match(tid):
-                    entries.setdefault(tid, {"id": tid, "raw": raw, "ambiguous": True, "rounds": [], "input": None,
-                                             "md_status": None, "closed_minute": None, "rounds_count": None,
-                                             "opened_at": None, "session": None, "tool": None, "model": None})
-                else:
-                    reader.issues.append(f"{path.name}: an entry '## {heading[:60]}' isn't a task or a note; skipped")
-                continue
-            if not entry["id"].startswith(f"P{n}_"):
-                reader.issues.append(f"{path.name}: {entry['id']} belongs to another direction; skipped")
-                continue
-            entries[entry["id"]] = entry
+        _execution(reader, path, n, entries, result["notes"])
 
-    events: dict[str, list[dict]] = {}
-    for event in _journal(reader, project):
-        if event.get("direction") == n:
-            events.setdefault(event["id"], []).append(event)
-    snapshot = {t["id"]: t for t in (stored or []) if t.get("direction") == n}
+    events = _journal(reader, project, n)
+    snapshot: dict[str, dict] = {}
+    for task in stored or []:
+        if _generation(task.get("direction")) == n and _id_in(task.get("id"), n):
+            snapshot[task["id"]] = task
 
     for tid in dict.fromkeys([*entries, *events, *snapshot]):
-        row = _task_row(tid, n, entries.get(tid), events.get(tid, []), snapshot.get(tid))
+        try:
+            row = _task_row(tid, n, entries.get(tid), events.get(tid, []), snapshot.get(tid))
+        except (ValueError, TypeError, KeyError, AttributeError, OverflowError):
+            reader.issues.append(f"{tid}: its records couldn't be read together; skipped")
+            continue
         (result["active"] if row["status"] == "open" else result["completed"]).append(row)
     result["active"].sort(key=_open_key)
     result["completed"].sort(key=_closed_key)

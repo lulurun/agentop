@@ -1,5 +1,6 @@
 """The Progress Viewer's read of a track: tasks, their order and rounds, notes, generations and damaged records."""
 
+import json
 import os
 import time
 from pathlib import Path
@@ -169,7 +170,7 @@ def test_damaged_records_leave_the_rest_readable(alpha, capsys, sessions, monkey
     result = progress.read(alpha)
     assert rows(result) == ["P1_M2A2-1", "P1_M2A1-1"]
     assert any("tasks.json is unreadable" in i for i in result["issues"])
-    assert any("2 unreadable lines" in i for i in result["issues"])
+    assert any("2 lines unreadable" in i for i in result["issues"])
 
     # Journal only: the Markdown entry is gone, so its input and output are unavailable.
     (folder() / "track/1/EXECUTION_M2.md").unlink()
@@ -236,3 +237,103 @@ def test_the_route_is_authenticated_and_scoped_to_the_plugins_projects(client):
     assert client.get(f"{base}/alpha/progress?generation=0", headers=AUTH).status_code == 422
     assert client.get(f"{base}/theirs/progress", headers=AUTH).status_code == 404
     assert client.get(f"{base}/nope/progress", headers=AUTH).status_code == 404
+
+
+def closed_pair(capsys, sessions, monkeypatch):
+    """Two parallel tasks of one action, closed in reverse open order within a minute: P1_M2A1-1 is the newest closure."""
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A1")
+    report(monkeypatch, capsys, "dev", "dev's summary")
+    report(monkeypatch, capsys, "api", "api's summary")
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "x", "--project", "alpha")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "y", "--project", "alpha")
+
+
+def test_an_undecodable_direction_is_still_shown_with_the_rest(alpha, capsys, sessions, monkeypatch):
+    closed_pair(capsys, sessions, monkeypatch)
+    (folder() / "track/1/DIRECTION.md").write_bytes(b"# Direction 1\n\n## Direction\n\xff\n")
+    result = progress.read(alpha)
+    assert "\ufffd" in result["direction"] and not result["direction_placeholder"]
+    assert [t["id"] for t in result["completed"]] == ["P1_M2A1-1", "P1_M2A1-2"] and result["plan"]
+    (folder() / "track/1/DIRECTION.md").write_bytes(b"## Direction\n\n" + track.DIRECTION_PLACEHOLDER.encode() + b"\n\xff")
+    assert progress.read(alpha)["direction_placeholder"] is False
+    (folder() / "track/1/DIRECTION.md").write_text("## Direction\n\n" + track.DIRECTION_PLACEHOLDER + "\n")
+    assert progress.read(alpha)["direction_placeholder"] is True
+
+
+def test_malformed_journal_values_are_ignored_and_valid_events_kept(alpha, capsys, sessions, monkeypatch):
+    closed_pair(capsys, sessions, monkeypatch)
+    without_snapshot()
+    bad = [
+        {"id": "P1_M2A1-1", "direction": 1, "round": "bad", "event": "report", "status": "open", "at": 1.0},
+        {"id": "P1_M2A1-2", "direction": 1, "round": 10**12, "event": "open", "status": "open", "at": "soon"},
+        {"id": "P1_M2A1-2", "direction": 1, "round": 1, "event": "fail", "status": "weird", "at": -5},
+        {"id": "P1_M2A1-1", "direction": True, "event": "fail", "status": "failed", "at": 9e99},
+        {"id": "P1_M2A1-1", "direction": "1", "event": "fail", "status": "failed", "at": 9e99},
+        {"id": "P2_M2A1-1", "direction": 1, "event": "fail", "status": "failed", "at": 9e99},
+        {"id": 7, "direction": 1}, {"id": "P1_M2A1-1", "direction": 1, "action": {"x": 1}, "session": ["s"]},
+    ]
+    with open(folder() / "track/tasks.jsonl", "a") as f:
+        f.writelines(json.dumps(e) + "\n" for e in bad)
+        f.write('{"id": "P1_M2A1-1", "direction": 1, "event": "accept", "status": "accepted", "at": NaN, "round": Infinity}\n')
+        f.write('{"id": "P1_M2A1-1", "direction": 1, "at": 1e400}\n')
+    result = progress.read(alpha)
+    assert [t["id"] for t in result["completed"]] == ["P1_M2A1-1", "P1_M2A1-2"]
+    dev = by_id(result)["P1_M2A1-1"]
+    assert dev["state"] == "accepted" and dev["closed_at"] and not dev["closed_approx"] and len(dev["rounds"]) == 1
+    assert dev["action"] == "M2A1" and dev["session"] == "dev" and dev["rounds"][0]["summary"] == "dev's summary"
+    assert any("invalid fields" in i for i in result["issues"]) and any("unreadable" in i for i in result["issues"])
+    json.dumps(result, allow_nan=False)
+
+
+def test_a_malformed_or_incomplete_snapshot_row_does_not_erase_the_markdown(alpha, capsys, sessions, monkeypatch):
+    closed_pair(capsys, sessions, monkeypatch)
+    path = folder() / ".project/tasks.json"
+    tasks = json.loads(path.read_text())["tasks"]
+    tasks[0] = {"id": "P1_M2A1-1", "direction": 1, "rounds": "x", "goal": 5, "accept": "no", "status": "weird",
+                "closed_at": float("inf"), "opened_at": True, "checked": ["y"]}
+    tasks[1] = {"id": "P1_M2A1-2", "direction": 1, "rounds": [None, {"summary": 3}] * 10**4}
+    path.write_text(json.dumps({"tasks": tasks}))
+    result = by_id(progress.read(alpha))
+    dev, api = result["P1_M2A1-1"], result["P1_M2A1-2"]
+    assert dev["input"]["goal"] == "dev's goal" and dev["input"]["accept"] == ["tests pass"]
+    assert dev["rounds"][0]["summary"] == "dev's summary" and dev["checked"] == "y" and dev["state"] == "accepted"
+    assert api["input"]["artifact"] == "results/api.md" and api["rounds"][0]["summary"] == "api's summary"
+    assert len(api["rounds"]) == progress.MAX_ROUNDS
+    assert [t["id"] for t in progress.read(alpha)["completed"]] == ["P1_M2A1-1", "P1_M2A1-2"]
+
+
+def test_records_past_the_first_megabyte_are_read_and_oversized_ones_skipped(alpha, capsys, sessions, monkeypatch):
+    closed_pair(capsys, sessions, monkeypatch)
+    without_snapshot()
+    journal = folder() / "track/tasks.jsonl"
+    padding = json.dumps({"id": "P9_M1A1-1", "direction": 9, "event": "open", "status": "open", "at": 1.0, "pad": "x" * 200})
+    huge = json.dumps({"id": "P1_M2A1-1", "direction": 1, "event": "accept", "pad": "x" * (progress.MAX_RECORD_BYTES + 10)})
+    journal.write_text((padding + "\n") * 6000 + huge + "\n" + journal.read_text())
+    assert journal.stat().st_size > 2_000_000
+
+    execution = folder() / "track/1/EXECUTION_M2.md"
+    head, _, entries = execution.read_text().partition("\n## ")
+    notes = "".join(f"## P1_M2A1 note {k}  by: coordinator\n2026-11-25 10:00\n\n{'n' * 1000}\n\n" for k in range(1, 1500))
+    oversized = "## P1_M2A2-9  session `big`  claude\n" + ("y" * 1000 + "\n") * 300 + "\n"
+    execution.write_text(head + "\n\n" + notes + oversized + "## " + entries)
+    assert execution.stat().st_size > 1_500_000
+
+    result = progress.read(alpha)
+    assert [t["id"] for t in result["completed"]] == ["P1_M2A1-1", "P1_M2A1-2", "P1_M2A2-9"]
+    dev = by_id(result)["P1_M2A1-1"]
+    assert not dev["closed_approx"] and dev["input"]["goal"] == "dev's goal" and dev["rounds"][0]["summary"] == "dev's summary"
+    assert by_id(result)["P1_M2A2-9"]["raw"] is None and len(result["notes"]) == 1499
+    assert any("over" in i and "tasks.jsonl" in i for i in result["issues"])
+    assert any("P1_M2A2-9" in i and "isn't shown" in i for i in result["issues"])
+
+
+def test_markdown_records_of_another_direction_are_never_joined(alpha, capsys, sessions, monkeypatch):
+    closed_pair(capsys, sessions, monkeypatch)
+    with open(folder() / "track/1/EXECUTION_M2.md", "a") as f:
+        f.write("\n## P2_M2A1-1  garbled heading\nx\n\n## P2_M2A1 note 1  by: coordinator\n2026-11-25 10:00\n\nforeign\n"
+                "\n## P2_M2A1-2  session `z`  claude\nOpened 2026-11-25 10:00 · rounds 1 · open\n")
+    result = progress.read(alpha)
+    assert rows(result) == ["P1_M2A1-1", "P1_M2A1-2"] and result["notes"] == []
+    assert sum("belongs to another direction" in i for i in result["issues"]) == 3
