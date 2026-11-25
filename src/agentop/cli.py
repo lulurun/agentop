@@ -108,7 +108,7 @@ def _own_project(args) -> str:
 
 
 def _tracked_coordinator(project: str) -> bool:
-    """Whether this runs in a Projects project's Coordinator, which delegates through `agentop task start`."""
+    """Whether this runs in a Projects project's Coordinator, which delegates through `agentop coordinator task start`."""
     from agentop import projects
 
     here = _ops().current_session()
@@ -121,8 +121,8 @@ def cmd_start(args):
     project = _own_project(args)
     if _tracked_coordinator(project) and not args.untracked:
         print(
-            "Error: a Coordinator delegates with agentop task start, which records the goal, criteria and artifact. "
-            "Add --untracked only for a session that is not a task (it shows in agentop review)",
+            "Error: a Coordinator delegates with agentop coordinator task start, which records the goal, criteria and "
+            "artifact. Add --untracked only for a session that is not a task (it shows in agentop coordinator review)",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -331,8 +331,13 @@ def cmd_project_remove(args):
         if s.get("project") == args.name:
             print(f"Stopping {s['display_name']} …")
             _ops().stop(s["name"])
+    if not args.delete_folder:
+        from agentop.plugins.projects import pursuit
+
+        for task in pursuit.interrupt_open(args.name):
+            print(f"Task {task['id']} ({task['session']}) is marked interrupted.")
     projects.remove(args.name, args.delete_folder)
-    print(f"Removed {args.name}" + (", and its folder" if args.delete_folder else f"; its folder is kept: {found['folder']}"))
+    print(f"Removed {args.name}" + (", and its folder" if args.delete_folder else f"; its folder and track/ are kept: {found['folder']}"))
 
 
 def cmd_project_show(args):
