@@ -268,6 +268,24 @@ def test_plan_commands_place_number_and_ask(alpha, capsys):
     assert "waiting on owner" in out
 
 
+def test_a_reworded_owner_yield_reuses_the_open_ask(alpha, capsys):
+    setup_plan(capsys)
+    first = ("M5 (direction change) is accepted and installed (cebe5d8). May I merge coordinator-track (M1-M5, local) "
+             "into main and push to github lulurun/agentop (M4A2)?")
+    again = "May I merge coordinator-track (M1-M5, local) into main and push to github lulurun/agentop (M4A2)?"
+    out, _ = ag(capsys, "coordinator", "yield", "owner", "--question", first, "--recommend", "Yes", "--default", "Hold",
+                "--project", "alpha")
+    ref = out.split("Recorded as ")[1].split(",")[0]
+    out, _ = ag(capsys, "coordinator", "yield", "owner", "--question", again, "--recommend", "Yes", "--default", "Hold",
+                "--project", "alpha")
+    assert f"Recorded as {ref}, waiting on owner, in the plan, asked 2×" in out
+    text = (folder() / "track/1/PLAN.md").read_text()
+    assert text.count("[waiting on owner]") == 1 and f"Question: {again}" in text
+    out, _ = ag(capsys, "coordinator", "yield", "owner", "--question", "May I merge?", "--recommend", "Yes",
+                "--default", "Hold", "--project", "alpha")
+    assert ref not in out and (folder() / "track/1/PLAN.md").read_text().count("[waiting on owner]") == 2
+
+
 def test_remove_only_unregisters_and_the_project_recreated_on_its_folder_resumes(alpha, capsys, sessions, monkeypatch):
     setup_plan(capsys)
     start(capsys, "dev", "M2A1")

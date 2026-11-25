@@ -18,7 +18,7 @@ from agentop.paths import state_dir
 from agentop.status_feed import SessionStatus, fetch
 from agentop.tmux import CapturePane
 
-from . import pursuit
+from . import pursuit, track
 
 CLEAR_TIMEOUT = 20.0
 # The feed is refreshed on the service's 2 s scan, so a turn that is just ending gets this long to show its Stop.
@@ -108,6 +108,22 @@ def blocker(project: str, explicit: bool = False, task: str | None = None) -> st
     if problems:
         return f"the track checks fail: {problems[0]}"
     return None
+
+
+def owner_ask_blocker(project: str) -> str | None:
+    """Why the owner's question must stay on screen: the last yield asked the owner and its ask is still open."""
+    last_yield = next((e for e in reversed(pursuit.events(project)) if e["kind"] == "yield"), None)
+    if last_yield is None or last_yield.get("type") != "owner":
+        return None
+    ref = last_yield.get("action")
+    if ref is None:
+        return "the last yield asked the owner, and the question is only on the screen"
+    try:
+        m, a = track.parse_ref(project, ref, True)
+        status = track.find_action(track.load_plan(project), m, a)["status"]
+    except track.TrackError:
+        return None
+    return f"{ref} asks the owner and is still open" if status == "waiting on owner" else None
 
 
 def known(status: SessionStatus | None) -> SessionStatus | None:
@@ -258,7 +274,7 @@ def clear_reason(project: str, row: dict, agent: AgentCli) -> tuple[str, bool] |
 def safety_clear(project: str, pane: Pane, why: str, explicit: bool = False) -> str:
     """Clear at a safe point with no event to deliver; after a yield --clear, tell it to carry on. Returns what happened."""
     with _one_at_a_time(project):
-        reason = blocker(project, explicit=explicit) or session_blocker(pane)
+        reason = blocker(project, explicit=explicit) or owner_ask_blocker(project) or session_blocker(pane)
         if reason is not None:
             pursuit.log(project, "clear.skipped", reason=reason, why=why)
             return "not cleared"

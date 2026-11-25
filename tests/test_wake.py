@@ -315,10 +315,9 @@ def test_a_closed_milestone_clears_at_the_next_safe_point(alpha, monkeypatch, ca
 def test_yield_clear_goes_through_the_same_check_then_says_carry_on(alpha, monkeypatch, capsys):
     monkeypatch.setattr(wake, "context_share", lambda row, agent: None)
     monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
-    fields = dict.fromkeys(("evidence", "meanwhile", "need", "tried", "note"), "")
-    cli.run_yield(SimpleNamespace(kind="owner", project=None, clear=True, keep=False, question="Ship it?",
-                                  recommend="Yes", default="Ship Friday", next="Draft the release notes while I wait.",
-                                  **fields))
+    fields = dict.fromkeys(("question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")
+    cli.run_yield(SimpleNamespace(kind="done", project=None, clear=True, keep=False, evidence="login ships",
+                                  next="Draft the release notes while I wait.", **fields))
     assert "once it has ended and it is safe" in capsys.readouterr().out
     pane = FakePane(screen="draft")
     assert turn_ends(pane) == ["not cleared"] and pane.typed == []
@@ -329,6 +328,53 @@ def test_yield_clear_goes_through_the_same_check_then_says_carry_on(alpha, monke
     assert pursuit.pending_clear("alpha") is None
     pane = FakePane()
     assert turn_ends(pane) == []
+
+
+def owner_yield(clear=False, question="M1 is done. May I merge login into main?"):
+    fields = dict.fromkeys(("evidence", "meanwhile", "need", "tried", "note", "next"), "")
+    cli.run_yield(SimpleNamespace(kind="owner", project=None, clear=clear, keep=False, question=question,
+                                  recommend="Yes", default="Hold the merge", **fields))
+
+
+def close_m1():
+    for ref in ("M1A1", "M1A2"):
+        with pursuit._locked("alpha"):
+            track.add_note("alpha", ref, "did it myself", "coordinator")
+            track.set_action("alpha", ref, "done", "", "")
+    cli.coordinator_milestone(SimpleNamespace(milestone_command="close", milestone="M1", summary="Login in."), "alpha")
+
+
+@pytest.mark.parametrize("clear", [False, True])
+def test_an_open_owner_ask_is_never_cleared_off_the_screen_until_the_owner_wakes_it(alpha, monkeypatch, capsys, clear):
+    monkeypatch.setattr(wake, "context_share", lambda row, agent: (190_000, 200_000))
+    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
+    close_m1()
+    owner_yield(clear)
+    ask = pursuit.events("alpha")[-1 - clear]["action"]
+    pane = FakePane()
+    assert turn_ends(pane) == ["not cleared"] and pane.typed == []
+    skipped = events("clear.skipped")[-1]
+    assert skipped["reason"] == f"{ask} asks the owner and is still open"
+    assert skipped["why"] == ("the yield asked for it" if clear else "M1 was closed")
+    assert turn_ends(FakePane()) == ["not cleared"]
+    # The owner answers: the ask closes, and the deferred clear happens at the end of the next yield's turn.
+    pursuit.wake_note("alpha", "owner")
+    with pursuit._locked("alpha"):
+        track.answer("alpha", ask, "Yes, merge it")
+        track.add_action("alpha", ask.partition("A")[0], "Merge login")
+    pursuit.yield_turn("alpha", "done", {"evidence": "merged", "next": "Pick the next milestone with the owner."})
+    pane = FakePane()
+    assert turn_ends(pane) == ["cleared"] and pane.typed[0] == "/clear"
+    assert events("clear.verified")[-1]["why"] == ("the yield asked for it" if clear else "M1 was closed")
+
+
+def test_a_task_event_still_clears_over_an_owner_yield(alpha, monkeypatch, capsys):
+    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
+    task()
+    owner_yield()
+    pane = FakePane()
+    report(monkeypatch, pane)
+    assert pane.typed[0] == "/clear" and events("wake")[-1]["cleared"] == "cleared"
 
 
 def test_the_safety_net_waits_for_the_feed_not_the_screen(alpha, monkeypatch):

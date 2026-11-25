@@ -493,6 +493,12 @@ def _norm(text: str) -> str:
     return " ".join(text.lower().split()).rstrip("?. ")
 
 
+def _same_question(one: str, other: str) -> bool:
+    # A re-ask often drops or adds a lead-in sentence; containment catches that without matching a short fragment.
+    short, long = sorted((_norm(one), _norm(other)), key=len)
+    return short == long or (short in long and 2 * len(short) >= len(long))
+
+
 def ask(project: str, ref: str | None, question: str, recommend: str, default: str) -> tuple[dict, bool]:
     """A waiting-on-owner action carrying the question; the same open question is refreshed, not added twice.
 
@@ -504,7 +510,7 @@ def ask(project: str, ref: str | None, question: str, recommend: str, default: s
     plan = load_plan(project)
     same = next(
         (x for ms in plan["milestones"] for x in ms["actions"]
-         if x["status"] == "waiting on owner" and _note(x, "Question") and _norm(_note(x, "Question")) == _norm(question)),
+         if x["status"] == "waiting on owner" and _same_question(_note(x, "Question"), question)),
         None,
     )
     milestone = None
