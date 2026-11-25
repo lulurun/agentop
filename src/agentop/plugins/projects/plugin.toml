@@ -5,4 +5,4 @@ description = "Your projects: each a group of sessions and a shared folder, run 
 plugin_api = 1
 default_enabled = true
 ui = ["feature"]
-cli = ["task", "yield", "review"]
+cli = ["coordinator", "task", "yield", "review"]
