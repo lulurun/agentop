@@ -53,7 +53,7 @@ Everything above is the **core**. It is always loaded and cannot be switched off
 - Each plugin is one folder under `src/agentop/plugins/`, with its UI under `ui/src/plugins/`, and a `plugin.toml` manifest.
 - A core loader finds them at service start and loads each one on its own. A plugin gets a narrow API: its own routes under `/api/v2/plugins/<id>/`, core events, supervised background tasks, a hook for being turned off, its own data folder, and `agentop` commands of its own.
 - Plugin UI goes into fixed slots in the app, such as a badge on a session row, a feature in the header, or a section in the service's Status tab. Status → Plugins switches each plugin on or off for that service.
-- **A plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
+- **Plugins can be disabled independently.** Sessions, terminals, and service control keep working; status-driven Projects checks and dialogue turn completion depend on the Waiting for input plugin.
 
 The plugins that ship with agentop are Projects, Dialogues, Waiting for input, the File viewer, Memory, Email code, and the Input bar. How they work and what each one does is in [docs/0_12_00_plugins.md](docs/0_12_00_plugins.md).
 
@@ -160,6 +160,7 @@ For a service reachable from the internet, such as one behind an HTTPS proxy:
 - [Architecture](docs/0_03_architecture.md): code structure and modules
 - [Projects](docs/0_13_projects.md): a goal, and a Coordinator session that drives other agents to reach it
 - [Plugins](docs/0_12_00_plugins.md): how plugins work, and what each one does; the larger ones have their own `0_12_<number>_<id>.md`
+- [Agent status detection](docs/0_12_05_attention.md): lifecycle events, screen fallback, reliability, timing, and cost
 - [UI](docs/0_10_ui.md): the app's layout, where tabs open, and its keys
 - [Manual tests](docs/8_manual-tests.md): checks that need a real PC
 - [Backlog](docs/9_backlog.md): everything not done yet, by priority

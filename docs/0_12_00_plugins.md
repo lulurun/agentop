@@ -82,7 +82,7 @@ A narrow object, not the service internals:
 | `api.emit(data)` | Sends `{"type": "plugin", "id": …, "data": …}` on the events socket for the plugin's UI |
 | `api.log` | A logger named `agentop.plugins.{id}` |
 
-There is no API for driving agents. A plugin that drives agents uses the core's own functions (`ops.start`, `AgentInstance`, `Actor`), and the sessions it starts are ordinary managed sessions, which it can make `readonly` or not `counted`. A dialogue's orchestrator is a process of its own, started with or without a service, so a service-side API couldn't reach it anyway.
+There is no API for driving agents. A plugin that drives agents uses the core's own functions (`ops.start`, `AgentInstance`, `Actor`), and the sessions it starts are ordinary managed sessions, which it can make `readonly` or not `counted`. A dialogue's orchestrator is a separate process and receives session status through the attention plugin's local socket.
 
 Isolation here is fault isolation, not protection: a timed-out handler's thread keeps running, and an async route or task that blocks stalls the service ([backlog](9_backlog.md#plugins-say-what-isolation-means)).
 
@@ -169,12 +169,13 @@ A box below a session's terminal to type prompts in, with buttons for Esc, the a
 
 ### Waiting for input (`attention`)
 
-Marks a session "Waiting" in the list once its agent was working and its screen has then stayed the same for 4s; any later change clears it. The open session is never marked.
+For the old and new detection methods, measured cost, timing, and limitations, see [Detecting agent status](0_12_05_attention.md).
 
-- On `scan` (the service's 2s tick) it lists every pane with one `tmux list-panes -a`, and reads the visible screen of a session's first pane, in its first window, where agentop starts the agent, only when that pane printed something since its last read.
-- The first look is only a baseline, so an agent idle from the start, or a service restart, marks nothing. The screen after a resize is a new baseline too, since the agent redraws. A tick that finds the last one still running is skipped.
-- It sends the waiting set with `api.emit` when it changes, and fills `session-badge` and `settings-section`, which shows what each tick costs (`GET /state`). Turned off, it costs nothing.
-- Watching output with `pipe-pane` was considered and dropped: `-o` toggles off an existing pipe, and the FIFOs and `cat` processes would need syncing with sessions as they come and go. Busy and idle stay on tmux signals, not agent hooks ([design D10](0_00_design.md#15-decisions)).
+Managed Claude Code and Codex sessions emit lifecycle events into per-session files under `state/signals/`. The watcher marks a session waiting when a turn ends or the tool requests input; a new prompt or tool activity clears the mark. Screen changes alone do not clear a hook-based mark. The Projects checker subscribes to the plugin’s per-session feed. Codex approvals are checked against the screen because automatic review can emit a permission event without a prompt.
+
+For unmanaged sessions, Antigravity, or sessions with no hook events, the watcher falls back to the screen: a change followed by four seconds of quiet is waiting. For a hook-based working turn, disappearance of a previously observed `esc to interrupt` footer for two scans also ends the turn. The fallback cannot identify every error or interruption. The first screen look and a resize are baselines. `GET /state` reports the waiting set and scan costs; turning the plugin off stops its watcher.
+
+Use `python tools/test_status.py --session <tmux-name>` to watch a managed session's events, or `--probe claude` / `--probe codex` to run a short prompt with temporary configuration and copied credentials. The probe uses the signed-in account and reports the raw events and exit status; it does not test an interactive approval dialog.
 
 ### File viewer (`viewer`)
 

@@ -1,7 +1,7 @@
 id = "attention"
 name = "Waiting for input"
 version = "0.1.0"
-description = "Marks sessions whose agent was working and has stopped, so it is likely waiting for you. It reads each session's screen on the service's 2s tick; turn it off here if that costs too much."
+description = "Marks sessions whose agent was working and has stopped, so it is likely waiting for you. It uses lifecycle events where available and checks screens as a fallback."
 plugin_api = 1
 default_enabled = true
 ui = ["session-badge", "settings-section"]

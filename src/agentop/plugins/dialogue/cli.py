@@ -1,9 +1,4 @@
-"""The Dialogues plugin's command: `agentop dialogue start | list | stop | remove`.
-
-Loaded by the CLI (agentop/plugin_cli.py) without the plugin's __init__.py. It
-works with the service down: dialogues are folders, and the orchestrator is a
-process of its own.
-"""
+"""The Dialogues plugin’s commands; turn completion uses the attention service."""
 
 from __future__ import annotations
 

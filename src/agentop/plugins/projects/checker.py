@@ -1,11 +1,12 @@
 """Watches Projects sessions on the scan tick: a Coordinator turn that cleared its context is told to carry on,
 and a quiet task session is reminded, then the Coordinator told.
 
-Turns are told apart by the screen, as the attention plugin does (tmux only, no transcripts).
+Turns use the attention watcher, including lifecycle events and screen fallback.
 """
 
 from __future__ import annotations
 
+import queue
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -40,15 +41,22 @@ class Turn:
 
 class Checker:
     def __init__(self, deliver: Callable[[str, str, str], None], quiet_seconds: float = QUIET_SECONDS,
-                 task_quiet_seconds: float = TASK_QUIET_SECONDS, watcher=None):
+                 task_quiet_seconds: float = TASK_QUIET_SECONDS, watcher=None, status_feed=None):
         self._deliver = deliver
         self.quiet_seconds = quiet_seconds
         self.task_quiet_seconds = task_quiet_seconds
+        self.status_feed = status_feed
+        self.subscriptions = {}
+        self.statuses = {}
         self.watcher = watcher or Watcher(quiet_seconds=4.0)
         self.turns: dict[str, Turn] = {}
         self._rows: list[dict] = []
 
     def reset(self) -> None:
+        for sid, subscription in self.subscriptions.items():
+            self.status_feed.unsubscribe(sid, subscription)
+        self.subscriptions = {}
+        self.statuses = {}
         self.watcher.reset()
         self.turns = {}
 
@@ -66,17 +74,38 @@ class Checker:
             if owned[project]:
                 rows.append(row)
         self._rows = rows
-        self.watcher.tick(rows, now)
         live = {row["id"] for row in rows}
+        if self.status_feed is None:
+            self.watcher.tick(rows, now)
+        else:
+            for sid in self.subscriptions.keys() - live:
+                self.status_feed.unsubscribe(sid, self.subscriptions.pop(sid))
+                self.statuses.pop(sid, None)
+            for sid in live:
+                if sid not in self.subscriptions:
+                    self.subscriptions[sid] = self.status_feed.subscribe(sid)
+                try:
+                    self.statuses[sid] = self.subscriptions[sid].get_nowait()
+                except queue.Empty:
+                    pass
         for sid in self.turns.keys() - live:
             del self.turns[sid]
         for row in rows:
-            screen = self.watcher.screens.get(row["id"])
-            if screen is None:
-                continue
+            if self.status_feed is None:
+                screen = self.watcher.screens.get(row["id"])
+                if screen is None:
+                    continue
+                state, since = screen.state, screen.waiting_since
+            else:
+                status = self.statuses.get(row["id"])
+                if status is None:
+                    continue
+                state = status.state
+                since = status.since if state in ("done", "input") else None
             turn = self.turns.setdefault(row["id"], Turn(after=now))
-            since = screen.waiting_since
             coordinator = row.get("display_name") == projects.COORDINATOR
+            if state == "input":
+                continue
             if coordinator and since is not None and now - since >= CLEAR_SECONDS:
                 self._clear(row)
             quiet = self.quiet_seconds if coordinator else self.task_quiet_seconds

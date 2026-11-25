@@ -26,7 +26,7 @@ Dialogues are one way of using agents, not what an agent is, so they are a plugi
 ## 2 How it works
 
 1. The app's New dialogue wizard or `agentop dialogue start` makes the dialogue's folder and brief, then launches two agent tmux sessions, its Coordinator, and a background orchestrator process. The agents are sessions in the dialogue's project, `readonly` and not `counted`: Sessions doesn't list them, their terminals are read-only, and their windows are kept at 80×40 whoever watches them, since the orchestrator reads replies off the screen.
-2. The orchestrator sends turn prompts to agent A, waits for a response, extracts the message body, and forwards it to agent B — then alternates.
+2. The orchestrator subscribes to the attention plugin’s status feed for each agent, sends turn prompts to agent A, waits for completion, extracts the message body, and forwards it to agent B — then alternates. It waits during input requests. If the service or attention plugin is unavailable, status-dependent progress pauses until the feed returns.
 3. Agents signal completion by setting `status:complete` in their delimiter block.
 4. The orchestrator stops when it sees a complete signal, reaches `max_turns`, or is manually stopped.
 

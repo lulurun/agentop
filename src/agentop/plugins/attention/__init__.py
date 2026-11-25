@@ -1,21 +1,4 @@
-"""Waiting for input: marks sessions whose agent was working and has stopped.
-
-A session is **busy** while its screen keeps changing, and becomes **waiting**
-once a busy screen has stayed the same for `QUIET_SECONDS`. Any later change
-(the agent carrying on, or someone typing) clears it. An agent that has been
-idle all along is never marked: only the change from busy to quiet is.
-
-It runs on the service's `scan` tick (2s) and adds no loop of its own. Each
-tick costs one `tmux list-panes -a` for every session at once, plus one
-`capture-pane` of the visible screen (no scrollback) of the first pane in
-the first window, where agentop starts the agent, for each session whose
-pane printed something since its last capture. Idle sessions cost nothing
-beyond the shared list. A resize (opening the session in a differently sized
-terminal) makes the agent redraw, so the screen after a resize is taken as the
-new baseline rather than as work.
-
-Turning the plugin off stops its handler, so it then costs nothing at all.
-"""
+"""Mark sessions waiting for input from lifecycle events or screen fallback."""
 
 from __future__ import annotations
 
@@ -24,9 +7,10 @@ import subprocess
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from agentop import tmux
+from agentop import signals, tmux
+from agentop.status_feed import SessionStatus
 
 QUIET_SECONDS = 4.0
 # Ticks after a resize whose changes are taken as the agent redrawing.
@@ -79,7 +63,12 @@ class Screen:
     busy: bool = False
     changed_at: float = 0.0
     waiting_since: float | None = None
+    state: str | None = None
+    source: str = "screen"
+    event: str = ""
+    state_since: float = 0.0
     settle: int = 0
+    fallback: signals.ScreenFallback = field(default_factory=signals.ScreenFallback)
 
 
 class Watcher:
@@ -95,6 +84,7 @@ class Watcher:
         self._capture = capture
         self.quiet_seconds = quiet_seconds
         self.screens: dict[str, Screen] = {}
+        self.readers: dict[str, tuple[str, signals.EventReader]] = {}
         self.stats = {"at": None, "sessions": 0, "captured": 0, "ms": 0.0, "skipped": 0}
         self._lock = threading.Lock()
 
@@ -105,6 +95,7 @@ class Watcher:
     def reset(self) -> None:
         with self._lock:
             self.screens = {}
+            self.readers = {}
 
     def tick(self, sessions: list[dict], now: float | None = None) -> bool:
         """Look at the sessions once. Returns whether the set of waiting sessions changed.
@@ -122,6 +113,7 @@ class Watcher:
     def _tick(self, sessions: list[dict], now: float) -> bool:
         started = time.perf_counter()
         before = set(self.waiting())
+        hooked = {row["id"] for row in sessions if row.get("managed")}
         targets = {
             row["id"]: row["tmux"]["session"]
             for row in sessions
@@ -129,6 +121,8 @@ class Watcher:
         }
         for sid in self.screens.keys() - targets.keys():
             del self.screens[sid]
+        for sid in self.readers.keys() - targets.keys():
+            del self.readers[sid]
 
         panes = self._list_panes()
         captured = 0
@@ -164,6 +158,33 @@ class Watcher:
                 if screen.busy and now - screen.changed_at >= self.quiet_seconds:
                     screen.busy = False
                     screen.waiting_since = now
+                status = None
+                if sid in hooked:
+                    reader = self.readers.get(sid)
+                    if reader is None or reader[0] != name:
+                        reader = (name, signals.EventReader(name))
+                        self.readers[sid] = reader
+                    status = reader[1].read()
+                if status is not None:
+                    source = "hook"
+                    if status.state == "working":
+                        inferred = screen.fallback.apply(status, self._capture(pane_id), now)
+                        source = "screen" if inferred is not status else "hook"
+                        status = inferred
+                        captured += 1
+                    screen.state = status.state
+                    screen.source = source
+                    screen.event = status.event
+                    screen.state_since = status.at
+                    screen.busy = status.state == "working"
+                    screen.waiting_since = status.at if status.state in ("done", "input") else None
+                else:
+                    state = "done" if screen.waiting_since is not None else "working" if screen.busy else "unknown"
+                    if screen.state != state or screen.source != "screen":
+                        screen.state_since = now
+                    screen.state = state
+                    screen.source = "screen"
+                    screen.event = ""
 
         self.stats = {
             "at": now,
@@ -177,14 +198,42 @@ class Watcher:
 
 def register(api):
     watcher = Watcher()
+    feed = api.status_feed
+    last_waiting = set()
+    previous = set()
 
     def on_scan(sessions):
-        if watcher.tick(sessions):
-            api.emit({"waiting": watcher.waiting()})
+        nonlocal last_waiting, previous
+        watcher.tick(sessions)
+        for sid, screen in tuple(watcher.screens.items()):
+            feed.publish(SessionStatus(sid, screen.state or "unknown", screen.state_since, screen.source, screen.event))
+        current = set(watcher.screens)
+        for sid in previous - current:
+            feed.publish(SessionStatus(sid, "unknown", time.time(), "unavailable"))
+        previous = current
+        waiting = watcher.waiting()
+        if set(waiting) != last_waiting:
+            last_waiting = set(waiting)
+            api.emit({"waiting": waiting})
 
+    from .bridge import serve
+
+    async def bridge():
+        try:
+            await serve(feed, api.status_socket_path)
+        finally:
+            feed.clear()
+
+    api.task(bridge)
     api.on("scan", on_scan)
-    # Off means nothing is watched, so coming back on starts from a fresh baseline.
-    api.on_disable(watcher.reset)
+    def reset():
+        nonlocal last_waiting, previous
+        last_waiting = set()
+        previous = set()
+        watcher.reset()
+        feed.clear()
+
+    api.on_disable(reset)
 
     @api.router.get("/state")
     def state():

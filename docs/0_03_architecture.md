@@ -79,7 +79,7 @@ scripts/                 Build and release: build-ui.sh, build-app.sh, release.s
 
 ### Core and plugins
 
-Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin only hides its own feature. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. How plugins work is in [0_12_00_plugins.md](0_12_00_plugins.md). Dialogues (section 5 below) are a plugin, in `src/agentop/plugins/dialogue/`.
+Everything described here is the **core**: always loaded, never switched off. New service-side features are **plugins**, one folder each under `src/agentop/plugins/` (UI under `ui/src/plugins/`), loaded by the core plugin loader, `service/plugins.py` (`PluginHost`), which lists them at `/api/v2/plugins` and enables or disables them. A plugin can also add `agentop` commands, from a `cli.py` the CLI loads itself (`plugin_cli.py`), without the service; what both read from a plugin's `plugin.toml` is in `plugin_manifest.py`. A missing, failing, or disabled plugin hides its own feature; Projects and Dialogues also depend on the attention status feed for status-driven progress. Plugins hear about sessions through `SessionStore.add_listener`, which turns each refresh into `session.started`, `session.exited`, `session.closed`, and `scan` events. How plugins work is in [0_12_00_plugins.md](0_12_00_plugins.md). Dialogues (section 5 below) are a plugin, in `src/agentop/plugins/dialogue/`.
 
 ## 2 Agent layer
 
@@ -117,6 +117,10 @@ The interface, with the default for each thing that differs:
 
 `agentop serve` calls `host.prepare()` before it listens. It finds the installed tools, and stops with an error when there are none. For each one with a `skills_dir()` (Claude Code and Codex) it installs or updates the skills that ship in `src/agentop/skills/`: each is copied with a `.agentop` marker file, and a copy with the marker is replaced when the skill changes. A folder or link of the user's own with the same name is left alone and logged; a broken link, such as one to where the repo used to keep the skills, is replaced. The installed tools' names go to `GET /api/v2/tools` (`installed`), and the start buffer chooses only among those.
 
+### 2.4 Lifecycle signals (`signals.py`)
+
+At launch, Claude receives `--settings` hooks and Codex receives session-level hook flags. The hook writes only event name, tool name, kind and time to a session-specific file, never a decision or prompt content. Codex is launched with its hook-trust bypass, so the owner should only run agentop in environments where the hook sources are trusted. The reader maps events to idle, working, input and done; a screen check covers some interruptions and approvals. With no events it falls back to the previous screen detector. The hook settings and event sequences should be checked with `tools/test_status.py` after a CLI update.
+
 ## 3 Actor layer
 
 ### 3.1 Actor (`actor.py`)
@@ -124,7 +128,7 @@ The interface, with the default for each thing that differs:
 Generic tmux send/receive. Knows nothing about the dialogue protocol or the tool.
 
 - `send(text)` — types text in with the tool's `AgentCli.deliver`. Each paste goes through a tmux buffer of its own, deleted after, so concurrent sends can't swap prompts. `send_text` uses bracketed paste (`Session.paste_text_bracketed()`, ESC[200~…ESC[201~), so multi-line prompts arrive intact: a plain tmux paste turns each line break into Enter, which submits (Claude Code too, for a short paste)
-- `receive() -> str | None` — polls the screen until stable for `idle_seconds`, returns full scrollback
+- `receive() -> str | None` — waits for the attention feed to report completion, then returns full scrollback; its initial boot wait uses screen stability
 
 ### 3.2 AgentInstance (`agent_instance.py`)
 
@@ -207,7 +211,7 @@ See [0_12_02_dialogue.md](0_12_02_dialogue.md) for full detail. The plugin is `s
 | `ops.py` | `start_dialogue()`, `list_dialogues()`, `stop_dialogue()`, `stop_running()`, `remove_dialogue()` |
 | `runner.py` | The orchestrator process, `python -m agentop.plugins.dialogue.runner <id>`, started by `ops.start_dialogue()` |
 
-The orchestrator is its own process, not part of the service, so a dialogue keeps running when the service restarts, and `agentop dialogue start` works with no service. Its agents are ordinary managed sessions started through `ops.start`, and it drives them with the core's `AgentInstance` and `Actor`.
+The orchestrator is its own process, not part of the service. It survives service restarts and reconnects to the attention status feed; turn completion waits while the service or attention plugin is unavailable. Its agents are ordinary managed sessions started through `ops.start`, and it drives them with the core's `AgentInstance` and `Actor`.
 
 ## 6 Web layer
 

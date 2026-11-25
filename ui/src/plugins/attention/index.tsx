@@ -94,7 +94,7 @@ function Cost({ plugin }: { plugin: PluginContext }) {
   const { stats } = state;
   return (
     <p className="memory-note">
-      A session is marked once its screen has stopped changing for {state.quiet_seconds}s after it was working.{" "}
+      A session is marked when its agent needs input or its turn ends. Screen detection is used as a fallback.{" "}
       {stats.at === null
         ? "Not checked yet."
         : `Last check: ${stats.sessions} sessions, ${stats.captured} screens read, ${stats.ms} ms.`}

@@ -392,3 +392,43 @@ def test_a_coordinator_must_start_tasks_not_plain_sessions(alpha, monkeypatch, c
     with pytest.raises(SystemExit):
         core_cli.cmd_start(args)
     assert "agentop task start" in capsys.readouterr().err
+
+
+def test_coordinator_clear_waits_until_input_prompt_finishes(alpha, monkeypatch):
+    from agentop.plugins.attention import Screen
+
+    class InputWatcher:
+        screens = {"coord-1": Screen("", "80x24", 0, waiting_since=100, state="input")}
+
+        def tick(self, sessions, now):
+            pass
+
+    watcher = InputWatcher()
+    checker = Checker(lambda *args: None, watcher=watcher)
+    cleared = []
+    monkeypatch.setattr(checker, "_clear", lambda row: cleared.append(row["id"]))
+    checker.tick(rows(), 110)
+    assert cleared == []
+    watcher.screens["coord-1"].state = "done"
+    checker.tick(rows(), 111)
+    assert cleared == ["coord-1"]
+
+
+def test_checker_subscribes_to_project_sessions_and_stops_on_feed_clear(alpha, monkeypatch):
+    from agentop.status_feed import SessionStatus, StatusFeed
+
+    feed = StatusFeed()
+    checker = Checker(lambda *args: None, status_feed=feed)
+    cleared = []
+    monkeypatch.setattr(checker, "_clear", lambda row: cleared.append(row["id"]))
+    checker.tick(rows(), 100)
+    assert set(checker.subscriptions) == {"coord-1", "dev-1"}
+    feed.publish(SessionStatus("coord-1", "done", 101, "hook", "Stop"))
+    checker.tick(rows(), 110)
+    assert cleared == ["coord-1"]
+    feed.clear()
+    checker.tick(rows(), 120)
+    assert cleared == ["coord-1"]
+    checker.tick([], 130)
+    assert checker.subscriptions == {}
+    assert feed._subscribers == {}

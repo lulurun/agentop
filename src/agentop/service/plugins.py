@@ -138,6 +138,16 @@ class PluginAPI:
             raise TypeError("on_disable handlers must be plain functions; they run in a thread")
         self._on_disable.append(handler)
 
+    @property
+    def status_feed(self):
+        return self._host.status_feed
+
+    @property
+    def status_socket_path(self):
+        from agentop.status_feed import socket_path
+
+        return socket_path(self._host.flags_path.parent)
+
     def sessions(self) -> list[dict]:
         """A snapshot of the session list. Changing it changes nothing."""
         return self._host.store.list()
@@ -234,6 +244,9 @@ class PluginHost:
 
     def __init__(self, store, roots: list[Path] | None = None, data_dir: Path | None = None):
         self.store = store
+        from agentop.status_feed import StatusFeed
+
+        self.status_feed = StatusFeed()
         # Tests pass their own roots; the service always searches the built-in folder first.
         self.roots = roots if roots is not None else plugin_roots()
         base = data_dir or paths.data_dir()

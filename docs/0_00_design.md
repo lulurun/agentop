@@ -514,7 +514,7 @@ The two top features follow the same split. **Sessions** (the `default` project)
 
 **A plugin** is an optional, additive feature. It may add API routes, react to core events, add CLI commands, and add UI in defined slots. It may not change or remove core behaviour, and core code never imports a plugin.
 
-The rule that everything else follows: **a plugin can fail, be removed, or be disabled, and the only visible effect is that its feature disappears.** Sessions, terminals, and service control keep working.
+Plugins can fail, be removed, or be disabled without stopping sessions, terminals, or service control. Status-driven Projects checks and dialogue turn completion depend on the attention plugin; they pause when its feed is unavailable.
 
 ### 12.2 The plugins
 
@@ -580,7 +580,7 @@ The choices that shape agentop, with what was chosen and what it was weighed aga
 | D7 | Tokens (2026-11-14) | The service token only signs a client in. Each client gets its own token, which expires after `client_ttl` unused and `client_max_age` at most, is renewed by the app while in use, and can be revoked on its own ([0_06_security.md 1](0_06_security.md#1-rules)) | One shared token for everything, where rotation resets every client |
 | D8 | Where plugins come from | Only folders inside the agentop install (and `AGENTOP_PLUGIN_DIRS`), with their UI in the app build | A user plugin directory, or UI code served by the service: both let more parties run code in the service or the app. Open until a security review |
 | D9 | Handoff (2026-11-13) | `agentop send` and the `handoff` skill, on one host; the user watches the target | A handoff plugin with queues, idle-only delivery, reports, approval and an audit log, across hosts: it assumed nobody watches the target |
-| D10 | Busy and idle state (2026-11-19) | tmux signals only (the screen) | Agent hooks or transcript tailing: agent internals drift between versions |
+| D10 | Busy and idle state | Lifecycle hooks for managed Claude Code and Codex sessions, with screen fallback | Screen changes alone cannot reliably distinguish a turn from typing or redraws; hooks and their fallback need live checks after CLI updates |
 | D11 | Desktop app (2026-11-16) | A thin wrapper that runs this computer's service and shows its page | A client with its own bundled UI, which fell behind the service after every update |
 | D12 | Releases (2026-11-20) | One `v*` series; a GitHub release only for a new major version, which is a new wrapper | A release per tag, with the app replacing itself on each |
 | D13 | Starting a Sessions session (2026-11-24) | From its first prompt: a one-shot probe judges the task (tier, folder, title), code picks the tool and model by tier and quota ([0_04_start.md](0_04_start.md)) | A long-running reception session every prompt goes to, which piles up unrelated context; or the probe naming the model itself, which weighs quota badly |

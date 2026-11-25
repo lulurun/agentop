@@ -39,9 +39,14 @@ def launch(
         cmd = agent._build_cmd(cmd, params)
     name = name or agent.new_session_name(short_name)
 
+    from agentop.signals import launch_flags
+
+    if agent.name == "codex" and "--dangerously-bypass-hook-trust" not in cmd:
+        cmd += " --dangerously-bypass-hook-trust"
     progress("creating")
     if not Session.new(name, cwd):
         raise StartFailed("tmux new-session failed")
+    cmd += launch_flags(agent.name, name)
     if agent.mouse:
         Session.set_option(name, "mouse", "on")
 

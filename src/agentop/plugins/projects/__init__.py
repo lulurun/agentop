@@ -29,7 +29,7 @@ def register(api) -> None:
         except PasteError as exc:
             api.log.warning("%s/%s: %s", project, row.get("display_name"), exc)
 
-    checker = Checker(deliver)
+    checker = Checker(deliver, status_feed=api.status_feed)
     api.on("scan", checker.tick)
     api.on_disable(checker.reset)
 
