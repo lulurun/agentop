@@ -13,7 +13,7 @@ import time
 
 from agentop import agentclis
 
-from . import pursuit, track, wake
+from . import checker, pursuit, track, wake
 
 
 def _common() -> argparse.ArgumentParser:
@@ -397,9 +397,29 @@ def _ago(at: float) -> str:
     return f"{minutes} min ago" if minutes < 120 else f"{minutes // 60} h ago"
 
 
+def _feed_state(project: str, session: str) -> str:
+    """A task session's state in the status feed and how long it has held, as `input 4m`, else `unknown`."""
+    from agentop import registry
+    from agentop.paths import state_dir
+    from agentop.status_feed import fetch
+
+    names = [name for name, r in registry.load().get("sessions", {}).items()
+             if r.get("managed") and r.get("project") == project and (r.get("display_name") or "").lower() == session.lower()]
+    for name in names:
+        status = checker.feed_state(fetch(state_dir(), name, timeout=0.5))
+        if status is not None:
+            if status.state == "idle":
+                return "idle"
+            return f"{status.state} {checker.age(time.time() - status.since)}"
+    return "unknown"
+
+
 def task_list(args, project: str) -> None:
     tasks = pursuit.load_tasks(project) if args.all else pursuit.open_tasks(project)
     if args.json:
+        for t in tasks:
+            if t["status"] == "open":
+                t["feed"] = _feed_state(project, t["session"])
         print(json.dumps(tasks, indent=2, ensure_ascii=False))
         return
     if not tasks:
@@ -413,6 +433,8 @@ def task_list(args, project: str) -> None:
             state = "reported, waits for you" if not current.get("blocked") else "BLOCKED, waits for you"
         else:
             state = f"working, sent {_ago(current['sent_at'])}"
+        if t["status"] == "open":
+            state += f", feed {_feed_state(project, t['session'])}"
         print(f"{t['id']:<14} {t['session']:<20} round {len(t['rounds'])}/{pursuit.MAX_ROUNDS}  {state}")
         print(f"{'':<15}{t['goal']}")
 
@@ -585,14 +607,15 @@ def coordinator_note(args, project: str) -> None:
     print(f"Recorded {heading} by {args.by}.")
 
 
-def _task_line(t: dict) -> str:
+def _task_line(t: dict, project: str) -> str:
     current = t["rounds"][-1]
     if current.get("reported_at"):
         state = "reported, waits for you" if not current.get("blocked") else "BLOCKED, waits for you"
     else:
         state = f"working, sent {_ago(current['sent_at'])}"
     action = t.get("action") or "no action"
-    return f"- {t['id']} `{t['session']}` ({action}), round {len(t['rounds'])}/{pursuit.MAX_ROUNDS}, {state}: {t['goal']}"
+    feed = _feed_state(project, t["session"])
+    return f"- {t['id']} `{t['session']}` ({action}), round {len(t['rounds'])}/{pursuit.MAX_ROUNDS}, {state}, feed {feed}: {t['goal']}"
 
 
 def status_text(project: str) -> str:
@@ -632,7 +655,7 @@ def status_text(project: str) -> str:
                 out.append("(no entries yet)")
     tasks = pursuit.open_tasks(project)
     out += ["", "# Tasks", ""]
-    out += [_task_line(t) for t in tasks] or ["- No open tasks."]
+    out += [_task_line(t, project) for t in tasks] or ["- No open tasks."]
     found = pursuit.problems(project)
     reported = [t["session"] for t in tasks if not pursuit.awaiting_report(t)]
     if reported:

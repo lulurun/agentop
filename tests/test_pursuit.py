@@ -318,6 +318,34 @@ def test_a_notice_while_a_wake_runs_waits_for_the_next_tick(alpha):
     assert ran == ["alpha", "alpha"] and len(kinds(alpha, "task.input")) == 1
 
 
+def test_task_list_and_status_show_each_open_tasks_feed_state_and_age(alpha, monkeypatch, capsys):
+    from types import SimpleNamespace
+
+    from agentop import registry
+
+    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+    pursuit.open_task(alpha, "api", "fakeagent", "/x", "Add API", ["tests pass"], "results/api.md")
+    pursuit.open_task(alpha, "ui", "fakeagent", "/x", "Add UI", ["tests pass"], "results/ui.md")
+    monkeypatch.setattr(registry, "load", lambda: {"sessions": {
+        "dev-1": {"managed": True, "project": "alpha", "display_name": "dev"},
+        "api-1": {"managed": True, "project": "alpha", "display_name": "api"},
+        "ui-1": {"managed": True, "project": "alpha", "display_name": "ui"},
+        "dev-2": {"managed": True, "project": "other", "display_name": "dev"},
+    }})
+    now = time.time()
+    feed = {"dev-1": SessionStatus("dev-1", "input", now - 250, "hook", "PermissionRequest"),
+            "api-1": SessionStatus("api-1", "working", now - 5, "hook", "PreToolUse"),
+            "ui-1": SessionStatus("ui-1", "done", now - 10, "screen")}
+    monkeypatch.setattr("agentop.status_feed.fetch", lambda state, sid, timeout=1.0: feed.get(sid))
+    cli.task_list(SimpleNamespace(all=False, json=False), alpha)
+    out = capsys.readouterr().out
+    assert "feed input 4m" in out and "feed working 5s" in out and "feed unknown" in out
+    text = cli.status_text(alpha)
+    assert "dev` (no action), round 1/3, working, sent 0 min ago, feed input 4m: Add login" in text
+    cli.task_list(SimpleNamespace(all=False, json=True), alpha)
+    assert [t["feed"] for t in json.loads(capsys.readouterr().out)] == ["input 4m", "working 5s", "unknown"]
+
+
 def test_task_start_briefs_the_session_and_report_tells_the_coordinator(alpha, monkeypatch, capsys):
     from types import SimpleNamespace
 
