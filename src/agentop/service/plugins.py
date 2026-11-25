@@ -58,7 +58,6 @@ HANDLER_TIMEOUT_SECONDS = 10.0
 # This many handler errors inside the window moves a plugin to `failed`.
 MAX_HANDLER_ERRORS = 5
 HANDLER_ERROR_WINDOW_SECONDS = 60.0
-CLOSE_WAIT_SECONDS = 60.0
 
 EVENTS = frozenset({"session.started", "session.exited", "session.closed", "scan"})
 
@@ -171,32 +170,6 @@ class PluginAPI:
         tools = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)
         await self._host.store.ensure_coordinator(name, [t.name for t in tools])
         return found
-
-    async def close_project(self, name: str, mark: Callable[[], object] | None = None) -> None:
-        """Stop a project's sessions, call `mark`, then drop its entry; its folder is kept. Only the plugin's own.
-
-        Waits up to a minute for a session still starting. Raises projects.ProjectError.
-        """
-        from agentop import projects
-
-        found = await asyncio.to_thread(projects.get, name)
-        if found is None or found.get("owner") != self.id:
-            raise projects.ProjectError(f"No project called {name} of {self.id}'s")
-
-        def mine() -> list[dict]:
-            return [r for r in self._host.store.list() if r.get("project") == name and r.get("managed")]
-
-        deadline = time.monotonic() + CLOSE_WAIT_SECONDS
-        while any(r["status"] == "starting" for r in mine()):
-            if time.monotonic() > deadline:
-                raise projects.ProjectError(f"A session of {name} is still starting: close it again once it is up")
-            await asyncio.sleep(0.25)
-        for row in mine():
-            if row["status"] in ("running", "exited", "failed"):
-                await self._host.store.stop(row["id"])
-        if mark is not None:
-            await asyncio.to_thread(mark)
-        await asyncio.to_thread(projects.close, name)
 
     async def start_coordinator(self, name: str) -> dict | None:
         """The project's Coordinator: running, or resumed or started now."""

@@ -216,49 +216,40 @@ def test_the_projects_plugin_makes_closes_and_loads_again_its_own(fake_agents, q
         assert service.http.delete(f"{base}/alpha?delete_folder=true").status_code in (404, 405)
         assert projects.get("alpha") is not None
 
-        outside = lambda: {  # noqa: E731
-            str(f.relative_to(projects.folder("alpha"))): f.read_bytes() for f in projects.folder("alpha").rglob("*")
-            if f.is_file() and f.parts[-2] != projects.META_DIR
-        }
-        before = outside()
-        closed = service.http.post(f"{base}/alpha/close")
-        assert closed.status_code == 200, closed.text
-        assert closed.json()["folder"] == str(projects.folder("alpha"))
-        assert not Session.has(coordinator_row["id"])
-        after = outside()
-        mark = after.pop("track/1/CLOSED.md").decode()
-        assert after == before
-        assert "closed by the owner, in the app" in mark
-        assert not (projects.folder("alpha") / ".project/project.json").exists()
-        assert not any(r["project"] == "alpha" for r in registry.load()["sessions"].values())
-        assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
-        assert service.http.get(base).json() == []
-        assert not any(r["project"] == "alpha" for r in service.http.get("/sessions").json())
+        # Close in the app only asks the Coordinator; nothing is stopped or written.
+        before = {str(f): f.read_bytes() for f in projects.folder("alpha").rglob("*") if f.is_file() and f.name != "sessions.json"}
+        asked = service.http.post(f"{base}/alpha/close")
+        assert asked.status_code == 202, asked.text
+        assert asked.json()["coordinator"] == coordinator_row["id"]
+        wait_for_screen(coordinator_row["id"], "The owner asked, in the app, to close this project")
+        assert "agentop project close alpha" in CapturePane.scrollback(coordinator_row["id"])
+        assert Session.has(coordinator_row["id"]) and projects.get("alpha") is not None
+        assert {str(f): f.read_bytes() for f in projects.folder("alpha").rglob("*")
+                if f.is_file() and f.name != "sessions.json"} == before
 
-        # Created again, the kept folder is loaded as it is, and its Coordinator resumes on the track.
+        # With the Coordinator stopped, Close resumes it first, then asks.
+        assert service.http.post(f"/sessions/{coordinator_row['id']}/stop").status_code == 200
+        deadline = time.monotonic() + 5
+        while service.http.get(f"/sessions/{coordinator_row['id']}").status_code == 200:
+            assert time.monotonic() < deadline
+            time.sleep(0.1)
+        asked = service.http.post(f"{base}/alpha/close", timeout=120)
+        assert asked.status_code == 202, asked.text
+        resumed = asked.json()["coordinator"]
+        assert resumed != coordinator_row["id"]
+        wait_for_screen(resumed, "The owner asked, in the app, to close this project")
+
+        # A closed project's kept folder, created again, is loaded as it is and its Coordinator resumes.
+        coordinator_row = {"id": resumed}
+        (projects.folder("alpha") / "track/1/CLOSED.md").write_text("# Closed\n\n- 2026-11-25 10:00 closed by `Coordinator` of alpha\n")
+        assert service.http.post(f"/sessions/{coordinator_row['id']}/stop").status_code == 200
+        projects.close("alpha")
+        assert service.http.get(base).json() == []
         again = service.http.post(base, json={"name": "alpha"})
         assert again.status_code == 201, again.text
-        assert [p["name"] for p in service.http.get(base).json()] == ["alpha"]
-        coordinator_row = next(
-            r for r in service.http.get("/sessions").json() if r["project"] == "alpha" and r["display_name"] == "Coordinator"
-        )
-        service.wait_for(coordinator_row["id"], "running")
-        wait_for_screen(coordinator_row["id"], "You are resuming this project's Coordinator session")
-        reloaded = outside()
-        mark = reloaded.pop("track/1/CLOSED.md").decode()
-        assert reloaded == before
-        assert mark.splitlines()[-1].endswith("reopened by the owner, in the app")
-
-
-def test_a_project_still_starting_is_closed_once_it_is_up(fake_agents):
-    for agent in fake_agents.values():
-        agent.boot_seconds = 2.0
-    with run_service() as service:
-        base = "/plugins/projects/projects"
-        assert service.http.post(base, json={"name": "alpha"}).status_code == 201
-        row = next(r for r in service.http.get("/sessions").json() if r["project"] == "alpha")
-        assert row["status"] == "starting"
-        # Close waits for the start, which is slow under a full parallel run.
-        assert service.http.post(f"{base}/alpha/close", timeout=90).status_code == 200
-        assert not Session.has(row["id"])
-        assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
+        row = next(r for r in service.http.get("/sessions").json()
+                   if r["project"] == "alpha" and r["display_name"] == "Coordinator" and r["id"] != coordinator_row["id"])
+        service.wait_for(row["id"], "running")
+        wait_for_screen(row["id"], "You are resuming this project's Coordinator session")
+        assert (projects.folder("alpha") / "track/1/CLOSED.md").read_text().splitlines()[-1].endswith(
+            "reopened by the owner, in the app")

@@ -75,7 +75,7 @@ A narrow object, not the service internals:
 | `api.on_disable(fn)` | Called, in a thread, when the user turns the plugin off, to wind down work it started. Not called when the service stops, so work that outlives the service (a process the plugin started) keeps running then |
 | `api.sessions()` | A read-only snapshot of the session list |
 | `api.session(id)` | One live session's row, or else a past one's (tool, agent session ID, directory) by its History ID, for reading its files |
-| `api.create_project(name, welcome, instructions)`, `api.close_project(name, mark)`, `api.start_coordinator(name)` | Projects the plugin owns, and their Coordinators ([0_13_projects.md 6](0_13_projects.md#6-for-plugins)) |
+| `api.create_project(name, welcome, instructions)`, `api.start_coordinator(name)` | Projects the plugin owns, and their Coordinators ([0_13_projects.md 6](0_13_projects.md#6-for-plugins)) |
 | `api.store` | A JSON file at `~/.agentop/plugins/{id}/store.json` for the plugin's own data |
 | `api.data_dir` | The plugin's own folder, `~/.agentop/plugins/{id}/`, made when first written to |
 | `api.offer_transcript_archive(root)` | Offers a copy of the tools' transcripts, a folder per tool in each tool's own layout. While the plugin is on, the app finds a transcript there when the tool has deleted its own |

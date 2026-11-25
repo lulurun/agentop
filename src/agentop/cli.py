@@ -329,37 +329,37 @@ def cmd_project_create(args):
 
 def cmd_project_close(args):
     from agentop import projects
-    from agentop.plugins.projects import track
-    from agentop.results import OpsError
+    from agentop.plugins.projects import pursuit, track
 
     found = projects.get(args.name)
     if found is None or found.get("owner") != "projects":
         print(f"Error: no project called {args.name} (only the Projects plugin's are closed here)", file=sys.stderr)
         sys.exit(1)
     here = _ops().current_session()
-    by = f"`{here[2]}` of {here[1]}" if here else "the owner, with agentop project close"
-    own = here[0] if here and here[1] == args.name else None
-    marked = track.mark(args.name, "closed", by, args.note or "")
-    stopped = []
+    if not here or here[1] != args.name or here[2] != projects.COORDINATOR:
+        print(f"Error: only {args.name}'s Coordinator closes it: ask it there (Close in the app does)", file=sys.stderr)
+        sys.exit(1)
+    tasks = pursuit.open_tasks(args.name)
+    if tasks:
+        print(f"Error: tasks are open: {track.task_names(tasks)}. Wait for their reports and accept or fail each "
+              "as usual, then close", file=sys.stderr)
+        sys.exit(1)
+    warnings = pursuit.problems(args.name) if track.exists(args.name) else []
+    if warnings:
+        print("Error: the track is not up to date; fix these first (agentop coordinator status shows them):", file=sys.stderr)
+        for w in warnings:
+            print(f"  - {w}", file=sys.stderr)
+        sys.exit(1)
+    marked = track.mark(args.name, "closed", f"`{here[2]}` of {here[1]}", args.note or "")
+    # Read before the entry goes: a closed project's sessions are no longer listed.
     live = _ops().get_sessions(with_meta=False)
-    for s in live:
-        if s.get("project") == args.name and s["name"] != own:
-            print(f"Stopping {s['display_name']} …")
-            try:
-                _ops().stop(s["name"])
-                stopped.append(s["display_name"])
-            except OpsError as exc:
-                print(f"  {exc}", file=sys.stderr)
     projects.close(args.name)
     print(f"Closed {args.name}: marked in {marked.relative_to(projects.folder(args.name))}, and gone from agentop project list.")
-    print(f"Its folder is kept as it was: {found['folder']}")
-    print(f"  agentop project create {args.name} loads it again; remove the folder yourself when it is no longer wanted.")
-    if stopped:
-        print(f"Its sessions were stopped: {', '.join(stopped)}.")
-    if own:
-        # Last, and from a process of its own: it ends the session this command runs in.
-        print(f"Stopping this session, {here[2]}, last.", flush=True)
-        _ops().stop_detached(own, live)
+    print(f"Its folder, files and other sessions are kept as they are: {found['folder']}")
+    print(f"  agentop project create {args.name} loads it again.")
+    # Last, and from a process of its own: it ends the session this command runs in.
+    print("Closing this session now.", flush=True)
+    _ops().stop_detached(here[0], live)
 
 
 def cmd_project_show(args):
@@ -726,7 +726,7 @@ def main():
     )
     p_pcreate.add_argument("name")
     p_pclose = project_sub.add_parser(
-        "close", help="Mark a Projects project closed in its track/, stop its sessions and drop it from the list; its folder is kept"
+        "close", help="Run by a project's Coordinator once no task is open: mark it closed in track/, drop it from the list, end this session"
     )
     p_pclose.add_argument("name")
     p_pclose.add_argument("--note", help="One line for the mark, e.g. what it ended with")

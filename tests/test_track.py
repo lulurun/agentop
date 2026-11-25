@@ -286,8 +286,8 @@ def test_a_reworded_owner_yield_reuses_the_open_ask(alpha, capsys):
     assert ref not in out and (folder() / "track/1/PLAN.md").read_text().count("[waiting on owner]") == 2
 
 
-def test_close_marks_the_track_stops_the_coordinator_last_and_create_loads_the_folder_again(alpha, capsys, sessions,
-                                                                                          monkeypatch):
+def test_only_the_coordinator_closes_once_no_task_is_open_and_create_loads_the_folder_again(alpha, capsys, sessions,
+                                                                                         monkeypatch):
     setup_plan(capsys)
     start(capsys, "dev", "M2A1")
     report(monkeypatch, capsys, "dev", "layout written")
@@ -295,32 +295,50 @@ def test_close_marks_the_track_stops_the_coordinator_last_and_create_loads_the_f
     start(capsys, "api", "M2A2")
     (folder() / "code/repo").mkdir(parents=True)
     (folder() / "code/repo/main.py").write_text("print('hi')\n")
-    before = snapshot(folder())
-    assert ".project/project.json" in before and ".project/tasks.json" in before and "track/tasks.jsonl" in before
 
     stopped = []
-    monkeypatch.setattr(ops, "get_sessions", lambda with_meta=False: [
-        {"name": "coord-1", "display_name": "Coordinator", "project": "alpha"},
-        {"name": "api-1", "display_name": "api", "project": "alpha"}, {"name": "x-1", "display_name": "x", "project": "beta"}])
+    live = [{"name": "coord-1", "display_name": "Coordinator", "project": "alpha", "managed": True, "tool": "claude"},
+            {"name": "api-1", "display_name": "api", "project": "alpha", "managed": True, "tool": "claude"}]
+    monkeypatch.setattr(ops, "get_sessions", lambda with_meta=False: live)
     monkeypatch.setattr(ops, "stop", stopped.append)
-    monkeypatch.setattr(ops, "stop_detached", lambda name, live: stopped.append(f"{name}, detached"))
+    monkeypatch.setattr(ops, "stop_detached", lambda name, sessions: stopped.append((name, sessions)))
     monkeypatch.setattr(sys.modules["agentop.cli"], "_projects_plugin_on", lambda: True)
     ag(capsys, "project", "remove", "alpha", code=2)
     ag(capsys, "project", "close", "alpha", "--delete-folder", code=2)
-    assert projects.get(alpha) is not None and stopped == []
 
+    # Not from another session, nor from outside one.
+    monkeypatch.setattr(ops, "current_session", lambda: ("api-1", "alpha", "api"))
+    _, err = ag(capsys, "project", "close", "alpha", code=1)
+    assert "only alpha's Coordinator closes it" in err
+    monkeypatch.setattr(ops, "current_session", lambda: None)
+    ag(capsys, "project", "close", "alpha", code=1)
+    as_coordinator(monkeypatch)
+
+    # It waits for the running execution, which is closed as usual.
+    _, err = ag(capsys, "project", "close", "alpha", code=1)
+    assert "tasks are open: P1_M2A2-1 (api)" in err
+    report(monkeypatch, capsys, "api", "commands written")
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "ran them", "--project", "alpha")
+    # And for the track to be up to date.
+    _, err = ag(capsys, "project", "close", "alpha", code=1)
+    assert "the track is not up to date" in err and "milestone close M2" in err
+    ag(capsys, "coordinator", "milestone", "close", "M2", "--summary", "-", "--project", "alpha", stdin="Track shipped.")
+    # Only accept stopped a session, as it always does.
+    assert projects.get(alpha) is not None and stopped == ["api-1"]
+    stopped.clear()
+
+    before = snapshot(folder())
     out, _ = ag(capsys, "project", "close", "alpha", "--note", "shipped the track")
-    # The Coordinator runs the command: it is stopped last, after the entry is gone.
-    assert stopped == ["api-1", "coord-1, detached"]
+    # Nothing else is stopped; the Coordinator's own session ends last, from a process of its own.
+    assert stopped == [("coord-1", live)]
     assert "Closed alpha: marked in track/1/CLOSED.md, and gone from agentop project list." in out
-    assert f"Its folder is kept as it was: {folder()}" in out and "agentop project create alpha loads it again" in out
-    assert "Its sessions were stopped: api." in out and out.rstrip().endswith("Stopping this session, Coordinator, last.")
+    assert f"Its folder, files and other sessions are kept as they are: {folder()}" in out
+    assert out.rstrip().endswith("Closing this session now.")
     assert projects.get(alpha) is None and alpha not in [p["name"] for p in projects.list_projects()]
     after = snapshot(folder())
     mark = after.pop("track/1/CLOSED.md").decode()
     assert after == {k: v for k, v in before.items() if k != ".project/project.json"}
     assert mark.splitlines()[-1].endswith("closed by `Coordinator` of alpha: shipped the track")
-    ag(capsys, "project", "close", "alpha", code=1)
 
     # A closed project's status still reads, and shows the mark; reading writes nothing.
     out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
@@ -334,36 +352,14 @@ def test_close_marks_the_track_stops_the_coordinator_last_and_create_loads_the_f
     assert f"Project alpha, loaded from its kept folder and marked reopened: {folder()}" in out
     assert sessions.started[-1] == projects.COORDINATOR
     assert sessions.prompts[-1] == coordinator.resume_prompt(projects.get(alpha))
-    found = projects.get(alpha)
-    assert found["owner"] == "projects" and found["welcome"]
     reloaded = snapshot(folder())
     assert reloaded.pop("track/1/CLOSED.md").decode().splitlines()[-1].endswith(
         "reopened by the owner, with agentop project create")
     assert {k: v for k, v in reloaded.items() if k != ".project/project.json"} == {
         k: v for k, v in before.items() if k != ".project/project.json"}
-
     out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
     assert out.startswith("# Closed (track/1/CLOSED.md): reopened now")
-    assert "## M2 Track files  [in progress]" in out and "- M2A1 Layout  [done] → P1_M2A1-1" in out
-    assert "- M2A2 Commands  [in progress] → P1_M2A2-1" in out
-    assert "## P1_M2A1-1  session `dev`" in out and "round 1 accepted: read track/" in out
-    assert "- P1_M2A2-1 `api` (M2A2), round 1/3, working" in out
-    ag(capsys, "coordinator", "task", "fail", "api", "--note", "its session went with the close", "--project", "alpha")
-    out, _ = start(capsys, "api", "M2A2")
-    assert "Task P1_M2A2-2" in out
-
-
-def test_close_from_outside_a_session_and_a_project_closed_before_it_had_a_track(tmp_path, capsys, monkeypatch):
-    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
-    monkeypatch.setattr(ops, "current_session", lambda: None)
-    monkeypatch.setattr(ops, "get_sessions", lambda with_meta=False: [])
-    monkeypatch.setattr(sys.modules["agentop.cli"], "_projects_plugin_on", lambda: True)
-    projects.create("beta", "projects")
-    projects.create("other", "dialogue")
-    ag(capsys, "project", "close", "other", code=1)
-    out, _ = ag(capsys, "project", "close", "beta")
-    assert "marked in track/CLOSED.md" in out and "Stopping this session" not in out
-    assert track.closed_state("beta").endswith("closed by the owner, with agentop project close")
+    assert "## M2 Track files  [done]" in out
 
 
 def test_a_new_project_welcomes_and_a_state_md_project_keeps_its_checks(alpha, capsys):

@@ -121,7 +121,7 @@ At a milestone (a design accepted, an implementation slice accepted, a deploymen
 
 ## Closing the project
 
-Only when the owner says the project is done: `agentop project close <name> --note "<what it ended with>"`. It writes a dated `closed` line to `track/<N>/CLOSED.md`, stops the project's sessions (yours last, which ends your turn), and drops the project from the list. The folder is kept; `agentop project create <name>` loads it again, and only the owner deletes it. Say so to the owner before you run it.
+Only when the owner asks (in this session, or with Close in the app, which types the request here). Wait for any open task: let it report and accept or fail it as usual. Make `agentop coordinator status` show no warnings (close the milestone if its actions are done). Then run `agentop project close <name> --note "<what it ended with>"`. It writes a dated `closed` line to `track/<N>/CLOSED.md`, drops the project from the list and ends this session, last. Everything else (folder, files, other sessions) is kept; `agentop project create <name>` loads it again, and only the owner deletes it. Tell the owner before you run it.
 
 ## How you are judged
 

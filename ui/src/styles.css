@@ -202,8 +202,7 @@ input::placeholder { color: var(--quiet); }
 .project-row[aria-current="true"] .project-pick { font-weight: 600; }
 .project-pick { flex: 1; min-width: 0; padding: 7px 8px 7px 18px; overflow: hidden; background: none; border: 0; border-radius: 0; text-align: left; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .project-close-button { padding: 2px 8px; font-size: 12px; color: var(--quiet); }
-.project-row:not(:hover, :focus-within) .project-close-button:not([aria-expanded="true"]) { opacity: 0.6; }
-.project-close { padding: 4px 8px 8px 18px; }
+.project-row:not(:hover, :focus-within) .project-close-button { opacity: 0.6; }
 .sidebar-actions .form-error { flex-basis: 100%; margin: 0; }
 .sidebar-actions { flex-wrap: wrap; }
 .sidebar:focus, .details:focus { outline: none; }

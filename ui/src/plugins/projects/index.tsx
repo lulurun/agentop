@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import type { Session } from "../../api/client";
 import { DetailsPanel } from "../../components/DetailsPanel";
 import { Section } from "../../components/Section";
@@ -97,13 +97,13 @@ function useProjects(plugin: PluginContext) {
     [plugin, open],
   );
 
+  /** Ask its Coordinator to close it, and show the Coordinator: the project leaves the list once it has. */
   const close = useCallback(
     async (name: string) => {
       await plugin.client.post(`/projects/${encodeURIComponent(name)}/close`);
-      if (current.snapshot()[service] === name) current.set(service, null);
-      await listing.load(plugin);
+      await open(name);
     },
-    [plugin, service],
+    [plugin, open],
   );
 
   const known = projects?.some((p) => p.name === chosen) ? chosen : undefined;
@@ -152,10 +152,16 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
   );
 }
 
-/** Asked in the page, not with window.confirm: where a webview shows no dialog, confirm answers no, and the old button did nothing. */
+/** A modal in the page, not window.confirm: where a webview shows no dialog, confirm answers no, and the old button did nothing. */
 function CloseProject({ name, onClose, onCancel }: { name: string; onClose(): Promise<void>; onCancel(): void }) {
+  const ref = useRef<HTMLDialogElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    const dialog = ref.current;
+    if (dialog && !dialog.open) dialog.showModal();
+  }, []);
 
   async function close() {
     setBusy(true);
@@ -169,22 +175,23 @@ function CloseProject({ name, onClose, onCancel }: { name: string; onClose(): Pr
   }
 
   return (
-    <section className="project-close" aria-label={`Close ${name}?`}>
-      <p className="stop-note" role={busy ? "status" : undefined}>
-        {busy
-          ? `Closing ${name}…`
-          : `Close ${name}? It is marked closed in its track, its sessions are stopped, and it leaves this list. Its folder is kept: create ${name} again to load it.`}
+    <dialog ref={ref} className="dialog" onClose={onCancel} aria-labelledby="close-project-title">
+      <h2 id="close-project-title">Close {name}?</h2>
+      <p>
+        Its Coordinator is asked to close it. Once no task is running and the track is up to date, it marks the project
+        closed, takes it off this list, and ends its own session. The folder, its files and the other sessions are kept;
+        creating {name} again loads it.
       </p>
       {error && <p className="form-error">{error}</p>}
       <div className="stop-buttons">
-        <button type="button" onClick={onCancel} disabled={busy}>
+        <button type="button" onClick={onCancel} disabled={busy} data-autofocus>
           Cancel
         </button>
         <button type="button" className="primary" onClick={() => void close()} disabled={busy}>
           Close {name}
         </button>
       </div>
-    </section>
+    </dialog>
   );
 }
 
@@ -192,43 +199,47 @@ function Left({ plugin }: { plugin: PluginContext }) {
   const { projects, chosen, open, create, close } = useProjects(plugin);
   const [closing, setClosing] = useState<string | null>(null);
 
+  // The Coordinator takes a closed project off the list; this notices.
+  useEffect(() => {
+    const timer = setInterval(() => void listing.load(plugin).catch(() => undefined), 5000);
+    return () => clearInterval(timer);
+  }, [plugin]);
+
   return (
     <>
       <Section id="projects:projects" title="Projects" extra={projects && <span className="session-count">{projects.length}</span>}>
         <NewProject onCreate={create} />
         <nav className="session-list" aria-label="Projects">
           {projects?.map((p) => (
-            <div key={p.name}>
-              <div className="project-row" aria-current={p.name === chosen ? "true" : undefined}>
-                <button type="button" className="project-pick" title={p.folder} onClick={() => void open(p.name)}>
-                  {p.name}
-                </button>
-                <button
-                  type="button"
-                  className="project-close-button"
-                  title={`Close ${p.name}: its folder is kept`}
-                  aria-label={`Close ${p.name}`}
-                  aria-expanded={closing === p.name}
-                  onClick={() => setClosing(closing === p.name ? null : p.name)}
-                >
-                  Close
-                </button>
-              </div>
-              {closing === p.name && (
-                <CloseProject
-                  name={p.name}
-                  onCancel={() => setClosing(null)}
-                  onClose={async () => {
-                    await close(p.name);
-                    setClosing(null);
-                  }}
-                />
-              )}
+            <div key={p.name} className="project-row" aria-current={p.name === chosen ? "true" : undefined}>
+              <button type="button" className="project-pick" title={p.folder} onClick={() => void open(p.name)}>
+                {p.name}
+              </button>
+              <button
+                type="button"
+                className="project-close-button"
+                title={`Close ${p.name}: its Coordinator closes it; everything is kept`}
+                aria-label={`Close ${p.name}`}
+                onClick={() => setClosing(p.name)}
+              >
+                Close
+              </button>
             </div>
           ))}
           {projects && projects.length === 0 && <p className="session-empty">No projects yet.</p>}
         </nav>
       </Section>
+      {closing && (
+        <CloseProject
+          key={closing}
+          name={closing}
+          onCancel={() => setClosing(null)}
+          onClose={async () => {
+            await close(closing);
+            setClosing(null);
+          }}
+        />
+      )}
       {chosen && <SessionSections project={chosen} canStart={false} />}
     </>
   );
