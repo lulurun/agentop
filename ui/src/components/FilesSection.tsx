@@ -206,14 +206,13 @@ export function FilesSection({ sessionId, tool }: { sessionId: string; tool: str
         </button>
       }
     >
-      <div className="file-tabs" role="tablist" aria-label="Files">
-        <button type="button" role="tab" aria-selected={shown === "changed"} onClick={() => setTab("changed")}>Changed</button>
-        <button type="button" role="tab" aria-selected={shown === "all"} onClick={() => setTab("all")}>All</button>
+      <div className="file-filters" role="group" aria-label="File filters">
+        <button type="button" aria-pressed={shown === "changed"} onClick={() => setTab("changed")}>Changed</button>
+        <button type="button" aria-pressed={shown === "all"} onClick={() => setTab("all")}>All</button>
         {hasMemory && (
           <button
             type="button"
-            role="tab"
-            aria-selected={shown === "memory"}
+            aria-pressed={shown === "memory"}
             title="The notes the agent tool keeps for this project"
             onClick={() => setTab("memory")}
           >

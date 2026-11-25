@@ -1,9 +1,13 @@
-import { act, createElement, useEffect, type ReactNode } from "react";
+import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { ApiError, type Session } from "../../api/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError, ServiceClient, type PluginInfo, type Session } from "../../api/client";
 import type { PluginContext } from "../types";
-import { ProgressPanels } from "./index";
+import { DetailsPanel } from "../../components/DetailsPanel";
+import { Workbench } from "../../components/Workbench";
+import { useApp, layoutOf } from "../../store";
+import { plugin as projectsPlugin } from "./index";
+import { ProgressViewer } from "./ProgressViewer";
 import { chosenAfter, isProjectCoordinator, latestOnly, pick, progressPath, type Progress, type TaskRow } from "./progress";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -76,23 +80,13 @@ interface Pending {
 let container: HTMLDivElement;
 let root: Root;
 let calls: Pending[];
-let detailsMounts: number;
 const plugin = {
   id: "projects",
   client: { get: (path: string) => new Promise((resolve, reject) => calls.push({ path, resolve, reject })) },
 } as unknown as PluginContext;
 
-function Details({ entry }: { entry: ReactNode }) {
-  useEffect(() => {
-    detailsMounts++;
-  }, []);
-  return createElement("div", { className: "fake-details" }, "Details body", entry);
-}
-
-function render(viewerKey: string | null, project = "alpha") {
-  act(() => {
-    root.render(createElement(ProgressPanels, { plugin, viewerKey, project, details: (entry: ReactNode) => createElement(Details, { entry }) }));
-  });
+function render(project = "alpha") {
+  act(() => root.render(createElement(ProgressViewer, { key: project, plugin, project })));
 }
 
 async function settle() {
@@ -104,13 +98,10 @@ async function settle() {
 const q = <T extends Element = HTMLElement>(selector: string) => container.querySelector<T & HTMLElement>(selector);
 const byText = (selector: string, text: string) =>
   [...container.querySelectorAll<HTMLElement>(selector)].find((el) => el.textContent?.trim() === text);
-const tabs = () => [...container.querySelectorAll('[role="tab"]')].map((t) => t.textContent);
 const click = (el: HTMLElement | undefined | null) => act(() => el!.click());
-const visible = () => container.querySelector('[role="tabpanel"]:not([hidden])')?.textContent ?? "";
 
 beforeEach(() => {
   calls = [];
-  detailsMounts = 0;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -121,55 +112,96 @@ afterEach(() => {
   container.remove();
 });
 
-describe("ProgressPanels", () => {
-  it("has no entry for anything but a Coordinator", () => {
-    render(null);
-    expect(byText("button", "Progress Viewer")).toBeUndefined();
-    expect(tabs()).toEqual([]);
-    expect(container.textContent).toContain("Details body");
+describe("Projects workbench", () => {
+  it("opens one closable Progress Viewer in the right area and keeps the side panel available", async () => {
+    const original = useApp.getState();
+    const feature = "plugin:projects";
+    const info = { id: "projects", state: "enabled", ui: ["feature"] } as PluginInfo;
+    const coordinator = session({ status: "running" });
+    const worker = session({ id: "s2", display_name: "worker", status: "running" });
+    const projectClient = { ...plugin, client: { ...plugin.client, get: async () => [{ name: "alpha", folder: "/alpha" }] } } as PluginContext;
+    const client = vi.spyOn(ServiceClient.prototype, "plugin").mockReturnValue(plugin.client);
+    const Right = projectsPlugin.feature!.right!;
+    const Left = projectsPlugin.feature!.left!;
+    const pane = (side: string) => container.querySelector<HTMLElement>(`[data-test-panel="${side}"]`)!;
+    try {
+      act(() => useApp.setState({
+        connections: [{ id: original.activeId, label: "Local", url: "http://localhost", token: "" }],
+        features: { [original.activeId]: feature },
+        layouts: {}, selected: {}, folded: [], plugins: [info], pluginsLoaded: true,
+        sessions: { s1: coordinator, s2: worker },
+        act: (async () => [coordinator, worker]) as typeof original.act,
+      }));
+      act(() => root.render(createElement("div", null,
+        createElement("aside", { "data-test-panel": "left" }, createElement(Left, { plugin: projectClient })),
+        createElement(Workbench, { feature, background: null, renderSession: () => "Terminal" }),
+        createElement("aside", { "data-test-panel": "right" }, createElement(Right, { plugin: projectClient })),
+      )));
+      await settle();
+      click(pane("left").querySelector<HTMLButtonElement>(".project-pick"));
+      await settle();
+      click(byText("button", "Progress Viewer"));
+      click(byText("button", "Progress Viewer"));
+      const rightArea = q('[data-area="right"]')!;
+      expect(rightArea.querySelector('[role="tab"]')?.textContent).toBe("Progress Viewer: alpha");
+      expect(layoutOf(useApp.getState()).right?.tabs).toHaveLength(1);
+      expect(q('[data-area="left"]')?.textContent).toContain("Terminal");
+      expect(pane("right").textContent).toContain("Coordinator");
+      expect(pane("right").querySelector(".panel-section:last-child")?.getAttribute("aria-label")).toBe("Actions");
+      for (const side of ["left", "right"]) expect(pane(side).querySelector('[role="tablist"]')).toBeNull();
+      expect(calls.map((c) => c.path)).toEqual(["/projects/alpha/progress"]);
+      calls[0].resolve(progress());
+      await settle();
+      expect(rightArea.textContent).toContain("Ship the viewer.");
+      click(q('[aria-label="Close Progress Viewer: alpha"]'));
+      expect(q('[data-area="right"]')).toBeNull();
+      act(() => useApp.getState().select(worker.id));
+      expect(byText("button", "Progress Viewer")).toBeUndefined();
+      expect(pane("right").querySelector(".panel-section:last-child")?.getAttribute("aria-label")).toBe("Actions");
+    } finally {
+      act(() => root.render(null));
+      act(() => useApp.setState(original));
+      client.mockRestore();
+    }
   });
 
-  it("opens one closable tab, switches to Details and back, and closes to the entry", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
-    expect(tabs()).toEqual(["Details", "Progress Viewer"]);
-    expect(q('[role="tab"][aria-selected="true"]')!.textContent).toBe("Progress Viewer");
-    expect(calls.map((c) => c.path)).toEqual(["/projects/alpha/progress"]);
+  it("ends shared session Details with Actions and retains Stop confirmation", () => {
+    const original = useApp.getState();
+    const running = session({ project: "default", display_name: "worker", status: "running" });
+    try {
+      act(() => useApp.setState({ features: {}, layouts: {}, folded: [], sessions: { s1: running }, selected: { [original.activeId]: "s1" } }));
+      act(() => root.render(createElement(DetailsPanel)));
+      const actions = q('section:last-child[aria-label="Actions"]')!;
+      click(byText("button", "Stop session"));
+      expect(actions.textContent).toContain("Stop worker?");
+      click(byText("button", "Cancel"));
+      expect(actions.textContent).toContain("Stop session");
+      act(() => useApp.setState({ sessions: { s1: { ...running, managed: false } } }));
+      expect(byText("button", "Stop session")).toBeUndefined();
+    } finally {
+      act(() => root.render(null));
+      act(() => useApp.setState(original));
+    }
+  });
+});
+
+describe("Progress Viewer", () => {
+  it("renders the direction, plan and execution groups in order", async () => {
+    render();
     expect(container.textContent).toContain("Loading the track");
     calls[0].resolve(progress());
     await settle();
-    const shown = visible();
-    expect(shown).toContain("Ship the viewer.");
-    expect(shown).toContain("M1 Build");
-    const ids = [...container.querySelectorAll(".progress-id")].map((el) => el.textContent);
-    expect(ids).toEqual(["P2_M1A1-3", "P2_M1A1-2", "P2_M1A1-1", "M1A1 note"]);
-    expect(shown).toContain("Awaiting review (blocked)");
-    expect(shown).toContain("by owner");
-
-    click(byText('[role="tab"]', "Details"));
-    expect(visible()).toContain("Details body");
-    click(byText(".fake-details button", "Progress Viewer"));
-    expect(tabs()).toEqual(["Details", "Progress Viewer"]);
-    expect(calls).toHaveLength(1);
-
-    click(q('[aria-label="Close Progress Viewer"]'));
-    expect(tabs()).toEqual([]);
-    expect(document.activeElement?.textContent).toBe("Progress Viewer");
-    expect(detailsMounts).toBe(1);
-  });
-
-  it("switches tabs from the keyboard", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
-    const list = q('[role="tablist"]')!;
-    act(() => list.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
-    expect(q('[role="tab"][aria-selected="true"]')!.textContent).toBe("Details");
-    expect(document.activeElement?.textContent).toBe("Details");
+    expect(container.textContent).toContain("Ship the viewer.");
+    expect(container.textContent).toContain("M1 Build");
+    expect([...container.querySelectorAll(".progress-id")].map((el) => el.textContent)).toEqual([
+      "P2_M1A1-3", "P2_M1A1-2", "P2_M1A1-1", "M1A1 note",
+    ]);
+    expect(container.textContent).toContain("Awaiting review (blocked)");
+    expect(container.textContent).toContain("by owner");
   });
 
   it("expands a task's input, output and evaluation and keeps it open across refresh", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
+    render();
     calls[0].resolve(progress());
     await settle();
     const row = () => [...container.querySelectorAll<HTMLElement>(".progress-row")].find((b) => b.textContent?.includes("P2_M1A1-1"))!;
@@ -186,8 +218,7 @@ describe("ProgressPanels", () => {
   });
 
   it("keeps a picked direction on refresh and ignores an older request's late answer", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
+    render();
     calls[0].resolve(progress());
     await settle();
     const select = q<HTMLSelectElement>("select")!;
@@ -216,29 +247,21 @@ describe("ProgressPanels", () => {
     expect(calls[4].path).toBe("/projects/alpha/progress?generation=1");
   });
 
-  it("closes on another session, project or service and drops the pending answer", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
-    render("svc/alpha/s2");
-    expect(tabs()).toEqual([]);
-    click(byText("button", "Progress Viewer"));
-    expect(calls).toHaveLength(2);
+  it("opens a fresh view per project and drops a pending answer from the previous one", async () => {
+    render();
+    render("beta");
+    expect(calls.map((c) => c.path)).toEqual(["/projects/alpha/progress", "/projects/beta/progress"]);
     calls[0].resolve(progress({ direction: "STALE" }));
     await settle();
     expect(container.textContent).not.toContain("STALE");
     expect(container.textContent).toContain("Loading the track");
-    calls[1].resolve(progress({ project: "beta", direction: "OTHER PROJECT" }));
+    calls[1].resolve(progress({ project: "alpha", direction: "WRONG PROJECT" }));
     await settle();
-    expect(container.textContent).not.toContain("OTHER PROJECT");
-    render("other-svc/alpha/s2");
-    expect(tabs()).toEqual([]);
-    render(null);
-    expect(byText("button", "Progress Viewer")).toBeUndefined();
+    expect(container.textContent).not.toContain("WRONG PROJECT");
   });
 
   it("retries after an error, keeps a stale snapshot on a failed refresh, and clears a missing project", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
+    render();
     calls[0].reject(new Error("network down"));
     await settle();
     expect(container.textContent).toContain("network down");
@@ -258,8 +281,7 @@ describe("ProgressPanels", () => {
   });
 
   it("shows empty and missing states", async () => {
-    render("svc/alpha/s1");
-    click(byText("button", "Progress Viewer"));
+    render();
     calls[0].resolve(progress({
       generations: [1], current: 1, generation: 1, direction_placeholder: true, plan: null, active: [], completed: [], notes: [],
       issues: ["track/tasks.jsonl has 1 unreadable line; skipped"], missing: { track: false, direction: false, plan: true, executions: true },

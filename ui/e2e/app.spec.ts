@@ -280,12 +280,15 @@ test("stop ends the session and leaves the rest of the app working", async ({ pa
   await page.goto(s.signedInUrl);
   await startSession(page, s, "demo");
   await expect(terminalText(page)).toContainText("fake agent ready", { timeout: 15_000 });
-  await page.getByRole("button", { name: "Stop session" }).click();
+  const details = page.locator(".details");
+  const actions = details.getByRole("region", { name: "Actions" });
+  await expect(details.locator(":scope > .panel-section").last()).toHaveAttribute("aria-label", "Actions");
+  await actions.getByRole("button", { name: "Stop session" }).click();
   await expect(page.getByText("Anything typed in its input is cleared")).toBeVisible();
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(row(page, "demo")).toBeVisible();
 
-  await page.getByRole("button", { name: "Stop session" }).click();
+  await actions.getByRole("button", { name: "Stop session" }).click();
   await page.getByRole("button", { name: "Stop demo" }).click();
   await expect(row(page, "demo")).toBeHidden({ timeout: 15_000 });
   await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
@@ -433,7 +436,7 @@ test("the right panel shows details, changes, and files, and follows the selecti
   await expect(details.getByText("trunk")).toBeVisible();
   await expect(details.getByRole("button", { name: "notes.txt" })).toBeVisible();
 
-  await details.getByRole("tab", { name: "All" }).click();
+  await details.getByRole("button", { name: "All" }).click();
   await expect(details.getByRole("button", { name: "inner.txt" })).toBeHidden();
   await details.getByRole("button", { name: "src" }).click();
   await expect(details.getByRole("button", { name: "inner.txt" })).toBeVisible();
@@ -463,7 +466,7 @@ test("switching sessions shows one Files section, for the selected session's dir
     ["two", "second-only.txt", "first-only.txt"],
   ]) {
     await row(page, name).click();
-    await details.getByRole("tab", { name: "All" }).click();
+    await details.getByRole("button", { name: "All" }).click();
     await expect(details.getByRole("button", { name: mine })).toBeVisible();
     await expect(details.getByRole("button", { name: theirs })).toHaveCount(0);
     await expect(details.getByRole("heading", { name: "Files" })).toHaveCount(1);
@@ -481,7 +484,7 @@ test("Files reloads the list it shows, keeping open folders open", async ({ page
   await startFromPrompt(page, { cwd: project, name: "one", wait: false });
 
   const files = page.locator(".details").getByRole("region", { name: "Files" });
-  await files.getByRole("tab", { name: "All" }).click();
+  await files.getByRole("button", { name: "All" }).click();
   await files.getByRole("button", { name: "src" }).click();
   await expect(files.getByRole("button", { name: "inner.txt" })).toBeVisible();
   writeFileSync(join(project, "added.txt"), "x");

@@ -125,23 +125,17 @@ function StopSession({ id, name }: { id: string; name: string }) {
   }
 
   if (stopping) {
-    return (
-      <section className="details-actions">
-        <p className="stop-note" role="status">Stopping {name}…</p>
-      </section>
-    );
+    return <p className="stop-note" role="status">Stopping {name}…</p>;
   }
   if (!confirming) {
     return (
-      <section className="details-actions">
-        <button type="button" onClick={() => setConfirming(true)}>
-          Stop session
-        </button>
-      </section>
+      <button type="button" onClick={() => setConfirming(true)}>
+        Stop session
+      </button>
     );
   }
   return (
-    <section className="details-actions" aria-label={`Stop ${name}?`}>
+    <div role="group" aria-label={`Stop ${name}?`}>
       <p className="stop-note">
         Stop {name}? Anything typed in its input is cleared, then the agent is asked to exit. If it's still running
         after 10 seconds, its terminal is closed.
@@ -154,7 +148,7 @@ function StopSession({ id, name }: { id: string; name: string }) {
           Stop {name}
         </button>
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -210,15 +204,17 @@ export const DetailsPanel = memo(function DetailsPanel({ actions }: { actions?: 
           {session.memory_mb != null && <Row label="Memory" value={`${Math.round(session.memory_mb)} MB`} />}
         </dl>
         {actions && <section className="details-actions">{actions}</section>}
-        {session.managed && session.status === "running" && (
-          <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />
-        )}
       </Section>
       <Section id="usage" title="Token usage">
         <Usage session={session} />
       </Section>
       {session.cwd && <FilesSection key={`files/${session.id}`} sessionId={session.id} tool={session.tool ?? null} />}
       <PluginSlot slot="right-panel" session={session} />
+      {session.managed && session.status === "running" && (
+        <Section id="session-actions" title="Actions">
+          <StopSession key={session.id} id={session.id} name={session.display_name} />
+        </Section>
+      )}
     </>
   );
 });

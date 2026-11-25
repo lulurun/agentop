@@ -558,9 +558,9 @@ button.app-outdated:hover { background: var(--line); }
 .stop-note { margin: 0 0 8px; color: var(--quiet); font-size: 13px; }
 .stop-buttons { display: flex; gap: 8px; }
 
-.file-tabs { display: flex; gap: 4px; margin-bottom: 6px; }
-.file-tabs button { padding: 2px 9px; background: none; border-color: transparent; color: var(--quiet); }
-.file-tabs button[aria-selected="true"] { background: var(--raised); color: var(--text); }
+.file-filters { display: flex; gap: 4px; margin-bottom: 6px; }
+.file-filters button { padding: 2px 9px; background: none; border-color: transparent; color: var(--quiet); }
+.file-filters button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
 .file-note { margin: 2px 0 6px; color: var(--quiet); font-size: 13px; }
 .file-list, .file-list ul { margin: 0; padding: 0; list-style: none; }
 .file-list ul { padding-left: 12px; }
@@ -1473,11 +1473,9 @@ button.icon.section-action:hover { background: var(--raised); color: var(--text)
 @keyframes start-pulse { 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .start-pulse { animation: none; } }
 
-/* Right-panel tabs (Projects' Progress Viewer) */
-.side-tab-bar { position: sticky; top: -4px; z-index: 1; margin: -4px -14px 4px; }
-.side-tab-bar .tab[data-active] { background: var(--surface); box-shadow: inset 0 -2px 0 var(--action); }
+/* Projects Progress Viewer */
 .tab-label:focus-visible, .progress-row:focus-visible { outline: 2px solid var(--action); outline-offset: -2px; }
-.progress-viewer { padding-bottom: 8px; }
+.progress-viewer { flex: 1; min-height: 0; overflow: auto; padding: 8px 16px 16px; }
 .progress-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
 .progress-toolbar button { margin-left: auto; }
 .progress-pick { display: flex; align-items: center; gap: 6px; color: var(--quiet); }

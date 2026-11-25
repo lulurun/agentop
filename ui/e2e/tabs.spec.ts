@@ -136,7 +136,7 @@ test("a file from the right panel opens in the right group, beside the terminal"
   await startSession(page, "demo", project);
 
   const details = page.locator(".details");
-  await details.getByRole("tab", { name: "All" }).click();
+  await details.getByRole("button", { name: "All" }).click();
   await details.getByRole("button", { name: "src" }).click();
   await details.getByRole("button", { name: "hello.py" }).click();
 
@@ -205,7 +205,7 @@ test("a Markdown file opens drawn, with its links and images", async ({ page }) 
   await startSession(page, "demo", project);
 
   const details = page.locator(".details");
-  await details.getByRole("tab", { name: "All" }).click();
+  await details.getByRole("button", { name: "All" }).click();
   await details.getByRole("button", { name: "docs" }).click();
   await details.getByRole("button", { name: "guide.md" }).click();
 
@@ -251,7 +251,7 @@ test("an image file opens drawn in the middle of the tab", async ({ page }) => {
   await startSession(page, "demo", project);
 
   const details = page.locator(".details");
-  await details.getByRole("tab", { name: "All" }).click();
+  await details.getByRole("button", { name: "All" }).click();
   await details.getByRole("button", { name: "dot.PNG" }).click();
 
   const main = page.locator(".main");

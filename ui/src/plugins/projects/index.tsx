@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { DetailsPanel } from "../../components/DetailsPanel";
 import { selectedSession } from "../../components/MainArea";
 import { Section } from "../../components/Section";
-import { SidePanelTabs, type SideTab } from "../../components/SidePanelTabs";
 import { SessionSections } from "../../components/Sidebar";
 import { focusedPastId, useApp } from "../../store";
 import type { PluginContext, UiPlugin } from "../types";
@@ -201,77 +200,32 @@ function Background({ plugin }: { plugin: PluginContext }) {
   );
 }
 
-type Tab = "details" | "progress";
-
-/**
- * The right panel with a Progress Viewer for `viewerKey`'s Coordinator, or Details alone when it is null.
- * The viewer closes whenever the key changes: another service, project or session, or a History tab.
- */
-export function ProgressPanels({ plugin, viewerKey, project, details }: {
-  plugin: PluginContext;
-  viewerKey: string | null;
-  project: string | undefined;
-  details(entry: ReactNode): ReactNode;
-}) {
-  const [viewer, setViewer] = useState<{ key: string; tab: Tab } | null>(null);
-  const entry = useRef<HTMLButtonElement>(null);
-  const refocus = useRef(false);
-  const shown = viewer && viewer.key === viewerKey ? viewer : null;
-
-  useEffect(() => {
-    if (viewer && viewer.key !== viewerKey) setViewer(null);
-  }, [viewer, viewerKey]);
-
-  useLayoutEffect(() => {
-    if (!shown && refocus.current) {
-      refocus.current = false;
-      entry.current?.focus();
-    }
-  });
-
-  const button = viewerKey && (
-    <button ref={entry} type="button" onClick={() => setViewer({ key: viewerKey, tab: "progress" })}>
+function Right({ plugin }: { plugin: PluginContext }) {
+  const { projects, chosen } = useProjects(plugin);
+  const session = useApp(selectedSession);
+  const pastId = useApp(focusedPastId);
+  const openTab = useApp((s) => s.openTab);
+  const entry = chosen && isProjectCoordinator(session, chosen, projects, pastId) && (
+    <button
+      type="button"
+      onClick={() => openTab({ kind: "plugin", plugin: plugin.id, view: "progress", key: chosen }, "right", "tab")}
+    >
       Progress Viewer
     </button>
   );
-  const close = () => {
-    refocus.current = true;
-    setViewer(null);
-  };
-  const tabs: SideTab[] = [{ id: "details", label: "Details", body: details(button) }];
-  if (shown && project) {
-    tabs.push({ id: "progress", label: "Progress Viewer", onClose: close, body: <ProgressViewer key={shown.key} plugin={plugin} project={project} /> });
-  }
-  return (
-    <SidePanelTabs
-      label="Right panel tabs"
-      active={shown?.tab ?? "details"}
-      onSelect={(tab) => shown && setViewer({ ...shown, tab: tab as Tab })}
-      tabs={tabs}
-    />
-  );
-}
-
-function Right({ plugin }: { plugin: PluginContext }) {
-  const { projects, chosen } = useProjects(plugin);
-  const service = useApp((s) => s.activeId);
-  const session = useApp(selectedSession);
-  const pastId = useApp(focusedPastId);
-  const viewerKey = isProjectCoordinator(session, chosen, projects, pastId) ? JSON.stringify([service, chosen, session.id]) : null;
-  return (
-    <ProgressPanels
-      plugin={plugin}
-      viewerKey={viewerKey}
-      project={chosen}
-      details={(entry) => <DetailsPanel actions={entry} />}
-    />
-  );
+  return <DetailsPanel actions={entry} />;
 }
 
 export const plugin: UiPlugin = {
   feature: {
     label: "Projects",
-    views: {},
+    views: {
+      progress: {
+        label: "Progress Viewer",
+        tabLabel: (project) => `Progress Viewer: ${project}`,
+        Component: ({ plugin, viewKey }) => viewKey ? <ProgressViewer plugin={plugin} project={viewKey} /> : null,
+      },
+    },
     left: Left,
     right: Right,
     background: Background,

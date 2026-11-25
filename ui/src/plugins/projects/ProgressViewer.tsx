@@ -164,7 +164,7 @@ function Execution({ data, expanded, toggle }: { data: Progress; expanded: Set<s
   );
 }
 
-/** The Progress Viewer of one project's track: mounted per service, project and Coordinator, so nothing carries between them. */
+/** The Progress Viewer of one project's track. */
 export function ProgressViewer({ plugin, project }: { plugin: PluginContext; project: string }) {
   const [data, setData] = useState<Progress | null>(null);
   const [load, setLoad] = useState<Load>({ kind: "loading" });
@@ -260,7 +260,7 @@ export function ProgressViewer({ plugin, project }: { plugin: PluginContext; pro
       )}
       {data && !data.missing.track && (
         <>
-          <Section id="projects:progress:direction" title={`Direction ${data.generation}`}>
+          <Section id={`projects:progress:${project}:direction`} title={`Direction ${data.generation}`}>
             {data.direction == null ? (
               <p className="detail-empty">DIRECTION.md is missing from track/{data.generation}.</p>
             ) : (
@@ -270,10 +270,10 @@ export function ProgressViewer({ plugin, project }: { plugin: PluginContext; pro
               </>
             )}
           </Section>
-          <Section id="projects:progress:plan" title="Plan">
+          <Section id={`projects:progress:${project}:plan`} title="Plan">
             {data.plan == null ? <p className="detail-empty">PLAN.md is missing from track/{data.generation}.</p> : <Doc text={data.plan} />}
           </Section>
-          <Section id="projects:progress:execution" title="Execution">
+          <Section id={`projects:progress:${project}:execution`} title="Execution">
             <Execution data={data} expanded={expanded} toggle={toggle} />
           </Section>
         </>
