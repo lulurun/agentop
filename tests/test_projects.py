@@ -69,9 +69,11 @@ def test_names_and_the_default_project(tmp_path, monkeypatch):
         projects.create("alpha", "projects")
     assert [p["name"] for p in projects.list_projects("projects")] == ["alpha"]
     with pytest.raises(projects.ProjectError):
-        projects.remove(projects.DEFAULT)
-    projects.remove("alpha")
-    assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
+        projects.close(projects.DEFAULT)
+    assert not projects.kept("alpha")
+    projects.close("alpha")
+    assert projects.get("alpha") is None and projects.folder("alpha").is_dir() and projects.kept("alpha")
+    assert not hasattr(projects, "remove")
 
 
 def test_the_instructions_are_written_once(tmp_path, monkeypatch):
@@ -175,7 +177,7 @@ def test_the_coordinator_starts_once_with_its_welcome_and_is_resumed_after(fake_
         assert registry.load()["sessions"][again["id"]]["agent_session_id"] == "COORD-1"
 
 
-def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
+def test_the_projects_plugin_makes_closes_and_loads_again_its_own(fake_agents, quick_boot):
     with run_service() as service:
         base = "/plugins/projects/projects"
         assert service.http.post(base, json={"name": "Bad Name"}).status_code == 400
@@ -207,18 +209,55 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         wait_for_screen(coordinator_row["id"], "You are resuming this project's Coordinator session")
         assert registry.load()["sessions"][coordinator_row["id"]]["agent_session_id"] == "ALPHA-COORD-1"
 
-        # Not its own: the default project, and a project that isn't there.
-        assert service.http.delete(f"{base}/default").status_code == 404
+        # Not its own: the default project, and a project that isn't there. There is no DELETE any more.
+        assert service.http.post(f"{base}/default/close").status_code == 404
         assert service.http.post(f"{base}/nope/coordinator").status_code == 404
+        assert service.http.delete(f"{base}/alpha").status_code in (404, 405)
+        assert service.http.delete(f"{base}/alpha?delete_folder=true").status_code in (404, 405)
+        assert projects.get("alpha") is not None
 
-        kept = lambda: {  # noqa: E731
+        outside = lambda: {  # noqa: E731
             str(f.relative_to(projects.folder("alpha"))): f.read_bytes() for f in projects.folder("alpha").rglob("*")
-            if f.is_file() and f.name != "sessions.json"
+            if f.is_file() and f.parts[-2] != projects.META_DIR
         }
-        before = kept()
-        assert service.http.delete(f"{base}/alpha").status_code == 200
+        before = outside()
+        closed = service.http.post(f"{base}/alpha/close")
+        assert closed.status_code == 200, closed.text
+        assert closed.json()["folder"] == str(projects.folder("alpha"))
         assert not Session.has(coordinator_row["id"])
-        assert kept() == {k: v for k, v in before.items() if k != ".project/project.json"}
+        after = outside()
+        mark = after.pop("track/1/CLOSED.md").decode()
+        assert after == before
+        assert "closed by the owner, in the app" in mark
+        assert not (projects.folder("alpha") / ".project/project.json").exists()
         assert not any(r["project"] == "alpha" for r in registry.load()["sessions"].values())
         assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
         assert service.http.get(base).json() == []
+        assert not any(r["project"] == "alpha" for r in service.http.get("/sessions").json())
+
+        # Created again, the kept folder is loaded as it is, and its Coordinator resumes on the track.
+        again = service.http.post(base, json={"name": "alpha"})
+        assert again.status_code == 201, again.text
+        assert [p["name"] for p in service.http.get(base).json()] == ["alpha"]
+        coordinator_row = next(
+            r for r in service.http.get("/sessions").json() if r["project"] == "alpha" and r["display_name"] == "Coordinator"
+        )
+        service.wait_for(coordinator_row["id"], "running")
+        wait_for_screen(coordinator_row["id"], "You are resuming this project's Coordinator session")
+        reloaded = outside()
+        mark = reloaded.pop("track/1/CLOSED.md").decode()
+        assert reloaded == before
+        assert mark.splitlines()[-1].endswith("reopened by the owner, in the app")
+
+
+def test_a_project_still_starting_is_closed_once_it_is_up(fake_agents):
+    for agent in fake_agents.values():
+        agent.boot_seconds = 2.0
+    with run_service() as service:
+        base = "/plugins/projects/projects"
+        assert service.http.post(base, json={"name": "alpha"}).status_code == 201
+        row = next(r for r in service.http.get("/sessions").json() if r["project"] == "alpha")
+        assert row["status"] == "starting"
+        assert service.http.post(f"{base}/alpha/close").status_code == 200
+        assert not Session.has(row["id"])
+        assert projects.get("alpha") is None and projects.folder("alpha").is_dir()

@@ -181,6 +181,31 @@ def stop(name: str, sessions: list[dict] | None = None) -> StopResult:
     return AgentInstance(agent, tmux_name).stop()
 
 
+def stop_detached(name: str, sessions: list[dict] | None = None) -> None:
+    """Stop a managed session from a process of its own, so stopping the session this runs in still finishes. Raises OpsError."""
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    if sessions is None:
+        sessions = get_sessions()
+    s = next((s for s in sessions if s["name"] == name), None)
+    if s is None or not s.get("managed"):
+        raise OpsError(f"{name} is not a managed session")
+    _agent(s["tool"])
+    tmux_name = (s.get("tmux") or {}).get("session") or name
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join(filter(None, [str(Path(__file__).parent.parent), os.environ.get("PYTHONPATH")]))}
+    # Its own session: the stop types C-c into this pane, and the agent may then end this process.
+    subprocess.Popen(
+        [sys.executable, "-c", "import sys; from agentop.ops import _stop_now; _stop_now(sys.argv[1], sys.argv[2])", s["tool"], tmux_name],
+        env=env, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+
+
+def _stop_now(tool: str, tmux_name: str) -> None:
+    AgentInstance(_agent(tool), tmux_name).stop()
+
+
 def get_saved_sessions(
     tool: str | None = None,
     limit: int = 50,

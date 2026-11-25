@@ -1,6 +1,6 @@
 """Projects: the owner's own projects, each run through a Coordinator. See docs/0_13_projects.md, sections 4.3 and 7.2.
 
-The core keeps projects and their sessions; this plugin makes and removes its own, checks its Coordinators' turns, and its UI is the Projects feature.
+The core keeps projects and their sessions; this plugin makes and closes its own, checks its Coordinators' turns, and its UI is the Projects feature.
 """
 
 # No `from __future__ import annotations`: FastAPI reads the request body's model,
@@ -17,9 +17,11 @@ def register(api) -> None:
     from agentop.agentclis import get_agent
     from agentop.tmux import PasteError
 
-    from . import pursuit, review, wake
+    from . import pursuit, review, track, wake
     from .checker import Checker
     from .texts import INSTRUCTIONS, WELCOME
+
+    BY_OWNER = "the owner, in the app"
 
     def deliver(project: str, row: dict, text: str) -> None:
         agent = get_agent(row.get("tool") or "")
@@ -55,8 +57,12 @@ def register(api) -> None:
 
     @api.router.post("/projects", status_code=201)
     async def create_project(body: NewProject):
+        """A new project, or a closed one's kept folder taken back as it is."""
+        name = body.name.strip()
+        if await asyncio.to_thread(projects.kept, name):
+            await asyncio.to_thread(track.reopen, name, BY_OWNER)
         try:
-            return await api.create_project(body.name.strip(), WELCOME, INSTRUCTIONS)
+            return await api.create_project(name, WELCOME, INSTRUCTIONS)
         except projects.ProjectError as exc:
             raise HTTPException(400, str(exc)) from None
 
@@ -96,14 +102,15 @@ def register(api) -> None:
             raise HTTPException(502, f"The event didn't reach the Coordinator: {exc}") from exc
         return {"outcome": outcome}
 
-    @api.router.delete("/projects/{name}")
-    async def remove_project(name: str, delete_folder: bool = False):
+    @api.router.post("/projects/{name}/close")
+    async def close_project(name: str):
+        """Mark it closed in its track, stop its sessions and drop its entry. Its folder is kept."""
         own(name)
         try:
-            await api.remove_project(name, delete_folder)
+            await api.close_project(name, lambda: track.mark(name, "closed", BY_OWNER))
         except projects.ProjectError as exc:
-            raise HTTPException(400, str(exc)) from None
-        return {"ok": True}
+            raise HTTPException(409, str(exc)) from None
+        return {"ok": True, "folder": str(projects.folder(name))}
 
     def stop_all() -> None:
         mine = {p["name"] for p in projects.list_projects(api.id)}
