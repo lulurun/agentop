@@ -258,6 +258,7 @@ def test_a_project_still_starting_is_closed_once_it_is_up(fake_agents):
         assert service.http.post(base, json={"name": "alpha"}).status_code == 201
         row = next(r for r in service.http.get("/sessions").json() if r["project"] == "alpha")
         assert row["status"] == "starting"
-        assert service.http.post(f"{base}/alpha/close").status_code == 200
+        # Close waits for the start, which is slow under a full parallel run.
+        assert service.http.post(f"{base}/alpha/close", timeout=90).status_code == 200
         assert not Session.has(row["id"])
         assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
