@@ -198,7 +198,8 @@ class Checker:
             return True
         if key == "task_input_after":
             kind, text = "task.input", (
-                f"{head} has waited for input for {age(waited)} (feed: {status.event or 'input'}). "
+                f"{head} has waited for input for {age(waited)}"
+                f"{' (an approval prompt on its screen)' if status.source == 'screen' else ''}. "
                 "Look at its screen: answer it, or tell the owner if it needs them."
             )
         elif key == "task_working_after":
