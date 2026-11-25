@@ -377,6 +377,43 @@ def test_a_task_event_still_clears_over_an_owner_yield(alpha, monkeypatch, capsy
     assert pane.typed[0] == "/clear" and events("wake")[-1]["cleared"] == "cleared"
 
 
+def test_a_report_that_clears_over_an_open_owner_ask_shows_the_ask_again(alpha, monkeypatch, capsys):
+    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
+    task()
+    owner_yield()
+    ask = pursuit.events("alpha")[-1]["action"]
+    pane = FakePane()
+    report(monkeypatch, pane)
+    assert pane.typed[0] == "/clear" and events("wake")[-1]["cleared"] == "cleared"
+    prompt = pane.typed[1]
+    assert "Open questions for the owner:" in prompt
+    assert f"{ask}: M1 is done. May I merge login into main?" in prompt
+    assert "Recommend: Yes" in prompt and "Default: Hold the merge" in prompt
+    assert prompt.index("Open questions") < prompt.index("dev reported round 1")
+
+
+def test_a_report_that_clears_with_no_open_ask_types_the_prompt_unchanged(alpha, monkeypatch):
+    task()
+    waiting()
+    pane = FakePane()
+    report(monkeypatch, pane)
+    assert pane.typed[0] == "/clear"
+    assert "Open questions" not in pane.typed[1]
+    head = wake.CLEARED + "\n\n" + pursuit.read_next("alpha") + "\n\n"
+    assert pane.typed[1].startswith(head) and "dev reported round 1" in pane.typed[1][len(head):].split("\n")[0]
+
+
+def test_the_resume_prompt_after_a_yield_clear_shows_an_open_owner_ask(alpha, monkeypatch):
+    task()
+    waiting()
+    with pursuit._locked("alpha"):
+        track.ask("alpha", None, "Ship it on Friday?", "Yes", "Wait for Monday")
+    pane = FakePane()
+    assert wake.safety_clear("alpha", pane, "the yield asked for it", explicit=True) == "cleared"
+    assert pane.typed[0] == "/clear" and pane.typed[1].startswith(wake.RESUME)
+    assert "Ship it on Friday?" in pane.typed[1] and "Default: Wait for Monday" in pane.typed[1]
+
+
 def test_the_safety_net_waits_for_the_feed_not_the_screen(alpha, monkeypatch):
     task()
     waiting()

@@ -555,6 +555,22 @@ def _note(action: dict, key: str) -> str:
     return next((n.strip().partition(":")[2].strip() for n in action["notes"] if _note_key(n) == key), "")
 
 
+def open_asks(project: str) -> str:
+    """The plan's waiting-on-owner actions with their Question, Recommend and Default, or "" when none is open."""
+    try:
+        plan = load_plan(project)
+    except TrackError:
+        return ""
+    asks = [x for ms in plan["milestones"] for x in ms["actions"] if x["status"] == "waiting on owner"]
+    if not asks:
+        return ""
+    lines = ["Open questions for the owner:"]
+    for x in asks:
+        lines += [f"- {action_ref(x)}: {_note(x, 'Question') or x['title']}",
+                  f"  Recommend: {_note(x, 'Recommend')}", f"  Default: {_note(x, 'Default')}"]
+    return "\n".join(lines)
+
+
 def asked_times(action: dict) -> int:
     found = re.search(r"\((\d+)×\)", _note(action, "Asked"))
     return int(found[1]) if found else 1

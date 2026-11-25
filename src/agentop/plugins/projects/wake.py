@@ -200,7 +200,7 @@ def clear(pane: Pane, timeout: float = CLEAR_TIMEOUT) -> str | None:
 
 
 def compose(project: str, head: str, text: str = "") -> str:
-    """The prompt after a clear: its first line, a due direction change, the Next verbatim, then the event."""
+    """The prompt after a clear: its first line, a due direction change, the Next verbatim, open owner asks, then the event."""
     parts = [head]
     due = pursuit.change_notice(project).strip()
     if due:
@@ -208,6 +208,9 @@ def compose(project: str, head: str, text: str = "") -> str:
     found = pursuit.read_next(project)
     if found:
         parts.append(found)
+    asks = track.open_asks(project)
+    if asks:
+        parts.append(asks)
     if text.strip():
         parts.append(text.strip())
     return "\n\n".join(parts)
