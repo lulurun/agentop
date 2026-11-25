@@ -373,7 +373,7 @@ Every command and option is in [0_08_cli.md](0_08_cli.md). The CLI is a peer of 
 
 - **Session commands** (`list`, `start`, `stop`, `send`, `history`) call the same `ops` functions the service does, and work with no service running. `send` goes through the service when one answers, so its prompts queue with the app's ([4.6](#46-sending-between-sessions)).
 - **Service commands** (`serve`, `open`, `service status | stop | restart | update | token | clients | connect-info`) run the service or ask it. They sign in with the service token from `service.json`, for 60 seconds per command ([0_06_security.md 2](0_06_security.md#2-how-each-client-signs-in)).
-- **Project commands** (`project list | show | create | remove`): create and remove act on the Projects plugin's projects, and need it on ([13](#13-projects)).
+- **Project commands** (`project list | show | create | close`): create and close act on the Projects plugin's projects, and need it on. Closing marks the track and keeps the folder, which create loads again; agentop never deletes a project's folder ([13](#13-projects)).
 - **Plugin commands** (`dialogue`, `recall`, `email-code`) come from plugins and never start the service; a disabled plugin's command says so ([0_12_00_plugins.md](0_12_00_plugins.md#cli-commands)).
 - Agents are a main user of the CLI: a Coordinator starts and reaches its project's sessions with `agentop start` and `agentop send`, and the skills `agentop serve` installs (`handoff`, `recall`) run it ([src/agentop/skills/](../src/agentop/skills/README.md)).
 

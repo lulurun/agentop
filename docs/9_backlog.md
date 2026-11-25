@@ -38,6 +38,11 @@ Two places signal a PID read from a file, with no check that it is still the pro
 
 ## P2
 
+### Removing a dialogue deletes its project folder
+
+Projects never delete a folder (`agentop project close` keeps it), but a dialogue is a project too, and `agentop dialogue remove` and the Dialogues Remove action `rmtree` its folder (`plugins/dialogue/ops.py`, `remove_dialogue` and `remove_dialogues_by_status`). Decide whether dialogues follow the same rule: mark and drop the entry, keep the folder.
+
+
 ### Service and UI updates in the header
 
 Update can follow `v*` releases (`update_from = "release"`, built 2026-11-18). The desktop app's header offers **Update agentop** (built 2026-11-20); the web app's header has no Update yet, only each service's Status ([design 7.4](0_00_design.md#74-releases-and-the-update-indicator)).
