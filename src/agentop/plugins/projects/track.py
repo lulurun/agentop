@@ -124,14 +124,6 @@ def next_task_id(project: str, action: str | None) -> tuple[str, int]:
     return f"{full}-{counter['tasks'][full]}", counter["direction"]
 
 
-def _carry_id(project: str, action: str) -> str:
-    counter = load_counter(project)
-    full = f"P{counter['direction']}_{action}"
-    counter["tasks"][full] = counter["tasks"].get(full, 0) + 1
-    _save_counter(project, counter)
-    return f"{full}-{counter['tasks'][full]}"
-
-
 def _log_path(project: str) -> Path:
     return root(project) / "tasks.jsonl"
 
@@ -170,11 +162,9 @@ def task_log(project: str) -> list[dict]:
 
 
 def task_states(project: str) -> dict[str, dict]:
-    """Each task's last line in tasks.jsonl, in the order tasks first appear; a carried task's old ID is `carried`."""
+    """Each task's last line in tasks.jsonl, in the order tasks first appear."""
     states: dict[str, dict] = {}
     for event in task_log(project):
-        if event.get("from") in states:
-            states[event["from"]] = {**states[event["from"]], "status": "carried", "event": "carry", "to": event["id"]}
         states[event["id"]] = event
     return states
 
@@ -407,9 +397,13 @@ def milestone_of(plan: dict, action: dict) -> dict:
 
 
 def current_milestone(plan: dict) -> dict | None:
-    """The first milestone in progress, else the first not done or dropped, else the last, in plan order."""
+    """The first milestone in progress, else the first not done or dropped, else the last, in plan order.
+
+    A milestone holding a pending direction change isn't the work in hand; status shows it on its own.
+    """
     for wanted in (("in progress",), ("planned",)):
-        found = next((m for m in plan["milestones"] if m["status"] in wanted), None)
+        found = next((m for m in plan["milestones"] if m["status"] in wanted
+                      and pending_change({"milestones": [m]}) is None), None)
         if found is not None:
             return found
     return plan["milestones"][-1] if plan["milestones"] else None
@@ -523,7 +517,10 @@ def ask(project: str, ref: str | None, question: str, recommend: str, default: s
     elif ref is not None:
         milestone = find_milestone(plan, parse_ref(project, ref, False)[0])
     if same is None:
-        milestone = milestone or next((x for x in plan["milestones"] if x["status"] not in CLOSED), None)
+        milestone = milestone or next(
+            (x for x in plan["milestones"] if x["status"] not in CLOSED and pending_change({"milestones": [x]}) is None),
+            None,
+        )
         if milestone is None:
             milestone = add_milestone(project, "Questions for the owner")
         return add_action(project, f"M{milestone['m']}", question, status="waiting on owner",
@@ -618,8 +615,6 @@ def task_entry(task: dict) -> str:
     status = task["status"] if task["status"] != "open" else ("reported" if rounds[-1].get("reported_at") else "open")
     times = f"Opened {_when(task['opened_at'])}" + (f" · closed {_when(task['closed_at'])}" if task.get("closed_at") else "")
     lines = [f"## {task['id']}  session `{task['session']}`  {tool}", f"{times} · rounds {len(rounds)} · {status}"]
-    if task.get("carried_from"):
-        lines.append(f"Carried from {task['carried_from']}.")
     lines += ["", f"Input: {task['goal']}", *[f"- {c}" for c in task["accept"]], f"Artifact: {task['artifact']}"]
     if task.get("brief"):
         lines.append("Brief: " + " / ".join(task["brief"].strip().splitlines()[:3]))
@@ -697,7 +692,7 @@ def refresh_action(project: str, task: dict, open_tasks: list[dict], event: str)
             links.append(tid + suffix)
     action["links"] = ", ".join(links)
     others = [t for t in open_tasks if t is not task and t.get("action") == task["action"] and t.get("direction") == n]
-    if event in ("open", "carry"):
+    if event == "open":
         action["status"] = "in progress"
     elif event == "accept" and not others:
         action["status"] = "done"
@@ -716,6 +711,7 @@ def on_task(project: str, task: dict, event: str, open_tasks: list[dict], **extr
     log_task(project, task, event, **extra)
     write_task_entry(project, task)
     refresh_action(project, task, open_tasks, event)
+    refresh_change(project, open_tasks)
 
 
 def check_action(project: str, action: str) -> str:
@@ -725,17 +721,6 @@ def check_action(project: str, action: str) -> str:
     if found["status"].startswith(CLOSED):
         raise TrackError(f"M{m}A{a} is {found['status']}. Set it back with plan action set, or pick an open action")
     return action_ref(found)
-
-
-def carry(project: str, task: dict, to: str) -> str:
-    """Re-home an open task under an action of the current plan; returns its new ID. Call under the lock."""
-    action = check_action(project, to)
-    n = generation(project)
-    if task.get("action") and task.get("direction") == n:
-        raise TrackError(f"{task['id']} is already in the current plan, under {task['action']}")
-    old = task["id"]
-    task.update(id=_carry_id(project, action), action=action, direction=n, carried_from=old)
-    return old
 
 
 # --- creating generations ---
@@ -754,34 +739,151 @@ def write_first(project: str) -> bool:
     return True
 
 
-def new_direction(project: str, text: str, copy_plan: bool = False, open_tasks: list[dict] | None = None,
-                  keep_open: bool = False) -> int:
-    """Create track/N+1 (or fill in direction 1 while it is still the placeholder). Returns its number. Under the lock."""
-    if not (text or "").strip():
-        raise TrackError("A direction needs --text: what the project pursues now and what done means ('-' reads stdin)")
+def new_direction(project: str, text: str | None = None, copy_plan: bool = False,
+                  open_tasks: list[dict] | None = None) -> int:
+    """Finish the current plan, then create track/N+1 (or fill in direction 1 while it is the placeholder). Under the lock.
+
+    Without text, it takes the pending direction change's. Returns the new direction's number.
+    """
     n = generation(project)
-    current = [t for t in open_tasks or [] if t.get("direction", n) == n or not t.get("action")]
-    if current and not keep_open:
+    plan = load_plan(project, n) if n and plan_path(project, n).exists() else None
+    change = pending_change(plan) if plan else None
+    text = (text or "").strip() or (change_text(change) if change else "")
+    if not text:
+        raise TrackError("A direction needs --text: what the project pursues now and what done means ('-' reads stdin)")
+    if open_tasks:
         raise TrackError(
-            f"Tasks of direction {n} are open: {', '.join(t['id'] for t in current)}. Accept or fail them first, or "
-            "pass --keep-open and then carry each into the new plan with agentop coordinator task carry <id> --to <action>"
+            f"Tasks are open: {task_names(open_tasks)}. A new direction waits for them: accept or fail each first "
+            "(agentop coordinator direction change --text - records the change to make when they close)"
         )
     if n and not direction_text(project, n) and not any(e.get("direction") == n for e in task_log(project)):
         _sole_write(direction_path(project, n), _direction_file(n, text))
         return n
     new = n + 1
+    milestones = ""
+    if plan is not None:
+        if copy_plan:
+            kept = [m for m in plan["milestones"] if not (change and change in m["actions"])]
+            milestones = render_plan({"head": [], "milestones": kept})
+        _finish_plan(project, n, plan, change, new)
     target = gen_dir(project, new)
     target.mkdir(parents=True)
-    milestones = ""
-    if copy_plan and n:
-        old = load_plan(project, n)
-        milestones = render_plan({"head": [], "milestones": old["milestones"]})
     (target / "DIRECTION.md").write_text(_direction_file(new, text))
     (target / "PLAN.md").write_text(_plan_file(new, milestones))
     counter = load_counter(project)
     counter["plan"] = {"milestones": 0, "actions": {}}
     _save_counter(project, counter)
     return new
+
+
+def _finish_plan(project: str, n: int, plan: dict, change: dict | None, new: int) -> None:
+    """The old plan's final state: the change done, what was left not done, open milestones stopped."""
+    for milestone in plan["milestones"]:
+        for action in milestone["actions"]:
+            if action is change:
+                action["status"] = "done"
+            elif not action["status"].startswith(CLOSED):
+                action["status"] = f"not done (direction changed to {new})"
+        if change is not None and change in milestone["actions"]:
+            milestone["status"] = "done"
+            milestone["body"] = [line for line in milestone["body"] if not line.startswith("Summary:")]
+            milestone["body"].append(f"Summary: Direction changed to {new}.")
+        elif milestone["status"] not in CLOSED:
+            milestone["status"] = "stopped"
+    save_plan(project, plan, n)
+    if change is not None:
+        add_note(project, action_ref(change), f"Direction changed to {new}: track/{new}/DIRECTION.md.")
+
+
+# --- direction change ---
+
+CHANGE_TITLE = "Change direction: "
+CHANGE_MILESTONE = "Direction change"
+
+
+def pending_change(plan: dict) -> dict | None:
+    """The plan's pending 'Change direction: …' action, if any."""
+    for milestone in plan["milestones"]:
+        for action in milestone["actions"]:
+            if action["title"].startswith(CHANGE_TITLE) and action["status"].startswith("pending"):
+                return action
+    return None
+
+
+def change_text(action: dict) -> str:
+    lines = [n[4:] if n.startswith("  > ") else "" for n in action["notes"] if n.startswith("  >")]
+    return "\n".join(lines).strip()
+
+
+def task_names(tasks: list[dict]) -> str:
+    return ", ".join(f"{t['id']} ({t['session']})" for t in tasks)
+
+
+def _change_status(open_tasks: list[dict]) -> str:
+    if not open_tasks:
+        return "pending (no task open: run direction new)"
+    k = len(open_tasks)
+    return f"pending (waits for {k} open task{'s' if k > 1 else ''})"
+
+
+def change_direction(project: str, text: str, open_tasks: list[dict]) -> tuple[dict, bool]:
+    """Record a direction change as the plan's first action, pending until no task is open; a second one replaces it.
+
+    Returns (action, replaced). Under the lock.
+    """
+    text = (text or "").strip()
+    if not text:
+        raise TrackError("A direction change needs --text: the new direction, as the owner gave it ('-' reads stdin)")
+    n = generation(project)
+    if not n or not direction_text(project, n):
+        raise TrackError("There is no direction to change yet: write it with agentop coordinator direction new --text -")
+    title = CHANGE_TITLE + _one_line(text.splitlines()[0], "A direction change needs --text")
+    notes = [f"  Requested: {_when(time.time())}", "  Text:", *[f"  > {line}" if line.strip() else "  >" for line in text.splitlines()]]
+    plan = load_plan(project)
+    found = pending_change(plan)
+    if found is None:
+        first = plan["milestones"][0] if plan["milestones"] else None
+        milestone = add_milestone(project, CHANGE_MILESTONE, f"M{first['m']}" if first else None)
+        found = add_action(project, f"M{milestone['m']}", title, status=_change_status(open_tasks), notes=notes)
+        return found, False
+    found.update(title=title, notes=notes, status=_change_status(open_tasks))
+    save_plan(project, plan)
+    return found, True
+
+
+def refresh_change(project: str, open_tasks: list[dict]) -> None:
+    """Keep the pending change's count of open tasks true after a task event."""
+    try:
+        plan = load_plan(project)
+    except TrackError:
+        return
+    found = pending_change(plan)
+    if found is not None and found["status"] != _change_status(open_tasks):
+        found["status"] = _change_status(open_tasks)
+        save_plan(project, plan)
+
+
+def current_change(project: str) -> dict | None:
+    """The current plan's pending direction change."""
+    n = generation(project)
+    if not n:
+        return None
+    try:
+        return pending_change(load_plan(project, n))
+    except TrackError:
+        return None
+
+
+def change_refusal(project: str, open_tasks: list[dict]) -> str:
+    """Why nothing new starts while a direction change is pending, naming what it waits for; "" when none is."""
+    change = current_change(project)
+    if change is None:
+        return ""
+    ref = action_ref(change)
+    if open_tasks:
+        return (f"A direction change is pending ({ref}): it waits for the open tasks {task_names(open_tasks)}. "
+                "Finish them (accept, reject, fail); then run agentop coordinator direction new")
+    return f"A direction change is pending ({ref}) and no task is open: run agentop coordinator direction new now"
 
 
 # --- checks ---
@@ -805,14 +907,8 @@ def problems(project: str, open_tasks: list[dict], kind: str | None = None) -> l
             "plan milestone add, action add or action set; or, if the plan needs no change, record that with agentop "
             "coordinator direction add --no-plan-change"
         )
-    for t in open_tasks:
-        if not t.get("action"):
-            found.append(f"Task {t['id']} ({t['session']}) has no action: agentop coordinator task carry {t['id']} --to <M…A…>")
-        elif t.get("direction") != n:
-            found.append(
-                f"Task {t['id']} ({t['session']}) belongs to direction {t.get('direction')}, not carried: "
-                f"agentop coordinator task carry {t['id']} --to <M…A…>"
-            )
+    if kind != "owner" and not open_tasks and current_change(project) is not None:
+        found.append(change_refusal(project, open_tasks))
     try:
         plan = load_plan(project, n)
     except TrackError as exc:

@@ -116,10 +116,10 @@ def cleared(project: str) -> bool:
 
 
 def wake_note(project: str, source: str = "send") -> str:
-    """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, else ""; logs the wake."""
+    """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, then any due direction change; logs the wake."""
     note = WAKE_NOTE if cleared(project) else ""
     log(project, WAKE, source=source, cleared=bool(note))
-    return note
+    return note + change_notice(project)
 
 
 def next_path(project: str) -> Path:
@@ -191,23 +191,12 @@ def awaiting_report(task: dict) -> bool:
     return task["status"] == "open" and task["rounds"][-1].get("reported_at") is None
 
 
-def _current(project: str, task: dict) -> None:
-    """A decision on a task goes into the current plan, so a task of an older direction is carried first."""
-    if track.exists(project) and task.get("action") and task.get("direction") != track.generation(project):
-        raise PursuitError(
-            f"{task['id']} belongs to direction {task.get('direction')}, whose files are never written again. "
-            f"Carry it first: agentop coordinator task carry {task['id']} --to <M…A…>"
-        )
-
-
-def _update(project: str, session: str, change, event: str, decision: bool = True) -> dict:
+def _update(project: str, session: str, change, event: str) -> dict:
     with _locked(project):
         tasks = load_tasks(project)
         task = next((t for t in tasks if t["status"] == "open" and _is(t, session)), None)
         if task is None:
             raise PursuitError(f"{session} has no open task. agentop coordinator task list shows them")
-        if decision:
-            _current(project, task)
         change(task)
         _save_tasks(project, tasks)
         track.on_task(project, task, event, [t for t in tasks if t["status"] == "open"])
@@ -230,6 +219,9 @@ def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept
         tasks = load_tasks(project)
         if any(t["status"] == "open" and t["session"].lower() == session.lower() for t in tasks):
             raise PursuitError(f"{session} already has an open task. Accept, reject, or fail it first")
+        refusal = track.change_refusal(project, [t for t in tasks if t["status"] == "open"])
+        if refusal:
+            raise PursuitError(f"No new task starts: {refusal[0].lower()}{refusal[1:]}")
         if action is not None:
             action = track.check_action(project, action)
         if track.exists(project):
@@ -275,7 +267,7 @@ def report(project: str, session: str, summary: str, blocked: bool = False) -> d
             )
         current.update(reported_at=time.time(), summary=summary.strip(), blocked=blocked, artifact_present=present)
 
-    task = _update(project, session, change, "report", decision=False)
+    task = _update(project, session, change, "report")
     log(project, "task.report", task=task["id"], session=task["session"], round=len(task["rounds"]), blocked=blocked)
     return task
 
@@ -324,37 +316,43 @@ def reject(project: str, session: str, feedback: str) -> dict:
     return task
 
 
-def fail(project: str, session: str, note: str, decision: bool = True) -> dict:
+def fail(project: str, session: str, note: str) -> dict:
     if not note.strip():
         raise PursuitError("Failing needs --note: what is missing, and what you will do instead")
 
     def change(task):
         task.update(status="failed", closed_at=time.time(), note=note.strip())
 
-    task = _update(project, session, change, "fail", decision)
+    task = _update(project, session, change, "fail")
     log(project, "task.fail", task=task["id"], session=task["session"], rounds=len(task["rounds"]))
     return task
 
 
-def carry(project: str, ref: str, to: str) -> dict:
-    """Re-home an open task (of an older direction, or with no action) under an action of the current plan."""
-    if not track.exists(project):
-        raise PursuitError("There is no track/ yet: run agentop coordinator direction new --text - first")
+def new_direction(project: str, text: str | None = None, copy_plan: bool = False) -> int:
     with _locked(project):
-        tasks = load_tasks(project)
-        task = next((t for t in tasks if t["status"] == "open" and _is(t, ref)), None)
-        if task is None:
-            raise PursuitError(f"{ref} has no open task. agentop coordinator task list shows them")
-        old = track.carry(project, task, to)
-        _save_tasks(project, tasks)
-        track.on_task(project, task, "carry", [t for t in tasks if t["status"] == "open"], **{"from": old})
-    log(project, "task.carry", task=task["id"], session=task["session"], **{"from": old})
-    return task
+        return track.new_direction(project, text, copy_plan, open_tasks(project))
 
 
-def new_direction(project: str, text: str, copy_plan: bool = False, keep_open: bool = False) -> int:
+def change_direction(project: str, text: str) -> tuple[dict, bool, list[dict]]:
+    """Record a direction change that waits for the open tasks; returns (action, replaced, open tasks)."""
     with _locked(project):
-        return track.new_direction(project, text, copy_plan, open_tasks(project), keep_open)
+        tasks = open_tasks(project)
+        action, replaced = track.change_direction(project, text, tasks)
+    log(project, "direction.change", action=track.action_ref(action), replaced=replaced, waits=[t["id"] for t in tasks])
+    return action, replaced, tasks
+
+
+def change_due(project: str) -> str:
+    """When a direction change is pending and no task is open, the line telling the Coordinator to make it; else ""."""
+    if not track.exists(project) or open_tasks(project):
+        return ""
+    return track.change_refusal(project, [])
+
+
+def change_notice(project: str) -> str:
+    """change_due as the head of a wake prompt."""
+    due = change_due(project)
+    return f"[agentop] {due}; it takes the pending text.\n\n" if due else ""
 
 
 def problems(project: str, kind: str | None = None) -> list[str]:

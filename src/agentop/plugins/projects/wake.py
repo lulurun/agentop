@@ -184,8 +184,11 @@ def clear(pane: Pane, timeout: float = CLEAR_TIMEOUT) -> str | None:
 
 
 def compose(project: str, head: str, text: str = "") -> str:
-    """The prompt after a clear: its first line, the Next verbatim, then the event."""
+    """The prompt after a clear: its first line, a due direction change, the Next verbatim, then the event."""
     parts = [head]
+    due = pursuit.change_notice(project).strip()
+    if due:
+        parts.append(due)
     found = pursuit.read_next(project)
     if found:
         parts.append(found)
@@ -215,7 +218,8 @@ def deliver_event(project: str, pane: Pane, text: str, source: str, task: str | 
             reason = reason or session_blocker(pane)
             if reason is not None:
                 pursuit.log(project, "clear.skipped", reason=reason, source=source)
-                outcome, prompt = "not cleared", (pursuit.WAKE_NOTE if pursuit.cleared(project) else "") + text
+                outcome, prompt = "not cleared", ((pursuit.WAKE_NOTE if pursuit.cleared(project) else "")
+                                                   + pursuit.change_notice(project) + text)
             elif _clear_logged(project, pane, source=source):
                 outcome, prompt = "cleared", compose(project, CLEARED, text)
             else:

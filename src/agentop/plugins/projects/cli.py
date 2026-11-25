@@ -65,10 +65,6 @@ def _task_parsers(sub, common) -> None:
     show = sub.add_parser("show", parents=[common], help="One open task, with its rounds")
     show.add_argument("name", help="The task's session, or its ID")
 
-    carry = sub.add_parser("carry", parents=[common], help="Re-home an open task under an action of the current plan")
-    carry.add_argument("name", help="The task's ID, or its session")
-    carry.add_argument("--to", required=True, help="The current plan's action, M1A4")
-
 
 def _yield_args(turn) -> None:
     turn.add_argument("kind", choices=pursuit.KINDS)
@@ -122,12 +118,16 @@ def register_cli(cli) -> None:
     common = _common()
     sub = top.add_subparsers(dest="coordinator_command", metavar="<subcommand>")
 
-    direction = sub.add_parser("direction", help="The project's direction: new, add, show")
+    direction = sub.add_parser("direction", help="The project's direction: change, new, add, show")
     dsub = direction.add_subparsers(dest="direction_command", metavar="<subcommand>")
-    new = dsub.add_parser("new", parents=[common], help="Start direction N+1: track/<N+1>/DIRECTION.md and PLAN.md")
-    new.add_argument("--text", required=True, help="The direction: what the project pursues now, what done means; '-' reads stdin")
+    change = dsub.add_parser("change", parents=[common], help="Record a new direction as the plan's first action, "
+                             "pending until the open tasks close; then run direction new")
+    change.add_argument("--text", required=True, help="The new direction, as the owner gave it; '-' reads stdin")
+    new = dsub.add_parser("new", parents=[common], help="Finish the current plan and start direction N+1: "
+                          "track/<N+1>/DIRECTION.md and PLAN.md; refused while a task is open")
+    new.add_argument("--text", help="The direction: what the project pursues now, what done means; '-' reads stdin "
+                     "(default: the pending direction change's text)")
     new.add_argument("--copy-plan", action="store_true", help="Start the new plan as a copy of the last one")
-    new.add_argument("--keep-open", action="store_true", help="Allow open tasks; carry each into the new plan afterwards")
     add = dsub.add_parser("add", parents=[common], help="Append a dated addendum to the current DIRECTION.md: a "
                           "requirement that doesn't change the direction")
     add.add_argument("--text", help="The new requirement, as the owner gave it; '-' reads stdin")
@@ -176,7 +176,7 @@ def register_cli(cli) -> None:
     note.add_argument("text", help="What was done, and where the result is; '-' reads stdin")
     note.add_argument("--by", default="coordinator", choices=("coordinator", "owner"))
 
-    task = sub.add_parser("task", help="Delegated tasks: start, report, accept, reject, fail, list, show, carry",
+    task = sub.add_parser("task", help="Delegated tasks: start, report, accept, reject, fail, list, show",
                           description="Delegate bounded work, with a goal, criteria, an artifact and at most "
                           f"{pursuit.MAX_ROUNDS} rounds. The task's session reports with agentop coordinator task report.")
     _task_parsers(task.add_subparsers(dest="task_command", metavar="<subcommand>"), common)
@@ -326,7 +326,7 @@ def task_start(args, project: str) -> None:
         result = ops.start(args.tool, cwd, args.name, params, project=project)
         ops.first_prompt(result.name, brief(task, project, extra))
     except OpsError as exc:
-        pursuit.fail(project, task["id"], f"The session didn't start: {exc}", decision=False)
+        pursuit.fail(project, task["id"], f"The session didn't start: {exc}")
         _fail(str(exc))
     print(f"Task {task['id']}: {args.name} ({args.tool}) started in {cwd}; round 1 of {pursuit.MAX_ROUNDS}.")
     print(f"Its result goes to {task['artifact']}. It reports with agentop coordinator task report; you'll get a message.")
@@ -476,7 +476,6 @@ def run_task(args, parser) -> None:
         "fail": task_fail,
         "list": task_list,
         "show": task_show,
-        "carry": task_carry,
     }[command](args, project)
 
 
@@ -526,22 +525,19 @@ def run_review(args) -> None:
 
 
 def _recorded(project: str, task: dict, then: str) -> None:
+    due = pursuit.change_due(project)
+    if due:
+        then = "the direction change; nothing else comes first"
     if task.get("action") and task.get("direction") == track.generation(project):
         m = task["action"].partition("A")[0][1:]
         status = track.find_action(track.load_plan(project), *track.parse_ref(project, task["action"], True))["status"]
         print(f"Recorded in track/{task['direction']}/EXECUTION_M{m}.md; {task['action']} is {status}. Next: {then}.")
     elif track.exists(project):
-        print(f"Next: carry it into the plan's record with agentop coordinator note <M…A…> \"…\", then {then}.")
+        print(f"Next: record it in the plan with agentop coordinator note <M…A…> \"…\", then {then}.")
     else:
         print(f"Next: record it in {pursuit.STATE_FILE}, then {then}.")
-
-
-def task_carry(args, project: str) -> None:
-    try:
-        task = pursuit.carry(project, args.name, args.to)
-    except pursuit.PursuitError as exc:
-        _fail(str(exc))
-    print(f"Carried {task['carried_from']} to {task['id']}, under {task['action']} of direction {task['direction']}.")
+    if due:
+        print(f"{due}: it takes the pending text, finishes the plan and starts the new direction.")
 
 
 def _locked(project: str, fn, *args):
@@ -561,11 +557,29 @@ def _print_file(path) -> None:
 
 def coordinator_direction(args, project: str) -> None:
     command = getattr(args, "direction_command", None)
-    if command == "new":
+    if command == "change":
         try:
-            n = pursuit.new_direction(project, _read(args.text), args.copy_plan, args.keep_open)
+            action, replaced, waits = pursuit.change_direction(project, _read(args.text))
         except pursuit.PursuitError as exc:
             _fail(str(exc))
+        ref = track.action_ref(action)
+        print(f"{'Replaced the pending' if replaced else 'Added the'} direction change as {ref}, first in the plan: "
+              f"{action['title']}  [{action['status']}].")
+        if waits:
+            print(f"It waits for the open tasks: {track.task_names(waits)}. Decide each as usual (accept, reject, fail); "
+                  "no new task starts until it is done. When the last closes, run agentop coordinator direction new.")
+        else:
+            print("No task is open: run agentop coordinator direction new now; it takes the pending text.")
+    elif command == "new":
+        before = track.generation(project)
+        try:
+            n = pursuit.new_direction(project, _read(args.text) if args.text is not None else None, args.copy_plan)
+        except pursuit.PursuitError as exc:
+            _fail(str(exc))
+        if n != before:
+            pursuit.log(project, "direction.new", direction=n)
+            if before:
+                print(f"Plan {before}'s final state is in track/{before}/PLAN.md; it is never written again.")
         print(f"Direction {n}: track/{n}/DIRECTION.md and track/{n}/PLAN.md.")
         print("Next: shape the plan with agentop coordinator plan milestone add / action add, then start tasks on its actions.")
     elif command == "add":
@@ -584,7 +598,7 @@ def coordinator_direction(args, project: str) -> None:
     elif command == "show":
         _print_file(track.direction_path(project))
     else:
-        _fail("agentop coordinator direction new|add|show")
+        _fail("agentop coordinator direction change|new|add|show")
 
 
 def _changes_plan(fn):
@@ -647,7 +661,7 @@ def _task_line(t: dict, project: str) -> str:
 
 def status_text(project: str) -> str:
     """The resume view: what a fresh context needs to carry on."""
-    out = []
+    out = _change_section(project)
     found_next = pursuit.read_next(project)
     out += [found_next or "# Next\n\n(none yet: agentop coordinator yield waiting|done --next \"…\" writes it)", ""]
     n = track.generation(project)
@@ -692,6 +706,21 @@ def status_text(project: str) -> str:
     return "\n".join(out)
 
 
+def _change_section(project: str) -> list[str]:
+    change = track.current_change(project)
+    if change is None:
+        return []
+    tasks = pursuit.open_tasks(project)
+    out = [f"# Direction change pending: {track.action_ref(change)}, before anything else", "",
+           f"{track.action_line(change)}", "", track.change_text(change), ""]
+    if tasks:
+        out += [f"It waits for {len(tasks)} open task(s); no new task starts until then:",
+                *[f"- {t['id']} `{t['session']}`" for t in tasks]]
+    else:
+        out.append("No task is open: run agentop coordinator direction new now; it takes this text.")
+    return out + [""]
+
+
 def coordinator_status(args, project: str) -> None:
     print(status_text(project))
 
@@ -709,7 +738,7 @@ def run_coordinator(args, parser) -> None:
         return
     if command == "task":
         if not getattr(args, "task_command", None):
-            _fail("agentop coordinator task start|report|accept|reject|fail|list|show|carry")
+            _fail("agentop coordinator task start|report|accept|reject|fail|list|show")
         run_task(args, parser)
         return
     project = _project(args)

@@ -64,6 +64,10 @@ def ag(capsys, *argv, stdin=None, code=0):
     return out, err
 
 
+def snapshot(path):
+    return {str(f.relative_to(path)): f.read_bytes() for f in sorted(path.rglob("*")) if f.is_file()}
+
+
 def folder(project="alpha"):
     return projects.folder(project)
 
@@ -92,14 +96,22 @@ def setup_plan(capsys):
 
 def test_every_coordinator_command_exists(alpha, capsys):
     commands = [
-        ("direction", "new"), ("direction", "add"), ("direction", "show"), ("plan", "show"), ("plan", "milestone", "add"),
+        ("direction", "change"), ("direction", "new"), ("direction", "add"), ("direction", "show"), ("plan", "show"), ("plan", "milestone", "add"),
         ("plan", "action", "add"), ("plan", "action", "set"), ("plan", "ask"), ("plan", "answer"),
         ("milestone", "close"), ("note",), ("task", "start"), ("task", "report"), ("task", "accept"), ("task", "reject"), ("task", "fail"),
-        ("task", "list"), ("task", "show"), ("task", "carry"), ("yield",), ("review",), ("status",),
+        ("task", "list"), ("task", "show"), ("yield",), ("review",), ("status",),
     ]
     for command in commands:
         out, _ = ag(capsys, "coordinator", *command, "--help")
         assert f"agentop coordinator {' '.join(command)}" in out
+
+
+def test_keep_open_and_task_carry_are_gone(alpha, capsys):
+    _, err = ag(capsys, "coordinator", "task", "carry", "P1_M2A1-1", "--to", "M2A1", "--project", "alpha", code=2)
+    assert "invalid choice: 'carry'" in err
+    _, err = ag(capsys, "coordinator", "direction", "new", "--text", "x", "--keep-open", "--project", "alpha", code=2)
+    assert "unrecognized arguments: --keep-open" in err
+    assert not hasattr(pursuit, "carry") and not hasattr(track, "carry")
 
 
 def test_the_old_top_level_names_are_gone_and_the_report_is_under_coordinator_task(alpha, capsys, sessions, monkeypatch):
@@ -170,27 +182,26 @@ def test_files_of_older_directions_are_never_written(alpha, capsys, sessions, mo
     setup_plan(capsys)
     start(capsys, "dev", "M2A1")
     _, err = ag(capsys, "coordinator", "direction", "new", "--project", "alpha", "--text", "Something else", code=1)
-    assert "Tasks of direction 1 are open: P1_M2A1-1" in err and "--keep-open" in err
-    ag(capsys, "coordinator", "direction", "new", "--project", "alpha", "--text", "Something else", "--copy-plan", "--keep-open")
-    old = {p.name: p.read_text() for p in (folder() / "track/1").iterdir()}
+    assert "Tasks are open: P1_M2A1-1 (dev)" in err and "direction change --text -" in err
+    report(monkeypatch, capsys, "dev")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha")
+    ag(capsys, "coordinator", "direction", "new", "--project", "alpha", "--text", "Something else", "--copy-plan")
+    old = snapshot(folder() / "track/1")
     assert track.generation(alpha) == 2 and "## M2 Track files" in (folder() / "track/2/PLAN.md").read_text()
     assert (folder() / "track/2/PLAN.md").read_text().startswith("# Plan 2 (from Direction 2)")
+    # With nothing pending, an immediate switch still writes the old plan's final state.
+    plan1 = (folder() / "track/1/PLAN.md").read_text()
+    assert "- M2A2 Commands  [not done (direction changed to 2)]" in plan1 and "## M2 Track files  [stopped]" in plan1
+    assert "- M2A1 Layout  [done]" in plan1
 
     _, err = ag(capsys, "coordinator", "plan", "action", "set", "P1_M2A2", "--status", "dropped", "--reason", "x",
                 "--project", "alpha", code=1)
     assert "never written again" in err
+    start(capsys, "dev", "M2A2")
     report(monkeypatch, capsys, "dev")
-    _, err = ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha", code=1)
-    assert "Carry it first: agentop coordinator task carry P1_M2A1-1" in err
-    _, err = ag(capsys, "coordinator", "yield", "waiting", "--next", "Wait for dev, then check its result.", "--project", "alpha", code=1)
-    assert "belongs to direction 1, not carried: agentop coordinator task carry P1_M2A1-1" in err
-    out, _ = ag(capsys, "coordinator", "task", "carry", "P1_M2A1-1", "--to", "M2A1", "--project", "alpha")
-    assert "Carried P1_M2A1-1 to P2_M2A1-1" in out
     ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha")
-    assert {p.name: p.read_text() for p in (folder() / "track/1").iterdir()} == old
-    execution = (folder() / "track/2/EXECUTION_M2.md").read_text()
-    assert "## P2_M2A1-1" in execution and "Carried from P1_M2A1-1." in execution
-    assert track.task_states(alpha)["P1_M2A1-1"]["status"] == "carried"
+    assert snapshot(folder() / "track/1") == old
+    assert "## P2_M2A2-1" in (folder() / "track/2/EXECUTION_M2.md").read_text()
     with pytest.raises(track.TrackError, match="never written again"):
         track._writable(alpha, 1)
 
@@ -209,13 +220,6 @@ def test_yield_refuses_each_case_and_names_the_fix(alpha, capsys, sessions, monk
     # Asking the owner for the direction is the fix, so `owner` passes, and becomes an ask in the plan.
     ag(capsys, "coordinator", "yield", "owner", "--question", "Goal?", "--recommend", "R", "--default", "D", "--project", "alpha")
     setup_plan(capsys)
-
-    pursuit.open_task(alpha, "loose", "claude", "/x", "g", ["a"], "results/loose.md")
-    assert "has no action: agentop coordinator task carry t1 --to" in refused("waiting", "--next", "Wait for dev, then check its result.")
-    pursuit.carry(alpha, "t1", "M2A2")
-    with pytest.raises(pursuit.PursuitError, match="already in the current plan"):
-        pursuit.carry(alpha, "loose", "M2A1")
-    pursuit.fail(alpha, "loose", "not needed")
 
     plan_path = folder() / "track/1/PLAN.md"
     plan_path.write_text(plan_path.read_text().replace("- M2A1 Layout  [planned]", "- M2A1 Layout  [done]"))
@@ -262,10 +266,6 @@ def test_plan_commands_place_number_and_ask(alpha, capsys):
     assert text.count("Merge hook-state?  [waiting on owner]") == 1 and "Asked: " in text and "(3×)" in text
     out, _ = ag(capsys, "coordinator", "plan", "show", "--project", "alpha")
     assert "waiting on owner" in out
-
-
-def snapshot(path):
-    return {str(f.relative_to(path)): f.read_bytes() for f in sorted(path.rglob("*")) if f.is_file()}
 
 
 def test_remove_only_unregisters_and_the_project_recreated_on_its_folder_resumes(alpha, capsys, sessions, monkeypatch):
@@ -409,3 +409,163 @@ def test_no_plan_change_alone_needs_a_pending_addendum(alpha, capsys):
     setup_plan(capsys)
     _, err = ag(capsys, "coordinator", "direction", "add", "--no-plan-change", "--project", "alpha", code=1)
     assert "No addendum waits for a plan change" in err
+
+
+CHANGE = "Pivot to the CSV export.\n\nDone means: every report downloads as CSV."
+
+
+def test_direction_change_is_the_plans_first_action_and_a_second_one_replaces_it(alpha, capsys, sessions, monkeypatch):
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    out, _ = ag(capsys, "coordinator", "direction", "change", "--text", "-", "--project", "alpha", stdin=CHANGE)
+    assert "Added the direction change as M3A1, first in the plan" in out
+    assert "It waits for the open tasks: P1_M2A1-1 (dev), P1_M2A2-1 (api)" in out
+    plan = track.load_plan(alpha)
+    first = plan["milestones"][0]
+    assert (first["m"], first["title"], first["status"]) == (3, "Direction change", "in progress")
+    action = first["actions"][0]
+    assert action["title"] == "Change direction: Pivot to the CSV export." and action["status"] == "pending (waits for 2 open tasks)"
+    assert track.change_text(action) == CHANGE
+    text = (folder() / "track/1/PLAN.md").read_text()
+    assert text.index("## M3 Direction change") < text.index("## M1 ")
+    assert "  > Pivot to the CSV export.\n  >\n  > Done means: every report downloads as CSV." in text
+
+    out, _ = ag(capsys, "coordinator", "direction", "change", "--text", "Pivot to PDF instead.", "--project", "alpha")
+    assert "Replaced the pending direction change as M3A1" in out
+    plan = track.load_plan(alpha)
+    changes = [a for m in plan["milestones"] for a in m["actions"] if a["title"].startswith("Change direction:")]
+    assert len(changes) == 1 and track.change_text(changes[0]) == "Pivot to PDF instead."
+    assert [m["title"] for m in plan["milestones"]].count("Direction change") == 1
+    events = [e for e in pursuit.events(alpha) if e["kind"] == "direction.change"]
+    assert [e["replaced"] for e in events] == [False, True] and events[0]["waits"] == ["P1_M2A1-1", "P1_M2A2-1"]
+
+
+def test_a_direction_change_needs_a_direction_and_text(alpha, capsys):
+    _, err = ag(capsys, "coordinator", "direction", "change", "--text", "x", "--project", "alpha", code=1)
+    assert "no direction to change yet" in err
+    setup_plan(capsys)
+    _, err = ag(capsys, "coordinator", "direction", "change", "--text", "-", "--project", "alpha", stdin=" \n", code=1)
+    assert "needs --text" in err
+    _, err = ag(capsys, "coordinator", "direction", "new", "--project", "alpha", code=1)
+    assert "A direction needs --text" in err
+
+
+def test_a_pending_change_waits_for_open_tasks_then_is_all_that_is_left(alpha, capsys, sessions, monkeypatch):
+    from agentop.plugins.projects import wake
+
+    def refused(*argv):
+        return ag(capsys, "coordinator", "yield", *argv, "--project", "alpha", code=1)[1]
+
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    ag(capsys, "coordinator", "direction", "change", "--text", "-", "--project", "alpha", stdin=CHANGE)
+
+    _, err = start(capsys, "docs", "M2A1", code=1)
+    assert "No new task starts: a direction change is pending (M3A1)" in err
+    assert "P1_M2A1-1 (dev), P1_M2A2-1 (api)" in err and sessions.started == ["dev", "api"]
+
+    out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
+    assert out.startswith("# Direction change pending: M3A1, before anything else")
+    head = out.split("# Next")[0]
+    assert "Done means: every report downloads as CSV." in head
+    assert "- P1_M2A1-1 `dev`" in head and "- P1_M2A2-1 `api`" in head
+
+    # Running tasks finish as usual, and waiting for them is a fine yield.
+    report(monkeypatch, capsys, "dev")
+    ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", "criterion 1 fails", "--project", "alpha")
+    report(monkeypatch, capsys, "dev", "fixed")
+    out, _ = ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha")
+    assert "direction new" not in out and "M2A1 is done" in out
+    assert "[pending (waits for 1 open task)]" in (folder() / "track/1/PLAN.md").read_text()
+    assert pursuit.change_notice(alpha) == ""
+    ag(capsys, "coordinator", "yield", "waiting", "--next", "Wait for api, then make the direction change.", "--project", "alpha")
+
+    report(monkeypatch, capsys, "api")
+    out, _ = ag(capsys, "coordinator", "task", "fail", "api", "--note", "not needed now", "--project", "alpha")
+    assert "Next: the direction change; nothing else comes first." in out
+    assert "no task is open: run agentop coordinator direction new now" in out
+    assert "[pending (no task open: run direction new)]" in (folder() / "track/1/PLAN.md").read_text()
+
+    for argv in (("waiting", "--next", "Wait for nothing at all, really now."), ("blocked", "--need", "a", "--tried", "b"),
+                 ("done", "--evidence", "e", "--next", "Make the direction change, then plan it.")):
+        assert "A direction change is pending (M3A1) and no task is open: run agentop coordinator direction new" in refused(*argv)
+    ag(capsys, "coordinator", "yield", "owner", "--question", "Keep the PDF work?", "--recommend", "No", "--default", "Drop it",
+       "--project", "alpha")
+    assert "Keep the PDF work?" not in "".join(
+        track.action_line(a) for a in track.load_plan(alpha)["milestones"][0]["actions"])
+
+    assert "direction new now; it takes the pending text" in pursuit.wake_note(alpha)
+    prompt = wake.compose(alpha, wake.CLEARED, "[owner] hello")
+    assert prompt.index("direction new now") < prompt.index("# Next") < prompt.index("[owner] hello")
+    _, err = start(capsys, "docs", "M2A1", code=1)
+    assert "no task is open: run agentop coordinator direction new now" in err
+
+
+def test_direction_new_finishes_the_old_plan_with_the_pending_text(alpha, capsys, sessions, monkeypatch):
+    setup_plan(capsys)
+    ag(capsys, "coordinator", "plan", "action", "add", "M2", "Docs", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "action", "set", "M2A3", "--status", "dropped", "--reason", "later", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "milestone", "add", "Release", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "milestone", "add", "Done one", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "action", "add", "M4", "Small", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "action", "set", "M4A1", "--status", "done", "--note", "did it", "--project", "alpha")
+    ag(capsys, "coordinator", "milestone", "close", "M4", "--summary", "Small done.", "--project", "alpha")
+    start(capsys, "dev", "M2A1")
+    ag(capsys, "coordinator", "direction", "change", "--text", "-", "--project", "alpha", stdin=CHANGE)
+    _, err = ag(capsys, "coordinator", "direction", "new", "--project", "alpha", code=1)
+    assert "Tasks are open: P1_M2A1-1 (dev)" in err and track.generation(alpha) == 1
+    report(monkeypatch, capsys, "dev")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha")
+
+    out, _ = ag(capsys, "coordinator", "direction", "new", "--project", "alpha")
+    assert "Plan 1's final state is in track/1/PLAN.md" in out and "Direction 2:" in out
+    assert track.generation(alpha) == 2 and track.direction_text(alpha) == CHANGE
+    plan1 = (folder() / "track/1/PLAN.md").read_text()
+    for line in ("## M5 Direction change  [done]", "Summary: Direction changed to 2.",
+                 "- M5A1 Change direction: Pivot to the CSV export.  [done]",
+                 "## M1 Agree the direction with the owner  [stopped]", "## M2 Track files  [stopped]",
+                 "- M2A1 Layout  [done] → P1_M2A1-1", "- M2A2 Commands  [not done (direction changed to 2)]",
+                 "- M2A3 Docs  [dropped (later)]", "## M3 Release  [stopped]", "## M4 Done one  [done]", "- M4A1 Small  [done]"):
+        assert line in plan1, line
+    assert "Direction changed to 2: track/2/DIRECTION.md." in (folder() / "track/1/EXECUTION_M5.md").read_text()
+    assert (folder() / "track/2/PLAN.md").read_text().strip().endswith("Date: " + track._today())
+    assert any(e["kind"] == "direction.new" and e["direction"] == 2 for e in pursuit.events(alpha))
+
+    # Direction 2 starts clean, and nothing done in it touches direction 1.
+    old = snapshot(folder() / "track/1")
+    out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
+    assert not out.startswith("# Direction change pending") and "# Direction 2" in out
+    ag(capsys, "coordinator", "plan", "milestone", "add", "CSV", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "action", "add", "M1", "Export", "--project", "alpha")
+    start(capsys, "csv", "M1A1")
+    report(monkeypatch, capsys, "csv")
+    ag(capsys, "coordinator", "task", "accept", "csv", "--checked", "x", "--project", "alpha")
+    ag(capsys, "coordinator", "note", "M1A1", "More", "--project", "alpha")
+    ag(capsys, "coordinator", "direction", "add", "--text", "Also XLSX.", "--no-plan-change", "--project", "alpha")
+    ag(capsys, "coordinator", "direction", "change", "--text", "Back to PDF.", "--project", "alpha")
+    assert snapshot(folder() / "track/1") == old
+
+
+def test_copy_plan_leaves_the_change_behind_and_dropping_it_cancels_the_change(alpha, capsys, sessions):
+    setup_plan(capsys)
+    ag(capsys, "coordinator", "direction", "change", "--text", "Pivot.", "--project", "alpha")
+    ag(capsys, "coordinator", "direction", "new", "--copy-plan", "--project", "alpha")
+    plan2 = (folder() / "track/2/PLAN.md").read_text()
+    assert "## M2 Track files  [planned]" in plan2 and "Direction change" not in plan2 and "not done" not in plan2
+
+    ag(capsys, "coordinator", "direction", "change", "--text", "Pivot again.", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "action", "set", "M3A1", "--status", "dropped", "--reason", "owner withdrew it",
+       "--project", "alpha")
+    assert track.current_change(alpha) is None
+    start(capsys, "dev", "M2A1")
+
+
+def test_the_current_milestone_is_the_work_not_the_pending_change(alpha, capsys, sessions):
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    ag(capsys, "coordinator", "direction", "change", "--text", "Pivot.", "--project", "alpha")
+    assert track.current_milestone(track.load_plan(alpha))["m"] == 2
+    out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
+    assert "# Execution of M2, the current milestone" in out and "## P1_M2A1-1" in out
