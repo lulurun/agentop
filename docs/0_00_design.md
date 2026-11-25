@@ -16,6 +16,7 @@ The first doc to read. Each section says what a part of agentop is and why; wher
 | [11 Desktop app](#11-desktop-app) | [1_setup.md](1_setup.md#desktop-app) |
 | [12 Plugins](#12-plugins) | [0_12_00_plugins.md](0_12_00_plugins.md) and a `0_12_<number>_<id>.md` per large plugin |
 | [13 Projects](#13-projects) | [0_13_projects.md](0_13_projects.md) |
+| Proposal: direct communication with agent tools | [0_14_direct-agent-communication.md](0_14_direct-agent-communication.md) |
 | [14 Risks](#14-risks), [15 Decisions](#15-decisions), [16 Sources](#16-sources) | |
 
 ## 1 Summary
