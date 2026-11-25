@@ -258,18 +258,33 @@ def test_plan_commands_place_number_and_ask(alpha, capsys):
     assert "waiting on owner" in out
 
 
-def test_a_removed_project_recreated_on_its_folder_resumes_from_its_track(alpha, capsys, sessions, monkeypatch):
+def snapshot(path):
+    return {str(f.relative_to(path)): f.read_bytes() for f in sorted(path.rglob("*")) if f.is_file()}
+
+
+def test_remove_only_unregisters_and_the_project_recreated_on_its_folder_resumes(alpha, capsys, sessions, monkeypatch):
     setup_plan(capsys)
     start(capsys, "dev", "M2A1")
     report(monkeypatch, capsys, "dev", "layout written")
     ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "read track/", "--project", "alpha")
     start(capsys, "api", "M2A2")
+    before = snapshot(folder())
+    assert ".project/project.json" in before and ".project/tasks.json" in before and "track/tasks.jsonl" in before
 
+    stopped = []
+    monkeypatch.setattr(ops, "get_sessions", lambda with_meta=False: [
+        {"name": "api-1", "display_name": "api", "project": "alpha"}, {"name": "x-1", "display_name": "x", "project": "beta"}])
+    monkeypatch.setattr(ops, "stop", stopped.append)
     monkeypatch.setattr(sys.modules["agentop.cli"], "_projects_plugin_on", lambda: True)
     out, _ = ag(capsys, "project", "remove", "alpha")
-    assert "Task P1_M2A2-1 (api) is marked interrupted" in out
-    assert projects.get(alpha) is None and (folder() / "track/1/PLAN.md").exists()
+    assert stopped == ["api-1"]
+    assert "Removed alpha from the list. Nothing else in its folder was changed" in out
+    assert "Its running sessions were stopped, as they would be orphaned: api." in out and "interrupted" not in out
+    assert projects.get(alpha) is None and alpha not in [p["name"] for p in projects.list_projects()]
+    after = snapshot(folder())
+    assert after == {k: v for k, v in before.items() if k != ".project/project.json"}
 
+    monkeypatch.setattr(ops, "get_sessions", lambda with_meta=False: [])
     found = projects.create(alpha, "projects")
     coordinator.write_instructions(found)
     prompt = coordinator.first_prompt(found)
@@ -279,10 +294,10 @@ def test_a_removed_project_recreated_on_its_folder_resumes_from_its_track(alpha,
     out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
     assert "# Direction 1" in out and "Ship the track." in out
     assert "## M2 Track files  [in progress]" in out and "- M2A1 Layout  [done] → P1_M2A1-1" in out
-    assert "- M2A2 Commands  [planned] → P1_M2A2-1 (interrupted)" in out
+    assert "- M2A2 Commands  [in progress] → P1_M2A2-1" in out
     assert "## P1_M2A1-1  session `dev`" in out and "round 1 accepted: read track/" in out
-    assert "P1_M2A2-1 `api` (M2A2): interrupted" in out
-    assert "round 1 interrupted" in (folder() / "track/1/EXECUTION_M2.md").read_text()
+    assert "- P1_M2A2-1 `api` (M2A2), round 1/3, working" in out
+    ag(capsys, "coordinator", "task", "fail", "api", "--note", "its session went with the removal", "--project", "alpha")
     out, _ = start(capsys, "api", "M2A2")
     assert "Task P1_M2A2-2" in out
 

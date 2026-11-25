@@ -74,8 +74,6 @@ def register(api) -> None:
     @api.router.delete("/projects/{name}")
     async def remove_project(name: str, delete_folder: bool = False):
         own(name)
-        if not delete_folder:
-            pursuit.interrupt_open(name)
         try:
             await api.remove_project(name, delete_folder)
         except projects.ProjectError as exc:

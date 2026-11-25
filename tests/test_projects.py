@@ -211,7 +211,14 @@ def test_the_projects_plugin_makes_and_removes_its_own(fake_agents, quick_boot):
         assert service.http.delete(f"{base}/default").status_code == 404
         assert service.http.post(f"{base}/nope/coordinator").status_code == 404
 
+        kept = lambda: {  # noqa: E731
+            str(f.relative_to(projects.folder("alpha"))): f.read_bytes() for f in projects.folder("alpha").rglob("*")
+            if f.is_file() and f.name != "sessions.json"
+        }
+        before = kept()
         assert service.http.delete(f"{base}/alpha").status_code == 200
         assert not Session.has(coordinator_row["id"])
+        assert kept() == {k: v for k, v in before.items() if k != ".project/project.json"}
+        assert not any(r["project"] == "alpha" for r in registry.load()["sessions"].values())
         assert projects.get("alpha") is None and projects.folder("alpha").is_dir()
         assert service.http.get(base).json() == []

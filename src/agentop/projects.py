@@ -117,7 +117,7 @@ def ensure_default() -> dict:
 
 
 def remove(name: str, delete_folder: bool = False) -> None:
-    """Forget a project. Its sessions are the caller's to stop first. Raises ProjectError."""
+    """Unregister a project: only its project.json goes, unless the whole folder does. Its sessions are the caller's to stop first."""
     if name == DEFAULT:
         raise ProjectError("The default project can't be removed")
     if not exists(name):
@@ -125,7 +125,7 @@ def remove(name: str, delete_folder: bool = False) -> None:
     if delete_folder:
         shutil.rmtree(folder(name))
     else:
-        shutil.rmtree(meta_dir(name))
+        _meta_path(name).unlink()
 
 
 def split_target(target: str) -> tuple[str | None, str]:

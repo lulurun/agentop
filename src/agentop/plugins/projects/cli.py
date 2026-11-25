@@ -595,12 +595,6 @@ def status_text(project: str) -> str:
     tasks = pursuit.open_tasks(project)
     out += ["", "# Tasks", ""]
     out += [_task_line(t) for t in tasks] or ["- No open tasks."]
-    live = {t["id"] for t in tasks}
-    interrupted = [s for tid, s in track.task_states(project).items() if s["status"] == "interrupted" and tid not in live]
-    for s in interrupted:
-        out.append(f"- {s['id']} `{s['session']}` ({s.get('action') or 'no action'}): interrupted "
-                   f"{track._when(s['at'])} at round {s['round']}; its session is gone. Start a new task on its action, or "
-                   "set the action's status")
     found = pursuit.problems(project)
     reported = [t["session"] for t in tasks if not pursuit.awaiting_report(t)]
     if reported:

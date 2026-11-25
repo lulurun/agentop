@@ -295,21 +295,6 @@ def carry(project: str, ref: str, to: str) -> dict:
     return task
 
 
-def interrupt_open(project: str) -> list[dict]:
-    """Mark open tasks interrupted, as when the project is removed and its folder kept; returns them."""
-    with _locked(project):
-        tasks = load_tasks(project)
-        stopped = [t for t in tasks if t["status"] == "open"]
-        for task in stopped:
-            task.update(status="interrupted", closed_at=time.time(), note="the project was removed while it was open")
-        _save_tasks(project, tasks)
-        for task in stopped:
-            track.on_task(project, task, "interrupt", [t for t in tasks if t["status"] == "open"])
-    for task in stopped:
-        log(project, "task.interrupt", task=task["id"], session=task["session"])
-    return stopped
-
-
 def new_direction(project: str, text: str, copy_plan: bool = False, keep_open: bool = False) -> int:
     with _locked(project):
         return track.new_direction(project, text, copy_plan, open_tasks(project), keep_open)

@@ -556,7 +556,7 @@ def task_entry(task: dict) -> str:
     evaluation = [f"- round {i} rejected: {r['feedback']}" for i, r in enumerate(rounds, 1) if r.get("feedback")]
     if task["status"] == "accepted":
         evaluation.append(f"- round {len(rounds)} accepted: {task.get('checked', '')}")
-    elif task["status"] in ("failed", "interrupted"):
+    elif task["status"] == "failed":
         evaluation.append(f"- round {len(rounds)} {task['status']}: {task.get('note', '')}")
     lines += ["", "Evaluation:", *(evaluation or ["- (not decided yet)"])]
     return "\n".join(lines) + "\n"
@@ -628,7 +628,7 @@ def refresh_action(project: str, task: dict, open_tasks: list[dict], event: str)
         action["status"] = "in progress"
     elif event == "accept" and not others:
         action["status"] = "done"
-    elif event in ("fail", "interrupt") and not others:
+    elif event == "fail" and not others:
         action["status"] = "planned"
     milestone = milestone_of(plan, action)
     if action["status"] == "in progress" and milestone["status"] in ("planned", "done"):

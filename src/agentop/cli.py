@@ -327,17 +327,17 @@ def cmd_project_remove(args):
     if found is None or found.get("owner") != "projects":
         print(f"Error: no project called {args.name} (only the Projects plugin's can be removed here)", file=sys.stderr)
         sys.exit(1)
+    stopped = []
     for s in _ops().get_sessions(with_meta=False):
         if s.get("project") == args.name:
             print(f"Stopping {s['display_name']} …")
             _ops().stop(s["name"])
-    if not args.delete_folder:
-        from agentop.plugins.projects import pursuit
-
-        for task in pursuit.interrupt_open(args.name):
-            print(f"Task {task['id']} ({task['session']}) is marked interrupted.")
+            stopped.append(s["display_name"])
     projects.remove(args.name, args.delete_folder)
-    print(f"Removed {args.name}" + (", and its folder" if args.delete_folder else f"; its folder and track/ are kept: {found['folder']}"))
+    print(f"Removed {args.name}" + (", and its folder." if args.delete_folder else
+          f" from the list. Nothing else in its folder was changed: {found['folder']}"))
+    if stopped:
+        print(f"Its running sessions were stopped, as they would be orphaned: {', '.join(stopped)}.")
 
 
 def cmd_project_show(args):
