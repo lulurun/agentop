@@ -25,3 +25,12 @@ export function GearIcon() {
   );
 }
 
+
+export function ReloadIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path d="M13 8a5 5 0 1 1-1.5-3.6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M12 1.8v3h-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}

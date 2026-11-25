@@ -10,12 +10,15 @@ export function Section({
   title,
   hint,
   extra,
+  action,
   children,
 }: {
   id: string;
   title: string;
   hint?: string;
   extra?: ReactNode;
+  /** A button beside the title, outside the fold toggle, since a button can't hold one. */
+  action?: ReactNode;
   children: ReactNode;
 }) {
   const folded = useApp((s) => s.folded.includes(id));
@@ -29,6 +32,7 @@ export function Section({
           <span className="fold-title">{title}</span>
           {extra}
         </button>
+        {action}
       </h3>
       <div id={body} className="section-body" hidden={folded}>
         {children}

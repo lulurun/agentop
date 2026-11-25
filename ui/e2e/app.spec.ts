@@ -471,6 +471,53 @@ test("switching sessions shows one Files section, for the selected session's dir
   }
 });
 
+test("Files reloads the list it shows, keeping open folders open", async ({ page }) => {
+  const s = await service("alpha");
+  const project = join(s.root, "project");
+  mkdirSync(join(project, "src"));
+  writeFileSync(join(project, "src", "inner.txt"), "x");
+  await page.goto(s.signedInUrl);
+  // Files shows from the session's directory, so it needn't wait for the agent.
+  await startFromPrompt(page, { cwd: project, name: "one", wait: false });
+
+  const files = page.locator(".details").getByRole("region", { name: "Files" });
+  await files.getByRole("tab", { name: "All" }).click();
+  await files.getByRole("button", { name: "src" }).click();
+  await expect(files.getByRole("button", { name: "inner.txt" })).toBeVisible();
+  writeFileSync(join(project, "added.txt"), "x");
+  writeFileSync(join(project, "src", "added-inner.txt"), "x");
+  await expect(files.getByRole("button", { name: "added.txt", exact: true })).toHaveCount(0);
+
+  const requests: string[] = [];
+  page.on("request", (request) => requests.push(new URL(request.url()).pathname));
+  await files.getByRole("button", { name: "Reload files" }).click();
+  await expect(files.getByRole("button", { name: "added.txt", exact: true })).toBeVisible();
+  await expect(files.getByRole("button", { name: "added-inner.txt" })).toBeVisible();
+  expect(requests.some((path) => /\/api\/v2\/sessions\/[^/]+\/files$/.test(path))).toBe(true);
+  // The title still folds the section; Reload is beside it, not inside it.
+  await expect(files.getByRole("button", { name: /^Files/ })).toHaveAttribute("aria-expanded", "true");
+});
+
+test("Active sessions counts only the shown project's sessions", async ({ page }) => {
+  const s = await service("alpha");
+  await page.goto(s.signedInUrl);
+  await expect(page.getByRole("heading", { name: /Start a session/ })).toBeVisible();
+  const [connection] = await savedConnections(page);
+  const auth = { Authorization: `Bearer ${connection.token}` };
+  expect((await page.request.post(`${s.url}/api/v2/plugins/projects/projects`, { headers: auth, data: { name: "elsewhere" } })).ok()).toBe(true);
+  for (const name of ["away-1", "away-2"]) {
+    const started = await page.request.post(`${s.url}/api/v2/sessions`, {
+      headers: auth,
+      data: { tool: "claude", cwd: join(s.root, "project"), name, project: "elsewhere" },
+    });
+    expect(started.ok()).toBe(true);
+  }
+  await startFromPrompt(page, { cwd: join(s.root, "project"), name: "here", wait: false });
+  const active = page.getByRole("region", { name: "Active sessions" });
+  await expect(active.getByRole("button", { name: /^here/ })).toBeVisible();
+  await expect(active.locator(".session-count")).toHaveText("1/20");
+});
+
 test("the WebGL renderer draws the terminal", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("agentop.renderer", "auto"));
   const s = await service("alpha");

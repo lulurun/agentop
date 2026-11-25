@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Session } from "./api/client";
-import { parseLayouts, sessionSummary } from "./store";
+import { activeCount, parseLayouts, sessionSummary } from "./store";
 
 function session(fields: Partial<Session>): Session {
   return { id: "s", display_name: "agentop", description: "", managed: true, ai_title: null, ...fields } as Session;
@@ -45,5 +45,27 @@ describe("saved tabs", () => {
     const saved = { groups: [{ tabs: [old, agent], active: "home" }], focused: 0 };
     const tabs = parseLayouts({ home: { "plugin:dialogue": saved } }).home["plugin:dialogue"]!.left!.tabs;
     expect(tabs.map((t) => t.id)).toEqual(["a"]);
+  });
+});
+
+describe("activeCount", () => {
+  const sessions = Object.fromEntries(
+    [
+      session({ id: "a" }),
+      session({ id: "b", project: "default" }),
+      session({ id: "c", project: "agentop" }),
+      session({ id: "d", project: "agentop", counted: false }),
+      session({ id: "e", project: "agentop", managed: false }),
+    ].map((s) => [s.id, s]),
+  );
+
+  it("counts every project's managed, counted sessions", () => {
+    expect(activeCount(sessions)).toBe(3);
+  });
+
+  it("counts one project's, with no project meaning default", () => {
+    expect(activeCount(sessions, "default")).toBe(2);
+    expect(activeCount(sessions, "agentop")).toBe(1);
+    expect(activeCount(sessions, "other")).toBe(0);
   });
 });

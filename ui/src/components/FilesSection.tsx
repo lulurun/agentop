@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { FileEntry, FileListing, GitChanges } from "../api/client";
 import { platform } from "../platform";
 import { useFileViewer } from "../plugins/Slot";
 import { useActiveClient, useApp } from "../store";
+import { ReloadIcon } from "./icons";
 import { Section } from "./Section";
 import type { FileRef } from "../tabs";
 
@@ -43,7 +44,7 @@ function FileRow({ file, absolute, children }: { file: FileRef | null; absolute:
   );
 }
 
-function Changed({ sessionId }: { sessionId: string }) {
+function Changed({ sessionId, version }: { sessionId: string; version: number }) {
   const client = useActiveClient();
   const [changes, setChanges] = useState<GitChanges | null>(null);
   const [failed, setFailed] = useState(false);
@@ -68,7 +69,7 @@ function Changed({ sessionId }: { sessionId: string }) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [client, sessionId]);
+  }, [client, sessionId, version]);
 
   if (failed) return <p className="file-note">Could not read this directory.</p>;
   if (!changes) return null;
@@ -112,7 +113,7 @@ function Changed({ sessionId }: { sessionId: string }) {
 
 type Tree = "workdir" | "memory";
 
-function Node({ sessionId, tree, entry, root }: { sessionId: string; tree: Tree; entry: FileEntry; root: string }) {
+function Node({ sessionId, tree, entry, root, version }: { sessionId: string; tree: Tree; entry: FileEntry; root: string; version: number }) {
   const [open, setOpen] = useState(false);
 
   if (!entry.is_dir) {
@@ -131,21 +132,32 @@ function Node({ sessionId, tree, entry, root }: { sessionId: string; tree: Tree;
         <span className="file-glyph" aria-hidden="true">{open ? "−" : "+"}</span>
         <span>{entry.name}</span>
       </button>
-      {open && <Directory sessionId={sessionId} tree={tree} path={entry.path} />}
+      {open && <Directory sessionId={sessionId} tree={tree} path={entry.path} version={version} />}
     </li>
   );
 }
 
-function Directory({ sessionId, tree, path }: { sessionId: string; tree: Tree; path: string }) {
+function Directory({ sessionId, tree, path, version }: { sessionId: string; tree: Tree; path: string; version: number }) {
   const client = useActiveClient();
   const [listing, setListing] = useState<FileListing | null>(null);
   const [failed, setFailed] = useState(false);
 
-  const load = useCallback(() => {
+  useEffect(() => {
+    let cancelled = false;
     const list = tree === "memory" ? client.memoryFiles : client.files;
-    list(sessionId, path).then(setListing, () => setFailed(true));
-  }, [client, sessionId, tree, path]);
-  useEffect(load, [load]);
+    list(sessionId, path).then(
+      (result) => {
+        if (!cancelled) {
+          setListing(result);
+          setFailed(false);
+        }
+      },
+      () => !cancelled && setFailed(true),
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [client, sessionId, tree, path, version]);
 
   if (failed) return <p className="file-note">Could not read this folder.</p>;
   if (!listing) return null;
@@ -154,7 +166,7 @@ function Directory({ sessionId, tree, path }: { sessionId: string; tree: Tree; p
       {!path && tree === "memory" && <li className="file-note">{listing.root}</li>}
       {listing.entries.length === 0 && !path && <li className="file-note">This directory is empty.</li>}
       {listing.entries.map((entry) => (
-        <Node key={entry.path} sessionId={sessionId} tree={tree} entry={entry} root={listing.root} />
+        <Node key={entry.path} sessionId={sessionId} tree={tree} entry={entry} root={listing.root} version={version} />
       ))}
       {listing.truncated && <li className="file-note">Showing the first {listing.entries.length} items.</li>}
     </ul>
@@ -162,7 +174,7 @@ function Directory({ sessionId, tree, path }: { sessionId: string; tree: Tree; p
 }
 
 /** Whether the session's agent tool keeps notes for its project, which only Claude Code does. */
-function useHasMemory(sessionId: string): boolean {
+function useHasMemory(sessionId: string, version: number): boolean {
   const client = useActiveClient();
   const [has, setHas] = useState(false);
   useEffect(() => {
@@ -174,16 +186,26 @@ function useHasMemory(sessionId: string): boolean {
     return () => {
       cancelled = true;
     };
-  }, [client, sessionId]);
+  }, [client, sessionId, version]);
   return has;
 }
 
 export function FilesSection({ sessionId, tool }: { sessionId: string; tool: string | null }) {
   const [tab, setTab] = useState<"changed" | "all" | "memory">("changed");
-  const hasMemory = useHasMemory(sessionId);
+  // Bumped by Reload: every list shown fetches again, keeping open folders open.
+  const [version, setVersion] = useState(0);
+  const hasMemory = useHasMemory(sessionId, version);
   const shown = tab === "memory" && !hasMemory ? "changed" : tab;
   return (
-    <Section id="files" title="Files">
+    <Section
+      id="files"
+      title="Files"
+      action={
+        <button type="button" className="icon section-action" aria-label="Reload files" title="Reload files" onClick={() => setVersion((v) => v + 1)}>
+          <ReloadIcon />
+        </button>
+      }
+    >
       <div className="file-tabs" role="tablist" aria-label="Files">
         <button type="button" role="tab" aria-selected={shown === "changed"} onClick={() => setTab("changed")}>Changed</button>
         <button type="button" role="tab" aria-selected={shown === "all"} onClick={() => setTab("all")}>All</button>
@@ -199,9 +221,9 @@ export function FilesSection({ sessionId, tool }: { sessionId: string; tool: str
           </button>
         )}
       </div>
-      {shown === "changed" && <Changed sessionId={sessionId} />}
-      {shown === "all" && <Directory sessionId={sessionId} tree="workdir" path="" />}
-      {shown === "memory" && <Directory sessionId={sessionId} tree="memory" path="" />}
+      {shown === "changed" && <Changed sessionId={sessionId} version={version} />}
+      {shown === "all" && <Directory sessionId={sessionId} tree="workdir" path="" version={version} />}
+      {shown === "memory" && <Directory sessionId={sessionId} tree="memory" path="" version={version} />}
     </Section>
   );
 }

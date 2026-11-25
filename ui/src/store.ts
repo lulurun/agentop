@@ -40,8 +40,11 @@ export interface HistoryState {
 const NO_HISTORY: HistoryState = { items: null, windowSeconds: null, maxActive: 20 };
 
 /** The sessions that count towards the limit: the ones agentop started, unless their plugin says otherwise. */
-export function activeCount(sessions: Record<string, Session>): number {
-  return Object.values(sessions).filter((s) => s.managed && s.counted !== false).length;
+/** Sessions counted against the service's limit, all of them or one project's. */
+export function activeCount(sessions: Record<string, Session>, project?: string): number {
+  return Object.values(sessions).filter(
+    (s) => s.managed && s.counted !== false && (project === undefined || (s.project ?? "default") === project),
+  ).length;
 }
 
 export interface AppState {

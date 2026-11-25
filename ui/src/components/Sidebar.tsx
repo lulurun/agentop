@@ -118,7 +118,9 @@ export const SessionSections = memo(function SessionSections({ project, canStart
       s.managed &&
       (s.project ?? "default") === project,
   );
-  const active = activeCount(sessions);
+  const active = activeCount(sessions, project);
+  // The limit is the service's, so every project's sessions fill it.
+  const full = activeCount(sessions) >= maxActive;
   // The selected session is only marked while its tab, not a past session's, has focus.
   const current = pastOpen ? undefined : selected;
 
@@ -128,8 +130,8 @@ export const SessionSections = memo(function SessionSections({ project, canStart
           <Section
             id="active"
             title="Active sessions"
-            hint={`At most ${maxActive} sessions started by agentop can be active at once`}
-            extra={<span className="session-count" data-full={active >= maxActive || undefined}>{active}/{maxActive}</span>}
+            hint={`This project's active sessions. At most ${maxActive} sessions started by agentop can be active at once, across all projects`}
+            extra={<span className="session-count" data-full={full || undefined}>{active}/{maxActive}</span>}
           >
             <nav className="session-list" aria-label="Sessions">
               {managed.map((s) => (

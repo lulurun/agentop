@@ -1187,6 +1187,10 @@ button.app-outdated:hover { background: var(--line); }
 }
 .fold-toggle:hover { background: var(--raised); color: var(--text); }
 .fold-title { flex: 1; }
+.section-title:has(> .section-action) { display: flex; align-items: center; gap: 2px; }
+.section-title > .fold-toggle { min-width: 0; }
+button.icon.section-action { flex: none; width: 24px; height: 24px; border-radius: 6px; }
+button.icon.section-action:hover { background: var(--raised); color: var(--text); }
 .fold-chevron {
   width: 6px;
   height: 6px;
