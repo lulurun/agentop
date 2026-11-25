@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 import httpx
+import psutil
 import pytest
 
 from tests.conftest import kill_tmux_server
@@ -43,6 +44,8 @@ class ByHand:
             "PYTHONPATH": str(ROOT / "src"),
             **env,
         }
+        self.http = None
+        self.recovery = None
         self.process = subprocess.Popen(
             [sys.executable, "-m", "agentop.cli", "serve", "--port", str(self.port), "--name", "by-hand"],
             env=self.env,
@@ -50,6 +53,8 @@ class ByHand:
             stderr=subprocess.DEVNULL,
         )
         self.base = f"http://127.0.0.1:{self.port}/api/v2"
+
+    def start(self):
         self.wait_up()
         token = (self.home / "service.json").read_text()
         import json
@@ -82,10 +87,28 @@ class ByHand:
         raise AssertionError("the service did not go down")
 
     def close(self):
-        if self.process.poll() is None:
-            self.process.terminate()
-            self.process.wait(10)
-        kill_tmux_server(self.env["AGENTOP_TMUX_SOCKET"])
+        try:
+            if self.http is not None:
+                self.http.close()
+            if self.recovery is not None and self.recovery.poll() is None:
+                children = psutil.Process(self.recovery.pid).children(recursive=True)
+                for child in children:
+                    if "python" in child.name():
+                        child.terminate()
+                try:
+                    self.recovery.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(self.recovery.pid, signal.SIGKILL)
+                    self.recovery.wait()
+            if self.process.poll() is None:
+                self.process.terminate()
+            try:
+                self.process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+        finally:
+            kill_tmux_server(self.env["AGENTOP_TMUX_SOCKET"])
 
 
 @pytest.fixture
@@ -93,8 +116,10 @@ def by_hand(tmp_path):
     services = []
 
     def start(**env):
-        services.append(ByHand(tmp_path, **env))
-        return services[-1]
+        service = ByHand(tmp_path, **env)
+        services.append(service)
+        service.start()
+        return service
 
     yield start
     for service in services:
@@ -200,15 +225,20 @@ def test_if_the_new_version_died_the_updater_starts_it_again(by_hand, tmp_path):
 
     s.process.send_signal(signal.SIGKILL)
     s.process.wait(10)
-    subprocess.run(
-        ["bash", "-c", saved.read_text()],
+    command = saved.read_text()
+    assert command.endswith(" &); fi")
+    # Keep the shell as the replacement's parent so it can reap it on shutdown.
+    command = command.removesuffix(" &); fi") + " & wait); fi"
+    s.recovery = subprocess.Popen(
+        ["bash", "-c", command],
         env={**s.env, "HEALTH_URL": f"{s.base}/health"},
-        check=True,
-        timeout=15,
+        start_new_session=True,
     )
     s.wait_up()
     pid = s.http.get("/service").json()["pid"]
     assert pid != s.process.pid
     os.kill(pid, signal.SIGTERM)
+    assert s.recovery.wait(timeout=15) == 0
+    s.recovery = None
     s.wait_down()
     assert (s.home / "logs" / "serve.log").exists()
