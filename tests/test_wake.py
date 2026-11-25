@@ -10,9 +10,9 @@ from agentop import coordinator, ops, projects
 from agentop.agentclis.base import _plain as plain
 from agentop.agentclis.claude import ClaudeAgentCli
 from agentop.agentclis.codex import CodexAgentCli
-from agentop.plugins.attention import Watcher
 from agentop.plugins.projects import cli, pursuit, track, wake
 from agentop.plugins.projects.checker import Checker
+from agentop.status_feed import SessionStatus, StatusFeed
 
 NEXT = "Wait for dev's report, then check it against the login criteria."
 RULE = "─" * 40
@@ -33,18 +33,39 @@ SCREENS = {
 }
 
 
-class FakePane(wake.Pane):
-    """A Coordinator's pane: its screen, what is typed into it, and its conversation ID."""
+def feed_status(state, since=0.0):
+    """What the attention plugin's feed says: a hook state, a screen guess, or nothing."""
+    if state is None:
+        return None
+    if state == "screen":
+        return SessionStatus("coord-1", "done", since, "screen")
+    if state == "unknown":
+        return SessionStatus("coord-1", "unknown", since, "unavailable")
+    return SessionStatus("coord-1", state, since, "hook", "Stop" if state == "done" else "PostToolUse")
 
-    def __init__(self, tool="claude", screen="old", busy=False, clears=True, new_id=True):
+
+class FakePane(wake.Pane):
+    """A Coordinator's pane: its screen, its status in the feed, what is typed into it, and its conversation ID.
+
+    `states` is the feed's state at each look, the last one staying; the screen never says whether it is busy.
+    """
+
+    def __init__(self, tool="claude", screen="old", states=("done",), clears=True, new_id=True, busy_screen=False):
         agent = ClaudeAgentCli() if tool == "claude" else CodexAgentCli()
-        super().__init__(agent, "coord-1", 4242)
+        super().__init__(agent, "coord-1", 4242, "coord-1")
         self.screens = SCREENS[tool]
         self.current = self.screens[screen]
-        self.busy, self.clears, self.new_id = busy, clears, new_id and tool == "claude"
+        self.states = list(states)
+        self.looks = 0
+        self.busy, self.clears, self.new_id = busy_screen, clears, new_id and tool == "claude"
         self.id = "conv-1"
         self.typed = []
         self.ticks = 0
+
+    def status(self):
+        self.looks += 1
+        state = self.states.pop(0) if len(self.states) > 1 else self.states[0]
+        return feed_status(state, wake._now() - 10)
 
     def screen(self, escapes=False):
         self.ticks += 1
@@ -69,6 +90,7 @@ def fast(monkeypatch):
     clock = [1000.0]
     monkeypatch.setattr(wake, "_clock", lambda: clock[0])
     monkeypatch.setattr(wake, "_sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr(wake, "_now", lambda: clock[0])
     monkeypatch.setattr("agentop.cli._service_api", lambda *a, **k: None)
     return clock
 
@@ -136,6 +158,10 @@ def test_a_blocked_report_is_a_wake_too(alpha, monkeypatch):
 
 @pytest.mark.parametrize("case, reason", [
     ("busy", "the Coordinator is busy"),
+    ("input", "the Coordinator is waiting for input"),
+    ("no hooks", "status unknown"),
+    ("feed off", "status unknown"),
+    ("no status", "status unknown"),
     ("no yield", "no yield since the last event"),
     ("draft", "a draft is in the prompt"),
     ("other report", "api reported and wait for a decision"),
@@ -145,7 +171,9 @@ def test_a_blocked_report_is_a_wake_too(alpha, monkeypatch):
 ])
 def test_without_a_safe_point_the_report_is_typed_without_a_clear(alpha, monkeypatch, case, reason):
     task()
-    pane = FakePane(busy=case == "busy", screen="draft" if case == "draft" else "old")
+    states = {"busy": ("working",), "input": ("input",), "no hooks": ("screen",), "feed off": ("unknown",),
+              "no status": (None,)}.get(case, ("done",))
+    pane = FakePane(states=states, screen="draft" if case == "draft" else "old")
     if case == "other report":
         task("api", "M1A2")
         path = projects.folder("alpha") / "results/api.md"
@@ -180,7 +208,7 @@ def test_an_unverified_clear_still_delivers_the_report_and_says_so(alpha, monkey
     assert NEXT in pane.typed[1] and "dev reported round 1" in pane.typed[1]
     assert events("clear.skipped")[0]["reason"] == "not verified within 20s"
     assert events("clear.verified") == []
-    assert fast[0] - started >= wake.IDLE_SECONDS + wake.CLEAR_TIMEOUT
+    assert fast[0] - started >= wake.CLEAR_TIMEOUT
 
 
 def test_a_second_report_before_the_next_yield_is_not_cleared_again(alpha, monkeypatch):
@@ -207,39 +235,29 @@ def test_a_placeholder_screen_hint_is_not_a_draft(alpha):
 # --- the safety net (9.3), at the end of a Coordinator turn
 
 
-class Screens:
-    def __init__(self):
-        self.text = "a"
-        self.activity = 0
-
-    def list_panes(self):
-        return {"coord-1": (self.activity, "80x24", "%1")}
-
-    def capture(self, pane):
-        return self.text
-
-
 def coordinator_row():
     return {"id": "coord-1", "status": "running", "managed": True, "project": "alpha", "tool": "claude",
             "display_name": "Coordinator", "tmux": {"session": "coord-1"}, "session_id": "conv-1"}
 
 
-def turn_ends(pane, tokens=None, monkeypatch=None, at=None):
-    """One Coordinator turn: output, then a still screen past the checker's wait. Returns what it typed."""
-    screens = Screens()
+def turn_ends(pane, end="done"):
+    """One Coordinator turn as the feed reports it: working, then `end`, past the checker's wait. Returns what it ran."""
+    feed = StatusFeed()
+    pane.status = lambda: feed.latest("coord-1")
     ran = []
-    checker = Checker(lambda p, row, text: ran.append(text), watcher=Watcher(screens.list_panes, screens.capture),
+    checker = Checker(lambda p, row, text: ran.append(text), status_feed=feed,
                       pane=lambda row: pane, run=lambda project, fn: ran.append(fn()))
-    now = time.time() if at is None else at
-    checker.tick([coordinator_row()], now)
-    screens.activity = int(now + 1)
-    screens.text += "x"
-    checker.tick([coordinator_row()], now + 1)
-    checker.tick([coordinator_row()], now + 3)
-    assert pane.typed == []
-    checker.tick([coordinator_row()], now + 6)
-    checker.tick([coordinator_row()], now + 12)
-    checker.tick([coordinator_row()], now + 30)
+    now = wake._now()
+    feed.publish(feed_status("working", now))
+    for at in (now, now + 1, now + 3):
+        checker.tick([coordinator_row()], at)
+    assert pane.typed == [] and ran == []
+    if end is None:
+        feed.clear()
+    else:
+        feed.publish(feed_status(end, now + 4))
+    for at in (now + 5, now + 7, now + 12, now + 30):
+        checker.tick([coordinator_row()], at)
     return ran
 
 
@@ -311,6 +329,70 @@ def test_yield_clear_goes_through_the_same_check_then_says_carry_on(alpha, monke
     assert pursuit.pending_clear("alpha") is None
     pane = FakePane()
     assert turn_ends(pane) == []
+
+
+def test_the_safety_net_waits_for_the_feed_not_the_screen(alpha, monkeypatch):
+    task()
+    waiting()
+    monkeypatch.setattr(wake, "context_share", lambda row, agent: (130_000, 200_000))
+    # A screen that keeps changing doesn't hold the clear back once the feed says the turn ended.
+    pane = FakePane(busy_screen=True)
+    assert turn_ends(pane) == ["cleared"] and pane.typed == ["/clear"]
+
+
+@pytest.mark.parametrize("end", ["input", "unknown", "screen", None])
+def test_the_safety_net_never_clears_without_a_hook_turn_end(alpha, monkeypatch, end):
+    task()
+    waiting()
+    monkeypatch.setattr(wake, "context_share", lambda row, agent: (130_000, 200_000))
+    pane = FakePane()
+    assert turn_ends(pane, end) == [] and pane.typed == []
+    skipped = [e["reason"] for e in events("clear.skipped")]
+    assert skipped == ([] if end == "input" else [wake.UNKNOWN])
+    assert events("clear.sent") == []
+
+
+def test_a_report_while_the_turn_ends_waits_for_its_stop_in_the_feed(alpha, monkeypatch, fast):
+    task()
+    waiting()
+    pane = FakePane(states=("working", "working", "working", "done"))
+    started = fast[0]
+    report(monkeypatch, pane)
+    assert pane.typed[0] == "/clear" and pane.looks >= 4
+    assert fast[0] - started < wake.TURN_END_WAIT + 5
+
+
+def test_a_report_to_a_busy_coordinator_waits_a_little_then_skips(alpha, monkeypatch, fast):
+    task()
+    waiting()
+    pane = FakePane(states=("working",))
+    started = fast[0]
+    report(monkeypatch, pane)
+    assert fast[0] - started >= wake.TURN_END_WAIT
+    assert events("clear.skipped")[0]["reason"] == "the Coordinator is busy"
+    assert len(pane.typed) == 1 and "dev reported round 1" in pane.typed[0]
+
+
+def test_a_clear_right_after_a_stop_waits_a_moment(alpha, monkeypatch, fast):
+    task()
+    waiting()
+    pane = FakePane()
+    pane.status = lambda: SessionStatus("coord-1", "done", fast[0], "hook", "Stop")
+    started = fast[0]
+    assert wake.turn_blocker(pane) is None
+    assert fast[0] - started >= wake.AFTER_STOP_SECONDS
+
+
+def test_without_a_service_the_cli_asks_the_bridge_and_without_one_does_not_clear(alpha, monkeypatch):
+    task()
+    waiting()
+    pane = wake.Pane(ClaudeAgentCli(), "coord-1", 4242, "coord-1")
+    monkeypatch.setattr(wake.Pane, "type", lambda self, text: typed.append(text))
+    monkeypatch.setattr(wake.Pane, "screen", lambda self, escapes=False: SCREENS["claude"]["old"])
+    typed = []
+    report(monkeypatch, pane)
+    assert len(typed) == 1 and "dev reported round 1" in typed[0]
+    assert events("clear.skipped")[0]["reason"] == wake.UNKNOWN
 
 
 # --- Next (9.4)

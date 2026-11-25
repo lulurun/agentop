@@ -1,7 +1,8 @@
 """Watches Projects sessions on the scan tick: a Coordinator at a safe point is cleared when its yield asked,
 its context is large or a milestone closed; a quiet task session is reminded, then the Coordinator told.
 
-Turns come from the attention plugin's status feed (lifecycle events, with its screen fallback).
+Turns come only from the attention plugin's status feed, as the tools' lifecycle events report them; a session
+with no such status (no hooks, a screen guess, the plugin off) is never cleared or reminded.
 """
 
 from __future__ import annotations
@@ -14,14 +15,13 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from agentop import projects
-from agentop.plugins.attention import Watcher
 
 from . import pursuit, wake
 
 LOG = logging.getLogger(__name__)
 
-# Codex refuses /clear while a turn runs; its spinner ticks every second while busy.
-CLEAR_SECONDS = 5.0
+# Codex refuses /clear while a turn runs, and for a moment after it.
+CLEAR_SECONDS = 2.0
 # A task session can sit on a still screen through a long test run or model call, so a short wait nags busy agents.
 TASK_QUIET_SECONDS = 2 * 3600.0
 
@@ -30,27 +30,27 @@ TASK_QUIET_SECONDS = 2 * 3600.0
 class Turn:
     handled: float | None = None
     netted: float | None = None
+    unknown: bool = False
     reminded: dict = field(default_factory=dict)
 
 
 class Checker:
-    def __init__(self, deliver: Callable[[str, dict, str], None], task_quiet_seconds: float = TASK_QUIET_SECONDS,
-                 watcher=None, pane=None, run=None, status_feed=None):
+    def __init__(self, deliver: Callable[[str, dict, str], None], status_feed,
+                 task_quiet_seconds: float = TASK_QUIET_SECONDS, pane=None, run=None):
         self._deliver = deliver
         self.task_quiet_seconds = task_quiet_seconds
         self.status_feed = status_feed
         self.subscriptions = {}
         self.statuses = {}
-        self.watcher = watcher or Watcher(quiet_seconds=4.0)
         self.turns: dict[str, Turn] = {}
         self._rows: list[dict] = []
-        self._pane = pane or wake.pane_of
+        self._pane = pane or (lambda row: wake.pane_of(row, status_feed.latest))
         self._run = run or self._in_thread
         self._busy: set[str] = set()
         self._busy_lock = threading.Lock()
 
     def _in_thread(self, project: str, fn: Callable[[], object]) -> None:
-        """A clear waits on the screen for up to half a minute, so it runs beside the tick, one per project."""
+        """A clear waits for its sign for up to half a minute, so it runs beside the tick, one per project."""
         with self._busy_lock:
             if project in self._busy:
                 return
@@ -72,7 +72,6 @@ class Checker:
             self.status_feed.unsubscribe(sid, subscription)
         self.subscriptions = {}
         self.statuses = {}
-        self.watcher.reset()
         self.turns = {}
 
     def tick(self, sessions: list[dict], now: float | None = None) -> None:
@@ -90,37 +89,32 @@ class Checker:
                 rows.append(row)
         self._rows = rows
         live = {row["id"] for row in rows}
-        if self.status_feed is None:
-            self.watcher.tick(rows, now)
-        else:
-            for sid in self.subscriptions.keys() - live:
-                self.status_feed.unsubscribe(sid, self.subscriptions.pop(sid))
-                self.statuses.pop(sid, None)
-            for sid in live:
-                if sid not in self.subscriptions:
-                    self.subscriptions[sid] = self.status_feed.subscribe(sid)
-                try:
-                    self.statuses[sid] = self.subscriptions[sid].get_nowait()
-                except queue.Empty:
-                    pass
+        for sid in self.subscriptions.keys() - live:
+            self.status_feed.unsubscribe(sid, self.subscriptions.pop(sid))
+            self.statuses.pop(sid, None)
+        for sid in live:
+            if sid not in self.subscriptions:
+                self.subscriptions[sid] = self.status_feed.subscribe(sid)
+            try:
+                self.statuses[sid] = self.subscriptions[sid].get_nowait()
+            except queue.Empty:
+                pass
         for sid in self.turns.keys() - live:
             del self.turns[sid]
         for row in rows:
-            if self.status_feed is None:
-                screen = self.watcher.screens.get(row["id"])
-                if screen is None:
-                    continue
-                state, since = screen.state, screen.waiting_since
-            else:
-                status = self.statuses.get(row["id"])
-                if status is None:
-                    continue
-                state = status.state
-                since = status.since if state in ("done", "input") else None
             turn = self.turns.setdefault(row["id"], Turn())
-            if state == "input":
+            coordinator = row.get("display_name") == projects.COORDINATOR
+            status = wake.known(self.statuses.get(row["id"]))
+            if status is None:
+                if coordinator and not turn.unknown:
+                    self._unknown(row)
+                turn.unknown = True
                 continue
-            if row.get("display_name") == projects.COORDINATOR:
+            turn.unknown = False
+            if status.state == "input":
+                continue
+            since = status.since if status.state == "done" else None
+            if coordinator:
                 if since is not None and now - since >= CLEAR_SECONDS and turn.netted != since:
                     turn.netted = since
                     self._net(row)
@@ -140,6 +134,14 @@ class Checker:
         if found is not None:
             why, explicit = found
             self._run(project, lambda: wake.safety_clear(project, pane, why, explicit))
+
+    def _unknown(self, row: dict) -> None:
+        """A Coordinator whose status turned unknown is never cleared on a guess; say so once if a clear was due."""
+        project = row["project"]
+        pane = self._pane(row)
+        found = wake.clear_reason(project, row, pane.agent) if pane is not None else None
+        if found is not None:
+            pursuit.log(project, "clear.skipped", reason=wake.UNKNOWN, why=found[0])
 
     def _tell_coordinator(self, project: str, row: dict, text: str, source: str, task: str | None = None) -> None:
         pane = self._pane(row)

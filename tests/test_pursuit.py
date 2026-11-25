@@ -6,9 +6,9 @@ import time
 import pytest
 
 from agentop import coordinator, projects
-from agentop.plugins.attention import Watcher
 from agentop.plugins.projects import cli, pursuit, review, track
 from agentop.plugins.projects.checker import Checker
+from agentop.status_feed import SessionStatus, StatusFeed
 
 
 @pytest.fixture
@@ -156,18 +156,6 @@ def test_review_counts_stops_and_shows_the_trend(alpha):
     assert "Handed to the owner: 100% → 0%" in text
 
 
-class Screens:
-    def __init__(self):
-        self.text = {"%1": "a", "%2": "b"}
-        self.activity = 0
-
-    def list_panes(self):
-        return {"coord-1": (self.activity, "80x24", "%1"), "dev-1": (self.activity, "80x24", "%2")}
-
-    def capture(self, pane):
-        return self.text[pane]
-
-
 def rows():
     base = {"status": "running", "managed": True, "project": "alpha", "tool": "fakeagent"}
     return [
@@ -176,33 +164,48 @@ def rows():
     ]
 
 
-def run_turn(checker, screens, pane, start, quiet=70):
-    """A turn of output on one pane at `start`, then quiet for `quiet` seconds."""
-    screens.activity = int(start)
-    screens.text[pane] += "x"
-    checker.tick(rows(), start)
-    checker.tick(rows(), start + 5)
-    checker.tick(rows(), start + quiet)
+def hook(sid, state, since):
+    return SessionStatus(sid, state, since, "hook", "Stop" if state == "done" else "PostToolUse")
 
 
 def test_a_quiet_task_session_is_reminded_then_the_coordinator_is_told(alpha):
     sent = []
-    screens = Screens()
-    checker = Checker(lambda p, row, text: sent.append(row["display_name"]),
-                      watcher=Watcher(screens.list_panes, screens.capture))
+    feed = StatusFeed()
+    checker = Checker(lambda p, row, text: sent.append(row["display_name"]), status_feed=feed, pane=lambda row: None)
     pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
     now = time.time()
+    feed.publish(hook("dev-1", "working", now))
     checker.tick(rows(), now)
-    run_turn(checker, screens, "%2", now + 10)
+    feed.publish(hook("dev-1", "done", now + 10))
+    checker.tick(rows(), now + 20)
     assert sent == []
     checker.tick(rows(), now + 20 + checker.task_quiet_seconds)
     assert sent == ["dev"]
+    checker.tick(rows(), now + 30 + checker.task_quiet_seconds)
+    assert sent == ["dev"]
     later = now + 3 * checker.task_quiet_seconds
-    run_turn(checker, screens, "%2", later, quiet=checker.task_quiet_seconds + 10)
-    assert sent == ["dev", "Coordinator"]
-    run_turn(checker, screens, "%2", later * 2, quiet=checker.task_quiet_seconds + 10)
+    feed.publish(hook("dev-1", "working", later))
+    checker.tick(rows(), later)
+    feed.publish(hook("dev-1", "done", later + 5))
+    checker.tick(rows(), later + 10 + checker.task_quiet_seconds)
     assert sent == ["dev", "Coordinator"]
     assert [e["kind"] for e in pursuit.events(alpha)].count("task.quiet") == 1
+
+
+@pytest.mark.parametrize("status", [
+    SessionStatus("dev-1", "done", 0.0, "screen"),
+    SessionStatus("dev-1", "unknown", 0.0, "unavailable"),
+    SessionStatus("dev-1", "input", 0.0, "hook", "PermissionRequest"),
+])
+def test_a_task_session_is_not_reminded_on_a_screen_guess_no_status_or_a_question(alpha, status):
+    sent = []
+    feed = StatusFeed()
+    checker = Checker(lambda p, row, text: sent.append(row["display_name"]), status_feed=feed, pane=lambda row: None)
+    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+    feed.publish(status)
+    checker.tick(rows(), 10)
+    checker.tick(rows(), 10 + 2 * checker.task_quiet_seconds)
+    assert sent == []
 
 
 def test_task_start_briefs_the_session_and_report_tells_the_coordinator(alpha, monkeypatch, capsys):
@@ -258,28 +261,19 @@ def test_a_coordinator_must_start_tasks_not_plain_sessions(alpha, monkeypatch, c
 
 
 def test_coordinator_clear_waits_until_input_prompt_finishes(alpha, monkeypatch):
-    from agentop.plugins.attention import Screen
-
-    class InputWatcher:
-        screens = {"coord-1": Screen("", "80x24", 0, waiting_since=100, state="input")}
-
-        def tick(self, sessions, now):
-            pass
-
-    watcher = InputWatcher()
-    checker = Checker(lambda *args: None, watcher=watcher)
+    feed = StatusFeed()
+    checker = Checker(lambda *args: None, status_feed=feed)
     cleared = []
     monkeypatch.setattr(checker, "_net", lambda row: cleared.append(row["id"]))
+    feed.publish(SessionStatus("coord-1", "input", 100, "hook", "PermissionRequest"))
     checker.tick(rows(), 110)
     assert cleared == []
-    watcher.screens["coord-1"].state = "done"
+    feed.publish(SessionStatus("coord-1", "done", 100, "hook", "Stop"))
     checker.tick(rows(), 111)
     assert cleared == ["coord-1"]
 
 
 def test_checker_subscribes_to_project_sessions_and_stops_on_feed_clear(alpha, monkeypatch):
-    from agentop.status_feed import SessionStatus, StatusFeed
-
     feed = StatusFeed()
     checker = Checker(lambda *args: None, status_feed=feed)
     cleared = []

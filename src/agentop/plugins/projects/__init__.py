@@ -86,7 +86,7 @@ def register(api) -> None:
                     and r.get("status") == "running" and r.get("display_name") == projects.COORDINATOR), None)
         if row is None:
             raise HTTPException(409, f"{name} has no running Coordinator")
-        pane = wake.pane_of(row)
+        pane = wake.pane_of(row, api.status_feed.latest)
         try:
             if pane is None:
                 await asyncio.to_thread(deliver, name, row, pursuit.wake_note(name, body.source) + body.text)

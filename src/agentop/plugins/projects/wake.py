@@ -7,19 +7,24 @@ from __future__ import annotations
 
 import fcntl
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
 
 from agentop import projects
 from agentop.agentclis import get_agent
 from agentop.agentclis.base import AgentCli
+from agentop.paths import state_dir
+from agentop.status_feed import SessionStatus, fetch
 from agentop.tmux import CapturePane
 
 from . import pursuit
 
 CLEAR_TIMEOUT = 20.0
-# Codex's spinner ticks every second while a turn runs, Claude's more often, so a screen still this long is between turns.
-IDLE_SECONDS = 5.0
+# The feed is refreshed on the service's 2 s scan, so a turn that is just ending gets this long to show its Stop.
+TURN_END_WAIT = 5.0
+# Codex can still refuse /clear for a moment after its Stop hook.
+AFTER_STOP_SECONDS = 1.0
 POLL_SECONDS = 0.5
 # Right after a clear the tool is still redrawing, and a prompt typed into that can be lost.
 SETTLE_SECONDS = 1.0
@@ -38,6 +43,9 @@ RESUME = (
 
 _sleep = time.sleep
 _clock = time.monotonic
+_now = time.time
+
+UNKNOWN = "status unknown"
 
 
 @dataclass
@@ -45,6 +53,14 @@ class Pane:
     agent: AgentCli
     tmux: str
     pid: int | None = None
+    sid: str = ""
+    status_of: Callable[[str], SessionStatus | None] | None = None
+
+    def status(self) -> SessionStatus | None:
+        """The session's latest status from the attention plugin's feed: in the service directly, else over its socket."""
+        if self.status_of is not None:
+            return self.status_of(self.sid)
+        return fetch(state_dir(), self.sid)
 
     def screen(self, escapes: bool = False) -> str:
         return CapturePane.screen(self.tmux, escapes)
@@ -56,10 +72,12 @@ class Pane:
         return self.agent.conversation_id(self.pid)
 
 
-def pane_of(row: dict) -> Pane | None:
+def pane_of(row: dict, status_of: Callable[[str], SessionStatus | None] | None = None) -> Pane | None:
     agent = get_agent(row.get("tool") or "")
     name = (row.get("tmux") or {}).get("session")
-    return Pane(agent, name, row.get("pid")) if agent is not None and name else None
+    if agent is None or not name:
+        return None
+    return Pane(agent, name, row.get("pid"), row.get("id") or name, status_of)
 
 
 @contextmanager
@@ -92,23 +110,39 @@ def blocker(project: str, explicit: bool = False, task: str | None = None) -> st
     return None
 
 
-def idle(pane: Pane, seconds: float = IDLE_SECONDS) -> bool:
-    """Whether the screen stays the same for `seconds`. The one place the hook state can replace the screen."""
-    first = pane.screen()
-    deadline = _clock() + seconds
-    while _clock() < deadline:
+def known(status: SessionStatus | None) -> SessionStatus | None:
+    """The status if it comes from the tool's own lifecycle events; a screen guess or no status is unknown."""
+    if status is None or status.source != "hook" or status.state == "unknown":
+        return None
+    return status
+
+
+def turn_blocker(pane: Pane, wait: float = TURN_END_WAIT) -> str | None:
+    """Why the feed says clearing isn't safe now: no status from hooks, a turn running, or a question waiting."""
+    deadline = _clock() + wait
+    while True:
+        status = known(pane.status())
+        if status is None:
+            return UNKNOWN
+        if status.state == "input":
+            return "the Coordinator is waiting for input"
+        if status.state != "working":
+            settled = status.since + AFTER_STOP_SECONDS - _now()
+            if settled > 0:
+                _sleep(settled)
+            return None
+        if _clock() >= deadline:
+            return "the Coordinator is busy"
         _sleep(POLL_SECONDS)
-        if pane.screen() != first:
-            return False
-    return True
 
 
-def screen_blocker(pane: Pane) -> str | None:
-    """Why the screen says clearing isn't safe now: a turn running, or a draft in the input line."""
+def session_blocker(pane: Pane) -> str | None:
+    """Why clearing isn't safe now: the feed's turn state, then a draft in the input line."""
+    reason = turn_blocker(pane)
+    if reason is not None:
+        return reason
     if pane.agent.prompt_mark is None:
         return f"{pane.agent.name}'s screen isn't read, so it isn't cleared"
-    if not idle(pane):
-        return "the Coordinator is busy"
     draft = pane.agent.draft(pane.screen(escapes=True))
     if draft is None:
         return "the input line wasn't found on the screen"
@@ -178,7 +212,7 @@ def deliver_event(project: str, pane: Pane, text: str, source: str, task: str | 
         if reason is None and pursuit.cleared(project):
             outcome, prompt = "already cleared", compose(project, CLEARED, text)
         else:
-            reason = reason or screen_blocker(pane)
+            reason = reason or session_blocker(pane)
             if reason is not None:
                 pursuit.log(project, "clear.skipped", reason=reason, source=source)
                 outcome, prompt = "not cleared", (pursuit.WAKE_NOTE if pursuit.cleared(project) else "") + text
@@ -220,7 +254,7 @@ def clear_reason(project: str, row: dict, agent: AgentCli) -> tuple[str, bool] |
 def safety_clear(project: str, pane: Pane, why: str, explicit: bool = False) -> str:
     """Clear at a safe point with no event to deliver; after a yield --clear, tell it to carry on. Returns what happened."""
     with _one_at_a_time(project):
-        reason = blocker(project, explicit=explicit) or screen_blocker(pane)
+        reason = blocker(project, explicit=explicit) or session_blocker(pane)
         if reason is not None:
             pursuit.log(project, "clear.skipped", reason=reason, why=why)
             return "not cleared"
