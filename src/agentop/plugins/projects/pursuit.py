@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import fcntl
 import json
+import os
 import re
+import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -24,7 +26,15 @@ STATE_SECTIONS = ("Objective", "Where things are", "Decisions", "Open questions 
 REVIEWS_DIR = "reviews"
 REFLECTION_PLACEHOLDER = "(The Coordinator writes this.)"
 KINDS = ("done", "waiting", "owner", "blocked")
-CLEARING_KINDS = ("done", "waiting")
+# The yields after which agentop may clear the context at the next wake (spec 9.2).
+CLEARING_KINDS = ("done", "waiting", "owner")
+NEEDS_NEXT = ("done", "waiting")
+NEXT_FILE = "NEXT.md"
+# A --next made of these alone says nothing a cleared context can act on.
+NEXT_PLACEHOLDERS = {
+    "", "tbd", "todo", "next", "na", "n a", "none", "nothing", "same", "same as before", "wait", "waiting",
+    "continue", "carry on", "see above", "as above", "the next action", "next action", "done",
+}
 
 OBJECTIVE_PLACEHOLDER = '(What the project is for, and what "done" means.)'
 
@@ -86,24 +96,71 @@ def events(project: str, since: float = 0.0) -> list[dict]:
 
 
 WAKE_NOTE = (
-    "[agentop] Your context was cleared before this message. Read AGENTS.md and COORDINATOR_SKILL.md, "
-    "run agentop coordinator status, then act on it:\n\n"
+    "[agentop] Your context was cleared before this message. Run agentop coordinator status "
+    "(it starts with your Next), then act on it:\n\n"
 )
+# What reaches the Coordinator through agentop; a yield after the last of them ended the turn that handled it.
+WAKE = "wake"
 
 
 def pending_clear(project: str) -> dict | None:
-    """The yield's clear.pending event when its /clear hasn't been sent yet."""
-    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "clear.pending")), None)
+    """The yield --clear request (clear.pending) when no clear has been verified since it."""
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear.verified", "clear.pending")), None)
     return last if last is not None and last["kind"] == "clear.pending" else None
 
 
-def wake_note(project: str) -> str:
+def cleared(project: str) -> bool:
+    """Whether the Coordinator's context was cleared and nothing has reached it since."""
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear.verified", WAKE)), None)
+    return last is not None and last["kind"] == "clear.verified"
+
+
+def wake_note(project: str, source: str = "send") -> str:
     """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, else ""; logs the wake."""
-    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "resume", "woken")), None)
-    if last is None or last["kind"] != "clear":
+    note = WAKE_NOTE if cleared(project) else ""
+    log(project, WAKE, source=source, cleared=bool(note))
+    return note
+
+
+def next_path(project: str) -> Path:
+    n = track.generation(project)
+    return track.gen_dir(project, n) / NEXT_FILE if n else _meta(project) / NEXT_FILE
+
+
+def check_next(text: str) -> str:
+    """The --next text, stripped. Raises PursuitError for an empty or placeholder one."""
+    text = (text or "").strip()
+    words = re.sub(r"[\W_]+", " ", text).strip().lower()
+    if words in NEXT_PLACEHOLDERS or (text.startswith("<") and text.endswith(">")) or len(words) < 8:
+        raise PursuitError(
+            "--next must say what you will do next and why, in a sentence: it is all a cleared context starts from"
+        )
+    return text
+
+
+def write_next(project: str, kind: str, text: str) -> Path:
+    """NEXT.md, replaced whole so a reader never sees half of it."""
+    path = next_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = f"# Next\nDate: {time.strftime('%Y-%m-%d %H:%M')} · yield {kind}\n\n{text.strip()}\n"
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(body)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return path
+
+
+def read_next(project: str) -> str:
+    try:
+        return next_path(project).read_text().strip()
+    except OSError:
         return ""
-    log(project, "woken")
-    return WAKE_NOTE
 
 
 def resolve_artifact(project: str, path: str) -> Path:
@@ -333,8 +390,8 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
     """Record why the Coordinator ends its turn, after checking the reason holds. Raises PursuitError."""
     fields = {k: (v or "").strip() for k, v in fields.items()}
     required = {
-        "done": ("evidence",),
-        "waiting": (),
+        "done": ("evidence", "next"),
+        "waiting": ("next",),
         "owner": ("question", "recommend", "default"),
         "blocked": ("need", "tried"),
     }
@@ -343,6 +400,8 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
     missing = [f"--{k}" for k in required[kind] if not fields.get(k)]
     if missing:
         raise PursuitError(f"'{kind}' needs {' and '.join(missing)}")
+    if kind in NEEDS_NEXT or fields.get("next"):
+        fields["next"] = check_next(fields.get("next", ""))
     found = problems(project, kind)
     if found:
         raise PursuitError("; ".join(found))
@@ -374,4 +433,6 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
             action, refreshed = track.ask(project, None, fields["question"], fields["recommend"], fields["default"])
         fields["action"] = track.action_ref(action)
         fields["asked"] = str(track.asked_times(action)) if refreshed else ""
+    if fields.get("next"):
+        write_next(project, kind, fields["next"])
     return log(project, "yield", type=kind, **{k: v for k, v in fields.items() if v})

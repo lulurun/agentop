@@ -13,7 +13,7 @@ import time
 
 from agentop import agentclis
 
-from . import pursuit, track
+from . import pursuit, track, wake
 
 
 def _common() -> argparse.ArgumentParser:
@@ -81,14 +81,15 @@ def _yield_args(turn) -> None:
         ("meanwhile", "owner: what you keep doing that the question doesn't block"),
         ("need", "blocked: the authority, access or change you need"),
         ("tried", "blocked: what you tried"),
+        ("next", "done, waiting (required): what you will do next and why; a cleared context starts from it"),
         ("note", "anything else to record"),
     ):
         turn.add_argument(f"--{flag}", default="", help=text)
     turn.add_argument(
         "--clear", action="store_true",
-        help="owner, blocked: also clear the Coordinator's context once this turn ends (done and waiting always do)",
+        help="clear the Coordinator's context once this turn has ended and it is safe, then carry on",
     )
-    turn.add_argument("--keep", action="store_true", help="done, waiting: keep the context instead of clearing it")
+    turn.add_argument("--keep", action="store_true", help="done, waiting, owner: keep the context at the next wake")
 
 
 YIELD_HELP = dict(
@@ -96,8 +97,8 @@ YIELD_HELP = dict(
     description="Record why the Coordinator stops now. Each reason is checked.",
     formatter_class=argparse.RawDescriptionHelpFormatter,
     epilog=(
-        "  done     --evidence: what shows the direction or request is met (needs a fresh review)\n"
-        "  waiting  tasks are out and their reports are awaited\n"
+        "  done     --evidence --next: what shows the direction or request is met (needs a fresh review)\n"
+        "  waiting  --next: tasks are out and their reports are awaited\n"
         "  owner    --question --recommend --default [--meanwhile]: only the owner can decide; it becomes a plan ask\n"
         "  blocked  --need --tried: authority, access or an outside change is required"
     ),
@@ -225,6 +226,37 @@ def _send(target: str, text: str, project: str) -> bool:
         return False
 
 
+def _wake(project: str, text: str, source: str, task: str) -> bool:
+    """Tell the Coordinator of a task event, clearing its context first when safe: through the service, else here."""
+    from agentop import projects
+    from agentop.cli import _service_api
+    from agentop.results import OpsError
+    from agentop.service import config
+    from agentop.tmux import PasteError
+
+    body = {"text": text, "source": source, "task": task}
+    answer = _service_api(config.load(), "POST", f"/plugins/projects/projects/{project}/wake", body, timeout=90)
+    if answer is not None and answer[0] < 400:
+        return True
+    if answer is not None and answer[0] != 404:
+        print(f"Warning: it didn't reach the Coordinator: {answer[1].get('detail') or answer[0]}", file=sys.stderr)
+        return False
+    try:
+        row = _ops().find_session(projects.COORDINATOR, project=project)
+    except OpsError as exc:
+        print(f"Warning: it didn't reach the Coordinator: {exc}", file=sys.stderr)
+        return False
+    pane = wake.pane_of(row) if row.get("managed") else None
+    if pane is None:
+        return _send(projects.COORDINATOR, pursuit.wake_note(project, source) + text, project)
+    try:
+        wake.deliver_event(project, pane, text, source, task)
+    except PasteError as exc:
+        print(f"Warning: it didn't reach the Coordinator: {exc}", file=sys.stderr)
+        return False
+    return True
+
+
 def _stop(name: str, project: str) -> None:
     from agentop.results import OpsError
 
@@ -302,8 +334,6 @@ def task_report(args, project: str) -> None:
         task = pursuit.report(project, name, _read(args.summary), args.blocked)
     except pursuit.PursuitError as exc:
         _fail(str(exc))
-    from agentop import projects
-
     rounds = len(task["rounds"])
     current = task["rounds"][-1]
     criteria = "; ".join(task["accept"])
@@ -314,7 +344,7 @@ def task_report(args, project: str) -> None:
         f"Check it yourself against: {criteria}. Then agentop coordinator task accept {name} --checked \"…\", "
         f"agentop coordinator task reject {name} --feedback \"…\", or agentop coordinator task fail {name} --note \"…\"."
     )
-    sent = _send(projects.COORDINATOR, pursuit.wake_note(project) + notice, project)
+    sent = _wake(project, notice, "task.blocked" if args.blocked else "task.report", task["id"])
     print(f"Reported round {rounds} of {task['id']}." + (" The Coordinator has been told." if sent else ""))
     print("Wait for the Coordinator's answer; don't start other work.")
 
@@ -428,19 +458,23 @@ def run_yield(args) -> None:
     here = _here()
     if here and here[2] != projects.COORDINATOR:
         _fail("only the Coordinator yields; a task's session reports with agentop coordinator task report")
-    fields = {k: getattr(args, k) for k in ("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note")}
+    fields = {k: getattr(args, k, "") for k in (
+        "evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "next", "note")}
+    if getattr(args, "keep", False):
+        fields["keep"] = "yes"
     try:
         event = pursuit.yield_turn(project, args.kind, fields)
     except pursuit.PursuitError as exc:
         _fail(f"{exc}. If it can't be fixed now, the next action is the fix.")
-    clear = getattr(args, "clear", False) or (args.kind in pursuit.CLEARING_KINDS and not getattr(args, "keep", False))
-    if clear:
+    if event.get("next"):
+        print(f"Next is in {pursuit.next_path(project).relative_to(track.projects.folder(project))}.")
+    if getattr(args, "clear", False):
         pursuit.log(project, "clear.pending", type=args.kind)
-        then = ("the next report or prompt reaches you with a note to run agentop coordinator status"
-                if args.kind in pursuit.CLEARING_KINDS else "agentop tells you to carry on")
-        print(f"Recorded. End your turn with a short message to the owner; then your context is cleared, and {then}.")
+        print("Recorded. End your turn with a short message to the owner; once it has ended and it is safe, your "
+              "context is cleared, and agentop tells you to carry on from your Next.")
     elif args.kind == "waiting":
-        print(f"Recorded: waiting on {event['sessions']}. End your turn; their reports will come to you.")
+        print(f"Recorded: waiting on {event['sessions']}. End your turn; their reports will come to you, "
+              "each after a clear of your context when it is safe.")
     elif args.kind == "owner":
         if event.get("action"):
             again = f", asked {event['asked']}×" if event.get("asked") else ""
@@ -541,6 +575,7 @@ def coordinator_milestone(args, project: str) -> None:
     if getattr(args, "milestone_command", None) != "close":
         _fail("agentop coordinator milestone close M1 --summary -")
     found = _locked(project, track.close_milestone, args.milestone, _read(args.summary))
+    pursuit.log(project, "milestone.close", milestone=found["m"])
     print(f"M{found['m']} is done, with its summary in the plan.")
 
 
@@ -562,6 +597,8 @@ def _task_line(t: dict) -> str:
 def status_text(project: str) -> str:
     """The resume view: what a fresh context needs to carry on."""
     out = []
+    found_next = pursuit.read_next(project)
+    out += [found_next or "# Next\n\n(none yet: agentop coordinator yield waiting|done --next \"…\" writes it)", ""]
     n = track.generation(project)
     if not n:
         out.append("There is no track/ yet.")

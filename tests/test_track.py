@@ -19,6 +19,12 @@ def alpha(tmp_path, monkeypatch):
     return "alpha"
 
 
+@pytest.fixture(autouse=True)
+def no_service(monkeypatch):
+    """The CLI tells the Coordinator here, not through a service on this machine."""
+    monkeypatch.setattr("agentop.cli._service_api", lambda *a, **k: None)
+
+
 @pytest.fixture
 def sessions(monkeypatch):
     """ops faked: task start records the sessions it would start, stop and send do nothing."""
@@ -176,7 +182,7 @@ def test_files_of_older_directions_are_never_written(alpha, capsys, sessions, mo
     report(monkeypatch, capsys, "dev")
     _, err = ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha", code=1)
     assert "Carry it first: agentop coordinator task carry P1_M2A1-1" in err
-    _, err = ag(capsys, "coordinator", "yield", "waiting", "--project", "alpha", code=1)
+    _, err = ag(capsys, "coordinator", "yield", "waiting", "--next", "Wait for dev, then check its result.", "--project", "alpha", code=1)
     assert "belongs to direction 1, not carried: agentop coordinator task carry P1_M2A1-1" in err
     out, _ = ag(capsys, "coordinator", "task", "carry", "P1_M2A1-1", "--to", "M2A1", "--project", "alpha")
     assert "Carried P1_M2A1-1 to P2_M2A1-1" in out
@@ -205,7 +211,7 @@ def test_yield_refuses_each_case_and_names_the_fix(alpha, capsys, sessions, monk
     setup_plan(capsys)
 
     pursuit.open_task(alpha, "loose", "claude", "/x", "g", ["a"], "results/loose.md")
-    assert "has no action: agentop coordinator task carry t1 --to" in refused("waiting")
+    assert "has no action: agentop coordinator task carry t1 --to" in refused("waiting", "--next", "Wait for dev, then check its result.")
     pursuit.carry(alpha, "t1", "M2A2")
     with pytest.raises(pursuit.PursuitError, match="already in the current plan"):
         pursuit.carry(alpha, "loose", "M2A1")
@@ -231,9 +237,9 @@ def test_yield_refuses_each_case_and_names_the_fix(alpha, capsys, sessions, monk
     ag(capsys, "coordinator", "plan", "action", "add", "M3", "Later", "--project", "alpha")
     start(capsys, "dev", "M3A1")
     report(monkeypatch, capsys, "dev")
-    assert "dev reported and wait for you" in refused("waiting")
+    assert "dev reported and wait for you" in refused("waiting", "--next", "Wait for dev, then check its result.")
     ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "x", "--project", "alpha")
-    assert "Tasks were closed since the last review" in refused("done", "--evidence", "e")
+    assert "Tasks were closed since the last review" in refused("done", "--evidence", "e", "--next", "Wait for dev, then check its result.")
 
 
 def test_plan_commands_place_number_and_ask(alpha, capsys):

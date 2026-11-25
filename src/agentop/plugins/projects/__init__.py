@@ -8,6 +8,8 @@ The core keeps projects and their sessions; this plugin makes and removes its ow
 
 
 def register(api) -> None:
+    import asyncio
+
     from fastapi import HTTPException
     from pydantic import BaseModel
 
@@ -15,7 +17,7 @@ def register(api) -> None:
     from agentop.agentclis import get_agent
     from agentop.tmux import PasteError
 
-    from . import pursuit, review
+    from . import pursuit, review, wake
     from .checker import Checker
     from .texts import INSTRUCTIONS, WELCOME
 
@@ -35,6 +37,11 @@ def register(api) -> None:
 
     class NewProject(BaseModel):
         name: str
+
+    class Wake(BaseModel):
+        text: str
+        source: str = "task.report"
+        task: str | None = None
 
     def own(name: str) -> dict:
         found = projects.get(name)
@@ -70,6 +77,24 @@ def register(api) -> None:
             "measure": {k: v for k, v in review.measure(name, 0.0).items() if k != "closed_tasks"},
             "latest_review": str(latest) if latest else None,
         }
+
+    @api.router.post("/projects/{name}/wake")
+    async def wake_coordinator(name: str, body: Wake):
+        """A task event for the Coordinator, typed after a verified clear when it is safe; here so it queues with other prompts."""
+        own(name)
+        row = next((r for r in api.sessions() if r.get("project") == name and r.get("managed")
+                    and r.get("status") == "running" and r.get("display_name") == projects.COORDINATOR), None)
+        if row is None:
+            raise HTTPException(409, f"{name} has no running Coordinator")
+        pane = wake.pane_of(row)
+        try:
+            if pane is None:
+                await asyncio.to_thread(deliver, name, row, pursuit.wake_note(name, body.source) + body.text)
+                return {"outcome": "not cleared"}
+            outcome = await asyncio.to_thread(wake.deliver_event, name, pane, body.text, body.source, body.task)
+        except PasteError as exc:
+            raise HTTPException(502, f"The event didn't reach the Coordinator: {exc}") from exc
+        return {"outcome": outcome}
 
     @api.router.delete("/projects/{name}")
     async def remove_project(name: str, delete_folder: bool = False):

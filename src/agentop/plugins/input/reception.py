@@ -213,6 +213,10 @@ def resume_note(row: dict) -> str:
         return ""
     read = ", ".join(files[:-1]) + (" and " if len(files) > 1 else "") + files[-1]
     tasks = ", run agentop coordinator status" if tracked else ""
+    if tracked:
+        from agentop.plugins.projects import pursuit
+
+        pursuit.log(row["project"], pursuit.WAKE, source="owner", cleared="by the owner")
     return f"[agentop] Your context was cleared before this message. Read {read}{tasks}, then answer the owner:\n\n"
 
 
@@ -222,7 +226,7 @@ def wake_note(row: dict) -> str:
         return ""
     from agentop.plugins.projects import pursuit
 
-    return pursuit.wake_note(row["project"])
+    return pursuit.wake_note(row["project"], "owner")
 
 
 def log(path: Path, **fields) -> None:
