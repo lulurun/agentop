@@ -228,7 +228,7 @@ export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature
     const home = homeTab(feature);
     return home ? withPinned(saved ?? EMPTY_LAYOUT, home) : (saved ?? EMPTY_LAYOUT);
   }
-  if (saved) return withPinned(saved, tabs.START_TAB);
+  if (saved) return saved;
   const selected = state.selected[state.activeId];
   if (!selected) return withPinned(EMPTY_LAYOUT, tabs.START_TAB);
   return withPinned(

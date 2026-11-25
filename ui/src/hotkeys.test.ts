@@ -18,6 +18,7 @@ describe("layout keys", () => {
     expect(layoutAction(key("KeyE"))).toEqual({ do: "focus", target: "right-area" });
     expect(layoutAction(key("KeyA"))).toEqual({ do: "tab", index: 0 });
     expect(layoutAction(key("KeyK"))).toEqual({ do: "tab", index: 7 });
+    expect(layoutAction(key("KeyM"))).toEqual({ do: "toggle-input" });
     expect(layoutAction(key("KeyL"))).toEqual({ do: "close-tab" });
   });
 

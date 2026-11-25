@@ -54,7 +54,7 @@ def owned_by_projects(row: dict) -> bool:
 
 
 def default_on(row: dict) -> bool:
-    return row.get("display_name") == projects.COORDINATOR and owned_by_projects(row)
+    return True
 
 
 def enabled(saved: dict | None, row: dict) -> bool:
@@ -182,7 +182,7 @@ def check(row: dict, text: str, work_dir: Path, ask=None) -> dict:
     if prompts < MIN_PROMPTS:
         return {**result, "reason": "little context yet"}
     state = ""
-    if default_on(row) and row.get("project"):
+    if row.get("display_name") == projects.COORDINATOR and owned_by_projects(row):
         state = state_excerpt(projects.folder(row["project"]))
     prompt = build_prompt(row, conversation, state, text)
     if ask is None:

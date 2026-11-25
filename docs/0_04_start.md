@@ -11,7 +11,7 @@ How Sessions starts and tidies its sessions: the owner types a first prompt, and
 
 - **Not a feature, and not a session.** It was first proposed as a long-running reception session, like a Coordinator, that every prompt goes to. Turned down: each prompt stands alone, so such a session's context would only pile up unrelated requests (the very thing the input bar's reception exists to clear), its answer would have to be read off a screen, and a TUI turn is slow. What it does is a one-shot cheap-model call per prompt (the **probe**) and plain service code. The conversation itself moves to the new session at once.
 - **The probe judges the task; code picks the model.** The probe says what kind of task it is and how hard (a **tier**); the **chooser** turns the tier into a tool and model from a catalogue, by installed tools, the owner's order, and the quota left. Quota changes by the minute and a cheap model weighs it badly; code's choice can be explained in one line and reused by the Coordinator without trusting a cheap model. A tool or model the prompt names always wins.
-- **No New session.** Sessions' left panel loses Create new session. The middle panel's left area always has the **start buffer**, a pinned tab, and sessions open as tabs beside it.
+- **New session.** The button in Sessions' left panel opens the **start buffer** in the left area. Its tab can be closed and reopened.
 - **The words that ask for the session stay with agentop (2026-11-24).** A prompt like "please open a new session for dev agentop" was handed over as typed, and the new session read it as its task and opened another session. The probe now also gives the **task**: the prompt with only those words taken out, the rest word for word. A cheap model that rewrote whole prompts would lose detail, so it only cuts, and the row shows the cut before launch. When nothing is left, the session starts with no first prompt.
 - **Tidying is code, on a timer.** A session idle for `idle_hours` is closed, and a start at the limit first closes the session idle longest. Closed sessions are in History and resume as before.
 - **The probe runs on agy by default** (Gemini Flash, low), the tool whose quota the owner uses least, and the owner can change it in the buffer.
@@ -61,7 +61,7 @@ Kept on the service (`~/.agentop/state/start.json`), set in the buffer's setting
 
 ## 8 In the app
 
-The start buffer is the first tab of Sessions' left area, pinned. It has the input box, and below it what was started from it, newest first.
+The New session button opens the start buffer in Sessions' left area. It has the input box, and below it what was started from it, newest first.
 
 1. Sending clears the box. The row reads "Prompt received · working out where to run it…".
 2. With the probe's answer it reads "Launching **title** in 3s", with the tool, model and folder as chips and **Change**, **Launch now** and **Cancel**. When the task differs from what was typed, the row shows it as "First prompt …", or "No first prompt" when nothing is left. Change can edit it. The 3 seconds are for catching a wrong folder before an agent starts working in it. Change opens the chips for editing and stops the countdown until Launch.

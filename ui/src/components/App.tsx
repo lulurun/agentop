@@ -1,3 +1,4 @@
+import { modeStore } from "../plugins/input/state";
 import { useEffect } from "react";
 import { PluginPanel } from "../plugins/Slot";
 import { layoutAction, type PanelOrArea } from "../hotkeys";
@@ -51,6 +52,9 @@ function runLayoutKey(event: KeyboardEvent) {
   }
   if (!linked) return;
   switch (action.do) {
+    case "toggle-input":
+      modeStore.set(modeStore.snapshot() === "bar" ? "terminal" : "bar");
+      break;
     case "toggle-left":
       if (here?.left) app.toggleLeft();
       break;

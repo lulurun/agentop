@@ -212,13 +212,13 @@ describe("every feature's tabs", () => {
 });
 
 describe("Sessions' start buffer", () => {
-  it("is pinned first in the left area, and a new session opens beside it", () => {
+  it("opens first in the left area and can be closed", () => {
     const layout = tabs.withPinnedTab(tabs.emptyLayout());
     expect(layout.left?.tabs.map((t) => t.id)).toEqual(["start"]);
-    expect(layout.left?.tabs[0].pinned).toBe(true);
+    expect(layout.left?.tabs[0].pinned).toBeFalsy();
     const opened = tabs.open(layout, session("a"), "left", "tab", "ta");
     expect(opened.left?.tabs.map((t) => t.id)).toEqual(["start", "ta"]);
-    expect(tabs.close(opened, "left", "start")).toBe(opened);
+    expect(tabs.close(opened, "left", "start").left?.tabs.map((t) => t.id)).toEqual(["ta"]);
   });
 
   it("is added to a saved layout once, and left where it was moved", () => {

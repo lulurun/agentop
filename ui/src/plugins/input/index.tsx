@@ -145,7 +145,7 @@ function InputBar({ session, plugin, terminal }: { session: Session; plugin: Plu
   if (!active) {
     return (
       <div className="input-bar" data-mode="terminal">
-        <button type="button" className="input-toggle" onClick={() => modeStore.set("bar")} title="Type prompts in a box below the terminal">
+        <button type="button" className="input-toggle" onClick={() => modeStore.set("bar")} title="Type prompts in a box below the terminal (Ctrl+Shift+M)">
           <KeyboardIcon />
           Input bar
         </button>
@@ -389,7 +389,7 @@ function InputBar({ session, plugin, terminal }: { session: Session; plugin: Plu
             type="button"
             className="input-toggle"
             aria-label="Type in the terminal"
-            title="Type in the terminal instead"
+            title="Type in the terminal instead (Ctrl+Shift+M)"
             onClick={() => modeStore.set("terminal")}
           >
             <KeyboardIcon />

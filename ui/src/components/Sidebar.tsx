@@ -80,10 +80,16 @@ const SessionRow = memo(function SessionRow({ session, selected }: { session: Se
 export const Sidebar = memo(function Sidebar() {
   return (
     <div className="sidebar-scroll">
+      <NewSessionButton />
       <SessionSections project="default" />
     </div>
   );
 });
+
+function NewSessionButton() {
+  const openTab = useApp((s) => s.openTab);
+  return <CreateSection id="new-session" title="New session" label="New session" onClick={() => openTab({ kind: "start" }, "left")} />;
+}
 
 /** A left panel's section with one New button, full width. */
 export function CreateSection({ id, title, label, onClick }: { id: string; title: string; label: string; onClick(): void }) {

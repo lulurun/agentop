@@ -157,12 +157,12 @@ def test_state_gives_the_objective_and_next(tmp_path):
     assert reception.state_excerpt(tmp_path / "none") == ""
 
 
-def test_on_by_default_only_for_a_projects_coordinator(monkeypatch):
+def test_on_by_default_for_all_sessions(monkeypatch):
     monkeypatch.setattr(reception.projects, "get", lambda name: {"owner": "projects" if name == "p" else "dialogue"})
     coordinator = {"id": "c", "project": "p", "display_name": "Coordinator"}
     assert reception.enabled(None, coordinator)
-    assert not reception.enabled(None, {"id": "d", "project": "p", "display_name": "dev"})
-    assert not reception.enabled(None, {"id": "c", "project": "talk", "display_name": "Coordinator"})
+    assert reception.enabled(None, {"id": "d", "project": "p", "display_name": "dev"})
+    assert reception.enabled(None, {"id": "c", "project": "talk", "display_name": "Coordinator"})
     saved = reception.set_enabled(None, coordinator, False)
     assert saved == {"reception": {"p/Coordinator": False}}
     assert not reception.enabled(saved, coordinator)
@@ -198,10 +198,11 @@ def test_a_cleared_coordinator_is_told_to_read_its_notes(monkeypatch, tmp_path):
 
 
 def test_the_check_route_passes_while_reception_is_off(client, calls):
+    client.patch("/api/v2/plugins/input/sessions/one/reception", json={"enabled": False}, headers=AUTH)
     r = client.post("/api/v2/plugins/input/sessions/one/check", json={"text": "a long prompt about something else entirely"}, headers=AUTH)
     assert r.status_code == 200
     assert r.json()["verdict"] == "pass"
-    assert client.get("/api/v2/plugins/input/sessions/one/reception", headers=AUTH).json() == {"enabled": False, "default": False}
+    assert client.get("/api/v2/plugins/input/sessions/one/reception", headers=AUTH).json() == {"enabled": False, "default": True}
     r = client.patch("/api/v2/plugins/input/sessions/one/reception", json={"enabled": True}, headers=AUTH)
     assert r.json()["enabled"] is True
     assert client.post("/api/v2/plugins/input/sessions/nope/check", json={"text": "x"}, headers=AUTH).status_code == 404

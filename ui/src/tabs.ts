@@ -110,7 +110,7 @@ export function canSplit(content: TabContent): boolean {
   return content.kind === "session" || content.kind === "file";
 }
 
-export const START_TAB: Tab = { id: "start", content: { kind: "start" }, pinned: true };
+export const START_TAB: Tab = { id: "start", content: { kind: "start" } };
 
 /** The layout with a feature's pinned tab in it (Sessions' start buffer): first in the left area, unless it was moved. The same layout when it is. */
 export function withPinnedTab(layout: Layout, pinned: Tab = START_TAB): Layout {
@@ -163,7 +163,10 @@ function findOpen(layout: Layout, content: TabContent): [Area, Tab] | undefined 
 export function open(layout: Layout, content: TabContent, area: Area, mode: OpenMode = "replace", id = newTabId()): Layout {
   const also = mode === "also" && canSplit(content);
   const found = also ? findOpen({ ...layout, [other(area)]: null }, content) : findOpen(layout, content);
-  if (found) return activate(layout, found[0], found[1].id);
+  if (found) {
+    if (content.kind === "start" && found[0] !== area) return moveToOther(layout, found[0], found[1].id);
+    return activate(layout, found[0], found[1].id);
+  }
   const group = layout[area];
   if (!group) return { ...withArea(layout, area, { tabs: [{ id, content }], active: id }), focused: area };
   const slot = slotOf(content);
@@ -302,9 +305,10 @@ export function parseLayout(value: unknown): Layout | null {
   if (Array.isArray(saved.groups)) {
     const groups = saved.groups as unknown[];
     if (!groups.every(validGroup)) return null;
-    return compact({ left: (groups[0] as Group) ?? null, right: (groups[1] as Group) ?? null, focused: saved.focused === 1 ? "right" : "left" });
+    return parseLayout({ left: groups[0] ?? null, right: groups[1] ?? null, focused: saved.focused === 1 ? "right" : "left" });
   }
   const { left, right, focused } = saved;
   if ((left !== null && !validGroup(left)) || (right !== null && !validGroup(right)) || (focused !== "left" && focused !== "right")) return null;
-  return compact({ left: left as Group | null, right: right as Group | null, focused });
+  const unpinStart = (group: Group | null) => group && ({ ...group, tabs: group.tabs.map((tab) => tab.content.kind === "start" ? { ...tab, pinned: false } : tab) });
+  return compact({ left: unpinStart(left as Group | null), right: unpinStart(right as Group | null), focused });
 }

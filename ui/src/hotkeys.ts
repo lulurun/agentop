@@ -13,7 +13,8 @@ export type LayoutAction =
   | { do: "toggle-right" }
   | { do: "focus"; target: PanelOrArea }
   | { do: "tab"; index: number }
-  | { do: "close-tab" };
+  | { do: "close-tab" }
+  | { do: "toggle-input" };
 
 /** How many features the nav's keys reach, Ctrl+Shift+3 to 8. */
 export const FEATURE_KEYS = 6;
@@ -36,6 +37,7 @@ export function layoutAction(event: KeyboardEvent): LayoutAction | null {
   if (FOCUS[code]) return { do: "focus", target: FOCUS[code] };
   const tab = TABS.indexOf(code);
   if (tab >= 0) return { do: "tab", index: tab };
+  if (code === "KeyM") return { do: "toggle-input" };
   if (code === "KeyL") return { do: "close-tab" };
   return null;
 }
