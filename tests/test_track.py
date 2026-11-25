@@ -66,8 +66,7 @@ def report(monkeypatch, capsys, session, text="done", project="alpha"):
     monkeypatch.setattr(ops, "current_session", lambda: (f"{session}-1", project, session))
     (folder(project) / "results").mkdir(exist_ok=True)
     (folder(project) / f"results/{session}.md").write_text("result")
-    out, err = ag(capsys, "task", "report", text)
-    assert "Note:" not in err
+    out, _ = ag(capsys, "coordinator", "task", "report", text)
     as_coordinator(monkeypatch)
     return out
 
@@ -89,7 +88,7 @@ def test_every_coordinator_command_exists(alpha, capsys):
     commands = [
         ("direction", "new"), ("direction", "show"), ("plan", "show"), ("plan", "milestone", "add"),
         ("plan", "action", "add"), ("plan", "action", "set"), ("plan", "ask"), ("plan", "answer"),
-        ("milestone", "close"), ("note",), ("task", "start"), ("task", "accept"), ("task", "reject"), ("task", "fail"),
+        ("milestone", "close"), ("note",), ("task", "start"), ("task", "report"), ("task", "accept"), ("task", "reject"), ("task", "fail"),
         ("task", "list"), ("task", "show"), ("task", "carry"), ("yield",), ("review",), ("status",),
     ]
     for command in commands:
@@ -97,17 +96,14 @@ def test_every_coordinator_command_exists(alpha, capsys):
         assert f"agentop coordinator {' '.join(command)}" in out
 
 
-def test_the_old_names_still_work_with_a_notice_and_task_report_without_one(alpha, capsys, sessions, monkeypatch):
-    _, err = ag(capsys, "review", "--project", "alpha", "--no-write")
-    assert "agentop review is now agentop coordinator review" in err
-    _, err = ag(capsys, "task", "list", "--project", "alpha")
-    assert "agentop task is now agentop coordinator task" in err
-    _, err = ag(capsys, "yield", "owner", "--project", "alpha", "--question", "Goal?", "--recommend", "Tell me", "--default", "Wait")
-    assert "agentop yield is now agentop coordinator yield" in err
+def test_the_old_top_level_names_are_gone_and_the_report_is_under_coordinator_task(alpha, capsys, sessions, monkeypatch):
+    for old in (("task", "list"), ("task", "report", "done"), ("yield", "waiting"), ("review", "--no-write")):
+        _, err = ag(capsys, *old, "--project", "alpha", code=2)
+        assert "invalid choice" in err
     setup_plan(capsys)
-    _, err = ag(capsys, "task", "start", "--project", "alpha", "--action", "M2A1", "dev", "--tool", "claude", "--cwd", "/x",
-                "--goal", "g", "--accept", "a", "--artifact", "results/dev.md")
-    assert "Note:" in err and track.task_states("alpha")
+    start(capsys, "dev", "M2A1")
+    prompt = sessions.prompts[0]
+    assert prompt.count("task report") == prompt.count("agentop coordinator task report") == 2
     report(monkeypatch, capsys, "dev")
     assert any("dev reported round 1 of 3" in text and "agentop coordinator task accept dev" in text for _, text in sessions.sent)
 
@@ -135,7 +131,7 @@ def test_task_ids_come_from_the_counter_and_each_event_is_one_line(alpha, capsys
     assert all({"id", "action", "at", "status", "round"} <= e.keys() for e in lines)
     assert lines[-2]["status"] == "failed" and lines[0]["action"] == "M2A1"
     assert sessions.started == ["dev", "api", "dev"]
-    assert "[agentop task P1_M2A1-1]" in sessions.prompts[0]
+    assert "[task P1_M2A1-1]" in sessions.prompts[0]
 
 
 def test_accept_reject_and_fail_write_the_execution_entry_and_the_action_status(alpha, capsys, sessions, monkeypatch):

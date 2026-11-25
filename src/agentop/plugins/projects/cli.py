@@ -1,4 +1,4 @@
-"""The Projects plugin's commands: `agentop coordinator …`, `agentop task report`, and the old names as aliases.
+"""The Projects plugin's commands: `agentop coordinator …`, with `agentop coordinator task report` for a task's session.
 
 See docs/0_13_projects.md, section 4.3.
 """
@@ -16,25 +16,13 @@ from agentop import agentclis
 from . import pursuit, track
 
 
-NOTICE = "Note: agentop {old} is now agentop coordinator {old}; the old name goes in the next release."
-
-
-def _alias(old: str, handler):
-    def run(args):
-        if not (old == "task" and getattr(args, "task_command", None) == "report"):
-            print(NOTICE.format(old=old), file=sys.stderr)
-        handler(args)
-
-    return run
-
-
 def _common() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("--project", help="The project (default: this session's)")
     return common
 
 
-def _task_parsers(sub, common, with_report: bool) -> None:
+def _task_parsers(sub, common) -> None:
     start = sub.add_parser("start", parents=[common], help="Start a session on a new task (Coordinator)")
     start.add_argument("name", help="The session's name in the project")
     start.add_argument("--action", help="The plan's action the task works on, M1A2 (needed once the project has a track)")
@@ -52,10 +40,9 @@ def _task_parsers(sub, common, with_report: bool) -> None:
     start.add_argument("--artifact", required=True, help="The file in the project folder its result goes to")
     start.add_argument("--prompt", help="More of the brief (context, constraints); '-' reads it from stdin")
 
-    if with_report:
-        report = sub.add_parser("report", parents=[common], help="Report this session's result to the Coordinator (the task's session)")
-        report.add_argument("summary", nargs="?", help="What you did and the evidence; '-' or none reads stdin")
-        report.add_argument("--blocked", action="store_true", help="You can't finish: say what stops you")
+    report = sub.add_parser("report", parents=[common], help="Report this session's result to the Coordinator (the task's session)")
+    report.add_argument("summary", nargs="?", help="What you did and the evidence; '-' or none reads stdin")
+    report.add_argument("--blocked", action="store_true", help="You can't finish: say what stops you")
 
     accept = sub.add_parser("accept", parents=[common], help="Accept a reported result and stop its session (Coordinator)")
     accept.add_argument("name", help="The task's session, or its ID")
@@ -78,10 +65,9 @@ def _task_parsers(sub, common, with_report: bool) -> None:
     show = sub.add_parser("show", parents=[common], help="One open task, with its rounds")
     show.add_argument("name", help="The task's session, or its ID")
 
-    if not with_report:
-        carry = sub.add_parser("carry", parents=[common], help="Re-home an open task under an action of the current plan")
-        carry.add_argument("name", help="The task's ID, or its session")
-        carry.add_argument("--to", required=True, help="The current plan's action, M1A4")
+    carry = sub.add_parser("carry", parents=[common], help="Re-home an open task under an action of the current plan")
+    carry.add_argument("name", help="The task's ID, or its session")
+    carry.add_argument("--to", required=True, help="The current plan's action, M1A4")
 
 
 def _yield_args(turn) -> None:
@@ -183,10 +169,10 @@ def register_cli(cli) -> None:
     note.add_argument("text", help="What was done, and where the result is; '-' reads stdin")
     note.add_argument("--by", default="coordinator", choices=("coordinator", "owner"))
 
-    task = sub.add_parser("task", help="Delegated tasks: start, accept, reject, fail, list, show, carry",
+    task = sub.add_parser("task", help="Delegated tasks: start, report, accept, reject, fail, list, show, carry",
                           description="Delegate bounded work, with a goal, criteria, an artifact and at most "
-                          f"{pursuit.MAX_ROUNDS} rounds. The task's session reports with agentop task report.")
-    _task_parsers(task.add_subparsers(dest="task_command", metavar="<subcommand>"), common, with_report=False)
+                          f"{pursuit.MAX_ROUNDS} rounds. The task's session reports with agentop coordinator task report.")
+    _task_parsers(task.add_subparsers(dest="task_command", metavar="<subcommand>"), common)
 
     _yield_args(sub.add_parser("yield", **YIELD_HELP))
     _review_args(sub.add_parser(
@@ -194,21 +180,6 @@ def register_cli(cli) -> None:
         description="Measure the Coordinator from the project's event log since the last review, and write reviews/<time>.md.",
     ))
     sub.add_parser("status", parents=[common], help="Where things are: direction, plan, the current milestone's execution, open tasks")
-
-    task = cli.command(
-        "task",
-        _alias("task", lambda args: run_task(args, task)),
-        help="Tasks: report (a task's session); the rest is now agentop coordinator task",
-        description="A task's session reports with agentop task report. The Coordinator's task commands are under "
-        "agentop coordinator task; these names remain for one release.",
-    )
-    _task_parsers(task.add_subparsers(dest="task_command", metavar="<subcommand>"), _common(), with_report=True)
-    _yield_args(cli.command("yield", _alias("yield", lambda args: run_yield(args)), **{
-        **YIELD_HELP, "help": "Now agentop coordinator yield"}))
-    _review_args(cli.command(
-        "review", _alias("review", lambda args: run_review(args)), help="Now agentop coordinator review",
-        description="Measure the Coordinator from the project's event log since the last review, and write reviews/<time>.md.",
-    ))
 
 
 def _fail(message: str) -> None:
@@ -270,13 +241,13 @@ def brief(task: dict, project: str, extra: str) -> str:
     artifact = pursuit.resolve_artifact(project, task["artifact"])
     criteria = "\n".join(f"- {c}" for c in task["accept"])
     text = (
-        f"[agentop task {task['id']}] The Coordinator owns the project's goal and checks your result. You own this task.\n\n"
+        f"[task {task['id']}] The Coordinator owns the project's goal and checks your result. You own this task.\n\n"
         f"Goal: {task['goal']}\n\nAcceptance criteria:\n{criteria}\n\n"
         f"Artifact: write your result to {artifact}. For code, it says what you changed (commits), how you verified it, "
         "and what is left.\n\n"
-        "When you are done, run: agentop task report \"<what you did, and the evidence it meets each criterion>\". "
+        "When you are done, run: agentop coordinator task report \"<what you did, and the evidence it meets each criterion>\". "
         "It checks the artifact exists and tells the Coordinator. If you can't finish or need a decision, run "
-        "agentop task report --blocked \"<what stops you>\". Never stop without reporting."
+        "agentop coordinator task report --blocked \"<what stops you>\". Never stop without reporting."
     )
     return f"{text}\n\n{extra.strip()}" if extra and extra.strip() else text
 
@@ -319,13 +290,13 @@ def task_start(args, project: str) -> None:
         pursuit.fail(project, task["id"], f"The session didn't start: {exc}", decision=False)
         _fail(str(exc))
     print(f"Task {task['id']}: {args.name} ({args.tool}) started in {cwd}; round 1 of {pursuit.MAX_ROUNDS}.")
-    print(f"Its result goes to {task['artifact']}. It reports with agentop task report; you'll get a message.")
+    print(f"Its result goes to {task['artifact']}. It reports with agentop coordinator task report; you'll get a message.")
 
 
 def task_report(args, project: str) -> None:
     here = _here()
     if not here or here[1] != project:
-        _fail("agentop task report runs in the session that owns the task")
+        _fail("agentop coordinator task report runs in the session that owns the task")
     name = here[2]
     try:
         task = pursuit.report(project, name, _read(args.summary), args.blocked)
@@ -338,7 +309,7 @@ def task_report(args, project: str) -> None:
     criteria = "; ".join(task["accept"])
     state = "BLOCKED" if args.blocked else "reported"
     notice = (
-        f"[agentop task {task['id']}] {name} {state} round {rounds} of {pursuit.MAX_ROUNDS}: {current['summary']}\n"
+        f"[task {task['id']}] {name} {state} round {rounds} of {pursuit.MAX_ROUNDS}: {current['summary']}\n"
         f"Artifact: {task['artifact']} ({'present' if current['artifact_present'] else 'missing'}). "
         f"Check it yourself against: {criteria}. Then agentop coordinator task accept {name} --checked \"…\", "
         f"agentop coordinator task reject {name} --feedback \"…\", or agentop coordinator task fail {name} --note \"…\"."
@@ -372,8 +343,8 @@ def task_reject(args, project: str) -> None:
         _fail(str(exc))
     rounds = len(task["rounds"])
     text = (
-        f"[agentop task {task['id']}, round {rounds} of {pursuit.MAX_ROUNDS}] The Coordinator did not accept your result:\n"
-        f"{feedback.strip()}\n\nFix it, update {task['artifact']}, then agentop task report \"…\" again."
+        f"[task {task['id']}, round {rounds} of {pursuit.MAX_ROUNDS}] The Coordinator did not accept your result:\n"
+        f"{feedback.strip()}\n\nFix it, update {task['artifact']}, then agentop coordinator task report \"…\" again."
     )
     _send(task["session"], text, project)
     print(f"Sent {args.name} round {rounds} of {pursuit.MAX_ROUNDS}.")
@@ -456,7 +427,7 @@ def run_yield(args) -> None:
     project = _project(args)
     here = _here()
     if here and here[2] != projects.COORDINATOR:
-        _fail("only the Coordinator yields; a task's session reports with agentop task report")
+        _fail("only the Coordinator yields; a task's session reports with agentop coordinator task report")
     fields = {k: getattr(args, k) for k in ("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note")}
     try:
         event = pursuit.yield_turn(project, args.kind, fields)
@@ -656,7 +627,7 @@ def run_coordinator(args, parser) -> None:
         return
     if command == "task":
         if not getattr(args, "task_command", None):
-            _fail("agentop coordinator task start|accept|reject|fail|list|show|carry")
+            _fail("agentop coordinator task start|report|accept|reject|fail|list|show|carry")
         run_task(args, parser)
         return
     project = _project(args)

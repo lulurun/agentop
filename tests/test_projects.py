@@ -54,7 +54,7 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     assert "agentop coordinator status" in coordinator.resume_prompt(project)
     assert "STATE.md" not in coordinator.resume_prompt(project).split("<project-coordinator-skill>")[0]
     assert phrase not in coordinator.welcome_prompt(dialogue)
-    assert "agentop yield" not in coordinator.welcome_prompt(dialogue)
+    assert "agentop coordinator yield" not in coordinator.welcome_prompt(dialogue)
     assert coordinator.resume_prompt(dialogue) == ""
     assert phrase not in coordinator.member_header(project, "dev")
 

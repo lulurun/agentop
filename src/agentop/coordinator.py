@@ -66,7 +66,7 @@ def instructions(project: dict) -> str:
     )
     start_line = (
         "- `agentop coordinator task start --action <M…A…> <name> --tool <codex|claude|antigravity> --cwd <dir> --goal … "
-        "--accept … --artifact …` starts a session on a task of the plan; it reports back with `agentop task report`. "
+        "--accept … --artifact …` starts a session on a task of the plan; it reports back with `agentop coordinator task report`. "
         "`agentop coordinator --help` has the rest."
         if _tracked(project)
         else "- `agentop start <name> --tool <codex|claude|antigravity> --cwd <dir> --prompt \"<task>\"` starts one in this "

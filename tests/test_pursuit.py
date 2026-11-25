@@ -400,7 +400,7 @@ def test_task_start_briefs_the_session_and_report_tells_the_coordinator(alpha, m
     cli.run_task(args, None)
     assert started == [("dev", {"remote_control": False})]
     assert "Goal: Add login" in prompts[0] and "- docs updated" in prompts[0] and "Read README first." in prompts[0]
-    assert str(projects.folder("alpha") / "results/dev.md") in prompts[0] and "agentop task report" in prompts[0]
+    assert str(projects.folder("alpha") / "results/dev.md") in prompts[0] and "agentop coordinator task report" in prompts[0]
 
     monkeypatch.setattr(ops, "current_session", lambda: ("dev-1", "alpha", "dev"))
     write(alpha, "results/dev.md")

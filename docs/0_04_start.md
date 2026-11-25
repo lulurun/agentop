@@ -5,7 +5,7 @@ How Sessions starts and tidies its sessions: the owner types a first prompt, and
 ## 1 Why
 
 - **Convenience.** New session asked for a tool, a folder and a name before any work could be said. Most of that can be read from the work itself.
-- **A trial for the Coordinator.** A Coordinator also has to pick a tool and model for each task, and today picks from habit. Sessions is where that choice is tried first, with the owner watching each one and correcting what is wrong: the corrections are the measure ([section 6](#6-the-record)). What holds up here is meant to serve `agentop task start` later; the Coordinator is not changed yet.
+- **A trial for the Coordinator.** A Coordinator also has to pick a tool and model for each task, and today picks from habit. Sessions is where that choice is tried first, with the owner watching each one and correcting what is wrong: the corrections are the measure ([section 6](#6-the-record)). What holds up here is meant to serve `agentop coordinator task start` later; the Coordinator is not changed yet.
 
 ## 2 What was decided (2026-11-24)
 

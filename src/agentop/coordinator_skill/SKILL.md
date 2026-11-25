@@ -76,7 +76,7 @@ EOF
 - For Claude, pass `--no-remote-control`; project work stays inside agentop rather than exposing a separate control path through claude.ai.
 - Pass the brief with `--prompt -` and a quoted heredoc, so the shell leaves backticks and `$` alone.
 
-The session ends with `agentop task report`, which tells you. Then (by session name or task ID):
+The session ends with `agentop coordinator task report`, which tells you. Then (by session name or task ID):
 
 - Open the artifact, run or inspect the evidence, compare with each criterion.
 - `agentop coordinator task accept dev --checked "ran pytest: 212 pass; read results/dev-auth.md; login works in the browser"` stops the session, writes the execution entry, and marks the action done.

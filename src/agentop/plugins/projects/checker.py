@@ -144,8 +144,8 @@ class Checker:
         turn.reminded[key] = times + 1
         if times == 0:
             self._deliver(project, row, (
-                f"[agentop task {task['id']}] You have gone quiet without reporting. If you are done, run "
-                "agentop task report \"…\". If something stops you, run agentop task report --blocked \"…\"."
+                f"[task {task['id']}] You have gone quiet without reporting. If you are done, run "
+                "agentop coordinator task report \"…\". If something stops you, run agentop coordinator task report --blocked \"…\"."
             ))
         elif times == 1:
             pursuit.log(project, "task.quiet", task=task["id"], session=task["session"])
@@ -155,6 +155,6 @@ class Checker:
             )
             if coordinator is not None:
                 self._deliver(project, coordinator, pursuit.wake_note(project) + (
-                    f"[agentop task {task['id']}] {task['session']} has gone quiet twice without reporting round "
+                    f"[task {task['id']}] {task['session']} has gone quiet twice without reporting round "
                     f"{len(task['rounds'])}. Look at its screen and decide: answer it, reject with feedback, or fail it."
                 ))
