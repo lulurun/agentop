@@ -159,20 +159,16 @@ class PluginAPI:
         return self._host.store.get(session_id) or history.record(session_id)
 
     async def create_project(self, name: str, welcome: str = "", instructions: str = "") -> dict:
-        """Make a project the plugin owns and start its Coordinator. Raises projects.ProjectError.
-
-        `welcome` ends "You can ask me to …" in the Coordinator's first message;
-        `instructions` is its part of the Coordinator's AGENTS.md.
-        """
+        """Make a project the plugin owns and start its Coordinator; raises projects.ProjectError."""
         from agentop import agentclis, projects
 
         found = await asyncio.to_thread(projects.create, name, self.id, welcome, instructions)
         tools = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)
-        await self._host.store.ensure_coordinator(name, [t.name for t in tools])
+        await self._host.store.ensure_coordinator(name, [t.name for t in tools], creating=True)
         return found
 
     async def start_coordinator(self, name: str) -> dict | None:
-        """The project's Coordinator: running, or resumed or started now."""
+        """Return a Projects Coordinator if running; other owners may start or resume one."""
         from agentop import agentclis
 
         tools = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)

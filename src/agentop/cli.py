@@ -119,6 +119,12 @@ def _tracked_coordinator(project: str) -> bool:
 def cmd_start(args):
     cwd = os.path.expanduser(args.cwd)
     project = _own_project(args)
+    if _tracked_coordinator(project):
+        from agentop.plugins.projects import pursuit
+
+        if pursuit.close_request(project):
+            print("Error: project close is pending; start no new ordinary work", file=sys.stderr)
+            sys.exit(1)
     if _tracked_coordinator(project) and not args.untracked:
         print(
             "Error: a Coordinator delegates with agentop coordinator task start, which records the goal, criteria and "
@@ -337,23 +343,20 @@ def cmd_project_close(args):
         sys.exit(1)
     here = _ops().current_session()
     if not here or here[1] != args.name or here[2] != projects.COORDINATOR:
-        print(f"Error: only {args.name}'s Coordinator closes it: ask it there (Close in the app does)", file=sys.stderr)
+        print(f"Error: only {args.name}'s Coordinator closes it: ask it there", file=sys.stderr)
         sys.exit(1)
-    tasks = pursuit.open_tasks(args.name)
-    if tasks:
-        print(f"Error: tasks are open: {track.task_names(tasks)}. Wait for their reports and accept or fail each "
-              "as usual, then close", file=sys.stderr)
-        sys.exit(1)
-    warnings = pursuit.problems(args.name) if track.exists(args.name) else []
-    if warnings:
-        print("Error: the track is not up to date; fix these first (agentop coordinator status shows them):", file=sys.stderr)
-        for w in warnings:
-            print(f"  - {w}", file=sys.stderr)
-        sys.exit(1)
-    marked = track.mark(args.name, "closed", f"`{here[2]}` of {here[1]}", args.note or "")
-    # Read before the entry goes: a closed project's sessions are no longer listed.
-    live = _ops().get_sessions(with_meta=False)
-    projects.close(args.name)
+    pursuit.request_close(args.name, args.note or "")
+    with pursuit._locked(args.name):
+        tasks = pursuit.open_tasks(args.name)
+        if tasks:
+            print(f"Error: tasks are open: {track.task_names(tasks)}. Wait for their reports and accept or fail each "
+                  "as usual, then close", file=sys.stderr)
+            sys.exit(1)
+        marked = track.mark(args.name, "closed", f"`{here[2]}` of {here[1]}", args.note or "")
+        # Read before the entry goes: a closed project's sessions are no longer listed.
+        live = _ops().get_sessions(with_meta=False)
+        projects.close(args.name)
+        pursuit.log(args.name, "close.complete")
     print(f"Closed {args.name}: marked in {marked.relative_to(projects.folder(args.name))}, and gone from agentop project list.")
     print(f"Its folder, files and other sessions are kept as they are: {found['folder']}")
     print(f"  agentop project create {args.name} loads it again.")

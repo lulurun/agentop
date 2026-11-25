@@ -1,7 +1,4 @@
-"""Projects: the owner's own projects, each run through a Coordinator. See docs/0_13_projects.md, sections 4.3 and 7.2.
-
-The core keeps projects and their sessions; this plugin makes and closes its own, checks its Coordinators' turns, and its UI is the Projects feature.
-"""
+"""The Projects feature and its pursuit checks."""
 
 # No `from __future__ import annotations`: FastAPI reads the request body's model,
 # defined inside register(), from the route's annotations.
@@ -19,17 +16,9 @@ def register(api) -> None:
 
     from . import pursuit, review, track, wake
     from .checker import Checker
-    from .texts import CLOSE_REQUEST, INSTRUCTIONS, WELCOME
+    from .texts import INSTRUCTIONS, WELCOME
 
     BY_OWNER = "the owner, in the app"
-    COORDINATOR_WAIT_SECONDS = 90
-
-    def agent_deliver(row: dict, text: str) -> None:
-        agent = get_agent(row.get("tool") or "")
-        tmux_name = (row.get("tmux") or {}).get("session")
-        if agent is None or not tmux_name:
-            raise PasteError("its terminal isn't known")
-        agent.deliver(tmux_name, text)
 
     def deliver(project: str, row: dict, text: str) -> None:
         agent = get_agent(row.get("tool") or "")
@@ -109,25 +98,6 @@ def register(api) -> None:
         except PasteError as exc:
             raise HTTPException(502, f"The event didn't reach the Coordinator: {exc}") from exc
         return {"outcome": outcome}
-
-    @api.router.post("/projects/{name}/close", status_code=202)
-    async def close_project(name: str):
-        """Ask the project's Coordinator to close it: only it does, once no task is open."""
-        own(name)
-        row = await api.start_coordinator(name)
-        if row is None:
-            raise HTTPException(409, "No agent tool is installed")
-        deadline = asyncio.get_running_loop().time() + COORDINATOR_WAIT_SECONDS
-        while row is not None and row.get("status") == "starting" and asyncio.get_running_loop().time() < deadline:
-            await asyncio.sleep(0.25)
-            row = next((r for r in api.sessions() if r["id"] == row["id"]), None)
-        if row is None or row.get("status") != "running":
-            raise HTTPException(409, f"{name}'s Coordinator isn't running yet: try again in a moment")
-        try:
-            await asyncio.to_thread(agent_deliver, row, CLOSE_REQUEST.format(name=name))
-        except PasteError as exc:
-            raise HTTPException(502, f"The request didn't reach the Coordinator: {exc}") from exc
-        return {"coordinator": row["id"]}
 
     def stop_all() -> None:
         mine = {p["name"] for p in projects.list_projects(api.id)}

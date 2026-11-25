@@ -103,6 +103,28 @@ WAKE_NOTE = (
 WAKE = "wake"
 
 
+def close_request(project: str) -> dict | None:
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("close.request", "close.complete")), None)
+    return last if last and last["kind"] == "close.request" else None
+
+
+def request_close(project: str, note: str = "") -> dict:
+    with _locked(project):
+        return close_request(project) or log(project, "close.request", note=note.strip())
+
+
+def close_notice(project: str) -> str:
+    request = close_request(project)
+    if request is None:
+        return ""
+    tasks = open_tasks(project)
+    next_step = (f"Wait for {track.task_names(tasks)}; review reports and accept or fail normally."
+                 if tasks else f"No task is open: run agentop project close {project} now.")
+    return ("[agentop] Priority: close this project. Start no new ordinary work. " + next_step
+            + " Unrelated planned work and warnings do not block closing."
+            + (f" Request: {request['note']}" if request.get("note") else "") + "\n\n")
+
+
 def pending_clear(project: str) -> dict | None:
     """The yield --clear request (clear.pending) when no clear has been verified since it."""
     last = next((e for e in reversed(events(project)) if e["kind"] in ("clear.verified", "clear.pending")), None)
@@ -116,7 +138,7 @@ def cleared(project: str) -> bool:
 
 
 def wake_note(project: str, source: str = "send") -> str:
-    """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, then any due direction change; logs the wake."""
+    """Carry pending priority work across a clear and log the wake."""
     note = WAKE_NOTE if cleared(project) else ""
     log(project, WAKE, source=source, cleared=bool(note))
     return note + change_notice(project)
@@ -216,7 +238,11 @@ def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept
     if action is not None and not track.exists(project):
         raise PursuitError("--action needs a track: run agentop coordinator direction new --text - first")
     with _locked(project):
+        if not projects.exists(project):
+            raise PursuitError(f"No project called {project}")
         tasks = load_tasks(project)
+        if close_request(project):
+            raise PursuitError("No new task starts: project close is pending; drain existing tasks, then close")
         if any(t["status"] == "open" and t["session"].lower() == session.lower() for t in tasks):
             raise PursuitError(f"{session} already has an open task. Accept, reject, or fail it first")
         refusal = track.change_refusal(project, [t for t in tasks if t["status"] == "open"])
@@ -344,19 +370,23 @@ def change_direction(project: str, text: str) -> tuple[dict, bool, list[dict]]:
 
 def change_due(project: str) -> str:
     """When a direction change is pending and no task is open, the line telling the Coordinator to make it; else ""."""
-    if not track.exists(project) or open_tasks(project):
+    if close_request(project) or not track.exists(project) or open_tasks(project):
         return ""
     return track.change_refusal(project, [])
 
 
 def change_notice(project: str) -> str:
-    """change_due as the head of a wake prompt."""
+    """Priority close or direction work at the head of a wake prompt."""
+    if close_request(project):
+        return close_notice(project)
     due = change_due(project)
     return f"[agentop] {due}; it takes the pending text.\n\n" if due else ""
 
 
 def problems(project: str, kind: str | None = None) -> list[str]:
     """What blocks a yield: the track's checks, or for a project still on STATE.md (no track/), the old ones."""
+    if close_request(project):
+        return []
     if not track.exists(project) and (projects.folder(project) / STATE_FILE).is_file():
         return state_problems(project)
     return track.problems(project, open_tasks(project), kind)
@@ -413,6 +443,8 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
     if kind == "waiting" and not pending:
         raise PursuitError("Nothing is pending: no open task awaits a report. Take the next action instead")
     if kind == "done":
+        if close_request(project):
+            raise PursuitError(f"Project close is pending: drain existing tasks, then agentop project close {project}")
         if pending:
             raise PursuitError(f"Tasks are still open: {', '.join(t['session'] for t in pending)}. Use 'waiting', or close them")
         closed = [e["at"] for e in events(project) if e["kind"] in ("task.accept", "task.fail")]

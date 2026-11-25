@@ -36,7 +36,7 @@ async def get_project(name: str, ctx: Ctx):
 
 @router.post("/projects/{name}/coordinator", response_model=SessionModel, status_code=202)
 async def start_coordinator(name: str, ctx: Ctx):
-    """The project's Coordinator: the running one, or one resumed or started now."""
+    """Get its Coordinator; Projects never start one through this route."""
     row = await ctx.store.ensure_coordinator(name, await available_tools(ctx))
     if row is None:
         raise HTTPException(409, "No agent tool is installed")

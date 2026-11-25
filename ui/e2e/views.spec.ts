@@ -542,26 +542,28 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   await left.getByRole("button", { name: "Create", exact: true }).click();
   await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("beta", { timeout: 20_000 });
 
-  // Close asks in a modal in the page, not with a browser dialog, which a webview may never show.
-  const dialogs: string[] = [];
-  page.on("dialog", (dialog) => dialogs.push(dialog.message()));
-  await left.getByRole("button", { name: "Close beta" }).click();
-  const modal = page.getByRole("dialog", { name: "Close beta?" });
-  await expect(modal).toContainText("The folder, its files and the other sessions are kept");
-  await modal.getByRole("button", { name: "Cancel" }).click();
-  await expect(modal).toHaveCount(0);
-
-  // Confirmed, it asks the Coordinator, which closes the project when no task runs; nothing else changes.
+  await expect(left.getByRole("button", { name: "Close beta" })).toHaveCount(0);
   const agents = readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8");
-  await left.getByRole("button", { name: "Close beta" }).click();
-  await page.getByRole("dialog", { name: "Close beta?" }).getByRole("button", { name: "Close beta" }).click();
-  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 90_000 });
-  const asked = page.getByTestId("terminal").filter({ hasText: "The owner asked, in the app, to close this project" });
-  await expect(asked).toBeVisible({ timeout: 15_000 });
-  await expect(asked).toContainText("agentop project close beta");
-  expect(dialogs).toEqual([]);
+  const coordinatorPosts: string[] = [];
+  page.on("request", (request) => {
+    if (request.method() === "POST" && /\/projects\/[^/]+\/(coordinator|close)$/.test(new URL(request.url()).pathname)) {
+      coordinatorPosts.push(request.url());
+    }
+  });
+  await expect(page.locator('[data-testid="terminal"]:visible')).toBeVisible({ timeout: 45_000 });
+  const registryPath = join(s.root, "state/projects/beta/.project/sessions.json");
+  const records = JSON.parse(readFileSync(registryPath, "utf8")).sessions;
+  const betaId = Object.keys(records).find((id) => records[id].display_name === "Coordinator")!;
+  s.tmux("kill-session", "-t", betaId);
+  await expect(left.getByRole("navigation", { name: "Sessions", exact: true }).getByText("Coordinator")).toHaveCount(0, { timeout: 15_000 });
+  await left.getByRole("button", { name: "alpha", exact: true }).click();
+  await left.getByRole("button", { name: "beta", exact: true }).click();
+  await page.reload();
+  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("beta");
+  await expect(left.getByRole("navigation", { name: "Sessions", exact: true }).getByText("Coordinator")).toHaveCount(0);
+  expect(Object.keys(JSON.parse(readFileSync(registryPath, "utf8")).sessions)).toEqual(Object.keys(records));
+  expect(coordinatorPosts).toEqual([]);
   expect(existsSync(join(s.root, "state/projects/beta/.project/project.json"))).toBe(true);
-  expect(readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8")).toBe(agents);
 
   // When the Coordinator has closed it (its entry gone), it leaves the list by itself.
   writeFileSync(join(s.root, "state/projects/beta/track/1/CLOSED.md"), "# Closed\n\n- 2026-11-25 10:00 closed by `Coordinator` of beta\n");

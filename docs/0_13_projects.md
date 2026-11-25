@@ -15,11 +15,11 @@ So a **project is a goal with a Coordinator pursuing it.** Each project has its 
 | | `default` | Any other project |
 |---|---|---|
 | Sessions listed in | Sessions | Projects (or Dialogues), per project |
-| Coordinator | None: the owner | One, always there |
+| Coordinator | None: the owner | Started on creation; may be stopped |
 | Sessions started by | The owner, from the start buffer | The Coordinator (`agentop start`); no start buffer |
 | Claude `--remote-control` | On | Off |
 
-`default` and other projects run on the same code: one session store, registry, start, resume and stop, and the same API, keyed by project. The rows above are the only differences on the service, and they all follow from `projects.has_coordinator`. In the UI, Projects reuses Sessions' sections, tabs and right panel, without the start buffer.
+`default` and other projects run on the same code: one session store, registry, start, resume and stop, and the same API, keyed by project. `projects.has_coordinator` distinguishes the default project; the owner scopes Coordinator lifecycle behavior. In the UI, Projects reuses Sessions' sections, tabs and right panel, without the start buffer.
 
 | Project | Owner | Shown in | Coordinator's job |
 |---------|-------|----------|-------------------|
@@ -36,7 +36,8 @@ So a **project is a goal with a Coordinator pursuing it.** Each project has its 
 - **Creating** a project other than `default`, whoever asks for it, always does the same: make the folder and `.project/`, write the Coordinator's `AGENTS.md` and `CLAUDE.md` (section 4), start the Coordinator, and send it the welcome prompt. Creating doesn't open it in the app.
 - `default` is made, folder and `.project/` only, the first time one of its sessions is recorded. It gets no instructions and no Coordinator.
 - A Projects project's folder also has `track/` (section 4.3), the Coordinator's direction, plan and execution record, whose first direction is written when the Coordinator is first started, and `reviews/`, the reports of `agentop coordinator review`. `.project/` also holds `tasks.json` and `events.jsonl`, the pursuit record.
-- **Closing** a project is how one ends, and its Coordinator is the only one who does it. agentop never deletes a project's folder; the owner does, with `rm -rf`, if ever. The owner asks the Coordinator, in its session or with Close in the left panel (a confirmation modal, then the request is typed into the Coordinator, started or resumed first if needed). The Coordinator waits for any open task, which reports and is accepted or failed as usual, and for `agentop coordinator status` to show no warnings, then runs `agentop project close <name> [--note …]`. That refuses outside the project's Coordinator session, while a task is open, or while the track has warnings. It appends a dated `closed by …` line to `track/<N>/CLOSED.md` of the current direction (`track/CLOSED.md` while there is none), deletes `.project/project.json`, so the project leaves `agentop project list` and the left panel, and ends the Coordinator's own session last, from a detached process (the stop types C-c into its pane). Nothing else is written, and the project's other sessions are left as they are. `default` can't be closed. `agentop coordinator status --project <name>` still reads a closed project's track, and starts with the `CLOSED.md` lines. The registry lists no sessions of a folder without `project.json`.
+- **Closing** a project is how one ends, and its Coordinator is the only one who does it. The owner asks in the Coordinator's session; there is no project-list Close button. The Coordinator first runs `agentop coordinator close [--note …]`, recording a durable priority request in `.project/events.jsonl`. No new task starts, including untracked starts from the Coordinator. Existing executions report and are reviewed and accepted or failed normally, updating execution records and PLAN through the existing task commands. Status and prompts after a clear show the close request before ordinary work or a pending direction change. `yield waiting --next …` remains available while reports are awaited, without unrelated track checks; reported results still need a decision.
+- Once zero executions are open, the Coordinator runs `agentop project close <name> [--note …]`. This also records the priority request if needed. It refuses outside that project's Coordinator session or while any task is open, including a reported but unaccepted task. Unfinished planned work, pending direction changes, milestone summaries, reviews and unrelated readiness warnings do not block closing. Under the same pursuit lock used to open tasks, it appends a dated `closed by …` line to the current direction's `CLOSED.md` (`track/CLOSED.md` without a direction), deletes `.project/project.json`, and records `close.complete`. The project leaves the list before its Coordinator stops last, from a detached process. Files and other sessions are preserved. `default` can't be closed. Status can still read a closed project's track; the registry lists no sessions of a folder without `project.json`.
 - **Loading a closed project again** is creating it again by name (`agentop project create <name>`, or Create in the app): the kept folder is taken as it is, with a new `project.json`, a `reopened by …` line in `CLOSED.md`, and its Coordinator started. The track, `code/`, `AGENTS.md` (only agentop's rules block in it is refreshed) and `.project/` are as they were; tasks still open stay open (their sessions are gone, so the Coordinator fails or restarts them), and the new Coordinator gets the resume prompt rather than the welcome (section 4.3, Track).
 - A plugin lists and changes only the projects it owns. No plugin changes `default`.
 
@@ -62,7 +63,7 @@ A dialogue's agents A and B are `readonly` and not `counted`; every Coordinator 
 ## 4 The Coordinator
 
 - Named `Coordinator` in every project but `default`. It works in the project folder, with Codex if installed, else Claude, else the first other installed tool.
-- It always exists: made with its project, resumed (same conversation) when it has stopped, never started afresh.
+- In a Projects project it starts only on explicit creation or reopening. A project can remain without a running Coordinator. Listing, viewing, selecting, refreshing, session exit and service startup never start or resume one, and stale start requests are refused when none runs. Creation on a kept closed folder resumes its saved conversation when available. Dialogue Coordinators retain their open-to-resume behavior.
 - Its instructions are files in the project folder, written when the project is created: `AGENTS.md` (read by Codex and Antigravity) and `CLAUDE.md` (`@AGENTS.md`). They say it is this project's Coordinator, what the folder is for, how sessions reach each other (section 5), and its owner's part (below). The owner and the Coordinator may edit them afterwards; agentop doesn't overwrite them, with one exception: in a Projects project, AGENTS.md carries the **Coordinator rules**, a block between `<!-- agentop:coordinator-rules … -->` markers that agentop adds, or replaces with the current rules, each time it starts or resumes the Coordinator. The rules are in AGENTS.md rather than only in the skill because the tools reload AGENTS.md on every turn, so they survive compaction, while the skill in the first prompt fades.
 - For a project owned by the Projects plugin, agentop keeps `COORDINATOR_SKILL.md` in the project folder and embeds its body in the Coordinator's initial and resume prompts. Root instructions contain only a conditional pointer: the session named `Coordinator` reloads the file after `/clear`; every other session must not load it. The skill is the manual for the rules: the turn loop, the stop reasons with good and bad examples, delegating with `agentop coordinator task`, the track, the project folder and source intake, and the milestone review and context reset. How a Coordinator is judged is in the skill only as a short closing section; the full philosophy stays in section 4.1, the standard any evaluation goes back to. It is outside agentop's globally installed skills bundle and is not loaded into dialogue Coordinators or another project session.
 - **Welcome.** Its first prompt asks it to greet the owner, from the owner's side, with "Hi, I'm the Coordinator of this project.", and list what they can ask it as bullets. The owner of the project supplies the list and the instructions' own part:
@@ -206,7 +207,7 @@ A session other than the Coordinator usually works in a repository under `<proje
 Python, through the plugin API ([0_12_00_plugins.md](0_12_00_plugins.md#what-registerapi-gets)):
 
 - `api.create_project(name, welcome, instructions)`: make a project the plugin owns, write its Coordinator's instructions, and start the Coordinator.
-- `api.start_coordinator(name)`: the project's Coordinator, running, or resumed or started now.
+- `api.start_coordinator(name)`: returns a Projects Coordinator only if already running/starting; otherwise refuses. For other plugins, it resumes or starts one as needed. Only `api.create_project` authorizes starting a Projects Coordinator.
 - Other sessions are started with the core's `ops.start(project=…, readonly=…, counted=…)`, and the plugin hears about them through the session events (`api.on`).
 
 The UI: the core's Active sessions and History sections, and its session tabs, take a project, so a plugin's feature reuses them as they are. The core's feature for `default` is Sessions.
@@ -221,7 +222,7 @@ The `default` project, without Started elsewhere and without a Coordinator. New 
 
 ### 7.2 Projects (plugin `projects`)
 
-- **Left panel**: Projects (a name field and Create, then the list, the chosen one highlighted, each with Close, which confirms in a modal and then asks the project's Coordinator to close it), then for the chosen project Active sessions and History. There is no New session: the owner asks the Coordinator, which starts the project's other sessions.
+- **Left panel**: Projects (a name field and Create, then the list, the chosen one highlighted; selection opens an existing running Coordinator only), then for the chosen project Active sessions and History. There is no New session: the owner asks the Coordinator, which starts the project's other sessions.
 - Commands: `agentop project create <name>` (also loads a closed project's kept folder) and `agentop project close <name> [--note …]`, run by the project's Coordinator only. The Coordinator starts other sessions with `agentop start` (section 6).
 
 ### 7.3 Dialogues (plugin `dialogue`)
@@ -235,7 +236,7 @@ A dialogue is a project with three sessions: Coordinator, and agents A and B (`r
 
 ## 8 When a plugin is off
 
-Its feature, commands and routes go away. Its projects' sessions are stopped, after a warning, as Dialogues does today; their folders are kept, and turning the plugin on again shows them, resuming each Coordinator when its project is opened.
+Its feature, commands and routes go away. Its projects' sessions are stopped, after a warning, as Dialogues does today; their folders are kept, and turning the plugin on again shows them. Projects Coordinators stay stopped; dialogue Coordinators resume when opened.
 
 ## 9 Moving existing data
 

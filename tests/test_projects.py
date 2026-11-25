@@ -204,46 +204,29 @@ def test_the_projects_plugin_makes_closes_and_loads_again_its_own(fake_agents, q
         while service.http.get(f"/sessions/{coordinator_row['id']}").status_code == 200:
             assert time.monotonic() < deadline
             time.sleep(0.1)
-        coordinator_row = service.http.post(f"{base}/alpha/coordinator").json()
-        service.wait_for(coordinator_row["id"], "running")
-        wait_for_screen(coordinator_row["id"], "You are resuming this project's Coordinator session")
-        assert registry.load()["sessions"][coordinator_row["id"]]["agent_session_id"] == "ALPHA-COORD-1"
-
-        # Not its own: the default project, and a project that isn't there. There is no DELETE any more.
-        assert service.http.post(f"{base}/default/close").status_code == 404
+        for route in (f"{base}/alpha/coordinator", "/projects/alpha/coordinator"):
+            refused = service.http.post(route)
+            assert refused.status_code == 409, refused.text
+        for _ in range(3):
+            assert service.http.get(base).json()[0]["name"] == "alpha"
+            assert service.http.get("/projects/alpha").status_code == 200
+            assert not any(r["project"] == "alpha" for r in service.http.get("/sessions").json())
+        assert service.http.post(f"{base}/alpha/close").status_code in (404, 405)
+        assert service.http.post(f"{base}/default/close").status_code in (404, 405)
         assert service.http.post(f"{base}/nope/coordinator").status_code == 404
         assert service.http.delete(f"{base}/alpha").status_code in (404, 405)
-        assert service.http.delete(f"{base}/alpha?delete_folder=true").status_code in (404, 405)
         assert projects.get("alpha") is not None
 
-        # Close in the app only asks the Coordinator; nothing is stopped or written.
-        before = {str(f): f.read_bytes() for f in projects.folder("alpha").rglob("*") if f.is_file() and f.name != "sessions.json"}
-        asked = service.http.post(f"{base}/alpha/close")
-        assert asked.status_code == 202, asked.text
-        assert asked.json()["coordinator"] == coordinator_row["id"]
-        wait_for_screen(coordinator_row["id"], "The owner asked, in the app, to close this project")
-        assert "agentop project close alpha" in CapturePane.scrollback(coordinator_row["id"])
-        assert Session.has(coordinator_row["id"]) and projects.get("alpha") is not None
-        assert {str(f): f.read_bytes() for f in projects.folder("alpha").rglob("*")
-                if f.is_file() and f.name != "sessions.json"} == before
-
-        # With the Coordinator stopped, Close resumes it first, then asks.
-        assert service.http.post(f"/sessions/{coordinator_row['id']}/stop").status_code == 200
-        deadline = time.monotonic() + 5
-        while service.http.get(f"/sessions/{coordinator_row['id']}").status_code == 200:
-            assert time.monotonic() < deadline
-            time.sleep(0.1)
-        asked = service.http.post(f"{base}/alpha/close", timeout=120)
-        assert asked.status_code == 202, asked.text
-        resumed = asked.json()["coordinator"]
-        assert resumed != coordinator_row["id"]
-        wait_for_screen(resumed, "The owner asked, in the app, to close this project")
+    # Service startup and its scans preserve a project without a Coordinator.
+    with run_service() as service:
+        assert service.http.get(base).json()[0]["name"] == "alpha"
+        assert not any(r["project"] == "alpha" for r in service.http.get("/sessions").json())
+        assert service.http.post("/projects/alpha/coordinator").status_code == 409
 
         # A closed project's kept folder, created again, is loaded as it is and its Coordinator resumes.
-        coordinator_row = {"id": resumed}
         (projects.folder("alpha") / "track/1/CLOSED.md").write_text("# Closed\n\n- 2026-11-25 10:00 closed by `Coordinator` of alpha\n")
-        assert service.http.post(f"/sessions/{coordinator_row['id']}/stop").status_code == 200
         projects.close("alpha")
+        assert service.http.post("/projects/alpha/coordinator").status_code == 404
         assert service.http.get(base).json() == []
         again = service.http.post(base, json={"name": "alpha"})
         assert again.status_code == 201, again.text
@@ -251,5 +234,44 @@ def test_the_projects_plugin_makes_closes_and_loads_again_its_own(fake_agents, q
                    if r["project"] == "alpha" and r["display_name"] == "Coordinator" and r["id"] != coordinator_row["id"])
         service.wait_for(row["id"], "running")
         wait_for_screen(row["id"], "You are resuming this project's Coordinator session")
+        assert registry.load()["sessions"][row["id"]]["agent_session_id"] == "ALPHA-COORD-1"
         assert (projects.folder("alpha") / "track/1/CLOSED.md").read_text().splitlines()[-1].endswith(
             "reopened by the owner, in the app")
+
+
+@pytest.mark.parametrize("status", [None, "exited", "failed"])
+def test_stale_coordinator_requests_cannot_start_or_resume_projects(tmp_path, monkeypatch, status):
+    import asyncio
+
+    from agentop.service.store import SessionStore, StoreError
+
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    found = projects.create("alpha", "projects")
+    store = SessionStore()
+    if status:
+        store._sessions["coord-1"] = {"id": "coord-1", "project": "alpha", "display_name": "Coordinator", "status": status}
+
+    def unexpected(*args, **kwargs):
+        pytest.fail("a stale request must not write instructions, close, create or resume")
+
+    monkeypatch.setattr(coordinator, "write_instructions", unexpected)
+    monkeypatch.setattr(store, "create", unexpected)
+    monkeypatch.setattr(store, "close", unexpected)
+
+    async def check():
+        for _ in range(2):
+            with pytest.raises(StoreError) as refused:
+                await store.ensure_coordinator("alpha", ["codex"])
+            assert refused.value.status == 409
+        # The project closes while a request is reading its metadata.
+        def closing(name):
+            (projects.meta_dir(name) / "project.json").unlink()
+            return found
+
+        monkeypatch.setattr(projects, "get", closing)
+        with pytest.raises(StoreError) as refused:
+            await store.ensure_coordinator("alpha", ["codex"])
+        assert refused.value.status == 409
+
+    asyncio.run(check())
+    assert not (projects.folder("alpha") / "AGENTS.md").exists()

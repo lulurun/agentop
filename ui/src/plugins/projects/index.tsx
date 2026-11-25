@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
-import type { Session } from "../../api/client";
+import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
 import { DetailsPanel } from "../../components/DetailsPanel";
 import { Section } from "../../components/Section";
 import { SessionSections } from "../../components/Sidebar";
@@ -67,25 +66,26 @@ function useProjects(plugin: PluginContext) {
   const projects = useSyncExternalStore(listing.subscribe, listing.snapshot);
   const chosen = useSyncExternalStore(current.subscribe, current.snapshot)[service];
   const select = useApp((s) => s.select);
-  const setError = useApp((s) => s.setError);
+  const act = useApp((s) => s.act);
 
   useEffect(() => {
     void listing.load(plugin).catch(() => undefined);
   }, [plugin, service]);
 
-  /** Show a project, opening its Coordinator: resumed, or started, if it isn't running. */
   const open = useCallback(
     async (name: string) => {
       current.set(service, name);
-      try {
-        const row = await plugin.client.post<Session>(`/projects/${encodeURIComponent(name)}/coordinator`);
+      const rows = await act((client) => client.sessions());
+      if (useApp.getState().activeId !== service) return;
+      const row = rows?.find(
+        (s) => s.project === name && s.display_name === "Coordinator" && (s.status === "running" || s.status === "starting"),
+      );
+      if (row) {
         useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
         select(row.id);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
       }
     },
-    [plugin, service, select, setError],
+    [service, select, act],
   );
 
   const create = useCallback(
@@ -97,17 +97,8 @@ function useProjects(plugin: PluginContext) {
     [plugin, open],
   );
 
-  /** Ask its Coordinator to close it, and show the Coordinator: the project leaves the list once it has. */
-  const close = useCallback(
-    async (name: string) => {
-      await plugin.client.post(`/projects/${encodeURIComponent(name)}/close`);
-      await open(name);
-    },
-    [plugin, open],
-  );
-
   const known = projects?.some((p) => p.name === chosen) ? chosen : undefined;
-  return { projects, chosen: known, open, create, close };
+  return { projects, chosen: known, open, create };
 }
 
 function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
@@ -152,52 +143,8 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
   );
 }
 
-/** A modal in the page, not window.confirm: where a webview shows no dialog, confirm answers no, and the old button did nothing. */
-function CloseProject({ name, onClose, onCancel }: { name: string; onClose(): Promise<void>; onCancel(): void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog && !dialog.open) dialog.showModal();
-  }, []);
-
-  async function close() {
-    setBusy(true);
-    setError("");
-    try {
-      await onClose();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setBusy(false);
-    }
-  }
-
-  return (
-    <dialog ref={ref} className="dialog" onClose={onCancel} aria-labelledby="close-project-title">
-      <h2 id="close-project-title">Close {name}?</h2>
-      <p>
-        Its Coordinator is asked to close it. Once no task is running and the track is up to date, it marks the project
-        closed, takes it off this list, and ends its own session. The folder, its files and the other sessions are kept;
-        creating {name} again loads it.
-      </p>
-      {error && <p className="form-error">{error}</p>}
-      <div className="stop-buttons">
-        <button type="button" onClick={onCancel} disabled={busy} data-autofocus>
-          Cancel
-        </button>
-        <button type="button" className="primary" onClick={() => void close()} disabled={busy}>
-          Close {name}
-        </button>
-      </div>
-    </dialog>
-  );
-}
-
 function Left({ plugin }: { plugin: PluginContext }) {
-  const { projects, chosen, open, create, close } = useProjects(plugin);
-  const [closing, setClosing] = useState<string | null>(null);
+  const { projects, chosen, open, create } = useProjects(plugin);
 
   // The Coordinator takes a closed project off the list; this notices.
   useEffect(() => {
@@ -215,31 +162,11 @@ function Left({ plugin }: { plugin: PluginContext }) {
               <button type="button" className="project-pick" title={p.folder} onClick={() => void open(p.name)}>
                 {p.name}
               </button>
-              <button
-                type="button"
-                className="project-close-button"
-                title={`Close ${p.name}: its Coordinator closes it; everything is kept`}
-                aria-label={`Close ${p.name}`}
-                onClick={() => setClosing(p.name)}
-              >
-                Close
-              </button>
             </div>
           ))}
           {projects && projects.length === 0 && <p className="session-empty">No projects yet.</p>}
         </nav>
       </Section>
-      {closing && (
-        <CloseProject
-          key={closing}
-          name={closing}
-          onCancel={() => setClosing(null)}
-          onClose={async () => {
-            await close(closing);
-            setClosing(null);
-          }}
-        />
-      )}
       {chosen && <SessionSections project={chosen} canStart={false} />}
     </>
   );

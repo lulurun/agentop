@@ -352,7 +352,7 @@ export interface paths {
         put?: never;
         /**
          * Start Coordinator
-         * @description The project's Coordinator: the running one, or one resumed or started now.
+         * @description Get its Coordinator; Projects never start one through this route.
          */
         post: operations["start_coordinator_projects__name__coordinator_post"];
         delete?: never;

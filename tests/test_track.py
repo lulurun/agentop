@@ -317,12 +317,16 @@ def test_only_the_coordinator_closes_once_no_task_is_open_and_create_loads_the_f
     # It waits for the running execution, which is closed as usual.
     _, err = ag(capsys, "project", "close", "alpha", code=1)
     assert "tasks are open: P1_M2A2-1 (api)" in err
+    assert pursuit.close_request(alpha)
+    _, err = start(capsys, "new", "M2A1", code=1)
+    assert "project close is pending" in err
     report(monkeypatch, capsys, "api", "commands written")
-    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "ran them", "--project", "alpha")
-    # And for the track to be up to date.
     _, err = ag(capsys, "project", "close", "alpha", code=1)
-    assert "the track is not up to date" in err and "milestone close M2" in err
-    ag(capsys, "coordinator", "milestone", "close", "M2", "--summary", "-", "--project", "alpha", stdin="Track shipped.")
+    assert "tasks are open" in err
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "ran them", "--project", "alpha")
+    assert track.find_action(track.load_plan(alpha), 2, 2)["status"] == "done"
+    assert "commands written" in track.execution_path(alpha, 1, 2).read_text()
+    assert track.problems(alpha, [])  # An unclosed milestone must not block closing.
     # Only accept stopped a session, as it always does.
     assert projects.get(alpha) is not None and stopped == ["api-1"]
     stopped.clear()
@@ -337,7 +341,9 @@ def test_only_the_coordinator_closes_once_no_task_is_open_and_create_loads_the_f
     assert projects.get(alpha) is None and alpha not in [p["name"] for p in projects.list_projects()]
     after = snapshot(folder())
     mark = after.pop("track/1/CLOSED.md").decode()
-    assert after == {k: v for k, v in before.items() if k != ".project/project.json"}
+    assert {k: v for k, v in after.items() if k != ".project/events.jsonl"} == {
+        k: v for k, v in before.items() if k not in (".project/project.json", ".project/events.jsonl")}
+    assert pursuit.close_request(alpha) is None
     assert mark.splitlines()[-1].endswith("closed by `Coordinator` of alpha: shipped the track")
 
     # A closed project's status still reads, and shows the mark; reading writes nothing.
@@ -355,11 +361,12 @@ def test_only_the_coordinator_closes_once_no_task_is_open_and_create_loads_the_f
     reloaded = snapshot(folder())
     assert reloaded.pop("track/1/CLOSED.md").decode().splitlines()[-1].endswith(
         "reopened by the owner, with agentop project create")
-    assert {k: v for k, v in reloaded.items() if k != ".project/project.json"} == {
-        k: v for k, v in before.items() if k != ".project/project.json"}
+    assert {k: v for k, v in reloaded.items() if k not in (".project/project.json", ".project/events.jsonl")} == {
+        k: v for k, v in before.items() if k not in (".project/project.json", ".project/events.jsonl")}
     out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
     assert out.startswith("# Closed (track/1/CLOSED.md): reopened now")
-    assert "## M2 Track files  [done]" in out
+    assert "## M2 Track files" in out
+    assert "# Priority close request" not in out
 
 
 def test_a_new_project_welcomes_and_a_state_md_project_keeps_its_checks(alpha, capsys):
@@ -623,3 +630,49 @@ def test_the_current_milestone_is_the_work_not_the_pending_change(alpha, capsys,
     assert track.current_milestone(track.load_plan(alpha))["m"] == 2
     out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
     assert "# Execution of M2, the current milestone" in out and "## P1_M2A1-1" in out
+
+
+def test_priority_close_survives_status_and_clear_and_drains_normal_decisions(alpha, capsys, sessions, monkeypatch):
+    from agentop.plugins.projects import wake
+
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    ag(capsys, "coordinator", "direction", "change", "--text", "Unrelated pending change")
+    ag(capsys, "coordinator", "close", "--note", "Owner is finished here")
+    request = pursuit.close_request(alpha)
+    ag(capsys, "coordinator", "close")
+    assert pursuit.close_request(alpha) == request
+    out, _ = ag(capsys, "coordinator", "status")
+    assert out.startswith("# Priority close request") and "Owner is finished here" in out
+    assert "# Direction change pending" not in out
+    prompt = wake.compose(alpha, "Context cleared")
+    assert "Priority: close" in prompt
+    assert "direction new now" not in prompt
+    pursuit.log(alpha, "clear.verified")
+    assert "Priority: close" in pursuit.wake_note(alpha)
+    ag(capsys, "coordinator", "yield", "waiting", "--next", "Drain existing reports, then close the project.")
+    _, err = start(capsys, "other", "M2A1", code=1)
+    assert "project close is pending" in err
+    _, err = ag(capsys, "start", "other", "--tool", "claude", "--cwd", "/tmp", "--untracked", code=1)
+    assert "project close is pending" in err
+    report(monkeypatch, capsys, "dev")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "read result")
+    ag(capsys, "coordinator", "task", "fail", "api", "--note", "Not needed for close")
+    plan = track.load_plan(alpha)
+    assert track.find_action(plan, 2, 1)["status"] == "done"
+    assert track.find_action(plan, 2, 2)["status"] == "planned"
+    assert "Not needed for close" in track.execution_path(alpha, 1, 2).read_text()
+    assert "No task is open: run agentop project close alpha now" in cli.status_text(alpha)
+    stopped = []
+    monkeypatch.setattr(ops, "stop_detached", lambda *args: stopped.append(projects.get(alpha)))
+    ag(capsys, "project", "close", "alpha")
+    assert stopped == [None]
+    assert (folder() / "track/1/PLAN.md").is_file()
+
+
+def test_a_stale_task_start_cannot_open_an_execution_after_final_close(alpha):
+    projects.close(alpha)
+    with pytest.raises(pursuit.PursuitError, match="No project called alpha"):
+        pursuit.open_task(alpha, "late", "codex", "/tmp", "Late work", ["done"], "results/late.md")
+    assert pursuit.open_tasks(alpha) == []

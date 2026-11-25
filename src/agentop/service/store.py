@@ -546,25 +546,27 @@ class SessionStore:
             except Exception:
                 LOG.exception("The first prompt of %s failed", session_id)
 
-    async def ensure_coordinator(self, project: str, available: list[str]) -> dict | None:
-        """Start the project's Coordinator unless it runs: resumed if it ran before, else new, with its welcome. None if there is no tool."""
+    async def ensure_coordinator(self, project: str, available: list[str], *, creating: bool = False) -> dict | None:
+        """Return its Coordinator; only explicit creation starts one for Projects."""
         if not projects.has_coordinator(project):
             raise StoreError(400, f"The {project} project has no Coordinator")
         found = await asyncio.to_thread(projects.get, project)
         if found is None:
             raise StoreError(404, f"No project called {project}")
-        await asyncio.to_thread(coordinator.write_instructions, found)
         name = projects.COORDINATOR
         running = next(
             (
                 r
                 for r in self._sessions.values()
-                if r.get("project") == project and r.get("display_name") == name and r["status"] != "failed"
+                if r.get("project") == project and r.get("display_name") == name and r["status"] in ("starting", "running")
             ),
             None,
         )
         if running:
             return copy.deepcopy(running)
+        if found.get("owner") == "projects" and not creating:
+            raise StoreError(409, f"{project} has no running Coordinator; browsing never starts one")
+        await asyncio.to_thread(coordinator.write_instructions, found)
         for row in [r for r in self._sessions.values() if r.get("project") == project and r.get("display_name") == name]:
             await self.close(row["id"])
         records = (await asyncio.to_thread(registry.load))["sessions"]

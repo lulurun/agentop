@@ -118,6 +118,9 @@ def register_cli(cli) -> None:
     common = _common()
     sub = top.add_subparsers(dest="coordinator_command", metavar="<subcommand>")
 
+    closing = sub.add_parser("close", parents=[common], help="Prioritize closing: drain existing tasks, then project close")
+    closing.add_argument("--note", default="", help="Why the owner asked to close")
+
     direction = sub.add_parser("direction", help="The project's direction: change, new, add, show")
     dsub = direction.add_subparsers(dest="direction_command", metavar="<subcommand>")
     change = dsub.add_parser("change", parents=[common], help="Record a new direction as the plan's first action, "
@@ -529,7 +532,9 @@ def run_review(args) -> None:
 
 def _recorded(project: str, task: dict, then: str) -> None:
     due = pursuit.change_due(project)
-    if due:
+    if pursuit.close_request(project):
+        then = "drain remaining tasks, then close the project"
+    elif due:
         then = "the direction change; nothing else comes first"
     if task.get("action") and task.get("direction") == track.generation(project):
         m = task["action"].partition("A")[0][1:]
@@ -664,7 +669,10 @@ def _task_line(t: dict, project: str) -> str:
 
 def status_text(project: str) -> str:
     """The resume view: what a fresh context needs to carry on."""
-    out = _closed_section(project) + _change_section(project)
+    closing = pursuit.close_notice(project).strip()
+    out = (["# Priority close request", "", closing, ""] if closing else []) + _closed_section(project)
+    if not closing:
+        out += _change_section(project)
     found_next = pursuit.read_next(project)
     out += [found_next or "# Next\n\n(none yet: agentop coordinator yield waiting|done --next \"…\" writes it)", ""]
     n = track.generation(project)
@@ -755,6 +763,13 @@ def run_coordinator(args, parser) -> None:
         run_task(args, parser)
         return
     project = _project(args, closed_too=command == "status")
+    if command == "close":
+        here = _here()
+        if not here or here[1] != project or here[2] != "Coordinator":
+            _fail("only the project Coordinator records a close request")
+        pursuit.request_close(project, args.note)
+        print(pursuit.close_notice(project).strip())
+        return
     {
         "direction": coordinator_direction,
         "plan": coordinator_plan,
