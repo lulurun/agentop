@@ -700,11 +700,7 @@ def status_text(project: str) -> str:
         if milestone is not None:
             path = track.execution_path(project, n, milestone["m"])
             out += ["", f"# Execution of M{milestone['m']}, the current milestone (track/{n}/{path.name})", ""]
-            if path.exists():
-                text = path.read_text()
-                out.append("## " + text.split("\n## ", 1)[1].strip() if "\n## " in text else "(no entries yet)")
-            else:
-                out.append("(no entries yet)")
+            out.append(track.readable_execution(path) or "(no entries yet)")
     tasks = pursuit.open_tasks(project)
     out += ["", "# Tasks", ""]
     out += [_task_line(t, project) for t in tasks] or ["- No open tasks."]

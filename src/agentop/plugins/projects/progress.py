@@ -12,6 +12,7 @@ import os
 import re
 import time
 from contextlib import contextmanager
+from itertools import accumulate
 from pathlib import Path
 
 from agentop import projects
@@ -39,8 +40,9 @@ _TIMES = re.compile(rf"^Opened (.+?)(?: · closed (.+?))? · rounds ({_N}) · (\
 _OUT = re.compile(rf"^- round ({_N}): (BLOCKED: )?(.*)$")
 _EVAL = re.compile(rf"^- round ({_N}) (rejected|accepted|failed): (.*)$")
 _UNDECIDED = "- (not decided yet)"
-# Where an entry starts: a task or note heading of any direction. Other '## ' lines are text inside a report.
-_BOUNDARY = re.compile(rf"^## P{_N}_M{_N}A{_N}(?:-{_N}\s| note {_N}\s)")
+_INPUT, _ITEM, _ARTIFACT = re.compile(r"Input: "), re.compile(r"- "), re.compile(r"Artifact: ")
+_OUT_PREFIX = re.compile(rf"- round ({_N}): ")
+_EVAL_PREFIX = re.compile(rf"- round ({_N}) (rejected|accepted|failed): ")
 
 
 @contextmanager
@@ -163,30 +165,194 @@ def _id_in(tid, n: int) -> bool:
 # --- Markdown ---
 
 
-def parse_task_entry(heading: str, raw: str) -> dict | None:
-    """The fields of a writer-shaped task entry; `ambiguous` when its sections can't all be read."""
+class _Misfit(Exception):
+    pass
+
+
+def _new_entry(head: re.Match, raw: str) -> dict:
+    return {"id": head[1], "session": head[2], "tool": head[3], "model": head[4], "raw": raw, "ambiguous": False,
+            "opened_at": None, "closed_minute": None, "rounds_count": None, "md_status": None,
+            "input": None, "rounds": [], "checked": None, "note": None}
+
+
+def _times(entry: dict, line: str | None) -> bool:
+    times = _TIMES.match(line or "")
+    if not times or not _count(int(times[3])):
+        return False
+    entry.update(opened_at=_minute(times[1]), closed_minute=times[2], rounds_count=int(times[3]), md_status=times[4])
+    return True
+
+
+def parse_task_entry(heading: str, lines: list[str], counts: list[str] | None = None) -> dict | None:
+    """A task entry's fields: by its record's counts, or by layout for one without; `ambiguous` when they can't all be read."""
     head = _TASK_HEAD.match(heading)
     if not head:
         return None
-    lines = raw.splitlines()[1:]
-    entry = {"id": head[1], "session": head[2], "tool": head[3], "model": head[4], "raw": raw, "ambiguous": False,
-             "opened_at": None, "closed_minute": None, "rounds_count": None, "md_status": None,
-             "input": None, "rounds": [], "checked": None, "note": None}
-    times = _TIMES.match(lines[0]) if lines else None
-    if times and _count(int(times[3])):
-        entry.update(opened_at=_minute(times[1]), closed_minute=times[2], rounds_count=int(times[3]), md_status=times[4])
-    else:
+    lines = list(lines)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if counts is not None:
+        entry = _counted(head, lines, counts)
+        if entry is not None:
+            return entry
+    entry = _legacy(head, lines)
+    entry["ambiguous"] = entry["ambiguous"] or counts is not None
+    return entry
+
+
+def _counted(head: re.Match, lines: list[str], counts: list[str]) -> dict | None:
+    """The fields of an entry written with its record, each field exactly the lines it counts; None when they don't fit."""
+    entry = _new_entry(head, "\n".join(lines))
+    sizes = [(int(c.rstrip("b")), c.endswith("b")) for c in counts]
+    pos = 2
+
+    def at() -> str | None:
+        return lines[pos] if pos < len(lines) else None
+
+    def take(pattern: re.Pattern) -> tuple[re.Match, str, bool]:
+        nonlocal pos
+        found = pattern.match(at() or "")
+        if not found or not sizes or not 0 < sizes[0][0] <= len(lines) - pos:
+            raise _Misfit
+        size, marked = sizes.pop(0)
+        text, pos = "\n".join(lines[pos:pos + size])[found.end():], pos + size
+        return found, text, marked
+
+    def expect(line: str) -> None:
+        nonlocal pos
+        if at() != line:
+            raise _Misfit
+        pos += 1
+
+    rounds: dict[int, dict] = {}
+    try:
+        if not _times(entry, lines[1] if len(lines) > 1 else None):
+            raise _Misfit
+        expect("")
+        goal = take(_INPUT)[1]
+        accept = []
+        while (at() or "").startswith("- "):
+            accept.append(take(_ITEM)[1])
+        artifact = take(_ARTIFACT)[1]
+        brief = None
+        if (at() or "").startswith("Brief: "):
+            brief, pos = at()[len("Brief: "):], pos + 1
+        entry["input"] = {"goal": goal, "accept": accept, "artifact": artifact, "brief": brief}
+        expect("")
+        expect("Output:")
+        if at() == "- (no report yet)":
+            pos += 1
+        while at() not in (None, ""):
+            found, text, blocked = take(_OUT_PREFIX)
+            n = _count(int(found[1]))
+            if n is None or n in rounds or (blocked and not text.startswith("BLOCKED: ")):
+                raise _Misfit
+            rounds[n] = {"round": n, "summary": text[len("BLOCKED: "):] if blocked else text, "blocked": blocked}
+        expect("")
+        expect("Evaluation:")
+        if at() == _UNDECIDED:
+            pos += 1
+        while at() is not None:
+            found, text, _ = take(_EVAL_PREFIX)
+            n = _count(int(found[1]))
+            if n is None:
+                raise _Misfit
+            key = {"rejected": "feedback", "accepted": "checked", "failed": "note"}[found[2]]
+            (rounds.setdefault(n, {"round": n}) if key == "feedback" else entry)[key] = text
+        if sizes:
+            raise _Misfit
+    except _Misfit:
+        return None
+    count = max([entry["rounds_count"], *rounds])
+    entry["rounds"] = [rounds.get(n, {"round": n}) for n in range(1, count + 1)]
+    return entry
+
+
+def _legacy(head: re.Match, lines: list[str]) -> dict:
+    """An entry an older writer left: read by layout, without the leftovers of its older versions after it."""
+    raw = "\n".join(lines).strip()
+    entry, eval_at = _sections(head, lines, raw)
+    broken = entry.pop("broken", False)
+    pieces = set() if entry["ambiguous"] else _older_pieces(entry)
+    if not pieces:
+        entry["ambiguous"] = entry["ambiguous"] or broken
+        return entry
+    firsts = {p[0] for p in pieces}
+    good = _leftovers(lines, pieces)
+    suspect = False
+    for c in range(eval_at + 3, len(lines)):
+        if lines[c - 1] != "" or lines[c] not in firsts:
+            continue
+        suspect = True
+        if good[c]:
+            cut, _ = _sections(head, lines[:c - 1], raw)
+            if not cut["ambiguous"] and not cut.pop("broken", False) and _leftovers(lines[c:], _older_pieces(cut))[0]:
+                return cut
+    entry["ambiguous"] = suspect or broken
+    return entry
+
+
+def _older_pieces(entry: dict) -> set[tuple[str, ...]]:
+    """What each version of this task before the latest looks like from its first '## ' line on.
+
+    The older writer replaced an entry only up to the first '## ' line after its heading, so each version holding
+    one left exactly that much of itself behind the next.
+    """
+    if entry["input"] is None:
+        return set()
+    base = {"id": entry["id"], "session": entry["session"], "tool": entry["tool"], "model": entry["model"],
+            "opened_at": None, "status": "open", **entry["input"]}
+    states = []
+    for r, now in enumerate(entry["rounds"], 1):
+        done = [{k: x.get(k) for k in ("summary", "blocked", "feedback")} for x in entry["rounds"][:r - 1]]
+        states.append(done + [{}])
+        if now.get("summary"):
+            states.append(done + [{"summary": now["summary"], "blocked": now.get("blocked")}])
+        if now.get("feedback"):
+            states.append(done + [{k: now.get(k) for k in ("summary", "blocked", "feedback")}])
+    pieces = set()
+    for rounds in states:
+        lines, _ = track.task_lines({**base, "rounds": rounds})
+        first = next((i for i in range(1, len(lines)) if lines[i].startswith("## ")), None)
+        if first is not None:
+            pieces.add(tuple(lines[first:]))
+    return pieces
+
+
+def _leftovers(lines: list[str], pieces: set[tuple[str, ...]]) -> list[bool]:
+    """For each line, whether the lines from it on are such leftovers, one after another with a blank line between."""
+    text = "\n".join(lines) + "\n"
+    offsets = list(accumulate((len(line) + 1 for line in lines), initial=0))
+    by_first: dict[str, list[tuple[str, int]]] = {}
+    for p in pieces:
+        by_first.setdefault(p[0], []).append(("\n".join(p) + "\n", len(p)))
+    good = [False] * len(lines) + [True]
+    for i in range(len(lines) - 1, -1, -1):
+        for piece, size in by_first.get(lines[i], ()):
+            j = i + size
+            if j <= len(lines) and text.startswith(piece, offsets[i]) and (j == len(lines) or (lines[j] == "" and good[j + 1])):
+                good[i] = True
+                break
+    good[len(lines)] = False
+    return good
+
+
+def _sections(head: re.Match, lines: list[str], raw: str) -> tuple[dict, int]:
+    """The entry read by its layout, and where its Evaluation section starts."""
+    lines = lines[1:]
+    entry = _new_entry(head, raw)
+    if not _times(entry, lines[0] if lines else None):
         entry["ambiguous"] = True
     try:
         out_at = lines.index("Output:")
     except ValueError:
         entry["ambiguous"] = True
-        return entry
+        return entry, 0
     marks = _evaluation_marks(lines, out_at)
     if not marks:
         entry["ambiguous"] = True
-        return entry
-    eval_at, end = marks[0], _stale_tail(lines, marks)
+        return entry, 0
+    eval_at = marks[0]
     entry["input"] = _parse_input(lines[1:out_at])
     if entry["input"] is None:
         entry["ambiguous"] = True
@@ -201,14 +367,19 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
             entry["ambiguous"], last = True, None
         elif last is not None:
             last["summary"] += "\n" + line
-    last, last_key = None, None
-    for line in lines[eval_at + 1:end]:
+    last, last_key, latest = None, None, 0
+    for line in lines[eval_at + 1:]:
         found = _EVAL.match(line)
         if found and _count(int(found[1])):
             n, kind, text = int(found[1]), found[2], found[3]
             key = {"rejected": "feedback", "accepted": "checked", "failed": "note"}[kind]
-            last = rounds.setdefault(n, {"round": n}) if key == "feedback" else entry
-            last[key], last_key = text, key
+            holder = rounds.setdefault(n, {"round": n}) if key == "feedback" else entry
+            if n < latest or holder.get(key) is not None:
+                # An earlier or repeated decision: what follows isn't this version's evaluation.
+                entry["broken"] = True
+                break
+            last, last_key, latest = holder, key, n
+            last[key] = text
         elif found:
             entry["ambiguous"], last = True, None
         elif last is not None:
@@ -219,7 +390,7 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
             holder[key] = holder[key].strip()
     count = max([entry["rounds_count"] or 0, *rounds])
     entry["rounds"] = [rounds.get(n, {"round": n}) for n in range(1, count + 1)]
-    return entry
+    return entry, eval_at + 1
 
 
 def _evaluation_marks(lines: list[str], out_at: int) -> list[int]:
@@ -227,22 +398,6 @@ def _evaluation_marks(lines: list[str], out_at: int) -> list[int]:
     return [i for i in range(out_at + 1, len(lines) - 1)
             if lines[i] == "Evaluation:" and lines[i - 1] == ""
             and (_EVAL.match(lines[i + 1]) or lines[i + 1] == _UNDECIDED)]
-
-
-def _stale_tail(lines: list[str], marks: list[int]) -> int:
-    """Where the entry's own text ends.
-
-    track._replace_entry rewrites an entry only up to its first '## ' line, so an entry whose text holds one keeps
-    the rest of each older version after the new one. Each such rest starts with that same line and what follows it.
-    """
-    first = next((i for i, line in enumerate(lines) if line.startswith("## ")), None)
-    if first is None:
-        return len(lines)
-    lead = lines[first:first + 3]
-    for i in range(max(marks[0] + 2, first + 1), len(lines)):
-        if lines[i - 1] == "" and lines[i:i + len(lead)] == lead:
-            return i - 1
-    return len(lines)
 
 
 def _parse_input(lines: list[str]) -> dict | None:
@@ -266,35 +421,15 @@ def _parse_input(lines: list[str]) -> dict | None:
     return {"goal": goal, "accept": accept, "artifact": lines[artifact_at][len("Artifact: "):], "brief": brief}
 
 
-def _parse_note(heading: str, raw: str, generation: int) -> dict | None:
+def _parse_note(heading: str, lines: list[str], generation: int) -> dict | None:
     head = _NOTE_HEAD.match(heading)
     if not head:
         return None
-    lines = raw.splitlines()[1:]
+    lines = lines[1:]
     date = lines[0].strip() if lines else ""
     return {"id": head[1], "generation": int(head[2]), "action": head[3], "milestone": int(head[4]),
             "number": int(head[5]), "by": head[6], "recorded": date, "recorded_at": _minute(date),
             "body": "\n".join(lines[1:]).strip()}
-
-
-def _entries(reader: _Reader, path: Path):
-    """(heading, raw entry) for each '## ' entry, streamed; an entry over MAX_RECORD_BYTES comes with raw None."""
-    heading, body, size, over = None, [], 0, False
-    for line in reader.lines(path):
-        if line is not None and _BOUNDARY.match(line):
-            if heading is not None:
-                yield heading, None if over else "\n".join(body).strip()
-            heading, body, size, over = line[3:], [line], len(line), False
-            continue
-        if heading is None:
-            continue
-        size += MAX_RECORD_BYTES + 1 if line is None else len(line) + 1
-        if size > MAX_RECORD_BYTES:
-            over, body = True, []
-        elif not over:
-            body.append(line)
-    if heading is not None:
-        yield heading, None if over else "\n".join(body).strip()
 
 
 def _bare_entry(tid: str, raw: str | None) -> dict:
@@ -305,27 +440,34 @@ def _bare_entry(tid: str, raw: str | None) -> dict:
 
 def _execution(reader: _Reader, path: Path, n: int, entries: dict, notes: list) -> None:
     where = reader.name(path)
-    for heading, raw in _entries(reader, path):
-        tid = heading.split()[0] if heading.split() else ""
-        note_head = _NOTE_HEAD.match(heading)
-        if (note_head and int(note_head[2]) != n) or (_TASK_ID.match(tid) and not _id_in(tid, n)):
+    for found in track.split_entries(reader.lines(path), MAX_RECORD_BYTES):
+        if found["id"] is None:
+            reader.issues.append(f"{where}: line {found['start'] + 1} is outside any entry; skipped")
+            continue
+        heading, lines, eid = found["heading"], found["lines"], found["id"]
+        tid = eid if _TASK_ID.match(eid) else None
+        if int(re.match(r"P(\d+)", eid)[1]) != n:
             reader.issues.append(f"{where}: '{heading[:60]}' belongs to another direction; skipped")
             continue
-        if raw is None:
+        if lines is None:
             reader.issues.append(f"{where}: '{heading[:60]}' is over {MAX_RECORD_BYTES} bytes; its text isn't shown")
-            if _TASK_ID.match(tid):
+            if tid:
                 entries.setdefault(tid, _bare_entry(tid, None))
             continue
-        if note_head:
-            notes.append(_parse_note(heading, raw, n))
+        if _NOTE_HEAD.match(heading):
+            notes.append(_parse_note(heading, lines, n))
             continue
-        entry = parse_task_entry(heading, raw)
+        entry = parse_task_entry(heading, lines, found["counts"])
         if entry is not None:
+            entry["ambiguous"] = entry["ambiguous"] or found["edited"]
             entries[entry["id"]] = entry
-        elif _TASK_ID.match(tid):
-            entries.setdefault(tid, _bare_entry(tid, raw))
+        elif tid:
+            entry = entries.setdefault(tid, _bare_entry(tid, "\n".join(lines).strip()))
         else:
             reader.issues.append(f"{where}: an entry '## {heading[:60]}' isn't a task or a note; skipped")
+            continue
+        if entry["ambiguous"]:
+            reader.issues.append(f"{where}: {entry['id']}'s entry can't be read unambiguously; its text is shown as written")
 
 
 # --- tasks.jsonl and tasks.json ---

@@ -621,35 +621,153 @@ def _execution_head(n: int, m: int) -> str:
     return f"# Execution of M{m} (Plan {n})\n\nWritten by agentop: one entry per task, and notes of work done without one.\n"
 
 
+_ENTRY_ID = r"P\d{1,9}_M\d{1,9}A\d{1,9}(?:-\d{1,9}| note \d{1,9})"
+ENTRY_HEAD = re.compile(rf"^## ({_ENTRY_ID})\s")
+# Written before each entry, it counts the entry's lines and each free-text field's, so a report may hold any line.
+RECORD = re.compile(rf"^<!-- agentop entry ({_ENTRY_ID}) lines (\d{{1,9}})(?: fields (\d{{1,9}}b?(?:,\d{{1,9}}b?)*))? -->$")
+
+
+def split_entries(lines, limit: int | None = None):
+    """Each entry of an EXECUTION file's lines, as a dict: id, heading, lines (None past `limit` bytes), start, end, counts.
+
+    An entry after its record spans the lines it counts (counts is a list); one without a record, or one whose text
+    no longer fits its record, runs to the next entry heading or record (counts None). A record with no entry after
+    it, and text outside entries, come as dicts with id None.
+    """
+    cur, left, record, seen = None, 0, None, False
+
+    def grow(line):
+        cur["size"] += (limit or 0) + 1 if line is None else len(line) + 1
+        if limit is not None and cur["size"] > limit:
+            cur["lines"] = None
+        elif cur["lines"] is not None:
+            cur["lines"].append(line)
+
+    def stray(start, line):
+        return {"id": None, "start": start, "line": line}
+
+    i = -1
+    for i, line in enumerate(lines):
+        if cur is not None and left:
+            grow(line)
+            left -= 1
+            if not left:
+                cur["end"] = i + 1
+            continue
+        if cur is not None and cur["end"] is not None:
+            if line is not None and (line == "" or ENTRY_HEAD.match(line) or RECORD.match(line)):
+                yield cur
+                cur = None
+            else:
+                cur.update(counts=None, end=None, edited=True)
+        found = RECORD.match(line) if line is not None else None
+        head = ENTRY_HEAD.match(line) if line is not None else None
+        if record is not None:
+            rec, at = record
+            record = None
+            if head and head[1] == rec[1] and int(rec[2]) > 0:
+                fields = rec[3].split(",") if rec[3] else []
+                cur = {"id": head[1], "heading": line[3:], "lines": [], "size": 0, "start": at, "end": None,
+                       "counts": fields, "edited": False}
+                grow(line)
+                left = int(rec[2]) - 1
+                if not left:
+                    cur["end"] = i + 1
+                continue
+            yield stray(at, rec[0])
+        if found or head:
+            if cur is not None:
+                cur["end"] = i
+                yield cur
+                cur = None
+            seen = True
+            if found:
+                record = (found, i)
+                continue
+            cur = {"id": head[1], "heading": line[3:], "lines": [], "size": 0, "start": i, "end": None,
+                   "counts": None, "edited": False}
+            grow(line)
+        elif cur is not None:
+            grow(line)
+        elif seen and line != "":
+            yield stray(i, line)
+    if record is not None:
+        yield stray(record[1], record[0][0])
+    if cur is not None:
+        if left:
+            cur.update(counts=None, edited=True)
+        cur["end"] = i + 1
+        yield cur
+
+
 def _replace_entry(path: Path, heading_id: str, entry: str, n: int, m: int) -> None:
-    text = path.read_text() if path.exists() else _execution_head(n, m)
-    pattern = re.compile(rf"^## {re.escape(heading_id)}\s.*?(?=^## |\Z)", re.M | re.S)
-    if pattern.search(text):
-        text = pattern.sub(lambda _: entry.rstrip() + "\n\n", text, count=1)
+    """Replace the entry's whole span, older versions' leftovers included, or add it at the end."""
+    lines = (path.read_text() if path.exists() else _execution_head(n, m)).split("\n")
+    new = entry.rstrip("\n").split("\n")
+    target = next((e for e in split_entries(lines) if e["id"] == heading_id), None)
+    if target is None:
+        while lines and lines[-1] == "":
+            lines.pop()
+        lines += ["", *new]
     else:
-        text = text.rstrip() + "\n\n" + entry.rstrip() + "\n"
-    _sole_write(path, text.rstrip() + "\n")
+        after = lines[target["end"]:]
+        lines = lines[:target["start"]] + new + ([""] if after and after[0] != "" else []) + after
+    _sole_write(path, "\n".join(lines).rstrip("\n") + "\n")
 
 
-def task_entry(task: dict) -> str:
+def _block(text) -> str:
+    return str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+
+
+def task_lines(task: dict) -> tuple[list[str], list[str]]:
+    """The entry's Markdown lines, and the line count of each free-text field in order ('b' marks a blocked report)."""
+    counts: list[str] = []
+
+    def field(prefix: str, text, mark: str = "") -> list[str]:
+        part = (prefix + _block(text)).split("\n")
+        counts.append(f"{len(part)}{mark}")
+        return part
+
     rounds = task["rounds"]
     tool = task["tool"] + (f" ({task['model']})" if task.get("model") else "")
     status = task["status"] if task["status"] != "open" else ("reported" if rounds[-1].get("reported_at") else "open")
     times = f"Opened {_when(task['opened_at'])}" + (f" · closed {_when(task['closed_at'])}" if task.get("closed_at") else "")
-    lines = [f"## {task['id']}  session `{task['session']}`  {tool}", f"{times} · rounds {len(rounds)} · {status}"]
-    lines += ["", f"Input: {task['goal']}", *[f"- {c}" for c in task["accept"]], f"Artifact: {task['artifact']}"]
+    lines = [f"## {task['id']}  session `{task['session']}`  {tool}", f"{times} · rounds {len(rounds)} · {status}", ""]
+    lines += field("Input: ", task["goal"])
+    for c in task["accept"]:
+        lines += field("- ", c)
+    lines += field("Artifact: ", task["artifact"])
     if task.get("brief"):
         lines.append("Brief: " + " / ".join(task["brief"].strip().splitlines()[:3]))
-    output = [f"- round {i}: {'BLOCKED: ' if r.get('blocked') else ''}{r['summary']}"
-              for i, r in enumerate(rounds, 1) if r.get("summary")]
-    lines += ["", "Output:", *(output or ["- (no report yet)"])]
-    evaluation = [f"- round {i} rejected: {r['feedback']}" for i, r in enumerate(rounds, 1) if r.get("feedback")]
-    if task["status"] == "accepted":
-        evaluation.append(f"- round {len(rounds)} accepted: {task.get('checked', '')}")
-    elif task["status"] == "failed":
-        evaluation.append(f"- round {len(rounds)} {task['status']}: {task.get('note', '')}")
-    lines += ["", "Evaluation:", *(evaluation or ["- (not decided yet)"])]
-    return "\n".join(lines) + "\n"
+    lines += ["", "Output:"]
+    reported = [(i, r) for i, r in enumerate(rounds, 1) if r.get("summary")]
+    for i, r in reported:
+        blocked = bool(r.get("blocked"))
+        lines += field(f"- round {i}: {'BLOCKED: ' if blocked else ''}", r["summary"], "b" if blocked else "")
+    if not reported:
+        lines.append("- (no report yet)")
+    lines += ["", "Evaluation:"]
+    decided = False
+    for i, r in enumerate(rounds, 1):
+        if r.get("feedback"):
+            lines += field(f"- round {i} rejected: ", r["feedback"])
+            decided = True
+    if task["status"] in ("accepted", "failed"):
+        lines += field(f"- round {len(rounds)} {task['status']}: ", task.get("checked" if task["status"] == "accepted" else "note", ""))
+        decided = True
+    if not decided:
+        lines.append("- (not decided yet)")
+    return "\n".join(lines).split("\n"), counts
+
+
+def _record(entry_id: str, lines: list[str], counts: list[str] | None = None) -> str:
+    fields = f" fields {','.join(counts)}" if counts else ""
+    return f"<!-- agentop entry {entry_id} lines {len(lines)}{fields} -->"
+
+
+def task_entry(task: dict) -> str:
+    lines, counts = task_lines(task)
+    return "\n".join([_record(task["id"], lines, counts), *lines]) + "\n"
 
 
 def write_task_entry(project: str, task: dict) -> bool:
@@ -663,8 +781,20 @@ def write_task_entry(project: str, task: dict) -> bool:
     return True
 
 
+def _file_entries(path: Path) -> list[dict]:
+    try:
+        return [e for e in split_entries(path.read_text().split("\n")) if e["id"]]
+    except OSError:
+        return []
+
+
+def readable_execution(path: Path) -> str:
+    """The file's entries as Markdown, without their records."""
+    return "\n\n".join("\n".join(e["lines"]).strip() for e in _file_entries(path))
+
+
 def add_note(project: str, ref: str, text: str, by: str = "coordinator") -> str:
-    text = (text or "").strip()
+    text = _block(text)
     if not text:
         raise TrackError("A note needs the text: what was done, and where the result is")
     if by not in ("coordinator", "owner"):
@@ -673,11 +803,11 @@ def add_note(project: str, ref: str, text: str, by: str = "coordinator") -> str:
     find_action(load_plan(project), m, a)
     n = generation(project)
     path = _writable(project, n) / f"EXECUTION_M{m}.md"
-    existing = path.read_text() if path.exists() else ""
-    k = len(re.findall(rf"^## P{n}_M{m}A{a} note \d+ ", existing, re.M)) + 1
-    heading = f"P{n}_M{m}A{a} note {k}"
-    entry = f"## {heading}  by: {by}\n{_when(time.time())}\n\n{text}\n"
-    _replace_entry(path, heading, entry, n, m)
+    prefix = f"P{n}_M{m}A{a} note "
+    k = max((int(e["id"][len(prefix):]) for e in _file_entries(path) if e["id"].startswith(prefix)), default=0) + 1
+    heading = f"{prefix}{k}"
+    lines = f"## {heading}  by: {by}\n{_when(time.time())}\n\n{text}".split("\n")
+    _replace_entry(path, heading, "\n".join([_record(heading, lines), *lines]) + "\n", n, m)
     return heading
 
 
@@ -685,14 +815,13 @@ def has_entry(project: str, action: str, n: int | None = None) -> bool:
     """An accepted task of the action, or a note on it, in its EXECUTION file."""
     n = n or generation(project)
     m = int(re.match(r"M(\d+)", action)[1])
-    try:
-        text = execution_path(project, n, m).read_text()
-    except OSError:
-        return False
-    full = re.escape(f"P{n}_{action}")
-    if re.search(rf"^## {full} note ", text, re.M):
-        return True
-    return bool(re.search(rf"^## {full}-\d+\s.*\n.*· accepted$", text, re.M))
+    full = f"P{n}_{action}"
+    for e in _file_entries(execution_path(project, n, m)):
+        if e["id"].startswith(f"{full} note "):
+            return True
+        if re.fullmatch(rf"{re.escape(full)}-\d+", e["id"]) and len(e["lines"]) > 1 and e["lines"][1].endswith("· accepted"):
+            return True
+    return False
 
 
 def refresh_action(project: str, task: dict, open_tasks: list[dict], event: str) -> None:

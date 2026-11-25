@@ -2,6 +2,8 @@
 
 import json
 import os
+import re
+import sys
 import time
 from pathlib import Path
 
@@ -200,7 +202,8 @@ def test_markdown_only_closures_are_approximate_and_undated_ones_last(alpha, cap
     garbled = by_id(result)["P1_M2A1-4"]
     assert garbled["state"] == "unknown" and "garbled heading" in garbled["raw"]
     # Only task and note headings start entries; any other '## ' line is text of the entry before it.
-    assert "## Stray heading" in garbled["raw"] and result["issues"] == []
+    assert "## Stray heading" in garbled["raw"]
+    assert result["issues"] == ["track/1/EXECUTION_M2.md: P1_M2A1-4's entry can't be read unambiguously; its text is shown as written"]
 
 
 def test_files_outside_the_project_are_not_read(alpha, capsys, tmp_path):
@@ -358,7 +361,7 @@ def test_headings_inside_reports_stay_in_their_entry_without_tasks_json(alpha, c
     report(monkeypatch, capsys, "ops", "Half done.\n\n## Blocked on\n\nAccess.")
     ag(capsys, "coordinator", "note", "M2A1", "Note after the tasks", "--project", "alpha")
     execution = (folder() / "track/1/EXECUTION_M2.md").read_text()
-    assert first in execution and second in execution and execution.count("## Results") > 2
+    assert first in execution and second in execution and execution.count("## Results") == 2
     without_snapshot()
 
     result = progress.read(alpha)
@@ -391,3 +394,132 @@ def test_a_heading_only_in_feedback_or_checked_text_is_kept_once(alpha, capsys, 
     assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [("First try", feedback), ("Second try", None)]
     assert dev["checked"] == checked and dev["state"] == "accepted" and result["issues"] == []
     assert api["rounds"][0]["summary"] == "Same\n\n## Missing\n\n- the docs" and api["state"] == "awaiting review"
+
+
+def old_writer(monkeypatch):
+    """The writer before entry records: it replaced an entry only up to its first '## ' line."""
+
+    def replace(path, heading_id, entry, n, m):
+        entry = entry.split("\n", 1)[1] if entry.startswith("<!-- ") else entry
+        text = path.read_text() if path.exists() else track._execution_head(n, m)
+        pattern = re.compile(rf"^## {re.escape(heading_id)}\s.*?(?=^## |\Z)", re.MULTILINE | re.DOTALL)
+        if pattern.search(text):
+            text = pattern.sub(lambda _: entry.rstrip() + "\n\n", text, count=1)
+        else:
+            text = text.rstrip() + "\n\n" + entry.rstrip() + "\n"
+        track._sole_write(path, text.rstrip() + "\n")
+
+    # Plugin tests may load the package again, so patch every copy of the module the CLI could be using.
+    copies = [(m, m._replace_entry) for m in list(sys.modules.values()) if getattr(m, "__file__", None) == track.__file__]
+    for module, _ in copies:
+        monkeypatch.setattr(module, "_replace_entry", replace)
+    return lambda: [monkeypatch.setattr(module, "_replace_entry", current) for module, current in copies]
+
+
+# Lines a report may hold that look like the entry format itself.
+LOOKALIKE = ("Done.\n\n## P1_M2A2-1  session `api`  claude\nOpened 2026-11-25 10:00 · rounds 1 · accepted\n\n"
+             "Evaluation:\n- round 1 accepted: not really\n- round 2: nor this\n<!-- agentop entry P1_M2A2-1 lines 2 -->\n"
+             "## P1_M2A1 note 7  by: owner\n\n## Results\n\n148 tests passed.")
+
+
+def test_a_task_update_replaces_its_whole_entry_whatever_its_text_holds(alpha, capsys, sessions, monkeypatch):
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    report(monkeypatch, capsys, "dev", LOOKALIKE)
+    ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", "BLOCKED: no\n\n## Results\n\nagain", "--project", "alpha")
+    report(monkeypatch, capsys, "dev", "BLOCKED: is a word here\n\n## Results\n\n150 tests passed.")
+    checked = "Verified.\n\n## Results\n\n148 tests passed.\n\n" + LOOKALIKE
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Ordinary summary")
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "Verified too", "--project", "alpha")
+    ag(capsys, "coordinator", "note", "M2A1", LOOKALIKE, "--project", "alpha")
+    ag(capsys, "coordinator", "note", "M2A1", "Second note", "--project", "alpha")
+    execution = (folder() / "track/1/EXECUTION_M2.md").read_text()
+    # Each text is in the file once per place it belongs: no older version is left behind.
+    assert execution.count(LOOKALIKE) == 3 and execution.count("again") == 1 and execution.count("Ordinary summary") == 1
+    assert track.has_entry(alpha, "M2A1") and "P1_M2A1 note 2" in execution and "note 8" not in execution
+    without_snapshot()
+
+    result = progress.read(alpha)
+    assert result["issues"] == []
+    assert [t["id"] for t in result["completed"]] == ["P1_M2A2-1", "P1_M2A1-1"]
+    dev, api = by_id(result)["P1_M2A1-1"], by_id(result)["P1_M2A2-1"]
+    assert [(r["summary"], r["blocked"], r["feedback"]) for r in dev["rounds"]] == [
+        (LOOKALIKE, False, "BLOCKED: no\n\n## Results\n\nagain"),
+        ("BLOCKED: is a word here\n\n## Results\n\n150 tests passed.", False, None)]
+    assert (dev["checked"], dev["state"], dev["raw"], dev["input"]["goal"]) == (checked, "accepted", None, "dev's goal")
+    assert (api["rounds"][0]["summary"], api["checked"], api["input"]["artifact"]) == ("Ordinary summary", "Verified too", "results/api.md")
+    assert [n["body"] for n in result["notes"]] == ["Second note", LOOKALIKE]
+
+
+def test_a_legacy_entry_without_its_older_versions_and_rewritten_whole(alpha, capsys, sessions, monkeypatch):
+    restore = old_writer(monkeypatch)
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    start(capsys, "ops", "M2A2")
+    first = "Verification complete.\n\n## Results\n\n148 tests passed."
+    feedback = "Two things:\n\n## Missing\n\n- the docs"
+    second = "Fixed.\n\n## Results\n\n150 tests passed."
+    checked = "Verified independently.\n\n## Results\n\n148 tests passed.\n\nTypeScript and the build also passed."
+    report(monkeypatch, capsys, "dev", first)
+    ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", feedback, "--project", "alpha")
+    report(monkeypatch, capsys, "dev", second)
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Plain\n\n## Results\n\nok")
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "Verified too", "--project", "alpha")
+    report(monkeypatch, capsys, "ops", "Half done.\n\n## Blocked on\n\nAccess.")
+    path = folder() / "track/1/EXECUTION_M2.md"
+    legacy = path.read_text()
+    assert "<!--" not in legacy and legacy.count("## Results") > 4
+    snapshot = (folder() / ".project/tasks.json").read_text()
+    without_snapshot()
+
+    def check(result):
+        assert result["issues"] == []
+        assert [t["id"] for t in result["completed"]] == ["P1_M2A2-1", "P1_M2A1-1"]
+        dev, api, ops = (by_id(result)[i] for i in ("P1_M2A1-1", "P1_M2A2-1", "P1_M2A2-2"))
+        assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [(first, feedback), (second, None)]
+        assert (dev["checked"], dev["raw"], dev["input"]["artifact"]) == (checked, None, "results/dev.md")
+        assert (api["rounds"][0]["summary"], api["checked"]) == ("Plain\n\n## Results\n\nok", "Verified too")
+        assert (ops["state"], ops["rounds"][0]["summary"]) == ("awaiting review", "Half done.\n\n## Blocked on\n\nAccess.")
+
+    check(progress.read(alpha))
+
+    # The current writer replaces a legacy entry with every leftover after it, and leaves the other entries as they were.
+    restore()
+    (folder() / ".project/tasks.json").write_text(snapshot)
+    ag(capsys, "coordinator", "task", "reject", "ops", "--feedback", "More", "--project", "alpha")
+    updated = path.read_text()
+    assert updated.count("Half done.") == 1 and updated.count("<!-- agentop entry") == 1
+    assert updated.startswith(legacy[:legacy.index("## P1_M2A2-2")])
+    without_snapshot()
+    result = progress.read(alpha)
+    check({**result, "active": [{**t, "state": "awaiting review"} for t in result["active"]]})
+    assert by_id(result)["P1_M2A2-2"]["rounds"][0]["feedback"] == "More"
+
+
+def test_ambiguous_legacy_and_edited_entries_are_shown_as_written(alpha, capsys, sessions, monkeypatch):
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    report(monkeypatch, capsys, "dev", "Done")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "Checked", "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Also done")
+    path = folder() / "track/1/EXECUTION_M2.md"
+    # A hand edit adds a line to the first entry: it no longer fits its record.
+    path.write_text(path.read_text().replace("- round 1: Done\n", "- round 1: Done\nedited by hand\n"))
+    # A legacy entry whose text after its evaluation repeats its first heading, but isn't an older version of it.
+    path.write_text(path.read_text() + (
+        "\n## P1_M2A1-2  session `old`  claude\nOpened 2026-11-25 10:00 · closed 2026-11-25 10:05 · rounds 1 · accepted\n\n"
+        "Input: g\n- c\nArtifact: results/old.md\n\nOutput:\n- round 1: A\n\n## Results\n\nB\n\nEvaluation:\n"
+        "- round 1 accepted: ok\n\n## Results\n\nsomething else\n"))
+    without_snapshot()
+    result = progress.read(alpha)
+    dev, old, api = (by_id(result)[i] for i in ("P1_M2A1-1", "P1_M2A1-2", "P1_M2A2-1"))
+    assert "edited by hand" in dev["raw"] and dev["rounds"][0]["summary"] == "Done\nedited by hand"
+    assert "something else" in old["raw"] and old["input"]["artifact"] == "results/old.md"
+    assert (api["raw"], api["rounds"][0]["summary"], api["state"]) == (None, "Also done", "awaiting review")
+    assert sorted(result["issues"]) == [f"track/1/EXECUTION_M2.md: {i}'s entry can't be read unambiguously; its text is shown as written"
+                                        for i in ("P1_M2A1-1", "P1_M2A1-2")]
