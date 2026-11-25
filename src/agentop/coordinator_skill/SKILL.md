@@ -19,10 +19,10 @@ On every turn, including one started by a task's report or by agentop after a cl
 
 Your record is `track/<N>/` in the project folder, written through `agentop coordinator`, so it survives a `/clear`, a resume, and a project re-created on its folder:
 
-- `DIRECTION.md`: what the project pursues now and what done means, why it changed from the last direction, and what carries forward (repos, branches, deployed state, the owner's standing constraints, lessons). Write it with `agentop coordinator direction new --text -`; while it is current you may edit it by hand. When the owner changes the direction, run `direction new` again (`--copy-plan` to start from the last plan): that makes `track/<N+1>/`, and the old files are never written again.
+- `DIRECTION.md`: what the project pursues now and what done means, why it changed from the last direction, and what carries forward (repos, branches, deployed state, the owner's standing constraints, lessons). Write the first one with `agentop coordinator direction new --text -`; while it is current you may edit it by hand. A new direction is always a new generation, `track/<N+1>/`, and the old files are never written again.
 - A new requirement from the owner, once a direction exists, is either an addendum or a new direction:
-  - **New direction** (`direction new`) only when it changes the goal or what done means, contradicts the direction, or makes most of the plan wrong.
-  - **Otherwise an addendum**: `agentop coordinator direction add --text -` with the requirement as the owner gave it. It goes under `## Addenda` in the current `DIRECTION.md` as `### Addendum k (date)`. Then change the plan for it (`plan milestone add`, `plan action add`, `plan action set`); `yield` refuses until you do. If it needs no plan change, say so with `direction add --no-plan-change`.
+  - **New direction** only when it changes the goal or what done means, contradicts the direction, or makes most of the plan wrong. Don't switch at once: `agentop coordinator direction change --text -` with the owner's words adds `Change direction: …` as the plan's first action, pending while tasks are open (a second change replaces it). No new task starts meanwhile; decide the running ones as usual. When the last closes, that change is your next action, before anything else: `agentop coordinator direction new` (it takes the pending text; `--copy-plan` to start from the last plan) records the old plan's final state and makes `track/<N+1>/`. Then write the new plan.
+  - **Otherwise an addendum**: `agentop coordinator direction add --text -` with the requirement as the owner gave it. It goes under `## Addenda` in the current `DIRECTION.md` as `### Addendum k (date)`. Then change the plan for it (`plan milestone add`, `plan action add`, `plan action set`); `yield` refuses until you do. If it needs no plan change, say so with `direction add --no-plan-change`. The direction stays the same generation.
   - **When unsure**, ask the owner once, with your recommendation: `yield owner --question "New direction, or an addendum to direction N?" --recommend "…" --default "…"`.
 - `PLAN.md`: milestones `M{m}` and their actions `M{m}A{a}`, in order, each with a status. `plan milestone add`, `plan action add M2 "…"` (`--before M2A3` to place it), `plan action set M2A3 --status dropped --reason "…"`. Numbers are never reused; order is the order in the file.
 - `EXECUTION_M{m}.md`: one entry per task (its brief, each round's report, your decisions), written by agentop when tasks open, report and close, and one per `agentop coordinator note`.
@@ -38,7 +38,7 @@ Your record is `track/<N>/` in the project folder, written through `agentop coor
 | `owner` | Only the owner can decide: product intent, authority, money, external effects, destructive or hard-to-undo steps | `--question`, `--recommend`, `--default`, and `--meanwhile` when something continues; it becomes a waiting-on-owner action |
 | `blocked` | Access, permission or an outside change is required and no workaround is reasonable | `--need`, `--tried` |
 
-agentop checks each reason. It refuses `waiting` with nothing pending, and any yield while a report waits for your decision or the track is out of step: no direction written, an addendum with no plan change after it, an open task with no action or from an older direction, an action done with no execution entry, or a milestone whose actions are all closed but that isn't closed with a summary. A refusal names the fix: take it. `agentop coordinator status` shows the same warnings.
+agentop checks each reason. It refuses `waiting` with nothing pending, and any yield while a report waits for your decision or the track is out of step: no direction written, an addendum with no plan change after it, a direction change pending with no task open (only `owner` passes), an action done with no execution entry, or a milestone whose actions are all closed but that isn't closed with a summary. A refusal names the fix: take it. `agentop coordinator status` shows the same warnings.
 
 `--next` is what you will do next and why, in a sentence or two: "Check dev's report against criterion 2, then start the docs task on M2A3". It is written to `track/<N>/NEXT.md`, and it is the first thing a cleared context reads, so make it something you can act on cold. `waiting` and `done` refuse without it, or with a placeholder.
 
@@ -90,7 +90,7 @@ The session ends with `agentop coordinator task report`, which tells you. Then (
 - `agentop coordinator task accept dev --checked "ran pytest: 212 pass; read results/dev-auth.md; login works in the browser"` stops the session, writes the execution entry, and marks the action done.
 - `agentop coordinator task reject dev --feedback "criterion 2 fails: …; change …"` sends round 2. You have 3 rounds in all.
 - `agentop coordinator task fail dev --note "…"` when the rounds are used up or the task was wrong; the action goes back to planned. Then replan.
-- At a direction change, a task still open is re-homed with `agentop coordinator task carry P1_M2A3-1 --to M1A4`.
+- While a direction change is pending, `task start` refuses: let the open tasks finish, then run `direction new`.
 
 agentop reminds a session that goes quiet without reporting, and tells you if it stays quiet. Look at its screen then: it may be at a permission prompt or asking something.
 
