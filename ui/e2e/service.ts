@@ -29,7 +29,7 @@ const SYSTEMD_RUN = (root: string) => `#!/bin/sh
 touch ${root}/updating
 `;
 
-const PYTHON = `${process.env.HOME}/.pyenv/versions/3.13.9/bin/python`;
+const PYTHON = process.env.AGENTOP_E2E_PYTHON ?? `${process.env.HOME}/.pyenv/versions/3.13.9/bin/python`;
 
 // Workers running at once each get their own block of ports.
 let nextPort = 19800 + Number(process.env.TEST_PARALLEL_INDEX ?? 0) * 500 + Math.floor(Math.random() * 400);

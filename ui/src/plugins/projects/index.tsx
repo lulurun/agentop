@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState, useSyncExternalStore, type FormEvent 
 import type { Session } from "../../api/client";
 import { DetailsPanel } from "../../components/DetailsPanel";
 import { Section } from "../../components/Section";
-import { TrashIcon } from "../../components/icons";
 import { SessionSections } from "../../components/Sidebar";
 import { useApp } from "../../store";
 import type { PluginContext, UiPlugin } from "../types";
@@ -98,9 +97,9 @@ function useProjects(plugin: PluginContext) {
     [plugin, open],
   );
 
-  const remove = useCallback(
-    async (name: string, deleteFolder: boolean) => {
-      await plugin.client.delete(`/projects/${encodeURIComponent(name)}?delete_folder=${deleteFolder}`);
+  const close = useCallback(
+    async (name: string) => {
+      await plugin.client.post(`/projects/${encodeURIComponent(name)}/close`);
       if (current.snapshot()[service] === name) current.set(service, null);
       await listing.load(plugin);
     },
@@ -108,7 +107,7 @@ function useProjects(plugin: PluginContext) {
   );
 
   const known = projects?.some((p) => p.name === chosen) ? chosen : undefined;
-  return { projects, chosen: known, open, create, remove };
+  return { projects, chosen: known, open, create, close };
 }
 
 function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
@@ -153,12 +152,45 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
   );
 }
 
-function Left({ plugin }: { plugin: PluginContext }) {
-  const { projects, chosen, open, create, remove } = useProjects(plugin);
-  function removeOne(name: string) {
-    if (!window.confirm(`Remove ${name} from the list? Its running sessions are stopped; nothing in its folder is changed.`)) return;
-    void remove(name, false).catch((e) => useApp.getState().setError(e instanceof Error ? e.message : String(e)));
+/** Asked in the page, not with window.confirm: where a webview shows no dialog, confirm answers no, and the old button did nothing. */
+function CloseProject({ name, onClose, onCancel }: { name: string; onClose(): Promise<void>; onCancel(): void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function close() {
+    setBusy(true);
+    setError("");
+    try {
+      await onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      setBusy(false);
+    }
   }
+
+  return (
+    <section className="project-close" aria-label={`Close ${name}?`}>
+      <p className="stop-note" role={busy ? "status" : undefined}>
+        {busy
+          ? `Closing ${name}…`
+          : `Close ${name}? It is marked closed in its track, its sessions are stopped, and it leaves this list. Its folder is kept: create ${name} again to load it.`}
+      </p>
+      {error && <p className="form-error">{error}</p>}
+      <div className="stop-buttons">
+        <button type="button" onClick={onCancel} disabled={busy}>
+          Cancel
+        </button>
+        <button type="button" className="primary" onClick={() => void close()} disabled={busy}>
+          Close {name}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function Left({ plugin }: { plugin: PluginContext }) {
+  const { projects, chosen, open, create, close } = useProjects(plugin);
+  const [closing, setClosing] = useState<string | null>(null);
 
   return (
     <>
@@ -166,13 +198,32 @@ function Left({ plugin }: { plugin: PluginContext }) {
         <NewProject onCreate={create} />
         <nav className="session-list" aria-label="Projects">
           {projects?.map((p) => (
-            <div key={p.name} className="project-row" aria-current={p.name === chosen ? "true" : undefined}>
-              <button type="button" className="project-pick" title={p.folder} onClick={() => void open(p.name)}>
-                {p.name}
-              </button>
-              <button type="button" className="icon" title={`Remove ${p.name}`} aria-label={`Remove ${p.name}`} onClick={() => removeOne(p.name)}>
-                <TrashIcon />
-              </button>
+            <div key={p.name}>
+              <div className="project-row" aria-current={p.name === chosen ? "true" : undefined}>
+                <button type="button" className="project-pick" title={p.folder} onClick={() => void open(p.name)}>
+                  {p.name}
+                </button>
+                <button
+                  type="button"
+                  className="project-close-button"
+                  title={`Close ${p.name}: its folder is kept`}
+                  aria-label={`Close ${p.name}`}
+                  aria-expanded={closing === p.name}
+                  onClick={() => setClosing(closing === p.name ? null : p.name)}
+                >
+                  Close
+                </button>
+              </div>
+              {closing === p.name && (
+                <CloseProject
+                  name={p.name}
+                  onCancel={() => setClosing(null)}
+                  onClose={async () => {
+                    await close(p.name);
+                    setClosing(null);
+                  }}
+                />
+              )}
             </div>
           ))}
           {projects && projects.length === 0 && <p className="session-empty">No projects yet.</p>}
