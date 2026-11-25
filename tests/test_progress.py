@@ -523,3 +523,58 @@ def test_ambiguous_legacy_and_edited_entries_are_shown_as_written(alpha, capsys,
     assert (api["raw"], api["rounds"][0]["summary"], api["state"]) == (None, "Also done", "awaiting review")
     assert sorted(result["issues"]) == [f"track/1/EXECUTION_M2.md: {i}'s entry can't be read unambiguously; its text is shown as written"
                                         for i in ("P1_M2A1-1", "P1_M2A1-2")]
+
+
+def test_a_legacy_report_quoting_an_evaluation_block_is_read_whole(alpha, capsys, sessions, monkeypatch):
+    old_writer(monkeypatch)
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    summary = "The status output included:\n\nEvaluation:\n- (not decided yet)\n\nThe example is part of the report."
+    report(monkeypatch, capsys, "dev", summary)
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", "Checked", "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Next row")
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "Also checked", "--project", "alpha")
+    without_snapshot()
+    result = progress.read(alpha)
+    dev, api = by_id(result)["P1_M2A1-1"], by_id(result)["P1_M2A2-1"]
+    assert (dev["rounds"][0]["summary"], dev["checked"], dev["raw"]) == (summary, "Checked", None)
+    assert (api["rounds"][0]["summary"], api["checked"]) == ("Next row", "Also checked") and result["issues"] == []
+
+
+def test_legacy_checked_text_quoting_the_previous_leftover_is_read_whole(alpha, capsys, sessions, monkeypatch):
+    old_writer(monkeypatch)
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    summary = "Verification complete.\n\n## Results\n\n148 tests passed."
+    report(monkeypatch, capsys, "dev", summary)
+    path = folder() / "track/1/EXECUTION_M2.md"
+    leftover = path.read_text().split("\n## Results", 1)[1].split("\n\n## P1_M2A2-1", 1)[0].rstrip()
+    checked = f"Verified against this excerpt:\n\n## Results{leftover}"
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Next row")
+    assert checked in path.read_text() and checked.endswith("Evaluation:\n- (not decided yet)")
+    without_snapshot()
+    result = progress.read(alpha)
+    dev, api = by_id(result)["P1_M2A1-1"], by_id(result)["P1_M2A2-1"]
+    assert (dev["rounds"][0]["summary"], dev["checked"], dev["raw"]) == (summary, checked, None)
+    assert api["rounds"][0]["summary"] == "Next row" and result["issues"] == []
+
+
+def test_a_legacy_entry_with_two_exact_readings_is_shown_as_written(alpha, capsys, sessions, monkeypatch):
+    old_writer(monkeypatch)
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    report(monkeypatch, capsys, "dev", "Done")
+    # Read either way, the entry renders back the same: the summary ends with a decision, or the checked text holds one.
+    checked = "First part\n\nEvaluation:\n- round 1 accepted: second part"
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Next row")
+    without_snapshot()
+    result = progress.read(alpha)
+    dev, api = by_id(result)["P1_M2A1-1"], by_id(result)["P1_M2A2-1"]
+    assert checked in dev["raw"] and dev["state"] == "accepted"
+    assert result["issues"] == ["track/1/EXECUTION_M2.md: P1_M2A1-1's entry can't be read unambiguously; its text is shown as written"]
+    assert api["rounds"][0]["summary"] == "Next row" and api["raw"] is None

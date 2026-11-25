@@ -12,7 +12,6 @@ import os
 import re
 import time
 from contextlib import contextmanager
-from itertools import accumulate
 from pathlib import Path
 
 from agentop import projects
@@ -268,91 +267,87 @@ def _counted(head: re.Match, lines: list[str], counts: list[str]) -> dict | None
     return entry
 
 
+MAX_LEGACY_CANDIDATES = 20
+
+
 def _legacy(head: re.Match, lines: list[str]) -> dict:
-    """An entry an older writer left: read by layout, without the leftovers of its older versions after it."""
+    """An entry an older writer left, read by layout: the one reading that reproduces it, or ambiguous.
+
+    That writer replaced an entry only up to the first '## ' line after its heading, so each earlier write holding
+    one left the rest of itself after the next. Those leftovers follow from the entry's own fields, which fixes
+    where the entry's own text ends. A reading counts only when its fields render back to exactly that text.
+    """
     raw = "\n".join(lines).strip()
-    entry, eval_at = _sections(head, lines, raw)
-    broken = entry.pop("broken", False)
-    pieces = set() if entry["ambiguous"] else _older_pieces(entry)
-    if not pieces:
-        entry["ambiguous"] = entry["ambiguous"] or broken
-        return entry
-    firsts = {p[0] for p in pieces}
-    good = _leftovers(lines, pieces)
-    suspect = False
-    for c in range(eval_at + 3, len(lines)):
-        if lines[c - 1] != "" or lines[c] not in firsts:
+    marks = _evaluation_marks(lines)
+    fits = []
+    for mark in marks[:MAX_LEGACY_CANDIDATES]:
+        whole = _sections(head, lines, raw, mark)
+        if whole["ambiguous"]:
             continue
-        suspect = True
-        if good[c]:
-            cut, _ = _sections(head, lines[:c - 1], raw)
-            if not cut["ambiguous"] and not cut.pop("broken", False) and _leftovers(lines[c:], _older_pieces(cut))[0]:
-                return cut
-    entry["ambiguous"] = suspect or broken
+        tail = _leftovers(whole)
+        own = lines[:len(lines) - len(tail) - 1] if tail else lines
+        if tail and (lines[len(own):] != ["", *tail] or len(own) <= mark + 1):
+            continue
+        entry = _sections(head, own, raw, mark)
+        if not entry["ambiguous"] and _leftovers(entry) == tail and _renders(entry, own):
+            fits.append(entry)
+    if len(fits) == 1 and len(marks) <= MAX_LEGACY_CANDIDATES:
+        return fits[0]
+    entry = _sections(head, lines, raw, marks[0] if marks else None)
+    entry["ambiguous"] = True
     return entry
 
 
-def _older_pieces(entry: dict) -> set[tuple[str, ...]]:
-    """What each version of this task before the latest looks like from its first '## ' line on.
+def _as_task(entry: dict, rounds: list[dict]) -> dict:
+    status = "accepted" if entry["checked"] is not None else "failed" if entry["note"] is not None else "open"
+    return {"id": entry["id"], "session": entry["session"], "tool": entry["tool"], "model": entry["model"],
+            "opened_at": None, "status": status, "checked": entry["checked"], "note": entry["note"],
+            **entry["input"], "rounds": rounds}
 
-    The older writer replaced an entry only up to the first '## ' line after its heading, so each version holding
-    one left exactly that much of itself behind the next.
-    """
-    if entry["input"] is None:
-        return set()
-    base = {"id": entry["id"], "session": entry["session"], "tool": entry["tool"], "model": entry["model"],
-            "opened_at": None, "status": "open", **entry["input"]}
-    states = []
+
+def _renders(entry: dict, lines: list[str]) -> bool:
+    """Whether the fields render back to exactly these lines, the times line's dates aside."""
+    if not entry["rounds"]:
+        return False
+    rounds = [{k: r.get(k) for k in ("summary", "blocked", "feedback")} for r in entry["rounds"]]
+    task = _as_task(entry, rounds)
+    rendered, _ = track.task_lines(task)
+    status = task["status"] if task["status"] != "open" else "reported" if rounds[-1].get("summary") else "open"
+    times = (entry["closed_minute"] is None or task["status"] != "open") and (
+        entry["rounds_count"], entry["md_status"]) == (len(rounds), status)
+    return times and len(rendered) == len(lines) and rendered[0] == lines[0] and rendered[2:] == lines[2:]
+
+
+def _leftovers(entry: dict) -> list[str]:
+    """The lines the older writer left after this entry: each earlier write from its first '## ' line on, newest first."""
+    writes: list[list[dict]] = [[{}]]
     for r, now in enumerate(entry["rounds"], 1):
         done = [{k: x.get(k) for k in ("summary", "blocked", "feedback")} for x in entry["rounds"][:r - 1]]
-        states.append(done + [{}])
         if now.get("summary"):
-            states.append(done + [{"summary": now["summary"], "blocked": now.get("blocked")}])
+            writes.append([*done, {"summary": now["summary"], "blocked": now.get("blocked")}])
         if now.get("feedback"):
-            states.append(done + [{k: now.get(k) for k in ("summary", "blocked", "feedback")}])
-    pieces = set()
-    for rounds in states:
-        lines, _ = track.task_lines({**base, "rounds": rounds})
+            writes.append([*done, {k: now.get(k) for k in ("summary", "blocked", "feedback")}])
+    if entry["checked"] is None and entry["note"] is None:
+        writes.pop()
+    tail: list[str] = []
+    for rounds in reversed(writes):
+        lines, _ = track.task_lines({**_as_task(entry, rounds), "status": "open"})
         first = next((i for i in range(1, len(lines)) if lines[i].startswith("## ")), None)
         if first is not None:
-            pieces.add(tuple(lines[first:]))
-    return pieces
+            tail += ([""] if tail else []) + lines[first:]
+    return tail
 
 
-def _leftovers(lines: list[str], pieces: set[tuple[str, ...]]) -> list[bool]:
-    """For each line, whether the lines from it on are such leftovers, one after another with a blank line between."""
-    text = "\n".join(lines) + "\n"
-    offsets = list(accumulate((len(line) + 1 for line in lines), initial=0))
-    by_first: dict[str, list[tuple[str, int]]] = {}
-    for p in pieces:
-        by_first.setdefault(p[0], []).append(("\n".join(p) + "\n", len(p)))
-    good = [False] * len(lines) + [True]
-    for i in range(len(lines) - 1, -1, -1):
-        for piece, size in by_first.get(lines[i], ()):
-            j = i + size
-            if j <= len(lines) and text.startswith(piece, offsets[i]) and (j == len(lines) or (lines[j] == "" and good[j + 1])):
-                good[i] = True
-                break
-    good[len(lines)] = False
-    return good
-
-
-def _sections(head: re.Match, lines: list[str], raw: str) -> tuple[dict, int]:
-    """The entry read by its layout, and where its Evaluation section starts."""
-    lines = lines[1:]
+def _sections(head: re.Match, lines: list[str], raw: str, mark: int | None) -> dict:
+    """The entry read by its layout, with its Evaluation section at line `mark`."""
     entry = _new_entry(head, raw)
-    if not _times(entry, lines[0] if lines else None):
+    if not _times(entry, lines[1] if len(lines) > 1 else None):
         entry["ambiguous"] = True
-    try:
-        out_at = lines.index("Output:")
-    except ValueError:
+    out_at = _output_at(lines)
+    if out_at is None or mark is None or not out_at < mark < len(lines) - 1:
         entry["ambiguous"] = True
-        return entry, 0
-    marks = _evaluation_marks(lines, out_at)
-    if not marks:
-        entry["ambiguous"] = True
-        return entry, 0
-    eval_at = marks[0]
+        return entry
+    lines, out_at, eval_at = lines[1:], out_at - 1, mark - 1
     entry["input"] = _parse_input(lines[1:out_at])
     if entry["input"] is None:
         entry["ambiguous"] = True
@@ -373,12 +368,12 @@ def _sections(head: re.Match, lines: list[str], raw: str) -> tuple[dict, int]:
         if found and _count(int(found[1])):
             n, kind, text = int(found[1]), found[2], found[3]
             key = {"rejected": "feedback", "accepted": "checked", "failed": "note"}[kind]
-            holder = rounds.setdefault(n, {"round": n}) if key == "feedback" else entry
-            if n < latest or holder.get(key) is not None:
-                # An earlier or repeated decision: what follows isn't this version's evaluation.
-                entry["broken"] = True
-                break
-            last, last_key, latest = holder, key, n
+            holder = rounds.get(n, {}) if key == "feedback" else entry
+            if last is not None and (last_key in ("checked", "note") or n < latest or holder.get(key) is not None):
+                # After the closing decision, or an earlier or repeated one: text of the field before it.
+                last[last_key] += "\n" + line
+                continue
+            last, last_key, latest = rounds.setdefault(n, {"round": n}) if key == "feedback" else entry, key, n
             last[key] = text
         elif found:
             entry["ambiguous"], last = True, None
@@ -390,12 +385,19 @@ def _sections(head: re.Match, lines: list[str], raw: str) -> tuple[dict, int]:
             holder[key] = holder[key].strip()
     count = max([entry["rounds_count"] or 0, *rounds])
     entry["rounds"] = [rounds.get(n, {"round": n}) for n in range(1, count + 1)]
-    return entry, eval_at + 1
+    return entry
 
 
-def _evaluation_marks(lines: list[str], out_at: int) -> list[int]:
-    """The lines that open an Evaluation section: 'Evaluation:' after a blank line, followed by a writer's bullet."""
-    return [i for i in range(out_at + 1, len(lines) - 1)
+def _output_at(lines: list[str]) -> int | None:
+    return lines.index("Output:") if "Output:" in lines else None
+
+
+def _evaluation_marks(lines: list[str]) -> list[int]:
+    """The lines that may open the Evaluation section: 'Evaluation:' after a blank line, followed by a writer's bullet."""
+    out_at = _output_at(lines)
+    if out_at is None:
+        return []
+    return [i for i in range(out_at + 2, len(lines) - 1)
             if lines[i] == "Evaluation:" and lines[i - 1] == ""
             and (_EVAL.match(lines[i + 1]) or lines[i + 1] == _UNDECIDED)]
 
