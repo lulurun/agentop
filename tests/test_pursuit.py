@@ -1,5 +1,6 @@
 """A Coordinator's tasks, stop reasons, idle checks and review (docs/0_13_projects.md, section 4.3)."""
 
+import json
 import os
 import time
 
@@ -168,44 +169,153 @@ def hook(sid, state, since):
     return SessionStatus(sid, state, since, "hook", "Stop" if state == "done" else "PostToolUse")
 
 
-def test_a_quiet_task_session_is_reminded_then_the_coordinator_is_told(alpha):
+def watching(project="alpha", **limits):
+    """A checker over a fake feed, with dev's task open; returns (checker, feed, [(to, text)])."""
+    if limits:
+        meta = projects.meta_dir(project) / "project.json"
+        meta.write_text(json.dumps({**json.loads(meta.read_text()), **limits}))
     sent = []
     feed = StatusFeed()
-    checker = Checker(lambda p, row, text: sent.append(row["display_name"]), status_feed=feed, pane=lambda row: None)
-    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+    checker = Checker(lambda p, row, text: sent.append((row["display_name"], text)), status_feed=feed,
+                      pane=lambda row: None)
+    pursuit.open_task(project, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+    return checker, feed, sent
+
+
+def kinds(project, kind):
+    return [e for e in pursuit.events(project) if e["kind"] == kind]
+
+
+def test_a_task_session_at_a_question_is_brought_to_the_coordinator_once_per_episode(alpha):
+    checker, feed, sent = watching()
     now = time.time()
-    feed.publish(hook("dev-1", "working", now))
-    checker.tick(rows(), now)
-    feed.publish(hook("dev-1", "done", now + 10))
-    checker.tick(rows(), now + 20)
+    feed.publish(SessionStatus("dev-1", "input", now, "hook", "PermissionRequest"))
+    checker.tick(rows(), now + 119)
     assert sent == []
-    checker.tick(rows(), now + 20 + checker.task_quiet_seconds)
-    assert sent == ["dev"]
-    checker.tick(rows(), now + 30 + checker.task_quiet_seconds)
-    assert sent == ["dev"]
-    later = now + 3 * checker.task_quiet_seconds
-    feed.publish(hook("dev-1", "working", later))
-    checker.tick(rows(), later)
-    feed.publish(hook("dev-1", "done", later + 5))
-    checker.tick(rows(), later + 10 + checker.task_quiet_seconds)
-    assert sent == ["dev", "Coordinator"]
-    assert [e["kind"] for e in pursuit.events(alpha)].count("task.quiet") == 1
+    checker.tick(rows(), now + 120)
+    checker.tick(rows(), now + 500)
+    assert [to for to, _ in sent] == ["Coordinator"]
+    assert "[task t1] dev has waited for input for 2m" in sent[0][1] and "Look at its screen" in sent[0][1]
+    feed.publish(hook("dev-1", "working", now + 600))
+    checker.tick(rows(), now + 601)
+    feed.publish(SessionStatus("dev-1", "input", now + 700, "hook", "Notification"))
+    checker.tick(rows(), now + 820)
+    assert [to for to, _ in sent] == ["Coordinator", "Coordinator"]
+    assert [e["session"] for e in kinds(alpha, "task.input")] == ["dev", "dev"]
+
+
+def test_the_thresholds_come_from_project_json_and_zero_turns_one_off(alpha):
+    checker, feed, sent = watching(task_input_after="30s", task_working_after=0)
+    feed.publish(SessionStatus("dev-1", "input", 100, "hook", "PermissionRequest"))
+    checker.tick(rows(), 130)
+    assert len(sent) == 1
+    feed.publish(hook("dev-1", "working", 200))
+    checker.tick(rows(), 200 + 10 * 3600)
+    assert len(sent) == 1
+
+
+def test_codexs_approval_prompt_seen_on_screen_counts_as_input(alpha):
+    checker, feed, sent = watching()
+    feed.publish(SessionStatus("dev-1", "input", 100, "screen", "PermissionRequest"))
+    checker.tick(rows(), 220)
+    assert len(sent) == 1 and "waited for input" in sent[0][1]
+
+
+def test_a_task_session_working_with_no_new_event_is_brought_to_the_coordinator_once(alpha):
+    checker, feed, sent = watching()
+    feed.publish(hook("dev-1", "working", 1000))
+    checker.tick(rows(), 1000 + 29 * 60)
+    assert sent == []
+    checker.tick(rows(), 1000 + 30 * 60)
+    checker.tick(rows(), 1000 + 50 * 60)
+    assert len(sent) == 1 and "dev has been working with no new event for 30m" in sent[0][1]
+    # Each tool event starts a new episode.
+    feed.publish(hook("dev-1", "working", 1000 + 51 * 60))
+    checker.tick(rows(), 1000 + 60 * 60)
+    assert len(sent) == 1
+    checker.tick(rows(), 1000 + 81 * 60)
+    assert len(sent) == 2 and len(kinds(alpha, "task.silent")) == 2
+
+
+def test_a_lost_stop_the_screen_guessed_counts_as_working_silently(alpha):
+    checker, feed, sent = watching()
+    feed.publish(SessionStatus("dev-1", "done", 1000, "screen", "screen"))
+    checker.tick(rows(), 1000 + 30 * 60)
+    assert len(sent) == 1 and "(its screen looks idle)" in sent[0][1]
+
+
+def test_done_without_a_report_reminds_the_session_then_tells_the_coordinator(alpha):
+    checker, feed, sent = watching()
+    now = 10_000.0
+    feed.publish(hook("dev-1", "done", now))
+    checker.tick(rows(), now + 179)
+    assert sent == []
+    checker.tick(rows(), now + 180)
+    checker.tick(rows(), now + 400)
+    assert [to for to, _ in sent] == ["dev"] and "only a reminder" in sent[0][1]
+    # Its reply to the reminder ends another turn: not reminded again.
+    feed.publish(hook("dev-1", "working", now + 401))
+    checker.tick(rows(), now + 401)
+    feed.publish(hook("dev-1", "done", now + 420))
+    checker.tick(rows(), now + 420 + 600)
+    assert [to for to, _ in sent] == ["dev"]
+    checker.tick(rows(), now + 420 + 2 * 3600)
+    checker.tick(rows(), now + 420 + 3 * 3600)
+    assert [to for to, _ in sent] == ["dev", "Coordinator"]
+    assert "dev ended its turn 2h ago without reporting round 1" in sent[1][1]
+    assert len(kinds(alpha, "task.reminded")) == 1 and len(kinds(alpha, "task.quiet")) == 1
+
+
+def test_a_turn_that_ends_while_a_background_job_runs_is_only_reminded(alpha):
+    checker, feed, sent = watching()
+    now = 10_000.0
+    for n in range(3):
+        start = now + n * 1000
+        feed.publish(hook("dev-1", "working", start))
+        checker.tick(rows(), start)
+        feed.publish(hook("dev-1", "done", start + 10))
+        checker.tick(rows(), start + 10 + 180)
+        # The job finishes before 2 h and wakes the session, which carries on.
+    assert [to for to, _ in sent] == ["dev", "dev"]
+    assert pursuit.task_for(alpha, "dev")["status"] == "open" and kinds(alpha, "task.quiet") == []
+
+
+def test_a_reported_task_is_not_reminded(alpha):
+    checker, feed, sent = watching()
+    write(alpha, "results/dev.md")
+    pursuit.report(alpha, "dev", "done")
+    feed.publish(hook("dev-1", "done", 100))
+    checker.tick(rows(), 100 + 3 * 3600)
+    assert sent == []
 
 
 @pytest.mark.parametrize("status", [
     SessionStatus("dev-1", "done", 0.0, "screen"),
+    SessionStatus("dev-1", "working", 0.0, "screen"),
     SessionStatus("dev-1", "unknown", 0.0, "unavailable"),
-    SessionStatus("dev-1", "input", 0.0, "hook", "PermissionRequest"),
 ])
-def test_a_task_session_is_not_reminded_on_a_screen_guess_no_status_or_a_question(alpha, status):
-    sent = []
-    feed = StatusFeed()
-    checker = Checker(lambda p, row, text: sent.append(row["display_name"]), status_feed=feed, pane=lambda row: None)
-    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+def test_a_task_session_without_hook_status_gets_no_notice(alpha, status):
+    checker, feed, sent = watching()
     feed.publish(status)
     checker.tick(rows(), 10)
-    checker.tick(rows(), 10 + 2 * checker.task_quiet_seconds)
+    checker.tick(rows(), 10 + 3 * 3600)
     assert sent == []
+
+
+def test_a_notice_while_a_wake_runs_waits_for_the_next_tick(alpha):
+    from types import SimpleNamespace
+
+    ran = []
+    accept = iter([False, True])
+    feed = StatusFeed()
+    checker = Checker(lambda *a: None, status_feed=feed, pane=lambda row: SimpleNamespace(agent=None),
+                      run=lambda project, fn: ran.append(project) or next(accept))
+    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
+    feed.publish(hook("coord-1", "working", 100))
+    feed.publish(SessionStatus("dev-1", "input", 100, "hook", "PermissionRequest"))
+    for at in (300, 302, 304):
+        checker.tick(rows(), at)
+    assert ran == ["alpha", "alpha"] and len(kinds(alpha, "task.input")) == 1
 
 
 def test_task_start_briefs_the_session_and_report_tells_the_coordinator(alpha, monkeypatch, capsys):
