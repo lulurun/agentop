@@ -122,13 +122,19 @@ def register_cli(cli) -> None:
     common = _common()
     sub = top.add_subparsers(dest="coordinator_command", metavar="<subcommand>")
 
-    direction = sub.add_parser("direction", help="The project's direction: new, show")
+    direction = sub.add_parser("direction", help="The project's direction: new, add, show")
     dsub = direction.add_subparsers(dest="direction_command", metavar="<subcommand>")
     new = dsub.add_parser("new", parents=[common], help="Start direction N+1: track/<N+1>/DIRECTION.md and PLAN.md")
     new.add_argument("--text", required=True, help="The direction: what the project pursues now, what done means; '-' reads stdin")
     new.add_argument("--copy-plan", action="store_true", help="Start the new plan as a copy of the last one")
     new.add_argument("--keep-open", action="store_true", help="Allow open tasks; carry each into the new plan afterwards")
-    dsub.add_parser("show", parents=[common], help="The current DIRECTION.md")
+    add = dsub.add_parser("add", parents=[common], help="Append a dated addendum to the current DIRECTION.md: a "
+                          "requirement that doesn't change the direction")
+    add.add_argument("--text", help="The new requirement, as the owner gave it; '-' reads stdin")
+    add.add_argument("--no-plan-change", action="store_true", help="The plan needs no change for it (without --text: "
+                     "for the addendum that waits for a plan change)")
+    add.add_argument("--direction", type=int, help="The direction to add to; only the current one is written")
+    dsub.add_parser("show", parents=[common], help="The current DIRECTION.md, with its addenda")
 
     plan = sub.add_parser("plan", help="The current PLAN.md: show, milestone add, action add|set, ask, answer")
     psub = plan.add_subparsers(dest="plan_command", metavar="<subcommand>")
@@ -562,10 +568,31 @@ def coordinator_direction(args, project: str) -> None:
             _fail(str(exc))
         print(f"Direction {n}: track/{n}/DIRECTION.md and track/{n}/PLAN.md.")
         print("Next: shape the plan with agentop coordinator plan milestone add / action add, then start tasks on its actions.")
+    elif command == "add":
+        if args.text is None and not args.no_plan_change:
+            _fail("agentop coordinator direction add --text - (or --no-plan-change for the addendum waiting on the plan)")
+        text = _read(args.text) if args.text is not None else ""
+        k = _locked(project, track.add_addendum, text, args.no_plan_change, args.direction)
+        n = track.generation(project)
+        pursuit.log(project, "direction.addendum", direction=n, addendum=k, plan_change=not args.no_plan_change)
+        if args.no_plan_change:
+            print(f"Addendum {k} of direction {n} needs no plan change; recorded in track/{n}/DIRECTION.md.")
+        else:
+            print(f"Addendum {k} is in track/{n}/DIRECTION.md. Next: update the plan for it (plan milestone add, "
+                  "action add or action set); yield refuses until you do, or until you record it needs no change "
+                  "with agentop coordinator direction add --no-plan-change.")
     elif command == "show":
         _print_file(track.direction_path(project))
     else:
-        _fail("agentop coordinator direction new|show")
+        _fail("agentop coordinator direction new|add|show")
+
+
+def _changes_plan(fn):
+    def run(project: str, *args):
+        found = fn(project, *args)
+        track.plan_changed(project)
+        return found
+    return run
 
 
 def coordinator_plan(args, project: str) -> None:
@@ -576,13 +603,13 @@ def coordinator_plan(args, project: str) -> None:
         else:
             print(_locked(project, lambda p: track.render_plan(track.load_plan(p), done_short=True)).rstrip())
     elif command == "milestone" and getattr(args, "milestone_command", None) == "add":
-        found = _locked(project, track.add_milestone, args.title, args.before)
+        found = _locked(project, _changes_plan(track.add_milestone), args.title, args.before)
         print(f"Added M{found['m']} {found['title']}.")
     elif command == "action" and getattr(args, "action_command", None) == "add":
-        found = _locked(project, track.add_action, args.milestone, args.title, args.before)
+        found = _locked(project, _changes_plan(track.add_action), args.milestone, args.title, args.before)
         print(f"Added {track.action_ref(found)} {found['title']}.")
     elif command == "action" and getattr(args, "action_command", None) == "set":
-        found = _locked(project, track.set_action, args.action, args.status, args.reason, args.note)
+        found = _locked(project, _changes_plan(track.set_action), args.action, args.status, args.reason, args.note)
         print(f"{track.action_ref(found)} is {found['status']}.")
     elif command == "ask":
         found, refreshed = _locked(project, track.ask, args.ref, args.question, args.recommend, args.default)

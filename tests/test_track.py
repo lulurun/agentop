@@ -92,7 +92,7 @@ def setup_plan(capsys):
 
 def test_every_coordinator_command_exists(alpha, capsys):
     commands = [
-        ("direction", "new"), ("direction", "show"), ("plan", "show"), ("plan", "milestone", "add"),
+        ("direction", "new"), ("direction", "add"), ("direction", "show"), ("plan", "show"), ("plan", "milestone", "add"),
         ("plan", "action", "add"), ("plan", "action", "set"), ("plan", "ask"), ("plan", "answer"),
         ("milestone", "close"), ("note",), ("task", "start"), ("task", "report"), ("task", "accept"), ("task", "reject"), ("task", "fail"),
         ("task", "list"), ("task", "show"), ("task", "carry"), ("yield",), ("review",), ("status",),
@@ -326,3 +326,86 @@ def test_a_new_project_welcomes_and_a_state_md_project_keeps_its_checks(alpha, c
     assert (folder() / "STATE.md").exists()
     out, _ = ag(capsys, "coordinator", "direction", "show", "--project", "alpha")
     assert out.startswith("# Direction 1")
+
+
+def test_direction_add_appends_numbered_addenda_and_status_shows_them(alpha, capsys, monkeypatch):
+    _, err = ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "Early", code=1)
+    assert "has no direction text yet" in err
+    setup_plan(capsys)
+    monkeypatch.setattr(track.time, "time", lambda: 1795000000.0)
+    out, _ = ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "-",
+                stdin="Also show the addenda in status.\n- one line each")
+    assert "Addendum 1 is in track/1/DIRECTION.md" in out and "plan milestone add" in out
+    ag(capsys, "coordinator", "plan", "action", "add", "M2", "Addenda in status", "--project", "alpha")
+    ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "Keep it short.", "--no-plan-change")
+    when = track._when(1795000000.0)
+    text = (folder() / "track/1/DIRECTION.md").read_text()
+    assert text.count("## Addenda") == 1
+    assert f"## Addenda\n\n### Addendum 1 ({when})\n\nAlso show the addenda in status.\n- one line each\n" in text
+    assert f"### Addendum 2 ({when})\n\nKeep it short.\n\nPlan: no change needed" in text
+    assert track.direction_text(alpha) == "Ship the track."
+
+    # k never goes back, even when an addendum is deleted by hand.
+    path = folder() / "track/1/DIRECTION.md"
+    path.write_text(text.split("### Addendum 2")[0])
+    ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "Third.", "--no-plan-change")
+    assert "### Addendum 3 (" in path.read_text() and "### Addendum 2" not in path.read_text()
+
+    out, _ = ag(capsys, "coordinator", "direction", "show", "--project", "alpha")
+    assert "### Addendum 1 (" in out and "### Addendum 3 (" in out
+    out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
+    assert "## Addenda" in out and "Also show the addenda in status." in out and "Third." in out
+
+    _, err = ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "## Heading", code=1)
+    assert "headings" in err
+    _, err = ag(capsys, "coordinator", "direction", "add", "--project", "alpha", code=1)
+    assert "--text -" in err
+
+
+def test_direction_add_refuses_older_directions_and_a_new_direction_starts_with_none(alpha, capsys):
+    setup_plan(capsys)
+    ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "More.")
+    ag(capsys, "coordinator", "direction", "new", "--project", "alpha", "--text", "Something else")
+    old = (folder() / "track/1/DIRECTION.md").read_text()
+    _, err = ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--direction", "1", "--text", "x", code=1)
+    assert "track/1 belongs to an older direction (the current one is 2); it is never written again" in err
+    assert (folder() / "track/1/DIRECTION.md").read_text() == old
+    assert "Addendum" not in (folder() / "track/2/DIRECTION.md").read_text()
+    # The pending plan change belonged to direction 1; direction 2 doesn't inherit it.
+    assert not any("Addendum" in p for p in pursuit.problems(alpha))
+    ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--direction", "2", "--text", "y", "--no-plan-change")
+    assert "### Addendum 1 (" in (folder() / "track/2/DIRECTION.md").read_text()
+
+
+@pytest.mark.parametrize("fix", [
+    ("plan", "milestone", "add", "Addenda"),
+    ("plan", "action", "add", "M2", "Addenda"),
+    ("plan", "action", "set", "M2A2", "--status", "blocked"),
+    ("direction", "add", "--no-plan-change"),
+])
+def test_yield_refuses_after_an_addendum_until_the_plan_changed(alpha, capsys, fix):
+    setup_plan(capsys)
+    blocked = ("coordinator", "yield", "blocked", "--need", "a", "--tried", "b", "--project", "alpha")
+    ag(capsys, "coordinator", "plan", "action", "add", "M2", "Before", "--project", "alpha")
+    ag(capsys, "coordinator", "direction", "add", "--project", "alpha", "--text", "Also export CSV.")
+    _, err = ag(capsys, *blocked, code=1)
+    assert "Addendum 1 of direction 1 hasn't changed the plan yet" in err
+    assert "plan milestone add, action add or action set" in err and "direction add --no-plan-change" in err
+    out, _ = ag(capsys, "coordinator", "status", "--project", "alpha")
+    assert "Addendum 1 of direction 1 hasn't changed the plan yet" in out
+    # Showing the plan, closing or asking isn't a change made for the addendum.
+    ag(capsys, "coordinator", "plan", "show", "--project", "alpha")
+    ag(capsys, "coordinator", "note", "M2A1", "x", "--project", "alpha")
+    ag(capsys, *blocked, code=1)
+    ag(capsys, "coordinator", *fix, "--project", "alpha")
+    ag(capsys, *blocked)
+    if fix[0] == "direction":
+        assert "Plan: no change needed" in (folder() / "track/1/DIRECTION.md").read_text().split("### Addendum 1")[1]
+    events = [e for e in pursuit.events(alpha) if e["kind"] == "direction.addendum"]
+    assert events[0]["addendum"] == 1 and events[0]["plan_change"] is True
+
+
+def test_no_plan_change_alone_needs_a_pending_addendum(alpha, capsys):
+    setup_plan(capsys)
+    _, err = ag(capsys, "coordinator", "direction", "add", "--no-plan-change", "--project", "alpha", code=1)
+    assert "No addendum waits for a plan change" in err
