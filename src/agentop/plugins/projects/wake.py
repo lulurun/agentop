@@ -192,7 +192,7 @@ def deliver_event(project: str, pane: Pane, text: str, source: str, task: str | 
 
 
 def context_share(row: dict, agent: AgentCli) -> tuple[int, int] | None:
-    session_id = row.get("session_id")
+    session_id = row.get("session_id") or agent.conversation_id(row.get("pid"))
     if not session_id:
         return None
     _, files = agent.transcript_files(session_id)

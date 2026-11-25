@@ -370,3 +370,26 @@ def test_the_service_route_types_the_event(fake_agents, monkeypatch):
         wait_for_screen(row["id"], "got: [task t1] dev reported")
         assert events("clear.skipped")[0]["reason"] == "no yield since the last event"
         assert service.http.post(f"{base}/nope/wake", json={"text": "x"}).status_code == 404
+
+
+def test_each_tool_reads_its_conversation_and_context_from_its_own_records(tmp_path):
+    import os
+
+    claude = ClaudeAgentCli(home=tmp_path)
+    (tmp_path / ".claude/sessions").mkdir(parents=True)
+    assert claude.conversation_id(os.getpid()) is None
+    (tmp_path / f".claude/sessions/{os.getpid()}.json").write_text(json.dumps({"sessionId": "conv-9"}))
+    assert claude.conversation_id(os.getpid()) == "conv-9"
+    log = tmp_path / "t.jsonl"
+    usage = {"input_tokens": 2, "cache_read_input_tokens": 100_000, "cache_creation_input_tokens": 20_000, "output_tokens": 8}
+    log.write_text("\n".join(json.dumps(r) for r in (
+        {"type": "assistant", "message": {"id": "a", "model": "claude-haiku-5-5", "usage": {"input_tokens": 5}}},
+        {"type": "assistant", "message": {"id": "b", "model": "claude-haiku-5-5", "usage": usage}},
+        {"type": "user", "message": {"content": "hi"}},
+    )) + "\n")
+    assert claude.context_tokens(log) == (120_010, 200_000)
+
+    rollout = tmp_path / "rollout-2026-11-25T03-05-00-x.jsonl"
+    info = {"last_token_usage": {"input_tokens": 150_000, "output_tokens": 500}, "model_context_window": 258_400}
+    rollout.write_text(json.dumps({"type": "event_msg", "payload": {"type": "token_count", "info": info}}) + "\n")
+    assert CodexAgentCli(home=tmp_path).context_tokens(rollout) == (150_500, 258_400)

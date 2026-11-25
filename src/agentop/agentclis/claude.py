@@ -9,6 +9,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
+import psutil
+
 from agentop.agentclis.base import AgentCli, Model, files_under, tail_records
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, saved_session
@@ -273,12 +275,24 @@ class ClaudeAgentCli(AgentCli):
             return None
 
     def conversation_id(self, pid: int | None) -> str | None:
-        """~/.claude/sessions/<pid>.json names the new session as soon as /clear runs."""
-        try:
-            meta = json.loads((self.home / ".claude" / "sessions" / f"{pid}.json").read_text())
-        except (OSError, ValueError, TypeError):
+        """~/.claude/sessions/<pid>.json names the new session as soon as /clear runs.
+
+        A launcher can wrap Claude Code in more processes of the same name, and the file is the innermost one's.
+        """
+        if not pid:
             return None
-        return meta.get("sessionId") if isinstance(meta, dict) else None
+        try:
+            chain = [pid, *(p.pid for p in psutil.Process(pid).children(recursive=True))]
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            chain = [pid]
+        for candidate in chain:
+            try:
+                meta = json.loads((self.home / ".claude" / "sessions" / f"{candidate}.json").read_text())
+            except (OSError, ValueError):
+                continue
+            if isinstance(meta, dict) and meta.get("sessionId"):
+                return meta["sessionId"]
+        return None
 
     def context_tokens(self, path: Path) -> tuple[int, int] | None:
         """The last assistant message's input, cached or not, plus its output."""
