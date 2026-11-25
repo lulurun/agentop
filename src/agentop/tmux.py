@@ -48,10 +48,10 @@ class CapturePane:
     """Static helpers for capturing tmux pane content."""
 
     @staticmethod
-    def screen(session: str) -> str:
-        """Return the text currently visible on screen (no scrollback)."""
+    def screen(session: str, escapes: bool = False) -> str:
+        """Return the text currently visible on screen (no scrollback); with escapes, its colours and attributes too."""
         try:
-            r = run("capture-pane", "-t", pane_target(session), "-p", text=True)
+            r = run("capture-pane", "-t", pane_target(session), "-p", *(["-e"] if escapes else []), text=True)
             return r.stdout if r.returncode == 0 else ""
         except _ERRORS:
             return ""

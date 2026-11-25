@@ -13,7 +13,7 @@ from typing import Optional
 import psutil
 
 from agentop import tmux
-from agentop.agentclis.base import AgentCli, Model, QuotaWindow, files_under
+from agentop.agentclis.base import AgentCli, Model, QuotaWindow, files_under, tail_records
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, StartResult, saved_session
 from agentop.tmux import CapturePane, Session
@@ -86,6 +86,8 @@ class CodexAgentCli(AgentCli):
     _HELPERS = ("app-server", "codex-code-mode-host")
     # The status line under the prompt: "<model> · <folder> · <thread name, or its first message cut with …>".
     _FOOTER_RE = re.compile(r"^\s*\S[^·\n]* · (?P<cwd>[~/][^·\n]*?) · (?P<name>[^·\n]+?)\s*$", re.MULTILINE)
+    prompt_mark = "›"
+    banner = ">_ OpenAI Codex"
     _RESUME_RE = re.compile(r"\bresume\s+([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\b")
 
     def __init__(self, home: Optional[Path] = None) -> None:
@@ -393,6 +395,22 @@ class CodexAgentCli(AgentCli):
             "cache_read_input_tokens": cached,
             "cache_creation_input_tokens": last.get("cache_write_input_tokens", 0),
         }
+
+    def cleared(self, screen: str) -> bool:
+        """Also, the footer names no thread: a new one has none until its first prompt."""
+        return super().cleared(screen) and not self._FOOTER_RE.search(screen)
+
+    def context_tokens(self, path: Path) -> tuple[int, int] | None:
+        """The last turn's input (it includes the cache) and output, against the window codex records."""
+        for record in reversed(tail_records(path)):
+            payload = record.get("payload") or {}
+            if record.get("type") != "event_msg" or not isinstance(payload, dict) or payload.get("type") != "token_count":
+                continue
+            info = payload.get("info") or {}
+            last, window = info.get("last_token_usage") or {}, info.get("model_context_window")
+            if last and window:
+                return (last.get("input_tokens") or 0) + (last.get("output_tokens") or 0), int(window)
+        return None
 
     def get_resume_cmd(self, session_id: str) -> str:
         return f"codex resume {session_id}"
