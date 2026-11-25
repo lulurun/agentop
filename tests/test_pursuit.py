@@ -7,7 +7,7 @@ import pytest
 
 from agentop import coordinator, projects
 from agentop.plugins.attention import Watcher
-from agentop.plugins.projects import cli, pursuit, review
+from agentop.plugins.projects import cli, pursuit, review, track
 from agentop.plugins.projects.checker import Checker
 
 
@@ -26,11 +26,42 @@ def write(project, rel, text="result"):
     return path
 
 
+STATE_TEMPLATE = """# State of alpha
+
+## Objective
+
+(What the project is for, and what "done" means.)
+
+## Where things are
+
+## Decisions
+
+## Open questions for the owner
+
+## Next
+"""
+
+
+def legacy(project):
+    """A project from before the track: STATE.md, and no track/."""
+    import shutil
+
+    shutil.rmtree(track.root(project))
+    (projects.folder(project) / pursuit.STATE_FILE).write_text(STATE_TEMPLATE)
+
+
 def touch_state(project):
     path = projects.folder(project) / pursuit.STATE_FILE
     path.write_text(path.read_text().replace(pursuit.OBJECTIVE_PLACEHOLDER, "Ship the thing."))
     later = time.time() + 1
     os.utime(path, (later, later))
+
+
+def direct(project):
+    """Direction 1 written, and M1 with one action, M1A1."""
+    pursuit.new_direction(project, "Ship the thing.")
+    with pursuit._locked(project):
+        track.add_action(project, "M1", "Add login")
 
 
 def test_a_task_needs_a_goal_criteria_and_an_artifact_in_the_project(alpha):
@@ -67,7 +98,8 @@ def test_three_rounds_then_only_fail(alpha):
     assert [e["kind"] for e in pursuit.events(alpha)][-1] == "task.fail"
 
 
-def test_yield_checks_each_reason(alpha):
+def test_yield_checks_each_reason_with_state_md_before_the_track(alpha):
+    legacy(alpha)
     with pytest.raises(pursuit.PursuitError, match="--recommend and --default"):
         pursuit.yield_turn(alpha, "owner", {"question": "Which?"})
     with pytest.raises(pursuit.PursuitError, match="Nothing is pending"):
@@ -203,7 +235,7 @@ def test_yield_clear_clears_the_coordinator_then_tells_it_once_to_carry_on(alpha
     assert delivered == []
     assert "context is cleared" in capsys.readouterr().out
     assert sent[0] == ("Coordinator", "/clear")
-    assert len(sent) == 2 and sent[1][0] == "Coordinator" and "STATE.md" in sent[1][1]
+    assert len(sent) == 2 and sent[1][0] == "Coordinator" and "agentop coordinator status" in sent[1][1]
     turn(lambda: pursuit.yield_turn(alpha, "owner", {"question": "Q?", "recommend": "R", "default": "D"}))
     assert len(sent) == 2
     kinds = [e["kind"] for e in pursuit.events(alpha)]
@@ -218,8 +250,8 @@ def test_done_and_waiting_clear_by_default_and_keep_stops_it(alpha, monkeypatch,
     delivered = []
     monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text, project)))
     monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
-    pursuit.open_task(alpha, "dev", "claude", "/x", "Add login", ["tests pass"], "results/dev.md")
-    touch_state(alpha)
+    direct(alpha)
+    pursuit.open_task(alpha, "dev", "claude", "/x", "Add login", ["tests pass"], "results/dev.md", action="M1A1")
     fields = dict.fromkeys(("evidence", "question", "recommend", "default", "meanwhile", "need", "tried", "note"), "")
 
     def run(kind, **flags):
@@ -263,8 +295,8 @@ def test_a_waiting_clear_is_not_resumed_and_the_next_report_says_the_context_was
     delivered, sent = [], []
     monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text)))
     monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
-    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md")
-    touch_state(alpha)
+    direct(alpha)
+    pursuit.open_task(alpha, "dev", "fakeagent", "/x", "Add login", ["tests pass"], "results/dev.md", action="M1A1")
     screens = Screens()
     checker = Checker(lambda p, row, text: sent.append(text), watcher=Watcher(screens.list_panes, screens.capture))
     now = time.time()
@@ -359,8 +391,9 @@ def test_task_start_briefs_the_session_and_report_tells_the_coordinator(alpha, m
     monkeypatch.setattr(ops, "first_prompt", lambda name, prompt: prompts.append(prompt))
     monkeypatch.setattr("agentop.cli.deliver", lambda target, text, project: delivered.append((target, text)))
 
+    direct(alpha)
     args = SimpleNamespace(
-        task_command="start", project="alpha", name="dev", tool="claude", cwd="/x", model=None,
+        task_command="start", project="alpha", name="dev", tool="claude", cwd="/x", model=None, action="M1A1",
         no_remote_control=True,
         goal="Add login", accept=["tests pass", "docs updated"], artifact="results/dev.md", prompt="Read README first.",
     )
@@ -391,7 +424,7 @@ def test_a_coordinator_must_start_tasks_not_plain_sessions(alpha, monkeypatch, c
     args = SimpleNamespace(cwd="/x", project=None, untracked=False, prompt=None, model=None, tool="claude", session_name="dev")
     with pytest.raises(SystemExit):
         core_cli.cmd_start(args)
-    assert "agentop task start" in capsys.readouterr().err
+    assert "agentop coordinator task start" in capsys.readouterr().err
 
 
 def test_coordinator_clear_waits_until_input_prompt_finishes(alpha, monkeypatch):

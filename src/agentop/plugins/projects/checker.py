@@ -25,8 +25,8 @@ CLEAR_SECONDS = 5.0
 TASK_QUIET_SECONDS = 2 * 3600.0
 
 RESUME = (
-    "[agentop] Your context was cleared. Read AGENTS.md, COORDINATOR_SKILL.md and STATE.md, run agentop task list, "
-    "then take the next best action toward the objective."
+    "[agentop] Your context was cleared. Read AGENTS.md and COORDINATOR_SKILL.md, run agentop coordinator status, "
+    "then take the next best action toward the direction."
 )
 
 

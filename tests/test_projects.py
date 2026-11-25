@@ -40,16 +40,19 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
     assert "COORDINATOR_SKILL.md" not in coordinator.instructions(dialogue)
     assert "## Coordinator rules" in coordinator.instructions(project)
     assert "## Coordinator rules" not in coordinator.instructions(dialogue)
-    assert "agentop task start" in coordinator.instructions(project)
-    assert "agentop task start" not in coordinator.instructions(dialogue)
+    assert "agentop coordinator task start --action" in coordinator.instructions(project)
+    assert "agentop coordinator" not in coordinator.instructions(dialogue)
     prompt = coordinator.welcome_prompt(project)
     normalized = " ".join(prompt.split())
     assert phrase in normalized
-    for command in ("agentop project show", "agentop task start", "agentop task accept", "agentop yield", "agentop review"):
+    for command in ("agentop project show", "agentop coordinator task start", "agentop coordinator task accept",
+                    "agentop coordinator yield", "agentop coordinator review", "agentop coordinator status"):
         assert command in normalized
-    assert "agentop yield owner --question" in normalized.split("<project-coordinator-skill>")[0]
+    assert "agentop coordinator yield owner --question" in normalized.split("<project-coordinator-skill>")[0]
     assert "`done` and `waiting` also clear your context" in normalized
     assert phrase in coordinator.resume_prompt(project)
+    assert "agentop coordinator status" in coordinator.resume_prompt(project)
+    assert "STATE.md" not in coordinator.resume_prompt(project).split("<project-coordinator-skill>")[0]
     assert phrase not in coordinator.welcome_prompt(dialogue)
     assert "agentop yield" not in coordinator.welcome_prompt(dialogue)
     assert coordinator.resume_prompt(dialogue) == ""
@@ -81,7 +84,9 @@ def test_the_instructions_are_written_once(tmp_path, monkeypatch):
     assert "You own the project's objective" not in agents.read_text()
     assert (projects.folder("alpha") / "CLAUDE.md").read_text() == "@AGENTS.md\n"
     assert (projects.folder("alpha") / coordinator.COORDINATOR_SKILL_FILE).read_text() == COORDINATOR_SKILL_SOURCE.read_text()
-    assert "## Objective" in (projects.folder("alpha") / "STATE.md").read_text()
+    assert not (projects.folder("alpha") / "STATE.md").exists()
+    assert "# Direction 1" in (projects.folder("alpha") / "track/1/DIRECTION.md").read_text()
+    assert "## M1 " in (projects.folder("alpha") / "track/1/PLAN.md").read_text()
     # The owner's text stays; only agentop's rules block is added, then kept up to date.
     agents.write_text("the owner's own")
     coordinator.write_instructions(found)

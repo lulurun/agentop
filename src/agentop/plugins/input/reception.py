@@ -116,7 +116,11 @@ def conversation_excerpt(messages: list) -> tuple[str, int]:
 
 
 def state_excerpt(folder: Path) -> str:
-    """A Projects project's Objective and Next, from its STATE.md, or ''."""
+    """A Projects project's direction and current milestone from its track, else Objective and Next from STATE.md, or ''."""
+    from agentop.plugins.projects import track
+
+    if track.exists(folder.name) and track.root(folder.name) == folder / track.TRACK_DIR:
+        return _cut(track.excerpt(folder.name), STATE_CHARS)
     try:
         text = (folder / "STATE.md").read_text(errors="replace")
     except OSError:
@@ -202,11 +206,13 @@ def resume_note(row: dict) -> str:
     if row.get("display_name") != projects.COORDINATOR or not row.get("project"):
         return ""
     folder = Path(row.get("cwd") or projects.folder(row["project"]))
-    files = [name for name in ("AGENTS.md", "COORDINATOR_SKILL.md", "STATE.md") if (folder / name).exists()]
+    tracked = owned_by_projects(row)
+    notes = ("AGENTS.md", "COORDINATOR_SKILL.md") if tracked else ("AGENTS.md", "COORDINATOR_SKILL.md", "STATE.md")
+    files = [name for name in notes if (folder / name).exists()]
     if not files:
         return ""
     read = ", ".join(files[:-1]) + (" and " if len(files) > 1 else "") + files[-1]
-    tasks = ", run agentop task list" if owned_by_projects(row) else ""
+    tasks = ", run agentop coordinator status" if tracked else ""
     return f"[agentop] Your context was cleared before this message. Read {read}{tasks}, then answer the owner:\n\n"
 
 

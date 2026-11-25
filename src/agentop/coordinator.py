@@ -65,12 +65,19 @@ def instructions(project: dict) -> str:
         else ""
     )
     start_line = (
-        "- `agentop task start <name> --tool <codex|claude|antigravity> --cwd <dir> --goal … --accept … --artifact …` "
-        "starts a session on a task; it reports back with `agentop task report`. `agentop task --help` has the rest."
+        "- `agentop coordinator task start --action <M…A…> <name> --tool <codex|claude|antigravity> --cwd <dir> --goal … "
+        "--accept … --artifact …` starts a session on a task of the plan; it reports back with `agentop task report`. "
+        "`agentop coordinator --help` has the rest."
         if _tracked(project)
         else "- `agentop start <name> --tool <codex|claude|antigravity> --cwd <dir> --prompt \"<task>\"` starts one in this "
         "project. A name is unique in the project, so plain names do: `dev`, `docs`, `deploy`. The session is told about "
         f"this folder and about you. When you need a result back, ask it to answer with `agentop send {projects.COORDINATOR} \"<result>\"`."
+    )
+    record = (
+        "`track/` holds the direction, plan and execution record that `agentop coordinator` writes, and `.project/` is "
+        "agentop's own record: edit neither by hand, except the current `track/<N>/DIRECTION.md`."
+        if _tracked(project)
+        else "`.project/` is agentop's own record: don't edit it."
     )
     text = f"""# Coordinator of {name}
 
@@ -78,7 +85,7 @@ You are the Coordinator of the agentop project `{name}`. The owner talks to you:
 
 ## This folder
 
-`{folder}` is the project folder. Keep briefs, requirements, plans, decisions, notes, and hand-over files here. Keep every source tree in `{folder}/code/<source-tree>`, including its Git repository. `.project/` is agentop's own record: don't edit it.
+`{folder}` is the project folder. Keep briefs, requirements, plans, decisions, notes, and hand-over files here. Keep every source tree in `{folder}/code/<source-tree>`, including its Git repository. {record}
 
 ## Sessions
 
@@ -110,10 +117,10 @@ def write_instructions(project: dict) -> None:
     if not claude.exists():
         claude.write_text("@AGENTS.md\n")
     if _tracked(project):
-        from agentop.plugins.projects import pursuit
+        from agentop.plugins.projects import track
 
         (folder / COORDINATOR_SKILL_FILE).write_text(COORDINATOR_SKILL_SOURCE.read_text())
-        pursuit.write_state_template(folder, project["name"])
+        track.write_first(project["name"])
 
 
 def welcome_prompt(project: dict) -> str:
@@ -123,7 +130,7 @@ def welcome_prompt(project: dict) -> str:
     unsaid = "Don't name the project or explain its folder; the owner knows what a project is."
     asks = f" Then \"You can ask me to:\" and a bulleted list, one short line each, of: {welcome}" if welcome else ""
     wait = (
-        " Before you end the turn, run: agentop yield owner --question \"What should this project achieve?\" "
+        " Before you end the turn, run: agentop coordinator yield owner --question \"What should this project achieve?\" "
         "--recommend \"Tell me the outcome and any constraints; I'll draft the brief and the plan\" "
         "--default \"Nothing to pursue until there is a goal\". Then wait for their request."
         if _tracked(project)
@@ -143,9 +150,19 @@ def resume_prompt(project: dict) -> str:
         return ""
     return (
         "You are resuming this project's Coordinator session. Reload and follow the Coordinator skill and the rules in "
-        "AGENTS.md, read STATE.md and agentop task list, then carry on toward the objective."
+        "AGENTS.md, run agentop coordinator status, then carry on toward the direction."
         f"{skill}"
     )
+
+
+def first_prompt(project: dict) -> str:
+    """The welcome, or the resume prompt when the folder already has a track in use (a project re-created on a kept folder)."""
+    if _tracked(project):
+        from agentop.plugins.projects import track
+
+        if track.started(project["name"]):
+            return resume_prompt(project)
+    return welcome_prompt(project)
 
 
 def member_header(project: dict, name: str) -> str:
@@ -168,5 +185,5 @@ def start_now(project: dict, available: list[str]) -> str | None:
         return None
     write_instructions(project)
     name = ops.start(tool, project["folder"], projects.COORDINATOR, project=project["name"]).name
-    ops.first_prompt(name, welcome_prompt(project), project["name"], projects.COORDINATOR)
+    ops.first_prompt(name, first_prompt(project), project["name"], projects.COORDINATOR)
     return name

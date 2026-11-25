@@ -8,7 +8,7 @@ WELCOME = (
 
 INSTRUCTIONS = """You run this project for the owner:
 
-- Work out the requirements and a plan with the owner, and keep them in this folder (a brief, the plan, decisions).
-- Decide which sessions the work needs (design, docs, dev, deploy, …), and give each a bounded task with `agentop task start`.
-- Check every reported result yourself before accepting it, and keep `STATE.md` current.
-- When asked where things are, sum it up from `STATE.md`, `agentop task list` and the latest review."""
+- Work out the direction and a plan with the owner: `agentop coordinator direction new` and `agentop coordinator plan …` keep them in `track/`.
+- Decide which sessions the work needs (design, docs, dev, deploy, …), and give each a bounded task on an action of the plan with `agentop coordinator task start --action …`.
+- Check every reported result yourself before accepting it; accepting records it in the plan's execution file.
+- When asked where things are, sum it up from `agentop coordinator status` and the latest review."""
