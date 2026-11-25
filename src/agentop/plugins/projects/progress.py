@@ -38,6 +38,9 @@ _NOTE_HEAD = re.compile(rf"^(P({_N})_(M({_N})A{_N}) note ({_N}))  by: (\S+)\s*$"
 _TIMES = re.compile(rf"^Opened (.+?)(?: · closed (.+?))? · rounds ({_N}) · (\S+)\s*$")
 _OUT = re.compile(rf"^- round ({_N}): (BLOCKED: )?(.*)$")
 _EVAL = re.compile(rf"^- round ({_N}) (rejected|accepted|failed): (.*)$")
+_UNDECIDED = "- (not decided yet)"
+# Where an entry starts: a task or note heading of any direction. Other '## ' lines are text inside a report.
+_BOUNDARY = re.compile(rf"^## P{_N}_M{_N}A{_N}(?:-{_N}\s| note {_N}\s)")
 
 
 @contextmanager
@@ -175,10 +178,15 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
     else:
         entry["ambiguous"] = True
     try:
-        out_at, eval_at = lines.index("Output:"), lines.index("Evaluation:")
+        out_at = lines.index("Output:")
     except ValueError:
         entry["ambiguous"] = True
         return entry
+    marks = _evaluation_marks(lines, out_at)
+    if not marks:
+        entry["ambiguous"] = True
+        return entry
+    eval_at, end = marks[0], _stale_tail(lines, marks)
     entry["input"] = _parse_input(lines[1:out_at])
     if entry["input"] is None:
         entry["ambiguous"] = True
@@ -191,10 +199,10 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
             last.update(summary=found[3], blocked=bool(found[2]))
         elif found:
             entry["ambiguous"], last = True, None
-        elif last is not None and line.strip():
+        elif last is not None:
             last["summary"] += "\n" + line
     last, last_key = None, None
-    for line in lines[eval_at + 1:]:
+    for line in lines[eval_at + 1:end]:
         found = _EVAL.match(line)
         if found and _count(int(found[1])):
             n, kind, text = int(found[1]), found[2], found[3]
@@ -203,11 +211,38 @@ def parse_task_entry(heading: str, raw: str) -> dict | None:
             last[key], last_key = text, key
         elif found:
             entry["ambiguous"], last = True, None
-        elif last is not None and line.strip():
+        elif last is not None:
             last[last_key] += "\n" + line
+    for key, holder in [("checked", entry), ("note", entry), *(("summary", r) for r in rounds.values()),
+                        *(("feedback", r) for r in rounds.values())]:
+        if isinstance(holder.get(key), str):
+            holder[key] = holder[key].strip()
     count = max([entry["rounds_count"] or 0, *rounds])
     entry["rounds"] = [rounds.get(n, {"round": n}) for n in range(1, count + 1)]
     return entry
+
+
+def _evaluation_marks(lines: list[str], out_at: int) -> list[int]:
+    """The lines that open an Evaluation section: 'Evaluation:' after a blank line, followed by a writer's bullet."""
+    return [i for i in range(out_at + 1, len(lines) - 1)
+            if lines[i] == "Evaluation:" and lines[i - 1] == ""
+            and (_EVAL.match(lines[i + 1]) or lines[i + 1] == _UNDECIDED)]
+
+
+def _stale_tail(lines: list[str], marks: list[int]) -> int:
+    """Where the entry's own text ends.
+
+    track._replace_entry rewrites an entry only up to its first '## ' line, so an entry whose text holds one keeps
+    the rest of each older version after the new one. Each such rest starts with that same line and what follows it.
+    """
+    first = next((i for i, line in enumerate(lines) if line.startswith("## ")), None)
+    if first is None:
+        return len(lines)
+    lead = lines[first:first + 3]
+    for i in range(max(marks[0] + 2, first + 1), len(lines)):
+        if lines[i - 1] == "" and lines[i:i + len(lead)] == lead:
+            return i - 1
+    return len(lines)
 
 
 def _parse_input(lines: list[str]) -> dict | None:
@@ -246,7 +281,7 @@ def _entries(reader: _Reader, path: Path):
     """(heading, raw entry) for each '## ' entry, streamed; an entry over MAX_RECORD_BYTES comes with raw None."""
     heading, body, size, over = None, [], 0, False
     for line in reader.lines(path):
-        if line is not None and line.startswith("## "):
+        if line is not None and _BOUNDARY.match(line):
             if heading is not None:
                 yield heading, None if over else "\n".join(body).strip()
             heading, body, size, over = line[3:], [line], len(line), False

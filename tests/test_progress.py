@@ -199,7 +199,8 @@ def test_markdown_only_closures_are_approximate_and_undated_ones_last(alpha, cap
     assert result["completed"][1]["closed_at"] == time.mktime(time.strptime("2026-11-25 10:05", "%Y-%m-%d %H:%M"))
     garbled = by_id(result)["P1_M2A1-4"]
     assert garbled["state"] == "unknown" and "garbled heading" in garbled["raw"]
-    assert any("Stray heading" in i for i in result["issues"])
+    # Only task and note headings start entries; any other '## ' line is text of the entry before it.
+    assert "## Stray heading" in garbled["raw"] and result["issues"] == []
 
 
 def test_files_outside_the_project_are_not_read(alpha, capsys, tmp_path):
@@ -337,3 +338,56 @@ def test_markdown_records_of_another_direction_are_never_joined(alpha, capsys, s
     result = progress.read(alpha)
     assert rows(result) == ["P1_M2A1-1", "P1_M2A1-2"] and result["notes"] == []
     assert sum("belongs to another direction" in i for i in result["issues"]) == 3
+
+
+def test_headings_inside_reports_stay_in_their_entry_without_tasks_json(alpha, capsys, sessions, monkeypatch):
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    start(capsys, "ops", "M2A2")
+    first = "Verification complete.\n\n## Results\n\n148 tests passed."
+    feedback = "Two things:\n\n## Missing\n\n- the docs\n- a test"
+    second = "Fixed both.\n\n## Results\n\n150 tests passed.\n\n### Notes\nNothing else."
+    checked = "Ran the suite.\n\n## Checked\n\nAll criteria."
+    report(monkeypatch, capsys, "dev", first)
+    ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", feedback, "--project", "alpha")
+    report(monkeypatch, capsys, "dev", second)
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Plain summary")
+    ag(capsys, "coordinator", "task", "accept", "api", "--checked", "Verified too", "--project", "alpha")
+    report(monkeypatch, capsys, "ops", "Half done.\n\n## Blocked on\n\nAccess.")
+    ag(capsys, "coordinator", "note", "M2A1", "Note after the tasks", "--project", "alpha")
+    execution = (folder() / "track/1/EXECUTION_M2.md").read_text()
+    assert first in execution and second in execution and execution.count("## Results") > 2
+    without_snapshot()
+
+    result = progress.read(alpha)
+    assert result["issues"] == []
+    assert [t["id"] for t in result["completed"]] == ["P1_M2A2-1", "P1_M2A1-1"]
+    dev, api, ops = (by_id(result)[i] for i in ("P1_M2A1-1", "P1_M2A2-1", "P1_M2A2-2"))
+    assert dev["input"] == {"goal": "dev's goal", "accept": ["tests pass"], "artifact": "results/dev.md",
+                            "brief": "Read the README first. / Then the spec."}
+    assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [(first, feedback), (second, None)]
+    assert (dev["state"], dev["checked"], dev["raw"]) == ("accepted", checked, None)
+    assert (api["rounds"][0]["summary"], api["checked"], api["input"]["goal"]) == ("Plain summary", "Verified too", "api's goal")
+    assert (ops["state"], ops["rounds"][0]["summary"]) == ("awaiting review", "Half done.\n\n## Blocked on\n\nAccess.")
+    assert [(n["action"], n["body"]) for n in result["notes"]] == [("M2A1", "Note after the tasks")]
+
+
+def test_a_heading_only_in_feedback_or_checked_text_is_kept_once(alpha, capsys, sessions, monkeypatch):
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    feedback = "Two things:\n\n## Missing\n\n- the docs"
+    checked = "Read it.\n\n## Checked\n\nEverything."
+    report(monkeypatch, capsys, "dev", "First try")
+    ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", feedback, "--project", "alpha")
+    report(monkeypatch, capsys, "dev", "Second try")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Same\n\n## Missing\n\n- the docs")
+    without_snapshot()
+    result = progress.read(alpha)
+    dev, api = by_id(result)["P1_M2A1-1"], by_id(result)["P1_M2A2-1"]
+    assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [("First try", feedback), ("Second try", None)]
+    assert dev["checked"] == checked and dev["state"] == "accepted" and result["issues"] == []
+    assert api["rounds"][0]["summary"] == "Same\n\n## Missing\n\n- the docs" and api["state"] == "awaiting review"
