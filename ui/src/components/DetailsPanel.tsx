@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import type { Session, TokenUsage } from "../api/client";
 import { platform } from "../platform";
 import { PluginSlot } from "../plugins/Slot";
@@ -158,7 +158,8 @@ function StopSession({ id, name }: { id: string; name: string }) {
   );
 }
 
-export const DetailsPanel = memo(function DetailsPanel() {
+/** `actions` are buttons for the selected session, at the end of its Details section. */
+export const DetailsPanel = memo(function DetailsPanel({ actions }: { actions?: ReactNode }) {
   const session = useApp(selectedSession);
   const pastId = useApp(focusedPastId);
   const act = useApp((s) => s.act);
@@ -208,6 +209,7 @@ export const DetailsPanel = memo(function DetailsPanel() {
           {session.runtime_seconds != null && <Row label="Running for" value={formatDuration(session.runtime_seconds)} />}
           {session.memory_mb != null && <Row label="Memory" value={`${Math.round(session.memory_mb)} MB`} />}
         </dl>
+        {actions && <section className="details-actions">{actions}</section>}
         {session.managed && session.status === "running" && (
           <StopSession key={`stop/${session.id}`} id={session.id} name={session.display_name} />
         )}

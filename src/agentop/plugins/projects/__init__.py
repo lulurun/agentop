@@ -7,14 +7,14 @@
 def register(api) -> None:
     import asyncio
 
-    from fastapi import HTTPException
+    from fastapi import HTTPException, Query
     from pydantic import BaseModel
 
     from agentop import ops, projects
     from agentop.agentclis import get_agent
     from agentop.tmux import PasteError
 
-    from . import pursuit, review, track, wake
+    from . import progress, pursuit, review, track, wake
     from .checker import Checker
     from .texts import INSTRUCTIONS, WELCOME
 
@@ -80,6 +80,12 @@ def register(api) -> None:
             "measure": {k: v for k, v in review.measure(name, 0.0).items() if k != "closed_tasks"},
             "latest_review": str(latest) if latest else None,
         }
+
+    @api.router.get("/projects/{name}/progress")
+    async def progress_state(name: str, generation: int | None = Query(None, ge=1)):
+        """One direction's documents, tasks and notes, read only; the current direction by default."""
+        own(name)
+        return await asyncio.to_thread(progress.read, name, generation)
 
     @api.router.post("/projects/{name}/wake")
     async def wake_coordinator(name: str, body: Wake):

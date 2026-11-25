@@ -1472,3 +1472,38 @@ button.icon.section-action:hover { background: var(--raised); color: var(--text)
 .start-pulse { width: 8px; height: 8px; border-radius: 50%; background: var(--action); animation: start-pulse 1.1s ease-in-out infinite; }
 @keyframes start-pulse { 50% { opacity: 0.25; } }
 @media (prefers-reduced-motion: reduce) { .start-pulse { animation: none; } }
+
+/* Right-panel tabs (Projects' Progress Viewer) */
+.side-tab-bar { position: sticky; top: -4px; z-index: 1; margin: -4px -14px 4px; }
+.side-tab-bar .tab[data-active] { background: var(--surface); box-shadow: inset 0 -2px 0 var(--action); }
+.tab-label:focus-visible, .progress-row:focus-visible { outline: 2px solid var(--action); outline-offset: -2px; }
+.progress-viewer { padding-bottom: 8px; }
+.progress-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.progress-toolbar button { margin-left: auto; }
+.progress-pick { display: flex; align-items: center; gap: 6px; color: var(--quiet); }
+.progress-error { margin: 4px 0 8px; }
+.progress-error .form-error { margin-bottom: 6px; }
+.progress-issues { margin: 0 0 8px; padding-left: 18px; color: var(--starting); font-size: 12.5px; }
+.progress-markdown { max-width: none; margin: 0; padding: 0 0 8px; font-size: 13px; line-height: 1.55; }
+.progress-markdown h1 { font-size: 1.3em; }
+.progress-markdown h2 { font-size: 1.12em; }
+.progress-markdown h3, .progress-markdown h4 { font-size: 1em; }
+.progress-markdown ul { padding-left: 18px; }
+.progress-image { color: var(--quiet); font-style: italic; }
+.progress-group { margin: 10px 0 4px; font-size: 12.5px; font-weight: 600; color: var(--quiet); }
+.progress-list { margin: 0; padding: 0; list-style: none; }
+.progress-task { border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; background: var(--ink); }
+.progress-row, .progress-note { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 6px 8px; text-align: left; background: none; border: 0; border-radius: 6px; }
+.progress-row-head { display: flex; justify-content: space-between; gap: 8px; }
+.progress-id { font-family: var(--code); font-size: 12px; overflow-wrap: anywhere; }
+.progress-state { flex: none; font-size: 12px; color: var(--quiet); }
+.progress-task[data-state="accepted"] .progress-state { color: var(--running); }
+.progress-task[data-state="failed"] .progress-state { color: var(--failed); }
+.progress-task[data-state="awaiting review"] .progress-state { color: var(--starting); }
+.progress-meta { color: var(--quiet); font-size: 12px; overflow-wrap: anywhere; }
+.progress-text { margin: 2px 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; }
+.progress-raw { font-family: var(--code); font-size: 12px; }
+.progress-detail { padding: 0 8px 8px; border-top: 1px solid var(--line); }
+.progress-detail ul { margin: 2px 0; padding-left: 18px; }
+.progress-field h5 { margin: 8px 0 2px; font-size: 12px; font-weight: 600; color: var(--quiet); text-transform: uppercase; letter-spacing: 0.04em; }
+.progress-round { margin: 4px 0; }
