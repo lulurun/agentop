@@ -156,7 +156,7 @@ function NewProject({ onCreate }: { onCreate(name: string): Promise<void> }) {
 function Left({ plugin }: { plugin: PluginContext }) {
   const { projects, chosen, open, create, remove } = useProjects(plugin);
   function removeOne(name: string) {
-    if (!window.confirm(`Stop ${name}'s sessions and remove the project? Its folder is kept.`)) return;
+    if (!window.confirm(`Remove ${name} from the list? Its running sessions are stopped; nothing in its folder is changed.`)) return;
     void remove(name, false).catch((e) => useApp.getState().setError(e instanceof Error ? e.message : String(e)));
   }
 

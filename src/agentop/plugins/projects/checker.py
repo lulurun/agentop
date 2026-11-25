@@ -1,63 +1,122 @@
-"""Watches Projects sessions on the scan tick: a Coordinator turn that cleared its context is told to carry on,
-and a quiet task session is reminded, then the Coordinator told.
+"""Watches Projects sessions on the scan tick: a Coordinator at a safe point is cleared when its yield asked,
+its context is large or a milestone closed; a task session long at a question, silent while working, or done
+without a report is reminded or brought to the Coordinator.
 
-Turns use the attention watcher, including lifecycle events and screen fallback.
+Turns come only from the attention plugin's status feed, as the tools' lifecycle events report them; a session
+with no such status (no hooks, a screen guess, the plugin off) is never cleared or reminded.
 """
 
 from __future__ import annotations
 
+import logging
 import queue
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from agentop import projects
-from agentop.plugins.attention import Watcher
+from agentop.service.config import parse_duration
+from agentop.status_feed import SessionStatus
 
-from . import pursuit
+from . import pursuit, wake
 
-# An owner typing a prompt also changes the screen; waiting this long keeps a prompt out of a half-typed one.
-QUIET_SECONDS = 60.0
-# Codex refuses /clear while a turn runs, so a yield's clear waits for the screen to go still; its spinner
-# ticks every second while busy.
-CLEAR_SECONDS = 5.0
-# A task session can sit on a still screen through a long test run or model call, so a short wait nags busy agents.
-TASK_QUIET_SECONDS = 2 * 3600.0
+LOG = logging.getLogger(__name__)
 
-RESUME = (
-    "[agentop] Your context was cleared. Read AGENTS.md, COORDINATOR_SKILL.md and STATE.md, run agentop task list, "
-    "then take the next best action toward the objective."
-)
+# Codex refuses /clear while a turn runs, and for a moment after it.
+CLEAR_SECONDS = 2.0
+# Each can be set per project in project.json (seconds, or "2m", "30m", "2h"; 0 turns it off).
+THRESHOLDS = {
+    "task_input_after": 120.0,
+    "task_working_after": 30 * 60.0,
+    # A turn can end while a background job runs: a reminder is harmless then, so it comes early.
+    "task_remind_after": 180.0,
+    "task_unreported_after": 2 * 3600.0,
+}
 
 
 @dataclass
 class Turn:
-    # A clear counts for the next turn end after it. The screen can't bound a turn's start: a short turn's
-    # clear can land before the tick that sees its output, and a pause before the final text ends busy.
-    after: float
-    handled: float | None = None
-    reminded: dict = field(default_factory=dict)
+    netted: float | None = None
+    unknown: bool = False
+    told: set = field(default_factory=set)
+    # The round last reminded: the turn after a reminder is likely its reply, so its end isn't reminded again.
+    reminded: tuple | None = None
+    reply_seen: bool = False
+
+
+def thresholds(project: dict | None) -> dict[str, float | None]:
+    """The project's thresholds in seconds, None where turned off."""
+    out = {}
+    for key, default in THRESHOLDS.items():
+        value = (project or {}).get(key, default)
+        try:
+            out[key] = parse_duration(value)
+        except ValueError:
+            LOG.warning("%s: %s=%r is not a duration; using %ss", (project or {}).get("name"), key, value, default)
+            out[key] = default
+    return out
+
+
+def feed_state(status: SessionStatus | None) -> SessionStatus | None:
+    """A task session's state for notices: the hooks', or the screen's when the hooks say working but it disagrees.
+
+    A notice is cheap, unlike a clear, so the screen fallback's Codex approval prompt and lost-Stop guess count here.
+    """
+    if wake.known(status) is not None:
+        return status
+    if status is not None and status.source == "screen" and status.event:
+        return SessionStatus(status.session_id, "input" if status.state == "input" else "working", status.since,
+                             status.source, status.event)
+    return None
+
+
+def age(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    if seconds < 3600:
+        return f"{seconds // 60}m"
+    return f"{seconds // 3600}h {seconds % 3600 // 60}m" if seconds % 3600 >= 60 else f"{seconds // 3600}h"
 
 
 class Checker:
-    def __init__(self, deliver: Callable[[str, str, str], None], quiet_seconds: float = QUIET_SECONDS,
-                 task_quiet_seconds: float = TASK_QUIET_SECONDS, watcher=None, status_feed=None):
+    def __init__(self, deliver: Callable[[str, dict, str], None], status_feed, pane=None, run=None):
         self._deliver = deliver
-        self.quiet_seconds = quiet_seconds
-        self.task_quiet_seconds = task_quiet_seconds
         self.status_feed = status_feed
         self.subscriptions = {}
         self.statuses = {}
-        self.watcher = watcher or Watcher(quiet_seconds=4.0)
         self.turns: dict[str, Turn] = {}
         self._rows: list[dict] = []
+        self._pane = pane or (lambda row: wake.pane_of(row, status_feed.latest))
+        self._run = run or self._in_thread
+        self._busy: set[str] = set()
+        self._busy_lock = threading.Lock()
+
+    def _in_thread(self, project: str, fn: Callable[[], object]) -> bool:
+        """A clear waits for its sign for up to half a minute, so it runs beside the tick, one per project."""
+        with self._busy_lock:
+            if project in self._busy:
+                return False
+            self._busy.add(project)
+
+        def run():
+            try:
+                fn()
+            except Exception as exc:  # noqa: BLE001 - a failed clear or paste is logged, and the next tick goes on
+                LOG.warning("%s: %s", project, exc)
+            finally:
+                with self._busy_lock:
+                    self._busy.discard(project)
+
+        threading.Thread(target=run, daemon=True, name=f"wake-{project}").start()
+        return True
 
     def reset(self) -> None:
         for sid, subscription in self.subscriptions.items():
             self.status_feed.unsubscribe(sid, subscription)
         self.subscriptions = {}
         self.statuses = {}
-        self.watcher.reset()
         self.turns = {}
 
     def tick(self, sessions: list[dict], now: float | None = None) -> None:
@@ -70,91 +129,125 @@ class Checker:
                 continue
             if project not in owned:
                 found = projects.get(project)
-                owned[project] = bool(found and found.get("owner") == "projects")
-            if owned[project]:
+                owned[project] = thresholds(found) if found and found.get("owner") == "projects" else None
+            if owned[project] is not None:
                 rows.append(row)
         self._rows = rows
         live = {row["id"] for row in rows}
-        if self.status_feed is None:
-            self.watcher.tick(rows, now)
-        else:
-            for sid in self.subscriptions.keys() - live:
-                self.status_feed.unsubscribe(sid, self.subscriptions.pop(sid))
-                self.statuses.pop(sid, None)
-            for sid in live:
-                if sid not in self.subscriptions:
-                    self.subscriptions[sid] = self.status_feed.subscribe(sid)
-                try:
-                    self.statuses[sid] = self.subscriptions[sid].get_nowait()
-                except queue.Empty:
-                    pass
+        for sid in self.subscriptions.keys() - live:
+            self.status_feed.unsubscribe(sid, self.subscriptions.pop(sid))
+            self.statuses.pop(sid, None)
+        for sid in live:
+            if sid not in self.subscriptions:
+                self.subscriptions[sid] = self.status_feed.subscribe(sid)
+            try:
+                self.statuses[sid] = self.subscriptions[sid].get_nowait()
+            except queue.Empty:
+                pass
         for sid in self.turns.keys() - live:
             del self.turns[sid]
         for row in rows:
-            if self.status_feed is None:
-                screen = self.watcher.screens.get(row["id"])
-                if screen is None:
-                    continue
-                state, since = screen.state, screen.waiting_since
-            else:
-                status = self.statuses.get(row["id"])
-                if status is None:
-                    continue
-                state = status.state
-                since = status.since if state in ("done", "input") else None
-            turn = self.turns.setdefault(row["id"], Turn(after=now))
-            coordinator = row.get("display_name") == projects.COORDINATOR
-            if state == "input":
+            turn = self.turns.setdefault(row["id"], Turn())
+            if row.get("display_name") != projects.COORDINATOR:
+                self._task_session(row, turn, owned[row["project"]], now)
                 continue
-            if coordinator and since is not None and now - since >= CLEAR_SECONDS:
-                self._clear(row)
-            quiet = self.quiet_seconds if coordinator else self.task_quiet_seconds
-            if since is None or turn.handled == since or now - since < quiet:
+            status = wake.known(self.statuses.get(row["id"]))
+            if status is None:
+                if not turn.unknown:
+                    self._unknown(row)
+                turn.unknown = True
                 continue
-            turn.handled = since
-            if coordinator:
-                self._coordinator(row, turn)
-                turn.after = since
-            else:
-                self._member(row, turn)
+            turn.unknown = False
+            if status.state == "done" and now - status.since >= CLEAR_SECONDS and turn.netted != status.since:
+                turn.netted = status.since
+                self._net(row)
 
-    def _coordinator(self, row: dict, turn: Turn) -> None:
-        project = row["project"]
-        # Turns without a yield aren't counted: an idle screen also changes (Codex's usage warnings, /status, a draft).
-        # After done or waiting there is nothing to carry on with, and a prompt would only yield and clear again.
-        if any(e["kind"] == "clear" and e.get("type") not in pursuit.CLEARING_KINDS
-               for e in pursuit.events(project, turn.after)):
-            pursuit.log(project, "resume")
-            self._deliver(project, row, RESUME)
-
-    def _clear(self, row: dict) -> None:
-        project = row["project"]
-        pending = pursuit.pending_clear(project)
-        if pending is not None:
-            self._deliver(project, row, "/clear")
-            pursuit.log(project, "clear", type=pending.get("type"))
-
-    def _member(self, row: dict, turn: Turn) -> None:
-        project = row["project"]
-        task = pursuit.task_for(project, row.get("display_name") or "")
-        if task is None or not pursuit.awaiting_report(task):
+    def _task_session(self, row: dict, turn: Turn, limits: dict, now: float) -> None:
+        """At most one notice per episode: a state, from the `since` of the event that began it."""
+        status = feed_state(self.statuses.get(row["id"]))
+        if status is None or status.state not in ("input", "working", "done"):
             return
-        key = (task["id"], len(task["rounds"]))
-        times = turn.reminded.get(key, 0)
-        turn.reminded[key] = times + 1
-        if times == 0:
+        waited = now - status.since
+        episode = (status.state, status.since)
+        due = [key for key in (("task_input_after",) if status.state == "input" else
+                               ("task_working_after",) if status.state == "working" else
+                               ("task_remind_after", "task_unreported_after"))
+               if limits[key] is not None and waited >= limits[key] and (key, *episode) not in turn.told]
+        if not due:
+            return
+        task = pursuit.task_for(row["project"], row.get("display_name") or "")
+        for key in due:
+            if task is None or (status.state == "done" and not pursuit.awaiting_report(task)) \
+                    or self._notice(key, row, task, status, waited, turn):
+                turn.told.add((key, *episode))
+
+    def _notice(self, key: str, row: dict, task: dict, status: SessionStatus, waited: float, turn: Turn) -> bool:
+        project, session, n = row["project"], task["session"], len(task["rounds"])
+        head = f"[task {task['id']}] {session}"
+        if key == "task_remind_after":
+            if turn.reminded == (task["id"], n) and not turn.reply_seen:
+                turn.reply_seen = True
+                return True
+            turn.reminded, turn.reply_seen = (task["id"], n), False
+            pursuit.log(project, "task.reminded", task=task["id"], session=session, round=n)
             self._deliver(project, row, (
-                f"[agentop task {task['id']}] You have gone quiet without reporting. If you are done, run "
-                "agentop task report \"…\". If something stops you, run agentop task report --blocked \"…\"."
+                f"[task {task['id']}] Your turn ended without a report. If you are done, run "
+                "agentop coordinator task report \"…\". If something stops you, run agentop coordinator task report "
+                "--blocked \"…\". If you are waiting on a background job, carry on; this is only a reminder."
             ))
-        elif times == 1:
-            pursuit.log(project, "task.quiet", task=task["id"], session=task["session"])
-            coordinator = next(
-                (r for r in self._rows if r.get("project") == project and r.get("display_name") == projects.COORDINATOR),
-                None,
+            return True
+        if key == "task_input_after":
+            kind, text = "task.input", (
+                f"{head} has waited for input for {age(waited)}"
+                f"{' (an approval prompt on its screen)' if status.source == 'screen' else ''}. "
+                "Look at its screen: answer it, or tell the owner if it needs them."
             )
-            if coordinator is not None:
-                self._deliver(project, coordinator, pursuit.wake_note(project) + (
-                    f"[agentop task {task['id']}] {task['session']} has gone quiet twice without reporting round "
-                    f"{len(task['rounds'])}. Look at its screen and decide: answer it, reject with feedback, or fail it."
-                ))
+        elif key == "task_working_after":
+            kind, text = "task.silent", (
+                f"{head} has been working with no new event for {age(waited)}"
+                f"{' (its screen looks idle)' if status.source == 'screen' else ''}. A tool call may hang or its Stop "
+                "was lost. Look at its screen and decide: wait, nudge it, or fail it."
+            )
+        else:
+            kind, text = "task.quiet", (
+                f"{head} ended its turn {age(waited)} ago without reporting round {n}. "
+                "Look at its screen and decide: answer it, reject with feedback, or fail it."
+            )
+        coordinator = next(
+            (r for r in self._rows if r.get("project") == project and r.get("display_name") == projects.COORDINATOR),
+            None,
+        )
+        if coordinator is None:
+            pursuit.log(project, kind, task=task["id"], session=session, seconds=round(waited), told=False)
+            return True
+        if not self._tell_coordinator(project, coordinator, text, kind, task["id"]):
+            return False
+        pursuit.log(project, kind, task=task["id"], session=session, seconds=round(waited), told=True)
+        return True
+
+    def _net(self, row: dict) -> None:
+        """At the end of each Coordinator turn: the safety net of spec 9.3, and the clear a yield asked for."""
+        project = row["project"]
+        pane = self._pane(row)
+        if pane is None:
+            return
+        found = wake.clear_reason(project, row, pane.agent)
+        if found is not None:
+            why, explicit = found
+            self._run(project, lambda: wake.safety_clear(project, pane, why, explicit))
+
+    def _unknown(self, row: dict) -> None:
+        """A Coordinator whose status turned unknown is never cleared on a guess; say so once if a clear was due."""
+        project = row["project"]
+        pane = self._pane(row)
+        found = wake.clear_reason(project, row, pane.agent) if pane is not None else None
+        if found is not None:
+            pursuit.log(project, "clear.skipped", reason=wake.UNKNOWN, why=found[0])
+
+    def _tell_coordinator(self, project: str, row: dict, text: str, source: str, task: str | None = None) -> bool:
+        """Whether it was sent or started: a wake already running for the project defers it to a later tick."""
+        pane = self._pane(row)
+        if pane is None:
+            self._deliver(project, row, pursuit.wake_note(project, source) + text)
+            return True
+        return self._run(project, lambda: wake.deliver_event(project, pane, text, source, task)) is not False

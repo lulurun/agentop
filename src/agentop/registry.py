@@ -63,7 +63,10 @@ def _project_names() -> list[str]:
     root = projects_dir()
     if not root.is_dir():
         return []
-    return sorted(d.name for d in root.iterdir() if (d / projects.META_DIR / "sessions.json").is_file())
+    meta = lambda d: d / projects.META_DIR  # noqa: E731
+    # A removed project keeps its sessions.json; without project.json its records are not listed.
+    return sorted(d.name for d in root.iterdir()
+                  if (meta(d) / "sessions.json").is_file() and (d.name == projects.DEFAULT or (meta(d) / "project.json").is_file()))
 
 
 def _read(project: str) -> dict:

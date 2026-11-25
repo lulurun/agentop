@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import queue
+import socket
 import tempfile
 import threading
 from dataclasses import dataclass
@@ -32,6 +34,10 @@ class StatusFeed:
             if session_id in self._latest:
                 subscription.put_nowait(self._latest[session_id])
         return subscription
+
+    def latest(self, session_id: str) -> SessionStatus | None:
+        with self._lock:
+            return self._latest.get(session_id)
 
     def unsubscribe(self, session_id: str, subscription: queue.Queue) -> None:
         with self._lock:
@@ -72,3 +78,21 @@ def socket_path(state: Path) -> Path:
     key = hashlib.sha256(os.fsencode(state.resolve())).hexdigest()[:20]
     temporary = Path("/tmp") if Path("/tmp").is_dir() else Path(tempfile.gettempdir())
     return temporary / f"agentop-{os.getuid()}-{key}" / "feed.sock"
+
+
+def fetch(state: Path, session_id: str, timeout: float = 1.0) -> SessionStatus | None:
+    """The latest status the service's bridge has for a session; None when it has none or isn't running."""
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(timeout)
+            connection.connect(str(socket_path(state)))
+            connection.sendall(json.dumps({"session_id": session_id}).encode() + b"\n")
+            pending = b""
+            while b"\n" not in pending:
+                data = connection.recv(4096)
+                if not data:
+                    return None
+                pending += data
+        return SessionStatus(**json.loads(pending.split(b"\n", 1)[0]))
+    except (OSError, ValueError, TypeError):
+        return None

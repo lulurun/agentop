@@ -1,4 +1,4 @@
-"""`agentop review`: how well the Coordinator pursued, measured from the project's event log, as a report for it and the owner."""
+"""`agentop coordinator review`: how well the Coordinator pursued, measured from the project's event log, as a report for it and the owner."""
 
 from __future__ import annotations
 
@@ -78,7 +78,7 @@ def measure(project: str, since: float, now: float | None = None) -> dict:
         "owner_asks": [e for e in yields if e.get("type") == "owner"],
         "blocks": [e for e in yields if e.get("type") == "blocked"],
         "closed_tasks": closed,
-        "state_problems": pursuit.state_problems(project),
+        "state_problems": pursuit.problems(project),
     }
 
 
@@ -96,7 +96,7 @@ def findings(m: dict) -> list[tuple[str, str, str]]:
         found.append(("medium", f"Only {_pct(m['first_round_rate'])} of accepted tasks passed in round 1",
                       "Briefs are under-specified: sharpen the goal, criteria and what to verify before starting."))
     if m["failed"]:
-        found.append(("medium", f"{m['failed']} tasks failed", "Note in STATE.md why, and whether the split or the tool choice was wrong."))
+        found.append(("medium", f"{m['failed']} tasks failed", "Note in the plan why (agentop coordinator note), and whether the split or the tool choice was wrong."))
     if m["quiet"]:
         found.append(("medium", f"{m['quiet']} times a session went quiet without reporting",
                       "Check its screen sooner (permission prompts, questions); say in briefs when to report blocked."))
@@ -104,10 +104,10 @@ def findings(m: dict) -> list[tuple[str, str, str]]:
         found.append(("medium", f"Tasks waiting over 2 hours for a report: {', '.join(m['stale'])}",
                       "Look at those sessions now; fail and replan if they are stuck."))
     if m["untracked"]:
-        found.append(("low", f"Sessions started outside agentop task: {', '.join(m['untracked'])}",
-                      "Start delegated work with agentop task start so it has criteria, an artifact and rounds."))
+        found.append(("low", f"Sessions started outside agentop coordinator task: {', '.join(m['untracked'])}",
+                      "Start delegated work with agentop coordinator task start so it has criteria, an artifact and rounds."))
     for problem in m["state_problems"]:
-        found.append(("medium", problem, "STATE.md is what a fresh context reads first; keep it current."))
+        found.append(("medium", problem, "The track is what a fresh context reads first; keep it current."))
     order = {"high": 0, "medium": 1, "low": 2}
     return sorted(found, key=lambda f: order[f[0]])
 
@@ -172,7 +172,7 @@ def render(project: str, m: dict, found: list, before: dict | None) -> str:
         *[f"{n}. {q}" for n, q in enumerate(CRITERIA, 1)],
         "",
         "Results are feedback for calibration, not hindsight proof. Which stops were premature? "
-        "Write one concrete change you will make, and keep it in STATE.md under Decisions.",
+        "Write one concrete change you will make, and keep it under Carried forward in the current DIRECTION.md.",
         "",
     ]
     return "\n".join(lines)

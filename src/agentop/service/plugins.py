@@ -172,7 +172,7 @@ class PluginAPI:
         return found
 
     async def remove_project(self, name: str, delete_folder: bool = False) -> None:
-        """Stop a project's sessions and forget it. Only the plugin's own. Raises projects.ProjectError."""
+        """Stop a project's running sessions and unregister it. Only the plugin's own. Raises projects.ProjectError."""
         from agentop import projects
 
         found = await asyncio.to_thread(projects.get, name)

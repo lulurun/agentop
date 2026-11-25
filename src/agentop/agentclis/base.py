@@ -10,7 +10,9 @@ names a tool itself.
 
 from __future__ import annotations
 
+import json
 import random
+import re
 import shlex
 import shutil
 import string
@@ -102,6 +104,39 @@ class AgentCli:
         """
         Session.paste_text_bracketed(session, text)
         Session.send_keys(session, "Enter")
+
+    # ------------------------------------------------------------------ clearing its context
+    # What starts the input line, and each earlier prompt the screen shows above it; None for a tool
+    # whose screen isn't read, so agentop never clears it on its own.
+    prompt_mark: str | None = None
+    # Drawn at the top of a new conversation, so it is on screen right after /clear.
+    banner: str | None = None
+
+    def draft(self, screen: str) -> bool | None:
+        """Whether text sits in the input line, from a capture with escapes (placeholders are dim); None if unknown."""
+        if not self.prompt_mark:
+            return None
+        lines = [line for line in screen.splitlines() if _plain(line).lstrip().startswith(self.prompt_mark)]
+        if not lines:
+            return None
+        raw = lines[-1]
+        return bool(_undimmed(raw[raw.index(self.prompt_mark) + len(self.prompt_mark):]).strip())
+
+    def cleared(self, screen: str) -> bool:
+        """Whether a plain capture shows a new conversation: the banner, and no earlier prompt but /clear."""
+        if not self.prompt_mark or not self.banner or self.banner not in screen:
+            return False
+        prompts = [line.strip()[len(self.prompt_mark):].strip() for line in screen.splitlines()
+                   if line.strip().startswith(self.prompt_mark)]
+        return bool(prompts) and all(p == "/clear" for p in prompts[:-1])
+
+    def conversation_id(self, pid: int | None) -> str | None:
+        """The conversation a live process holds, if the tool records it at once; /clear changes it."""
+        return None
+
+    def context_tokens(self, path: Path) -> tuple[int, int] | None:
+        """(tokens in the context now, the model's window) from the end of a transcript, or None."""
+        return None
 
     # ------------------------------------------------------------------ startup
     start_timeout: float = 30.0
@@ -326,3 +361,52 @@ class AgentCli:
     def get_session_meta(self, pid: int, cwd: str) -> dict:
         """What the live process is doing: any of session_id, ai_title, token_usage, and the tool's own extras."""
         return {}
+
+
+_SGR = re.compile(r"\x1b\[([0-9;]*)m")
+_ESCAPE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
+def _plain(line: str) -> str:
+    return _ESCAPE.sub("", line)
+
+
+def _undimmed(line: str) -> str:
+    """The text of a captured line that isn't drawn dim, as placeholders and suggestions are."""
+    out, dim, at = [], False, 0
+    for found in _SGR.finditer(line):
+        if not dim:
+            out.append(_plain(line[at:found.start()]))
+        codes = found.group(1).split(";") if found.group(1) else ["0"]
+        for code in codes:
+            if code in ("0", "22"):
+                dim = False
+            elif code == "2":
+                dim = True
+        at = found.end()
+    if not dim:
+        out.append(_plain(line[at:]))
+    return "".join(out)
+
+
+def tail_records(path: Path, size: int = 512 * 1024) -> list[dict]:
+    """The JSON records in the last `size` bytes of a JSON-lines file, oldest first."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, 2)
+            end = f.tell()
+            f.seek(max(0, end - size))
+            data = f.read().decode(errors="replace")
+    except OSError:
+        return []
+    lines = data.splitlines()[1:] if end > size else data.splitlines()
+    found = []
+    for line in lines:
+        try:
+            record = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(record, dict):
+            found.append(record)
+    return found
+

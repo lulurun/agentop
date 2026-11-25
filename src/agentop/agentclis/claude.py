@@ -9,7 +9,9 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Optional
 
-from agentop.agentclis.base import AgentCli, Model, files_under
+import psutil
+
+from agentop.agentclis.base import AgentCli, Model, files_under, tail_records
 from agentop.conversation import TRANSCRIPT, Message, Reader, epoch, json_lines, texts
 from agentop.results import SavedSession, saved_session
 
@@ -85,6 +87,9 @@ class ClaudeAgentCli(AgentCli):
 
     # Shown under the input box, and not on the trust prompt.
     READY_MARKER = "shift+tab to cycle"
+    prompt_mark = "❯"
+    banner = "Claude Code v"
+    context_window = 200_000
     TRUST_YES = "yes, i trust this folder"
     TRUST_DONE = "enter to confirm"
 
@@ -268,6 +273,38 @@ class ClaudeAgentCli(AgentCli):
             return _sum_usage(json_lines(path))
         except OSError:
             return None
+
+    def conversation_id(self, pid: int | None) -> str | None:
+        """~/.claude/sessions/<pid>.json names the new session as soon as /clear runs.
+
+        A launcher can wrap Claude Code in more processes of the same name, and the file is the innermost one's.
+        """
+        if not pid:
+            return None
+        try:
+            chain = [pid, *(p.pid for p in psutil.Process(pid).children(recursive=True))]
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            chain = [pid]
+        for candidate in chain:
+            try:
+                meta = json.loads((self.home / ".claude" / "sessions" / f"{candidate}.json").read_text())
+            except (OSError, ValueError):
+                continue
+            if isinstance(meta, dict) and meta.get("sessionId"):
+                return meta["sessionId"]
+        return None
+
+    def context_tokens(self, path: Path) -> tuple[int, int] | None:
+        """The last assistant message's input, cached or not, plus its output."""
+        for record in reversed(tail_records(path)):
+            msg = record.get("message") if record.get("type") == "assistant" else None
+            usage = msg.get("usage") if isinstance(msg, dict) else None
+            if isinstance(usage, dict):
+                used = sum(usage.get(k) or 0 for k in (
+                    "input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens", "output_tokens"))
+                window = 1_000_000 if "[1m]" in str(msg.get("model") or "") else self.context_window
+                return used, window
+        return None
 
     def get_session_meta(self, pid: int, cwd: str) -> dict:
         """From ~/.claude/sessions/<pid>.json (session ID, remote control) and one read of the transcript (title, usage)."""

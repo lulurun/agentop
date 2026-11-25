@@ -588,7 +588,7 @@ class SessionStore:
         tool = coordinator.pick_tool(available)
         if tool is None:
             return None
-        return await self.create(tool, found["folder"], name, project=project, prompt=coordinator.welcome_prompt(found))
+        return await self.create(tool, found["folder"], name, project=project, prompt=coordinator.first_prompt(found))
 
     def _require(self, session_id: str) -> dict:
         row = self._sessions.get(session_id)

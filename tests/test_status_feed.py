@@ -131,3 +131,31 @@ def test_actor_reconnects_after_bridge_restart(tmp_path, monkeypatch):
             await asyncio.gather(bridge, return_exceptions=True)
 
     asyncio.run(run())
+
+
+def test_latest_and_fetch_give_one_sessions_snapshot(tmp_path):
+    from agentop.plugins.attention.bridge import serve
+    from agentop.status_feed import fetch, socket_path
+
+    feed = StatusFeed()
+    assert feed.latest("one") is None and fetch(tmp_path, "one", timeout=0.2) is None
+    feed.publish(SessionStatus("one", "done", 2, "hook", "Stop"))
+    assert feed.latest("one").state == "done"
+
+    async def run():
+        path = socket_path(tmp_path)
+        task = asyncio.create_task(serve(feed, path))
+        try:
+            for _ in range(100):
+                if path.exists():
+                    break
+                await asyncio.sleep(0.01)
+            found = await asyncio.to_thread(fetch, tmp_path, "one")
+            missing = await asyncio.to_thread(fetch, tmp_path, "two", 0.3)
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        return found, missing
+
+    found, missing = asyncio.run(run())
+    assert found == SessionStatus("one", "done", 2, "hook", "Stop") and missing is None

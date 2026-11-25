@@ -1,13 +1,15 @@
 """A project's pursuit record: the Coordinator's tasks, its stop reasons, and the event log review reads.
 
-Kept in `<project>/.project/` (tasks.json, events.jsonl), written by agentop's commands only. See docs/0_13_projects.md, section 4.3.
+Kept in `<project>/.project/` (tasks.json, events.jsonl) and mirrored into the track (track.py). See docs/0_13_projects.md, section 4.3.
 """
 
 from __future__ import annotations
 
 import fcntl
 import json
+import os
 import re
+import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -15,43 +17,26 @@ from pathlib import Path
 from agentop import projects
 from agentop.jsonfile import write_json_atomic
 
+from . import track
+from .track import TrackError as PursuitError
+
 MAX_ROUNDS = 3
 STATE_FILE = "STATE.md"
 STATE_SECTIONS = ("Objective", "Where things are", "Decisions", "Open questions for the owner", "Next")
 REVIEWS_DIR = "reviews"
 REFLECTION_PLACEHOLDER = "(The Coordinator writes this.)"
 KINDS = ("done", "waiting", "owner", "blocked")
-CLEARING_KINDS = ("done", "waiting")
+# The yields after which agentop may clear the context at the next wake (spec 9.2).
+CLEARING_KINDS = ("done", "waiting", "owner")
+NEEDS_NEXT = ("done", "waiting")
+NEXT_FILE = "NEXT.md"
+# A --next made of these alone says nothing a cleared context can act on.
+NEXT_PLACEHOLDERS = {
+    "", "tbd", "todo", "next", "na", "n a", "none", "nothing", "same", "same as before", "wait", "waiting",
+    "continue", "carry on", "see above", "as above", "the next action", "next action", "done",
+}
 
 OBJECTIVE_PLACEHOLDER = '(What the project is for, and what "done" means.)'
-STATE_TEMPLATE = """# State of {name}
-
-The Coordinator keeps this current: it is what a fresh context reads first.
-
-## Objective
-
-(What the project is for, and what "done" means.)
-
-## Where things are
-
-(Accepted work with commits and paths, what is deployed, what is in progress.)
-
-## Decisions
-
-(Decided, by whom, and why.)
-
-## Open questions for the owner
-
-(Each with a recommendation and what happens if there is no answer.)
-
-## Next
-
-(The next actions, in order.)
-"""
-
-
-class PursuitError(ValueError):
-    pass
 
 
 def _meta(project: str) -> Path:
@@ -111,24 +96,71 @@ def events(project: str, since: float = 0.0) -> list[dict]:
 
 
 WAKE_NOTE = (
-    "[agentop] Your context was cleared before this message. Read AGENTS.md, COORDINATOR_SKILL.md and STATE.md, "
-    "run agentop task list, then act on it:\n\n"
+    "[agentop] Your context was cleared before this message. Run agentop coordinator status "
+    "(it starts with your Next), then act on it:\n\n"
 )
+# What reaches the Coordinator through agentop; a yield after the last of them ended the turn that handled it.
+WAKE = "wake"
 
 
 def pending_clear(project: str) -> dict | None:
-    """The yield's clear.pending event when its /clear hasn't been sent yet."""
-    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "clear.pending")), None)
+    """The yield --clear request (clear.pending) when no clear has been verified since it."""
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear.verified", "clear.pending")), None)
     return last if last is not None and last["kind"] == "clear.pending" else None
 
 
-def wake_note(project: str) -> str:
-    """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, else ""; logs the wake."""
-    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear", "resume", "woken")), None)
-    if last is None or last["kind"] != "clear":
+def cleared(project: str) -> bool:
+    """Whether the Coordinator's context was cleared and nothing has reached it since."""
+    last = next((e for e in reversed(events(project)) if e["kind"] in ("clear.verified", WAKE)), None)
+    return last is not None and last["kind"] == "clear.verified"
+
+
+def wake_note(project: str, source: str = "send") -> str:
+    """WAKE_NOTE when the Coordinator was cleared and nothing has reached it since, then any due direction change; logs the wake."""
+    note = WAKE_NOTE if cleared(project) else ""
+    log(project, WAKE, source=source, cleared=bool(note))
+    return note + change_notice(project)
+
+
+def next_path(project: str) -> Path:
+    n = track.generation(project)
+    return track.gen_dir(project, n) / NEXT_FILE if n else _meta(project) / NEXT_FILE
+
+
+def check_next(text: str) -> str:
+    """The --next text, stripped. Raises PursuitError for an empty or placeholder one."""
+    text = (text or "").strip()
+    words = re.sub(r"[\W_]+", " ", text).strip().lower()
+    if words in NEXT_PLACEHOLDERS or (text.startswith("<") and text.endswith(">")) or len(words) < 8:
+        raise PursuitError(
+            "--next must say what you will do next and why, in a sentence: it is all a cleared context starts from"
+        )
+    return text
+
+
+def write_next(project: str, kind: str, text: str) -> Path:
+    """NEXT.md, replaced whole so a reader never sees half of it."""
+    path = next_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    body = f"# Next\nDate: {time.strftime('%Y-%m-%d %H:%M')} · yield {kind}\n\n{text.strip()}\n"
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(body)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+    return path
+
+
+def read_next(project: str) -> str:
+    try:
+        return next_path(project).read_text().strip()
+    except OSError:
         return ""
-    log(project, "woken")
-    return WAKE_NOTE
 
 
 def resolve_artifact(project: str, path: str) -> Path:
@@ -146,30 +178,34 @@ def open_tasks(project: str) -> list[dict]:
     return [t for t in load_tasks(project) if t["status"] == "open"]
 
 
+def _is(task: dict, wanted: str) -> bool:
+    return task["session"].lower() == wanted.lower() or task["id"].lower() == wanted.lower()
+
+
 def task_for(project: str, session: str) -> dict | None:
-    """The session's open task, matched ignoring case."""
-    wanted = session.lower()
-    return next((t for t in open_tasks(project) if t["session"].lower() == wanted), None)
+    """The open task of a session, or with that ID, matched ignoring case."""
+    return next((t for t in open_tasks(project) if _is(t, session)), None)
 
 
 def awaiting_report(task: dict) -> bool:
     return task["status"] == "open" and task["rounds"][-1].get("reported_at") is None
 
 
-def _update(project: str, session: str, change) -> dict:
+def _update(project: str, session: str, change, event: str) -> dict:
     with _locked(project):
         tasks = load_tasks(project)
-        wanted = session.lower()
-        task = next((t for t in tasks if t["status"] == "open" and t["session"].lower() == wanted), None)
+        task = next((t for t in tasks if t["status"] == "open" and _is(t, session)), None)
         if task is None:
-            raise PursuitError(f"{session} has no open task. agentop task list shows them")
+            raise PursuitError(f"{session} has no open task. agentop coordinator task list shows them")
         change(task)
         _save_tasks(project, tasks)
+        track.on_task(project, task, event, [t for t in tasks if t["status"] == "open"])
         return task
 
 
-def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept: list[str], artifact: str) -> dict:
-    """Record a new task before its session starts. Raises PursuitError."""
+def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept: list[str], artifact: str,
+              action: str | None = None, model: str | None = None, brief: str = "") -> dict:
+    """Record a new task before its session starts; with a track, its ID comes from the counter. Raises PursuitError."""
     goal = goal.strip()
     accept = [a.strip() for a in accept if a.strip()]
     if not goal:
@@ -177,12 +213,27 @@ def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept
     if not accept:
         raise PursuitError("A task needs at least one --accept: a criterion you will check its result against")
     resolve_artifact(project, artifact)
+    if action is not None and not track.exists(project):
+        raise PursuitError("--action needs a track: run agentop coordinator direction new --text - first")
     with _locked(project):
         tasks = load_tasks(project)
         if any(t["status"] == "open" and t["session"].lower() == session.lower() for t in tasks):
             raise PursuitError(f"{session} already has an open task. Accept, reject, or fail it first")
+        refusal = track.change_refusal(project, [t for t in tasks if t["status"] == "open"])
+        if refusal:
+            raise PursuitError(f"No new task starts: {refusal[0].lower()}{refusal[1:]}")
+        if action is not None:
+            action = track.check_action(project, action)
+        if track.exists(project):
+            task_id, direction = track.next_task_id(project, action)
+        else:
+            task_id, direction = f"t{len(tasks) + 1}", None
         task = {
-            "id": f"t{len(tasks) + 1}",
+            "id": task_id,
+            "action": action,
+            "direction": direction,
+            "model": model,
+            "brief": (brief or "").strip()[:500],
             "session": session,
             "tool": tool,
             "cwd": cwd,
@@ -195,6 +246,7 @@ def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept
         }
         tasks.append(task)
         _save_tasks(project, tasks)
+        track.on_task(project, task, "open", [t for t in tasks if t["status"] == "open"])
     log(project, "task.open", task=task["id"], session=session, tool=tool)
     return task
 
@@ -215,7 +267,7 @@ def report(project: str, session: str, summary: str, blocked: bool = False) -> d
             )
         current.update(reported_at=time.time(), summary=summary.strip(), blocked=blocked, artifact_present=present)
 
-    task = _update(project, session, change)
+    task = _update(project, session, change, "report")
     log(project, "task.report", task=task["id"], session=task["session"], round=len(task["rounds"]), blocked=blocked)
     return task
 
@@ -239,7 +291,7 @@ def accept(project: str, session: str, checked: str) -> dict:
             raise PursuitError(f"The artifact {task['artifact']} does not exist, so the result can't be accepted")
         task.update(status="accepted", closed_at=time.time(), checked=checked.strip())
 
-    task = _update(project, session, change)
+    task = _update(project, session, change, "accept")
     log(project, "task.accept", task=task["id"], session=task["session"], rounds=len(task["rounds"]))
     return task
 
@@ -253,13 +305,13 @@ def reject(project: str, session: str, feedback: str) -> dict:
         _reported(task)
         if len(task["rounds"]) >= MAX_ROUNDS:
             raise PursuitError(
-                f"{task['id']} has used all {MAX_ROUNDS} rounds. Close it with agentop task fail {task['session']} --note …, "
+                f"{task['id']} has used all {MAX_ROUNDS} rounds. Close it with agentop coordinator task fail {task['session']} --note …, "
                 "then replan or take the decision to the owner"
             )
         task["rounds"][-1]["feedback"] = feedback.strip()
         task["rounds"].append({"sent_at": time.time()})
 
-    task = _update(project, session, change)
+    task = _update(project, session, change, "reject")
     log(project, "task.reject", task=task["id"], session=task["session"], round=len(task["rounds"]) - 1)
     return task
 
@@ -271,9 +323,43 @@ def fail(project: str, session: str, note: str) -> dict:
     def change(task):
         task.update(status="failed", closed_at=time.time(), note=note.strip())
 
-    task = _update(project, session, change)
+    task = _update(project, session, change, "fail")
     log(project, "task.fail", task=task["id"], session=task["session"], rounds=len(task["rounds"]))
     return task
+
+
+def new_direction(project: str, text: str | None = None, copy_plan: bool = False) -> int:
+    with _locked(project):
+        return track.new_direction(project, text, copy_plan, open_tasks(project))
+
+
+def change_direction(project: str, text: str) -> tuple[dict, bool, list[dict]]:
+    """Record a direction change that waits for the open tasks; returns (action, replaced, open tasks)."""
+    with _locked(project):
+        tasks = open_tasks(project)
+        action, replaced = track.change_direction(project, text, tasks)
+    log(project, "direction.change", action=track.action_ref(action), replaced=replaced, waits=[t["id"] for t in tasks])
+    return action, replaced, tasks
+
+
+def change_due(project: str) -> str:
+    """When a direction change is pending and no task is open, the line telling the Coordinator to make it; else ""."""
+    if not track.exists(project) or open_tasks(project):
+        return ""
+    return track.change_refusal(project, [])
+
+
+def change_notice(project: str) -> str:
+    """change_due as the head of a wake prompt."""
+    due = change_due(project)
+    return f"[agentop] {due}; it takes the pending text.\n\n" if due else ""
+
+
+def problems(project: str, kind: str | None = None) -> list[str]:
+    """What blocks a yield: the track's checks, or for a project still on STATE.md (no track/), the old ones."""
+    if not track.exists(project) and (projects.folder(project) / STATE_FILE).is_file():
+        return state_problems(project)
+    return track.problems(project, open_tasks(project), kind)
 
 
 def state_problems(project: str) -> list[str]:
@@ -292,12 +378,6 @@ def state_problems(project: str) -> list[str]:
     return problems
 
 
-def write_state_template(folder: Path, name: str) -> None:
-    path = folder / STATE_FILE
-    if not path.exists():
-        path.write_text(STATE_TEMPLATE.format(name=name))
-
-
 def latest_review(project: str) -> Path | None:
     folder = projects.folder(project) / REVIEWS_DIR
     found = sorted(folder.glob("*.md")) if folder.is_dir() else []
@@ -308,8 +388,8 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
     """Record why the Coordinator ends its turn, after checking the reason holds. Raises PursuitError."""
     fields = {k: (v or "").strip() for k, v in fields.items()}
     required = {
-        "done": ("evidence",),
-        "waiting": (),
+        "done": ("evidence", "next"),
+        "waiting": ("next",),
         "owner": ("question", "recommend", "default"),
         "blocked": ("need", "tried"),
     }
@@ -318,14 +398,18 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
     missing = [f"--{k}" for k in required[kind] if not fields.get(k)]
     if missing:
         raise PursuitError(f"'{kind}' needs {' and '.join(missing)}")
-    problems = state_problems(project)
-    if problems:
-        raise PursuitError("; ".join(problems))
+    if kind in NEEDS_NEXT or fields.get("next"):
+        fields["next"] = check_next(fields.get("next", ""))
+    found = problems(project, kind)
+    if found:
+        raise PursuitError("; ".join(found))
     pending = [t for t in open_tasks(project) if awaiting_report(t)]
     reported = [t for t in open_tasks(project) if not awaiting_report(t)]
     if reported:
         names = ", ".join(t["session"] for t in reported)
-        raise PursuitError(f"{names} reported and wait for you: accept, reject, or fail first (agentop task show <name>)")
+        raise PursuitError(
+            f"{names} reported and wait for you: accept, reject, or fail first (agentop coordinator task show <name>)"
+        )
     if kind == "waiting" and not pending:
         raise PursuitError("Nothing is pending: no open task awaits a report. Take the next action instead")
     if kind == "done":
@@ -334,10 +418,19 @@ def yield_turn(project: str, kind: str, fields: dict[str, str]) -> dict:
         closed = [e["at"] for e in events(project) if e["kind"] in ("task.accept", "task.fail")]
         reviews = [e["at"] for e in events(project) if e["kind"] == "review"]
         if closed and (not reviews or max(reviews) < max(closed)):
-            raise PursuitError("Tasks were closed since the last review. Run agentop review, write your reflection, then yield")
+            raise PursuitError(
+                "Tasks were closed since the last review. Run agentop coordinator review, write your reflection, then yield"
+            )
         review = latest_review(project)
         if review is not None and REFLECTION_PLACEHOLDER in review.read_text():
             raise PursuitError(f"Write your reflection in {review} before yielding done")
     if kind == "waiting":
         fields["sessions"] = ", ".join(t["session"] for t in pending)
+    if kind == "owner" and track.exists(project):
+        with _locked(project):
+            action, refreshed = track.ask(project, None, fields["question"], fields["recommend"], fields["default"])
+        fields["action"] = track.action_ref(action)
+        fields["asked"] = str(track.asked_times(action)) if refreshed else ""
+    if fields.get("next"):
+        write_next(project, kind, fields["next"])
     return log(project, "yield", type=kind, **{k: v for k, v in fields.items() if v})

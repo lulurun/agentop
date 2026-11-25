@@ -102,7 +102,7 @@ From [0_10_ui.md](0_10_ui.md) and [0_12_03_memory.md 6](0_12_03_memory.md#6-the-
 - A merged session list across services, and a window per service (client-only; a non-goal in [design 2.2](0_00_design.md#22-non-goals) for now).
 - An offline app shell for the web app, so it survives its service stopping.
 - Colour in the File viewer's diff view.
-- **Start from a prompt** ([0_04_start.md](0_04_start.md)): once the record shows how often the probe and chooser are right, offer the chooser to the Coordinator (`agentop task start --tier`); a way to read Claude's quota without typing `/usage` into a pane.
+- **Start from a prompt** ([0_04_start.md](0_04_start.md)): once the record shows how often the probe and chooser are right, offer the chooser to the Coordinator (`agentop coordinator task start --tier`); a way to read Claude's quota without typing `/usage` into a pane.
 - Memory: once recall misses have been noted for a while, read `plugins/memory/recall.jsonl` and decide on hybrid search with embeddings ([0_12_03_memory.md 9](0_12_03_memory.md#9-how-other-agents-remember-and-whether-keyword-search-is-enough)).
 
 ### Platforms and install

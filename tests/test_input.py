@@ -192,7 +192,7 @@ def test_a_cleared_coordinator_is_told_to_read_its_notes(monkeypatch, tmp_path):
         (tmp_path / name).write_text("x")
     row = {"id": "c", "project": "p", "display_name": "Coordinator", "cwd": str(tmp_path)}
     assert reception.resume_note(row).startswith(
-        "[agentop] Your context was cleared before this message. Read AGENTS.md and STATE.md, run agentop task list"
+        "[agentop] Your context was cleared before this message. Read AGENTS.md, run agentop coordinator status"
     )
     assert reception.resume_note({**row, "display_name": "dev"}) == ""
 
