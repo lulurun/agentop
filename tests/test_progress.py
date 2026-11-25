@@ -578,3 +578,64 @@ def test_a_legacy_entry_with_two_exact_readings_is_shown_as_written(alpha, capsy
     assert checked in dev["raw"] and dev["state"] == "accepted"
     assert result["issues"] == ["track/1/EXECUTION_M2.md: P1_M2A1-1's entry can't be read unambiguously; its text is shown as written"]
     assert api["rounds"][0]["summary"] == "Next row" and api["raw"] is None
+
+
+def _legacy_rounds(project, monkeypatch, capsys, summaries, feedbacks, checked):
+    old_writer(monkeypatch)
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    start(capsys, "api", "M2A2")
+    for i, summary in enumerate(summaries):
+        report(monkeypatch, capsys, "dev", summary)
+        if i < len(feedbacks):
+            ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", feedbacks[i], "--project", "alpha")
+    ag(capsys, "coordinator", "task", "accept", "dev", "--checked", checked, "--project", "alpha")
+    report(monkeypatch, capsys, "api", "Next row")
+    without_snapshot()
+    result = progress.read(project)
+    rows = by_id(result)
+    assert rows["P1_M2A2-1"]["rounds"][0]["summary"] == "Next row" and rows["P1_M2A2-1"]["raw"] is None
+    return rows["P1_M2A1-1"], result["issues"]
+
+
+AMBIGUOUS_DEV = ["track/1/EXECUTION_M2.md: P1_M2A1-1's entry can't be read unambiguously; its text is shown as written"]
+
+
+@pytest.mark.parametrize("summaries, feedbacks, quoted", [
+    # A rejection quoting the closing decision the next round could get.
+    (["First report", "Second report"], ["Use this wording when done:\n- round 2 accepted: example only"],
+     "- round 2 accepted: example only"),
+    # A report quoting the next round's report line.
+    (["Plan:\n- round 2: the docs", "Second report"], ["More"], "- round 2: the docs"),
+    # A rejection quoting the next round's rejection line.
+    (["One", "Two", "Three"], ["Expect:\n- round 2 rejected: if the docs are missing", "Docs missing"],
+     "- round 2 rejected: if the docs are missing"),
+])
+def test_a_legacy_entry_quoting_one_of_its_own_item_lines_is_shown_as_written(
+        alpha, capsys, sessions, monkeypatch, summaries, feedbacks, quoted):
+    dev, issues = _legacy_rounds(alpha, monkeypatch, capsys, summaries, feedbacks, "Actually verified")
+    assert quoted in dev["raw"] and "- round 1 rejected: " in dev["raw"] and issues == AMBIGUOUS_DEV
+
+
+def test_a_legacy_entry_quoting_an_item_line_it_cannot_have_is_read_whole(alpha, capsys, sessions, monkeypatch):
+    feedback = "Not like this:\n- round 5 accepted: no\n- round 1 rejected: nor this"
+    dev, issues = _legacy_rounds(alpha, monkeypatch, capsys, ["First", "Second\n- round 1: quoted"], [feedback], "Checked")
+    assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [("First", feedback), ("Second\n- round 1: quoted", None)]
+    assert (dev["checked"], dev["raw"], issues) == ("Checked", None, [])
+
+
+def test_a_legacy_failed_task_reads_its_last_report_from_the_journal(alpha, capsys, sessions, monkeypatch):
+    old_writer(monkeypatch)
+    setup_plan(capsys)
+    start(capsys, "dev", "M2A1")
+    report(monkeypatch, capsys, "dev", "One")
+    ag(capsys, "coordinator", "task", "reject", "dev", "--feedback", "More", "--project", "alpha")
+    report(monkeypatch, capsys, "dev", "Two")
+    ag(capsys, "coordinator", "task", "fail", "dev", "--note", "Out of scope", "--project", "alpha")
+    without_snapshot()
+    dev = by_id(progress.read(alpha))["P1_M2A1-1"]
+    assert [r["summary"] for r in dev["rounds"]] == ["One", "Two"] and (dev["note"], dev["raw"]) == ("Out of scope", None)
+    # Without the journal, round 2's report could as well be a line of round 1's.
+    (folder() / "track/tasks.jsonl").unlink()
+    result = progress.read(alpha)
+    assert by_id(result)["P1_M2A1-1"]["raw"] is not None and result["issues"] == AMBIGUOUS_DEV

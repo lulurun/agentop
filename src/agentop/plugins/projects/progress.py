@@ -12,6 +12,7 @@ import os
 import re
 import time
 from contextlib import contextmanager
+from itertools import islice
 from pathlib import Path
 
 from agentop import projects
@@ -182,7 +183,8 @@ def _times(entry: dict, line: str | None) -> bool:
     return True
 
 
-def parse_task_entry(heading: str, lines: list[str], counts: list[str] | None = None) -> dict | None:
+def parse_task_entry(heading: str, lines: list[str], counts: list[str] | None = None,
+                     reported: frozenset[int] = frozenset()) -> dict | None:
     """A task entry's fields: by its record's counts, or by layout for one without; `ambiguous` when they can't all be read."""
     head = _TASK_HEAD.match(heading)
     if not head:
@@ -194,7 +196,7 @@ def parse_task_entry(heading: str, lines: list[str], counts: list[str] | None = 
         entry = _counted(head, lines, counts)
         if entry is not None:
             return entry
-    entry = _legacy(head, lines)
+    entry = _legacy(head, lines, reported)
     entry["ambiguous"] = entry["ambiguous"] or counts is not None
     return entry
 
@@ -267,34 +269,109 @@ def _counted(head: re.Match, lines: list[str], counts: list[str]) -> dict | None
     return entry
 
 
-MAX_LEGACY_CANDIDATES = 20
+MAX_LEGACY_READINGS = 64
 
 
-def _legacy(head: re.Match, lines: list[str]) -> dict:
+def _legacy(head: re.Match, lines: list[str], reported: frozenset[int]) -> dict:
     """An entry an older writer left, read by layout: the one reading that reproduces it, or ambiguous.
 
     That writer replaced an entry only up to the first '## ' line after its heading, so each earlier write holding
-    one left the rest of itself after the next. Those leftovers follow from the entry's own fields, which fixes
-    where the entry's own text ends. A reading counts only when its fields render back to exactly that text.
+    one left the rest of itself after the next; those leftovers follow from the entry's own fields. A reading places
+    each item the writer gives this many rounds and this status on one of its marker lines, and counts only when its
+    fields render back to exactly the entry's own text. Two such readings, or none, leave the entry as written.
+    `reported` holds the rounds the journal has a report for: whether a failed task's last round was reported.
     """
     raw = "\n".join(lines).strip()
+    base = _new_entry(head, raw)
+    out_at = _output_at(lines)
+    given = _parse_input(lines[2:out_at]) if out_at is not None else None
     marks = _evaluation_marks(lines)
-    fits = []
-    for mark in marks[:MAX_LEGACY_CANDIDATES]:
-        whole = _sections(head, lines, raw, mark)
-        if whole["ambiguous"]:
-            continue
-        tail = _leftovers(whole)
-        own = lines[:len(lines) - len(tail) - 1] if tail else lines
-        if tail and (lines[len(own):] != ["", *tail] or len(own) <= mark + 1):
-            continue
-        entry = _sections(head, own, raw, mark)
-        if not entry["ambiguous"] and _leftovers(entry) == tail and _renders(entry, own):
-            fits.append(entry)
-    if len(fits) == 1 and len(marks) <= MAX_LEGACY_CANDIDATES:
-        return fits[0]
+    fits, tried = [], 0
+    if _times(base, lines[1] if len(lines) > 1 else None) and given is not None:
+        for mark in marks:
+            for outs, evals in _splits(lines, out_at, mark, base["rounds_count"], base["md_status"], reported):
+                tried += 1
+                if tried > MAX_LEGACY_READINGS:
+                    return _as_written(head, lines, raw, marks)
+                whole = _reading(base, given, lines, mark, outs, evals, len(lines))
+                tail = _leftovers(whole)
+                end = len(lines) - len(tail) - 1 if tail else len(lines)
+                if (tail and lines[end:] != ["", *tail]) or any(i >= end for i, *_ in evals) or end < mark + 2:
+                    continue
+                if not evals and end != mark + 2:
+                    continue
+                entry = _reading(base, given, lines, mark, outs, evals, end)
+                if _leftovers(entry) == tail and _renders(entry, lines[:end]):
+                    fits.append(entry)
+    return fits[0] if len(fits) == 1 else _as_written(head, lines, raw, marks)
+
+
+def _as_written(head: re.Match, lines: list[str], raw: str, marks: list[int]) -> dict:
     entry = _sections(head, lines, raw, marks[0] if marks else None)
     entry["ambiguous"] = True
+    return entry
+
+
+def _splits(lines: list[str], out_at: int, mark: int, n: int, status: str, journal: frozenset[int]):
+    """Each placement of the writer's items: reports of rounds 1..n-1 and of round n once reported, each rejection
+    (every round before the last was reported and rejected), then the closing decision of round n."""
+    closing = status if status in ("accepted", "failed") else None
+    reported = {"open": [n - 1], "reported": [n], "accepted": [n], "failed": [n] if n in journal else [n - 1, n]}.get(status, [])
+    evals = [(k, "rejected") for k in range(1, n)] + ([(n, closing)] if closing else [])
+    eval_places = list(islice(_places(lines, mark + 1, len(lines), [f"- round {k} {kind}: " for k, kind in evals],
+                                      _UNDECIDED, False), MAX_LEGACY_READINGS + 1))
+    for m in reported:
+        for outs in _places(lines, out_at + 1, mark - 1, [f"- round {k}: " for k in range(1, m + 1)], "- (no report yet)", True):
+            for places in eval_places:
+                yield [(i, k + 1) for k, i in enumerate(outs)], [(i, *evals[k]) for k, i in enumerate(places)]
+
+
+def _places(lines: list[str], start: int, stop: int, prefixes: list[str], empty: str, exact: bool):
+    """Increasing lines from `start`, before `stop`, starting with each prefix in turn; [] when there are none."""
+    if not prefixes:
+        if start < len(lines) and lines[start] == empty and (not exact or start + 1 == stop):
+            yield []
+        return
+    found: dict[str, list[int]] = {}
+    for i in range(start, stop):
+        hit = _OUT_PREFIX.match(lines[i]) or _EVAL_PREFIX.match(lines[i])
+        if hit:
+            found.setdefault(hit[0], []).append(i)
+    latest, bound = [0] * len(prefixes), stop
+    for j in range(len(prefixes) - 1, -1, -1):
+        options = [i for i in found.get(prefixes[j], []) if i < bound]
+        if not options:
+            return
+        latest[j] = bound = options[-1]
+
+    def walk(j: int, after: int):
+        if j == len(prefixes):
+            yield []
+            return
+        for i in found[prefixes[j]]:
+            if (i == start if j == 0 else after < i) and i <= latest[j]:
+                for rest in walk(j + 1, i):
+                    yield [i, *rest]
+
+    yield from walk(0, start)
+
+
+def _reading(base: dict, given: dict, lines: list[str], mark: int, outs: list, evals: list, end: int) -> dict:
+    """The entry's fields with its items on these lines, and its own text ending at line `end`."""
+    entry = {**base, "input": given}
+    rounds: dict[int, dict] = {}
+    for (i, k), stop in zip(outs, [i for i, _ in outs[1:]] + [mark - 1]):
+        text = "\n".join(lines[i:stop])[len(f"- round {k}: "):].strip()
+        blocked = text.startswith("BLOCKED: ")
+        rounds[k] = {"round": k, "summary": text[len("BLOCKED: "):] if blocked else text, "blocked": blocked}
+    for (i, k, kind), stop in zip(evals, [i for i, *_ in evals[1:]] + [end]):
+        text = "\n".join(lines[i:stop])[len(f"- round {k} {kind}: "):].strip()
+        if kind == "rejected":
+            rounds.setdefault(k, {"round": k})["feedback"] = text
+        else:
+            entry["checked" if kind == "accepted" else "note"] = text
+    count = max([entry["rounds_count"], *rounds])
+    entry["rounds"] = [rounds.get(k, {"round": k}) for k in range(1, count + 1)]
     return entry
 
 
@@ -440,7 +517,7 @@ def _bare_entry(tid: str, raw: str | None) -> dict:
             "model": None, "checked": None, "note": None}
 
 
-def _execution(reader: _Reader, path: Path, n: int, entries: dict, notes: list) -> None:
+def _execution(reader: _Reader, path: Path, n: int, entries: dict, notes: list, events: dict[str, list[dict]]) -> None:
     where = reader.name(path)
     for found in track.split_entries(reader.lines(path), MAX_RECORD_BYTES):
         if found["id"] is None:
@@ -459,7 +536,8 @@ def _execution(reader: _Reader, path: Path, n: int, entries: dict, notes: list) 
         if _NOTE_HEAD.match(heading):
             notes.append(_parse_note(heading, lines, n))
             continue
-        entry = parse_task_entry(heading, lines, found["counts"])
+        reported = frozenset(e["round"] for e in events.get(eid, []) if e["event"] == "report" and e["round"])
+        entry = parse_task_entry(heading, lines, found["counts"], reported)
         if entry is not None:
             entry["ambiguous"] = entry["ambiguous"] or found["edited"]
             entries[entry["id"]] = entry
@@ -701,6 +779,7 @@ def _read(project: str, wanted: int | None) -> dict:
     result["missing"].update(direction=direction is None, plan=plan is None)
     result["direction_placeholder"] = direction is not None and _placeholder(direction)
 
+    events = _journal(reader, project, n)
     entries: dict[str, dict] = {}
     files = []
     if reader.inside(folder) is not None:
@@ -709,9 +788,8 @@ def _read(project: str, wanted: int | None) -> dict:
         if reader.inside(path) is None or not path.is_file():
             continue
         result["missing"]["executions"] = False
-        _execution(reader, path, n, entries, result["notes"])
+        _execution(reader, path, n, entries, result["notes"], events)
 
-    events = _journal(reader, project, n)
     snapshot: dict[str, dict] = {}
     for task in stored or []:
         if _generation(task.get("direction")) == n and _id_in(task.get("id"), n):
