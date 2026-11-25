@@ -29,14 +29,18 @@ Your record is `track/<N>/` in the project folder, written through `agentop coor
 
 | Kind | When it is true | What it needs |
 |------|-----------------|---------------|
-| `done` | The direction or the owner's current request is met and verified | `--evidence`; a fresh `agentop coordinator review` if tasks closed since the last one; no open task |
-| `waiting` | Tasks are out and you have nothing useful to do until they report | at least one open task awaiting a report |
+| `done` | The direction or the owner's current request is met and verified | `--evidence`, `--next`; a fresh `agentop coordinator review` if tasks closed since the last one; no open task |
+| `waiting` | Tasks are out and you have nothing useful to do until they report | `--next`; at least one open task awaiting a report |
 | `owner` | Only the owner can decide: product intent, authority, money, external effects, destructive or hard-to-undo steps | `--question`, `--recommend`, `--default`, and `--meanwhile` when something continues; it becomes a waiting-on-owner action |
 | `blocked` | Access, permission or an outside change is required and no workaround is reasonable | `--need`, `--tried` |
 
 agentop checks each reason. It refuses `waiting` with nothing pending, and any yield while a report waits for your decision or the track is out of step: no direction written, an open task with no action or from an older direction, an action done with no execution entry, or a milestone whose actions are all closed but that isn't closed with a summary. A refusal names the fix: take it. `agentop coordinator status` shows the same warnings.
 
-`done` and `waiting` also clear your context when the turn ends; the next report or prompt then reaches you with a note to run `agentop coordinator status`. The track already holds the plan and what happened, so keep it true as you go rather than before you yield. Pass `--keep` only when the next turn needs this conversation, such as a discussion with the owner still going. `owner` and `blocked` keep the context, since the answer will refer to this question; add `--clear` if it doesn't need it.
+`--next` is what you will do next and why, in a sentence or two: "Check dev's report against criterion 2, then start the docs task on M2A3". It is written to `track/<N>/NEXT.md`, and it is the first thing a cleared context reads, so make it something you can act on cold. `waiting` and `done` refuse without it, or with a placeholder.
+
+Your context is cleared at the next wake: when a task's report (or a quiet notice) arrives after a `waiting`, `done` or `owner` yield and you are idle, agentop clears your context, checks the clear landed, then types one prompt: a line saying it was cleared, your Next, and the report. Run `agentop coordinator status` (it starts with your Next) and handle the report. If agentop can't clear safely (you are mid-turn, a draft is in the prompt, another report waits for you), the report arrives without a clear. agentop also clears at a safe point when your context grows past about 60% of the window or a milestone was closed. The track already holds the plan and what happened, so keep it true as you go rather than before you yield. Pass `--keep` only when the next turn needs this conversation, such as a discussion with the owner still going; `--clear` asks for a clear once this turn has ended, after which agentop tells you to carry on from your Next.
+
+Keep the context small: send long verification output (test runs, diffs, logs) to a file under `results/` and keep only the verdict lines in your context.
 
 Signs you are about to stop too early:
 
@@ -109,7 +113,7 @@ At a milestone (a design accepted, an implementation slice accepted, a deploymen
 1. Close the milestone with `agentop coordinator milestone close M… --summary -`.
 2. Run `agentop coordinator review`. Read its findings, write your reflection in the report's last section, and keep one concrete change under Carried forward in `DIRECTION.md`.
 3. Tell the owner the report's path and its top findings, in two or three lines.
-4. End with `agentop coordinator yield done` or `waiting`, which clears your context. The next message tells you to read AGENTS.md and this skill, and to run `agentop coordinator status`, before you act on it.
+4. End with `agentop coordinator yield done` or `waiting` with a `--next` a cold start can act on. A closed milestone clears your context at the next safe point; the next message tells you to run `agentop coordinator status`, which starts with your Next, before you act on it.
 
 ## How you are judged
 

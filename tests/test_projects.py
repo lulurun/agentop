@@ -49,7 +49,7 @@ def test_the_project_skill_is_only_for_projects_plugin_coordinators():
                     "agentop coordinator yield", "agentop coordinator review", "agentop coordinator status"):
         assert command in normalized
     assert "agentop coordinator yield owner --question" in normalized.split("<project-coordinator-skill>")[0]
-    assert "`done` and `waiting` also clear your context" in normalized
+    assert "Your context is cleared at the next wake" in normalized
     assert phrase in coordinator.resume_prompt(project)
     assert "agentop coordinator status" in coordinator.resume_prompt(project)
     assert "STATE.md" not in coordinator.resume_prompt(project).split("<project-coordinator-skill>")[0]

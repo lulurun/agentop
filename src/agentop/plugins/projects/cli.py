@@ -277,7 +277,8 @@ def brief(task: dict, project: str, extra: str) -> str:
         f"Goal: {task['goal']}\n\nAcceptance criteria:\n{criteria}\n\n"
         f"Artifact: write your result to {artifact}. For code, it says what you changed (commits), how you verified it, "
         "and what is left.\n\n"
-        "When you are done, run: agentop coordinator task report \"<what you did, and the evidence it meets each criterion>\". "
+        "When you are done, run: agentop coordinator task report \"<one paragraph: what you did, and the evidence it meets "
+        "each criterion, pointing to the artifact for the detail>\". "
         "It checks the artifact exists and tells the Coordinator. If you can't finish or need a decision, run "
         "agentop coordinator task report --blocked \"<what stops you>\". Never stop without reporting."
     )
