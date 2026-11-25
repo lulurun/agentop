@@ -218,6 +218,79 @@ def _direction_file(n: int, text: str) -> str:
     )
 
 
+_ADDENDUM = re.compile(r"^### Addendum (\d+) ", re.M)
+
+
+def add_addendum(project: str, text: str, no_plan_change: bool = False, n: int | None = None) -> int:
+    """Append '### Addendum k (date)' under '## Addenda' in the current DIRECTION.md; returns k. Under the lock.
+
+    With no text and no_plan_change, marks the addendum awaiting a plan change as needing none instead.
+    """
+    text = (text or "").strip()
+    if not text and no_plan_change:
+        return _no_plan_change(project, n)
+    if not text:
+        raise TrackError("An addendum needs --text: the new requirement, as the owner gave it ('-' reads stdin)")
+    if re.search(r"^#{1,3}\s", text, re.M):
+        raise TrackError("An addendum's text can't hold headings of level 1 to 3: use #### or a list instead")
+    current = generation(project)
+    if not current:
+        raise TrackError("There is no track/ yet: run agentop coordinator direction new --text - to write the direction")
+    n = n or current
+    path = _writable(project, n) / "DIRECTION.md"
+    if not direction_text(project, n):
+        raise TrackError(
+            f"Direction {n} has no direction text yet, so there is nothing to add to: "
+            "write it with agentop coordinator direction new --text -"
+        )
+    existing = path.read_text()
+    counter = load_counter(project)
+    k = max([counter["plan"].get("addenda", 0), *(int(x) for x in _ADDENDUM.findall(existing))]) + 1
+    entry = f"### Addendum {k} ({_when(time.time())})\n\n{text}\n"
+    if no_plan_change:
+        entry += "\nPlan: no change needed (recorded with --no-plan-change).\n"
+    section = re.search(r"^##\s+Addenda\s*$.*?(?=^##\s|\Z)", existing, re.M | re.S)
+    if section:
+        body = section.group(0).rstrip() + "\n\n" + entry
+        rest = existing[section.end():]
+        updated = existing[:section.start()] + body + ("\n" + rest if rest.strip() else "")
+    else:
+        updated = existing.rstrip() + "\n\n## Addenda\n\n" + entry
+    _sole_write(path, updated.rstrip() + "\n")
+    counter["plan"]["addenda"] = k
+    if no_plan_change:
+        counter["plan"].pop("addendum_pending", None)
+    else:
+        counter["plan"]["addendum_pending"] = k
+    _save_counter(project, counter)
+    return k
+
+
+def _no_plan_change(project: str, n: int | None) -> int:
+    n = n or generation(project)
+    path = _writable(project, n) / "DIRECTION.md"
+    counter = load_counter(project)
+    k = counter["plan"].get("addendum_pending")
+    if not k:
+        raise TrackError("No addendum waits for a plan change: give --text - to add one")
+    existing = path.read_text()
+    block = re.search(rf"^### Addendum {k} .*?(?=^##|\Z)", existing, re.M | re.S)
+    line = "Plan: no change needed (recorded with --no-plan-change).\n"
+    if block:
+        updated = existing[:block.end()].rstrip() + "\n\n" + line + ("\n" + existing[block.end():] if existing[block.end():].strip() else "")
+        _sole_write(path, updated.rstrip() + "\n")
+    counter["plan"].pop("addendum_pending")
+    _save_counter(project, counter)
+    return k
+
+
+def plan_changed(project: str) -> None:
+    """A milestone or action was added or set: an addendum waiting for its plan change has it."""
+    counter = load_counter(project)
+    if counter["plan"].pop("addendum_pending", None) is not None:
+        _save_counter(project, counter)
+
+
 # --- plan ---
 
 
@@ -724,6 +797,13 @@ def problems(project: str, open_tasks: list[dict], kind: str | None = None) -> l
         found.append(
             f"Direction {n} has no direction text: write it under '## Direction' in track/{n}/DIRECTION.md, "
             "or run agentop coordinator direction new --text -"
+        )
+    pending = load_counter(project)["plan"].get("addendum_pending")
+    if kind != "owner" and pending:
+        found.append(
+            f"Addendum {pending} of direction {n} hasn't changed the plan yet: update the plan with agentop coordinator "
+            "plan milestone add, action add or action set; or, if the plan needs no change, record that with agentop "
+            "coordinator direction add --no-plan-change"
         )
     for t in open_tasks:
         if not t.get("action"):
