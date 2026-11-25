@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 import { startFromPrompt } from "./start";
@@ -516,6 +516,8 @@ test("Memory lists recent sessions, searches them like the web, and opens a sess
 });
 
 test("a project is made with a name, opens its Coordinator, and keeps its sessions out of Sessions", async ({ page }) => {
+  // Its Coordinator is typed the whole Coordinator skill as its first prompt, which takes a while.
+  test.setTimeout(150_000);
   const s = await open(page);
   await features(page).getByRole("button", { name: "Projects" }).click();
   const left = page.getByRole("complementary", { name: "Left panel" });
@@ -523,10 +525,10 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   await left.getByRole("button", { name: "Create", exact: true }).click();
 
   // Its Coordinator works in the project folder, with its instructions there, and opens in Projects.
-  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("alpha");
+  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("alpha", { timeout: 20_000 });
   const sessions = left.getByRole("navigation", { name: "Sessions", exact: true });
-  await expect(sessions.getByText("Coordinator")).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByTestId("terminal")).toContainText("fake agent ready", { timeout: 15_000 });
+  await expect(sessions.getByText("Coordinator")).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId("terminal")).toContainText("fake agent ready", { timeout: 45_000 });
   expect(existsSync(join(s.root, "state/projects/alpha/AGENTS.md"))).toBe(true);
   expect(readFileSync(join(s.root, "state/projects/alpha/CLAUDE.md"), "utf8")).toBe("@AGENTS.md\n");
 
@@ -538,11 +540,40 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   await features(page).getByRole("button", { name: "Projects" }).click();
   await left.getByLabel("New project's name").fill("beta");
   await left.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("beta");
+  await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("beta", { timeout: 20_000 });
 
-  // Removing one stops its sessions and keeps its folder.
-  await left.getByRole("button", { name: "Remove beta" }).click();
-  await left.getByRole("button", { name: "Remove alpha" }).click();
-  await expect(left.getByText("No projects yet.")).toBeVisible();
-  expect(existsSync(join(s.root, "state/projects/alpha/AGENTS.md"))).toBe(true);
+  // Close asks in a modal in the page, not with a browser dialog, which a webview may never show.
+  const dialogs: string[] = [];
+  page.on("dialog", (dialog) => dialogs.push(dialog.message()));
+  await left.getByRole("button", { name: "Close beta" }).click();
+  const modal = page.getByRole("dialog", { name: "Close beta?" });
+  await expect(modal).toContainText("The folder, its files and the other sessions are kept");
+  await modal.getByRole("button", { name: "Cancel" }).click();
+  await expect(modal).toHaveCount(0);
+
+  // Confirmed, it asks the Coordinator, which closes the project when no task runs; nothing else changes.
+  const agents = readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8");
+  await left.getByRole("button", { name: "Close beta" }).click();
+  await page.getByRole("dialog", { name: "Close beta?" }).getByRole("button", { name: "Close beta" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, { timeout: 90_000 });
+  const asked = page.getByTestId("terminal").filter({ hasText: "The owner asked, in the app, to close this project" });
+  await expect(asked).toBeVisible({ timeout: 15_000 });
+  await expect(asked).toContainText("agentop project close beta");
+  expect(dialogs).toEqual([]);
+  expect(existsSync(join(s.root, "state/projects/beta/.project/project.json"))).toBe(true);
+  expect(readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8")).toBe(agents);
+
+  // When the Coordinator has closed it (its entry gone), it leaves the list by itself.
+  writeFileSync(join(s.root, "state/projects/beta/track/1/CLOSED.md"), "# Closed\n\n- 2026-11-25 10:00 closed by `Coordinator` of beta\n");
+  rmSync(join(s.root, "state/projects/beta/.project/project.json"));
+  const list = left.getByRole("navigation", { name: "Projects" });
+  await expect(list.getByRole("button", { name: "beta", exact: true })).toHaveCount(0, { timeout: 15_000 });
+  await expect(list.getByRole("button", { name: "alpha", exact: true })).toBeVisible();
+
+  // Made again by name, the kept folder is loaded back, with its track, and its Coordinator starts on it.
+  await left.getByLabel("New project's name").fill("beta");
+  await left.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(list.locator('[aria-current="true"]')).toContainText("beta", { timeout: 20_000 });
+  expect(readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8")).toBe(agents);
+  expect(readFileSync(join(s.root, "state/projects/beta/track/1/CLOSED.md"), "utf8")).toMatch(/reopened by the owner, in the app\n$/);
 });

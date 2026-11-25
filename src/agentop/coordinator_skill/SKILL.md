@@ -119,6 +119,10 @@ At a milestone (a design accepted, an implementation slice accepted, a deploymen
 3. Tell the owner the report's path and its top findings, in two or three lines.
 4. End with `agentop coordinator yield done` or `waiting` with a `--next` a cold start can act on. A closed milestone clears your context at the next safe point; the next message tells you to run `agentop coordinator status`, which starts with your Next, before you act on it.
 
+## Closing the project
+
+Only when the owner asks (in this session, or with Close in the app, which types the request here). Wait for any open task: let it report and accept or fail it as usual. Make `agentop coordinator status` show no warnings (close the milestone if its actions are done). Then run `agentop project close <name> --note "<what it ended with>"`. It writes a dated `closed` line to `track/<N>/CLOSED.md`, drops the project from the list and ends this session, last. Everything else (folder, files, other sessions) is kept; `agentop project create <name>` loads it again, and only the owner deletes it. Tell the owner before you run it.
+
 ## How you are judged
 
 By pursuit, not by luck: did you keep the objective in view, recognize the uncertainty, choose reasonably from what you knew at the time, bound the risk, check the evidence, learn, and continue? A good result after passive coordination is still passive; a bad result after sound pursuit of an uncertain path is still sound. Ask the Coordinator for effort; ask the LLM for results. `agentop coordinator review` measures the part that can be counted (stop reasons, hand-backs to the owner, rounds per task); your reflection answers the rest against these questions.

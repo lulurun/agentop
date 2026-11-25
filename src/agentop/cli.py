@@ -302,12 +302,19 @@ def cmd_project_create(args):
     if not _projects_plugin_on():
         print("Error: the Projects plugin is off. Turn it on in Status → Plugins", file=sys.stderr)
         sys.exit(1)
+    from agentop.plugins.projects import track
+
+    kept = projects.kept(args.name)
     try:
         found = projects.create(args.name, "projects", WELCOME, INSTRUCTIONS)
     except projects.ProjectError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
-    print(f"Project {args.name}: {found['folder']}")
+    if kept:
+        reopened = track.reopen(args.name, "the owner, with agentop project create")
+        print(f"Project {args.name}, loaded from its kept folder{' and marked reopened' if reopened else ''}: {found['folder']}")
+    else:
+        print(f"Project {args.name}: {found['folder']}")
     print("Starting its Coordinator …")
     try:
         name = coordinator.start_now(found, [a.name for a in agentclis.installed(agentclis.AGENTS)])
@@ -320,24 +327,39 @@ def cmd_project_create(args):
     print(f"  Attach: tmux attach-session -t {name}")
 
 
-def cmd_project_remove(args):
+def cmd_project_close(args):
     from agentop import projects
+    from agentop.plugins.projects import pursuit, track
 
     found = projects.get(args.name)
     if found is None or found.get("owner") != "projects":
-        print(f"Error: no project called {args.name} (only the Projects plugin's can be removed here)", file=sys.stderr)
+        print(f"Error: no project called {args.name} (only the Projects plugin's are closed here)", file=sys.stderr)
         sys.exit(1)
-    stopped = []
-    for s in _ops().get_sessions(with_meta=False):
-        if s.get("project") == args.name:
-            print(f"Stopping {s['display_name']} …")
-            _ops().stop(s["name"])
-            stopped.append(s["display_name"])
-    projects.remove(args.name, args.delete_folder)
-    print(f"Removed {args.name}" + (", and its folder." if args.delete_folder else
-          f" from the list. Nothing else in its folder was changed: {found['folder']}"))
-    if stopped:
-        print(f"Its running sessions were stopped, as they would be orphaned: {', '.join(stopped)}.")
+    here = _ops().current_session()
+    if not here or here[1] != args.name or here[2] != projects.COORDINATOR:
+        print(f"Error: only {args.name}'s Coordinator closes it: ask it there (Close in the app does)", file=sys.stderr)
+        sys.exit(1)
+    tasks = pursuit.open_tasks(args.name)
+    if tasks:
+        print(f"Error: tasks are open: {track.task_names(tasks)}. Wait for their reports and accept or fail each "
+              "as usual, then close", file=sys.stderr)
+        sys.exit(1)
+    warnings = pursuit.problems(args.name) if track.exists(args.name) else []
+    if warnings:
+        print("Error: the track is not up to date; fix these first (agentop coordinator status shows them):", file=sys.stderr)
+        for w in warnings:
+            print(f"  - {w}", file=sys.stderr)
+        sys.exit(1)
+    marked = track.mark(args.name, "closed", f"`{here[2]}` of {here[1]}", args.note or "")
+    # Read before the entry goes: a closed project's sessions are no longer listed.
+    live = _ops().get_sessions(with_meta=False)
+    projects.close(args.name)
+    print(f"Closed {args.name}: marked in {marked.relative_to(projects.folder(args.name))}, and gone from agentop project list.")
+    print(f"Its folder, files and other sessions are kept as they are: {found['folder']}")
+    print(f"  agentop project create {args.name} loads it again.")
+    # Last, and from a process of its own: it ends the session this command runs in.
+    print("Closing this session now.", flush=True)
+    _ops().stop_detached(here[0], live)
 
 
 def cmd_project_show(args):
@@ -699,11 +721,15 @@ def main():
     p_pshow = project_sub.add_parser("show", help="A project's folder and sessions (default: this session's)")
     p_pshow.add_argument("name", nargs="?")
     p_pshow.add_argument("--json", action="store_true")
-    p_pcreate = project_sub.add_parser("create", help="Make a project of the Projects plugin's, and start its Coordinator")
+    p_pcreate = project_sub.add_parser(
+        "create", help="Make a project of the Projects plugin's, or load a closed one's kept folder, and start its Coordinator"
+    )
     p_pcreate.add_argument("name")
-    p_premove = project_sub.add_parser("remove", help="Stop a Projects project's sessions and forget it")
-    p_premove.add_argument("name")
-    p_premove.add_argument("--delete-folder", action="store_true", help="Delete its folder too")
+    p_pclose = project_sub.add_parser(
+        "close", help="Run by a project's Coordinator once no task is open: mark it closed in track/, drop it from the list, end this session"
+    )
+    p_pclose.add_argument("name")
+    p_pclose.add_argument("--note", help="One line for the mark, e.g. what it ended with")
 
     # serve
     p_serve = sub.add_parser("serve", help="Run the service in the foreground")
@@ -760,7 +786,7 @@ def main():
             "list": cmd_project_list,
             "show": cmd_project_show,
             "create": cmd_project_create,
-            "remove": cmd_project_remove,
+            "close": cmd_project_close,
         }[args.project_command](args)
         return
 

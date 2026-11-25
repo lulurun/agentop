@@ -953,6 +953,47 @@ def problems(project: str, open_tasks: list[dict], kind: str | None = None) -> l
     return found
 
 
+# --- closing ---
+
+CLOSED_FILE = "CLOSED.md"
+
+
+def closed_path(project: str) -> Path:
+    n = generation(project)
+    return (gen_dir(project, n) if n else root(project)) / CLOSED_FILE
+
+
+def mark(project: str, event: str, by: str, note: str = "") -> Path:
+    """Append a dated `closed` or `reopened` line to the current direction's CLOSED.md; the only file closing writes."""
+    path = closed_path(project)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    line = f"- {_when(time.time())} {event} by {by}" + (f": {' '.join(note.split())}" if note.strip() else "")
+    if path.exists():
+        with open(path, "a") as f:
+            f.write(line + "\n")
+    else:
+        path.write_text(f"# Closed\n\nWritten by agentop project close and create; the last line says which it is now.\n\n{line}\n")
+    return path
+
+
+def closed_state(project: str) -> str | None:
+    """CLOSED.md's last line, when there is one."""
+    try:
+        lines = [line for line in closed_path(project).read_text().splitlines() if line.startswith("- ")]
+    except OSError:
+        return None
+    return lines[-1][2:] if lines else None
+
+
+def reopen(project: str, by: str) -> bool:
+    """Mark a closed project's kept folder reopened, as it is created again on it."""
+    state = closed_state(project)
+    if state is None or " closed by " not in state:
+        return False
+    mark(project, "reopened", by)
+    return True
+
+
 def started(project: str) -> bool:
     """Whether the track holds anything beyond the placeholder: a Coordinator starting on it resumes, not welcomes."""
     n = generation(project)

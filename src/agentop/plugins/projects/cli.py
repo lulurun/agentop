@@ -204,13 +204,16 @@ def _here() -> tuple[str, str, str] | None:
     return _ops().current_session()
 
 
-def _project(args) -> str:
+def _project(args, closed_too: bool = False) -> str:
+    """The project the command is for; with closed_too, a closed one's kept folder with a track/ also does."""
     from agentop import projects
 
     name = args.project or (_here() or (None, None, None))[1]
     if not name:
         _fail("run this inside a project's session, or give --project")
     found = projects.get(name)
+    if closed_too and found is None and projects.is_valid_name(name) and track.closed_state(name):
+        return name
     if found is None or found.get("owner") != "projects":
         _fail(f"{name} is not a Projects project")
     return name
@@ -467,7 +470,7 @@ def run_task(args, parser) -> None:
     if not command:
         parser.print_help()
         return
-    project = _project(args)
+    project = _project(args, closed_too=command == "status")
     {
         "start": task_start,
         "report": task_report,
@@ -661,7 +664,7 @@ def _task_line(t: dict, project: str) -> str:
 
 def status_text(project: str) -> str:
     """The resume view: what a fresh context needs to carry on."""
-    out = _change_section(project)
+    out = _closed_section(project) + _change_section(project)
     found_next = pursuit.read_next(project)
     out += [found_next or "# Next\n\n(none yet: agentop coordinator yield waiting|done --next \"…\" writes it)", ""]
     n = track.generation(project)
@@ -706,6 +709,16 @@ def status_text(project: str) -> str:
     return "\n".join(out)
 
 
+def _closed_section(project: str) -> list[str]:
+    state = track.closed_state(project)
+    if state is None:
+        return []
+    path = track.closed_path(project)
+    lines = [line for line in path.read_text().splitlines() if line.startswith("- ")]
+    now = "closed" if " closed by " in state else "reopened"
+    return [f"# Closed ({path.relative_to(track.projects.folder(project))}): {now} now", "", *lines, ""]
+
+
 def _change_section(project: str) -> list[str]:
     change = track.current_change(project)
     if change is None:
@@ -741,7 +754,7 @@ def run_coordinator(args, parser) -> None:
             _fail("agentop coordinator task start|report|accept|reject|fail|list|show")
         run_task(args, parser)
         return
-    project = _project(args)
+    project = _project(args, closed_too=command == "status")
     {
         "direction": coordinator_direction,
         "plan": coordinator_plan,

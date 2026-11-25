@@ -77,3 +77,15 @@ def test_a_session_with_no_agent_is_just_closed(tmux_server, tmp_path):
     assert Session.new("idle", str(tmp_path))
     result = AgentInstance(FakeAgent(), "idle").stop()
     assert result == StopResult(sent_exit=False, exited=True, forced=False, tmux_killed=True)
+
+
+def test_a_session_stopped_from_a_process_of_its_own_still_goes(tmux_server, tmp_path):
+    from agentop import ops
+
+    launch(tmp_path, "self", POLITE)
+    ops.stop_detached("self", [{"name": "self", "managed": True, "tool": "claude"}])
+    deadline = time.monotonic() + 20
+    while Session.has("self"):
+        assert time.monotonic() < deadline, "the detached stop never closed the session"
+        time.sleep(0.2)
+    assert "/exit" in (tmp_path / "self.log").read_text()

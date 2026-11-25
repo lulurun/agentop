@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 import time
 from pathlib import Path
 
@@ -60,6 +59,11 @@ def exists(name: str) -> bool:
     return get(name) is not None
 
 
+def kept(name: str) -> bool:
+    """A folder with no record: a closed project's, which create takes back as it is."""
+    return is_valid_name(name) and folder(name).is_dir() and not exists(name)
+
+
 def list_projects(owner: str | None = None) -> list[dict]:
     """Every project, or one owner's, oldest first."""
     root = projects_dir()
@@ -72,7 +76,7 @@ def list_projects(owner: str | None = None) -> list[dict]:
 
 
 def create(name: str, owner: str, welcome: str = "", instructions: str = "") -> dict:
-    """Make the folder and its record. Raises ProjectError. The Coordinator is started by coordinator.start_for."""
+    """Make the folder and its record, or the record only on a closed project's kept folder. Raises ProjectError."""
     if not is_valid_name(name):
         raise ProjectError("A project's name is 1-96 lowercase letters, digits, '-' or '_', starting with a letter or digit")
     if exists(name):
@@ -116,16 +120,13 @@ def ensure_default() -> dict:
     return found or create(DEFAULT, CORE)
 
 
-def remove(name: str, delete_folder: bool = False) -> None:
-    """Unregister a project: only its project.json goes, unless the whole folder does. Its sessions are the caller's to stop first."""
+def close(name: str) -> None:
+    """Drop a project's entry, .project/project.json; its folder is kept, to be created again on. Never deletes a folder."""
     if name == DEFAULT:
-        raise ProjectError("The default project can't be removed")
+        raise ProjectError("The default project can't be closed")
     if not exists(name):
         raise ProjectError(f"No project called {name}")
-    if delete_folder:
-        shutil.rmtree(folder(name))
-    else:
-        _meta_path(name).unlink()
+    _meta_path(name).unlink()
 
 
 def split_target(target: str) -> tuple[str | None, str]:

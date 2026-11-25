@@ -171,18 +171,6 @@ class PluginAPI:
         await self._host.store.ensure_coordinator(name, [t.name for t in tools])
         return found
 
-    async def remove_project(self, name: str, delete_folder: bool = False) -> None:
-        """Stop a project's running sessions and unregister it. Only the plugin's own. Raises projects.ProjectError."""
-        from agentop import projects
-
-        found = await asyncio.to_thread(projects.get, name)
-        if found is None or found.get("owner") != self.id:
-            raise projects.ProjectError(f"No project called {name} of {self.id}'s")
-        for row in self._host.store.list():
-            if row.get("project") == name and row.get("managed") and row["status"] != "starting":
-                await self._host.store.stop(row["id"])
-        await asyncio.to_thread(projects.remove, name, delete_folder)
-
     async def start_coordinator(self, name: str) -> dict | None:
         """The project's Coordinator: running, or resumed or started now."""
         from agentop import agentclis
