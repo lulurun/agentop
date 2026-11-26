@@ -195,7 +195,7 @@ def test_a_task_session_at_a_question_is_brought_to_the_coordinator_once_per_epi
     checker.tick(rows(), now + 120)
     checker.tick(rows(), now + 500)
     assert [to for to, _ in sent] == ["Coordinator"]
-    assert "[task t1] dev has waited for input for 2m" in sent[0][1] and "Look at its screen" in sent[0][1]
+    assert "[task t1] dev has waited for input for 2m" in sent[0][1] and "Inspect its recent session output" in sent[0][1]
     feed.publish(hook("dev-1", "working", now + 600))
     checker.tick(rows(), now + 601)
     feed.publish(SessionStatus("dev-1", "input", now + 700, "hook", "Notification"))
@@ -244,40 +244,17 @@ def test_a_lost_stop_the_screen_guessed_counts_as_working_silently(alpha):
     assert len(sent) == 1 and "(its screen looks idle)" in sent[0][1]
 
 
-def test_done_without_a_report_reminds_the_session_then_tells_the_coordinator(alpha):
+def test_done_without_a_report_is_inspected_by_the_coordinator(alpha):
     checker, feed, sent = watching()
     now = 10_000.0
     feed.publish(hook("dev-1", "done", now))
-    checker.tick(rows(), now + 179)
-    assert sent == []
     checker.tick(rows(), now + 180)
-    checker.tick(rows(), now + 400)
-    assert [to for to, _ in sent] == ["dev"] and "only a reminder" in sent[0][1]
-    # Its reply to the reminder ends another turn: not reminded again.
-    feed.publish(hook("dev-1", "working", now + 401))
-    checker.tick(rows(), now + 401)
-    feed.publish(hook("dev-1", "done", now + 420))
-    checker.tick(rows(), now + 420 + 600)
-    assert [to for to, _ in sent] == ["dev"]
-    checker.tick(rows(), now + 420 + 2 * 3600)
-    checker.tick(rows(), now + 420 + 3 * 3600)
-    assert [to for to, _ in sent] == ["dev", "Coordinator"]
-    assert "dev ended its turn 2h ago without reporting round 1" in sent[1][1]
-    assert len(kinds(alpha, "task.reminded")) == 1 and len(kinds(alpha, "task.quiet")) == 1
-
-
-def test_a_turn_that_ends_while_a_background_job_runs_is_only_reminded(alpha):
-    checker, feed, sent = watching()
-    now = 10_000.0
-    for n in range(3):
-        start = now + n * 1000
-        feed.publish(hook("dev-1", "working", start))
-        checker.tick(rows(), start)
-        feed.publish(hook("dev-1", "done", start + 10))
-        checker.tick(rows(), start + 10 + 180)
-        # The job finishes before 2 h and wakes the session, which carries on.
-    assert [to for to, _ in sent] == ["dev", "dev"]
-    assert pursuit.task_for(alpha, "dev")["status"] == "open" and kinds(alpha, "task.quiet") == []
+    assert sent == []
+    checker.tick(rows(), now + 2 * 3600)
+    checker.tick(rows(), now + 3 * 3600)
+    assert [to for to, _ in sent] == ["Coordinator"]
+    assert "Inspect its recent session output" in sent[0][1]
+    assert len(kinds(alpha, "task.quiet")) == 1
 
 
 def test_a_reported_task_is_not_reminded(alpha):

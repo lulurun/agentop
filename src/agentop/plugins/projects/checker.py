@@ -1,10 +1,4 @@
-"""Watches Projects sessions on the scan tick: a Coordinator at a safe point is cleared when its yield asked,
-its context is large or a milestone closed; a task session long at a question, silent while working, or done
-without a report is reminded or brought to the Coordinator.
-
-Turns come only from the attention plugin's status feed, as the tools' lifecycle events report them; a session
-with no such status (no hooks, a screen guess, the plugin off) is never cleared or reminded.
-"""
+"""Clear Coordinators at safe points and bring task sessions needing attention to them."""
 
 from __future__ import annotations
 
@@ -29,8 +23,6 @@ CLEAR_SECONDS = 2.0
 THRESHOLDS = {
     "task_input_after": 120.0,
     "task_working_after": 30 * 60.0,
-    # A turn can end while a background job runs: a reminder is harmless then, so it comes early.
-    "task_remind_after": 180.0,
     "task_unreported_after": 2 * 3600.0,
 }
 
@@ -40,9 +32,6 @@ class Turn:
     netted: float | None = None
     unknown: bool = False
     told: set = field(default_factory=set)
-    # The round last reminded: the turn after a reminder is likely its reply, so its end isn't reminded again.
-    reminded: tuple | None = None
-    reply_seen: bool = False
 
 
 def thresholds(project: dict | None) -> dict[str, float | None]:
@@ -171,47 +160,35 @@ class Checker:
         episode = (status.state, status.since)
         due = [key for key in (("task_input_after",) if status.state == "input" else
                                ("task_working_after",) if status.state == "working" else
-                               ("task_remind_after", "task_unreported_after"))
+                               ("task_unreported_after",))
                if limits[key] is not None and waited >= limits[key] and (key, *episode) not in turn.told]
         if not due:
             return
         task = pursuit.task_for(row["project"], row.get("display_name") or "")
         for key in due:
             if task is None or (status.state == "done" and not pursuit.awaiting_report(task)) \
-                    or self._notice(key, row, task, status, waited, turn):
+                    or self._notice(key, row, task, status, waited):
                 turn.told.add((key, *episode))
 
-    def _notice(self, key: str, row: dict, task: dict, status: SessionStatus, waited: float, turn: Turn) -> bool:
+    def _notice(self, key: str, row: dict, task: dict, status: SessionStatus, waited: float) -> bool:
         project, session, n = row["project"], task["session"], len(task["rounds"])
         head = f"[task {task['id']}] {session}"
-        if key == "task_remind_after":
-            if turn.reminded == (task["id"], n) and not turn.reply_seen:
-                turn.reply_seen = True
-                return True
-            turn.reminded, turn.reply_seen = (task["id"], n), False
-            pursuit.log(project, "task.reminded", task=task["id"], session=session, round=n)
-            self._deliver(project, row, (
-                f"[task {task['id']}] Your turn ended without a report. If you are done, run "
-                "agentop coordinator task report \"…\". If something stops you, run agentop coordinator task report "
-                "--blocked \"…\". If you are waiting on a background job, carry on; this is only a reminder."
-            ))
-            return True
         if key == "task_input_after":
             kind, text = "task.input", (
                 f"{head} has waited for input for {age(waited)}"
                 f"{' (an approval prompt on its screen)' if status.source == 'screen' else ''}. "
-                "Look at its screen: answer it, or tell the owner if it needs them."
+                "Inspect its recent session output: answer it, or tell the owner if it needs them."
             )
         elif key == "task_working_after":
             kind, text = "task.silent", (
                 f"{head} has been working with no new event for {age(waited)}"
                 f"{' (its screen looks idle)' if status.source == 'screen' else ''}. A tool call may hang or its Stop "
-                "was lost. Look at its screen and decide: wait, nudge it, or fail it."
+                "was lost. Inspect its recent session output and decide: wait, nudge it, or fail it."
             )
         else:
             kind, text = "task.quiet", (
                 f"{head} ended its turn {age(waited)} ago without reporting round {n}. "
-                "Look at its screen and decide: answer it, reject with feedback, or fail it."
+                "Inspect its recent session output and decide whether to wait, nudge it, or fail the task."
             )
         coordinator = next(
             (r for r in self._rows if r.get("project") == project and r.get("display_name") == projects.COORDINATOR),
@@ -250,4 +227,6 @@ class Checker:
         if pane is None:
             self._deliver(project, row, pursuit.wake_note(project, source) + text)
             return True
+        if pane.agent is not None and pane.agent.draft(pane.screen(escapes=True)) is True:
+            return False
         return self._run(project, lambda: wake.deliver_event(project, pane, text, source, task)) is not False

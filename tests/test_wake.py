@@ -223,6 +223,32 @@ def test_a_second_report_before_the_next_yield_is_not_cleared_again(alpha, monke
     assert events("clear.skipped")[-1]["reason"] == "no yield since the last event"
 
 
+def test_a_finished_turn_after_a_wake_can_clear_without_another_yield(alpha, monkeypatch):
+    task()
+    waiting()
+    pursuit.log(alpha, "wake", source="task.silent")
+    pane = FakePane()
+    ended = time.time() + 1
+    pane.status = lambda: feed_status("done", ended)
+    monkeypatch.setattr(wake, "_now", lambda: ended + 2)
+    report(monkeypatch, pane)
+    assert pane.typed[0] == "/clear"
+    assert "dev reported" in pane.typed[1]
+
+
+def test_a_draft_defers_a_notice_without_recording_a_wake(alpha):
+    pane = FakePane(screen="draft")
+    checker = Checker(lambda *args: None, status_feed=StatusFeed(), pane=lambda row: pane,
+                      run=lambda project, fn: fn())
+    task()
+    waiting()
+    assert not checker._tell_coordinator(alpha, {}, "inspect dev", "task.silent")
+    assert not events("wake") and not pane.typed
+    pane.current = pane.screens["old"]
+    assert checker._tell_coordinator(alpha, {}, "inspect dev", "task.silent")
+    assert events("wake")[-1]["source"] == "task.silent"
+
+
 def test_a_placeholder_screen_hint_is_not_a_draft(alpha):
     for tool in ("claude", "codex"):
         agent = FakePane(tool).agent

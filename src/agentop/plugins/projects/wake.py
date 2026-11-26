@@ -90,16 +90,18 @@ def _one_at_a_time(project: str):
         yield
 
 
-def blocker(project: str, explicit: bool = False, task: str | None = None) -> str | None:
+def blocker(project: str, explicit: bool = False, task: str | None = None, pane: Pane | None = None) -> str | None:
     """Why the record says clearing isn't safe now, or None (spec 9.2). `task` is the one whose event is being delivered."""
     found = pursuit.events(project)
     last_yield = next((e for e in reversed(found) if e["kind"] == "yield"), None)
     last_wake = next((e for e in reversed(found) if e["kind"] == pursuit.WAKE), None)
     if last_yield is None or (last_wake is not None and last_wake["at"] >= last_yield["at"]):
-        return "no yield since the last event"
-    if not explicit and last_yield.get("type") not in pursuit.CLEARING_KINDS:
+        status = known(pane.status()) if pane is not None else None
+        if status is None or status.state != "done" or (last_wake is not None and status.since < last_wake["at"]):
+            return "no yield since the last event"
+    if not explicit and last_yield is not None and last_yield.get("type") not in pursuit.CLEARING_KINDS:
         return f"the last yield was {last_yield.get('type')}"
-    if not explicit and last_yield.get("keep"):
+    if not explicit and last_yield is not None and last_yield.get("keep"):
         return "the last yield asked to keep the context"
     others = [t["session"] for t in pursuit.open_tasks(project) if not pursuit.awaiting_report(t) and t["id"] != task]
     if others:
@@ -230,7 +232,7 @@ def _clear_logged(project: str, pane: Pane, **fields) -> str | None:
 def deliver_event(project: str, pane: Pane, text: str, source: str, task: str | None = None) -> str:
     """Type a task event into the Coordinator, clearing its context first when safe (spec 9.1). Returns what happened."""
     with _one_at_a_time(project):
-        reason = blocker(project, task=task)
+        reason = blocker(project, task=task, pane=pane)
         if reason is None and pursuit.cleared(project):
             outcome, prompt = "already cleared", compose(project, CLEARED, text)
         else:
@@ -277,7 +279,7 @@ def clear_reason(project: str, row: dict, agent: AgentCli) -> tuple[str, bool] |
 def safety_clear(project: str, pane: Pane, why: str, explicit: bool = False) -> str:
     """Clear at a safe point with no event to deliver; after a yield --clear, tell it to carry on. Returns what happened."""
     with _one_at_a_time(project):
-        reason = blocker(project, explicit=explicit) or owner_ask_blocker(project) or session_blocker(pane)
+        reason = blocker(project, explicit=explicit, pane=pane) or owner_ask_blocker(project) or session_blocker(pane)
         if reason is not None:
             pursuit.log(project, "clear.skipped", reason=reason, why=why)
             return "not cleared"
