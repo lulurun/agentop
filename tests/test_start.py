@@ -1,4 +1,8 @@
+import os
+import shlex
+import subprocess
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -55,6 +59,34 @@ def test_start_uses_the_same_name_throughout(fake_agents, cwd):
     assert result.name.startswith("demo-")
     assert Session.has(result.name)
     assert steps == ["creating", "launching", "waiting", "confirming"]
+
+
+@pytest.mark.parametrize(("tool", "hook_count"), [("claude", 9), ("codex", 7)])
+def test_hooks_are_loaded_by_the_pane_shell(tool, hook_count, monkeypatch, tmp_path):
+    from agentop import launcher, signals
+    from agentop.agentclis.base import AgentCli
+
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    agent = AgentCli()
+    agent.name = tool
+    monkeypatch.setattr(Session, "new", lambda *_: True)
+    monkeypatch.setattr(Session, "set_option", lambda *_: True)
+    monkeypatch.setattr(Session, "list_panes", lambda *_: ["1"])
+    monkeypatch.setattr(launcher, "_find_agent_pid", lambda *_: os.getpid())
+    invoked = []
+
+    def run_in_pane(name, command, enter):
+        assert enter == "Enter"
+        assert len(command.encode()) < 1024
+        invoked.append(Path(shlex.split(command)[1]))
+        assert invoked[0].stat().st_mode & 0o077 == 0
+        result = subprocess.run(["/bin/sh", "-c", command], check=True, capture_output=True, text=True)
+        assert result.stdout.splitlines()[:2] == ["--model", "model name"]
+        assert result.stdout.count(str(signals.event_path(name))) == hook_count
+
+    monkeypatch.setattr(Session, "send_keys", run_in_pane)
+    launcher.launch(agent, """printf '%s\\n' --model 'model name'""", str(tmp_path), name="test-launch")
+    assert not invoked[0].exists()
 
 
 def test_a_chosen_name_is_used(fake_agents, cwd):

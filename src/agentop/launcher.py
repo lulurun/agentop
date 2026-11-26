@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import shlex
+import tempfile
 import time
 from collections.abc import Callable
+from contextlib import ExitStack
 from typing import TYPE_CHECKING
 
 import psutil
@@ -25,15 +28,7 @@ def launch(
     on_progress: Callable[[str], None] | None = None,
     agent_session_id: str | None = None,
 ) -> StartResult:
-    """Create a tmux session, run cmd in its shell, and wait for the agent process. Raises StartFailed.
-
-    The command is typed into the pane rather than passed to new-session
-    so that it runs with the user's shell setup, which the service's
-    environment does not have.
-
-    On failure the tmux session is left in place when it exists, and its
-    name is in the error, so the error stays visible on its screen.
-    """
+    """Run the agent in a new tmux shell and keep the pane available on failure."""
     progress = on_progress or (lambda step: None)
     if params:
         cmd = agent._build_cmd(cmd, params)
@@ -46,25 +41,39 @@ def launch(
     progress("creating")
     if not Session.new(name, cwd):
         raise StartFailed("tmux new-session failed")
-    cmd += launch_flags(agent.name, name)
     if agent.mouse:
         Session.set_option(name, "mouse", "on")
 
-    progress("launching")
-    Session.send_keys(name, cmd, "Enter")
+    with ExitStack() as files:
+        try:
+            flags = launch_flags(agent.name, name)
+            pane_cmd = cmd
+            if flags:
+                # The terminal can truncate long input before the shell has initialized.
+                script = files.enter_context(
+                    tempfile.NamedTemporaryFile(mode="w", prefix="agentop-launch-", encoding="utf-8")
+                )
+                script.write(cmd + flags + "\n")
+                script.flush()
+                pane_cmd = f". {shlex.quote(script.name)}"
+        except OSError as exc:
+            raise StartFailed(f"Could not prepare {agent.name} launch: {exc}", name) from exc
 
-    progress("waiting")
-    lines = Session.list_panes(name, "#{pane_pid}")
-    pane_pid = int(lines[0]) if lines and lines[0].isdigit() else None
-    tool_pid = None
-    deadline = time.monotonic() + agent.start_timeout
-    while pane_pid and time.monotonic() < deadline:
-        tool_pid = _find_agent_pid(agent, pane_pid)
-        if tool_pid:
-            break
-        if _launch_failed(name, cmd):
-            raise StartFailed(f"{cmd.split()[0]} is not installed, or not on the shell's PATH", name)
-        time.sleep(0.25)
+        progress("launching")
+        Session.send_keys(name, pane_cmd, "Enter")
+
+        progress("waiting")
+        lines = Session.list_panes(name, "#{pane_pid}")
+        pane_pid = int(lines[0]) if lines and lines[0].isdigit() else None
+        tool_pid = None
+        deadline = time.monotonic() + agent.start_timeout
+        while pane_pid and time.monotonic() < deadline:
+            tool_pid = _find_agent_pid(agent, pane_pid)
+            if tool_pid:
+                break
+            if _launch_failed(name, cmd):
+                raise StartFailed(f"{cmd.split()[0]} is not installed, or not on the shell's PATH", name)
+            time.sleep(0.25)
 
     if not tool_pid:
         raise StartFailed(f"{agent.name} did not start within {agent.start_timeout:g}s", name)
