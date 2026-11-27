@@ -124,6 +124,8 @@ describe("Projects workbench", () => {
     const Right = projectsPlugin.feature!.right!;
     const Left = projectsPlugin.feature!.left!;
     const pane = (side: string) => container.querySelector<HTMLElement>(`[data-test-panel="${side}"]`)!;
+    // Picking a project reads its layout.json first; this one has none.
+    vi.stubGlobal("fetch", async (url: string) => new Response(null, { status: String(url).endsWith("/projects/alpha/layout") ? 204 : 404 }));
     try {
       act(() => useApp.setState({
         connections: [{ id: original.activeId, label: "Local", url: "http://localhost", token: "" }],
@@ -162,6 +164,7 @@ describe("Projects workbench", () => {
       act(() => root.render(null));
       act(() => useApp.setState(original));
       client.mockRestore();
+      vi.unstubAllGlobals();
     }
   });
 
