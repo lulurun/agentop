@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentop"
-version = "2.12.1"
+version = "2.13.0"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.104.0",
