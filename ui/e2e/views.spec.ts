@@ -59,6 +59,14 @@ async function openStatus(page: Page, name = "box") {
 
 const features = (page: Page) => page.getByRole("navigation", { name: "Features" });
 
+/** Make a project from the Project button's creation buffer. */
+async function createProject(page: Page, name: string) {
+  await page.getByRole("complementary", { name: "Left panel" }).getByRole("button", { name: "Project", exact: true }).click();
+  const buffer = page.getByRole("region", { name: "New project", exact: true });
+  await buffer.getByLabel("Name").fill(name);
+  await buffer.getByRole("button", { name: "Create", exact: true }).click();
+}
+
 /** Past sessions agentop started, each with a transcript last written `ago` seconds back. */
 function seedHistory(
   s: Service,
@@ -521,8 +529,7 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   const s = await open(page);
   await features(page).getByRole("button", { name: "Projects" }).click();
   const left = page.getByRole("complementary", { name: "Left panel" });
-  await left.getByLabel("New project's name").fill("alpha");
-  await left.getByRole("button", { name: "Create", exact: true }).click();
+  await createProject(page, "alpha");
 
   // Its Coordinator works in the project folder, with its instructions there, and opens in Projects.
   await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("alpha", { timeout: 20_000 });
@@ -538,8 +545,7 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
 
   // A second one, named straight after, is made and chosen too.
   await features(page).getByRole("button", { name: "Projects" }).click();
-  await left.getByLabel("New project's name").fill("beta");
-  await left.getByRole("button", { name: "Create", exact: true }).click();
+  await createProject(page, "beta");
   await expect(left.getByRole("navigation", { name: "Projects" }).locator('[aria-current="true"]')).toContainText("beta", { timeout: 20_000 });
 
   await expect(left.getByRole("button", { name: "Close beta" })).toHaveCount(0);
@@ -573,8 +579,7 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   await expect(list.getByRole("button", { name: "alpha", exact: true })).toBeVisible();
 
   // Made again by name, the kept folder is loaded back, with its track, and its Coordinator starts on it.
-  await left.getByLabel("New project's name").fill("beta");
-  await left.getByRole("button", { name: "Create", exact: true }).click();
+  await createProject(page, "beta");
   await expect(list.locator('[aria-current="true"]')).toContainText("beta", { timeout: 20_000 });
   expect(readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8")).toBe(agents);
   expect(readFileSync(join(s.root, "state/projects/beta/track/1/CLOSED.md"), "utf8")).toMatch(/reopened by the owner, in the app\n$/);

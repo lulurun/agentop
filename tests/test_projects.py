@@ -275,3 +275,68 @@ def test_stale_coordinator_requests_cannot_start_or_resume_projects(tmp_path, mo
 
     asyncio.run(check())
     assert not (projects.folder("alpha") / "AGENTS.md").exists()
+
+
+def test_a_chosen_coordinator_tool_is_checked_first_then_started(fake_agents, quick_boot):
+    with run_service() as service:
+        base = "/plugins/projects/projects"
+        for tool in ("brokenagent", "nope", ""):
+            refused = service.http.post(base, json={"name": "beta", "tool": tool})
+            assert refused.status_code == 400, refused.text
+        assert projects.get("beta") is None and not projects.folder("beta").exists()
+
+        def coordinator_of(name):
+            return next(r for r in service.http.get("/sessions").json() if r["project"] == name and r["display_name"] == "Coordinator")
+
+        # Picked by default, fakeagent would start; the chosen tool wins.
+        assert service.http.post(base, json={"name": "beta", "tool": "slowagent"}).status_code == 201
+        assert coordinator_of("beta")["tool"] == "slowagent"
+        assert service.http.post(base, json={"name": "gamma"}).status_code == 201
+        assert coordinator_of("gamma")["tool"] == "fakeagent"
+
+        # A kept folder: a refused tool leaves its closed track as it was.
+        projects.close("gamma")
+        closed = projects.folder("gamma") / "track/1/CLOSED.md"
+        closed.parent.mkdir(parents=True, exist_ok=True)
+        closed.write_text("# Closed\n\n- 2026-11-25 10:00 closed by `Coordinator` of gamma\n")
+        assert service.http.post(base, json={"name": "gamma", "tool": "nope"}).status_code == 400
+        assert "reopened" not in closed.read_text()
+        assert projects.get("gamma") is None
+
+
+def test_a_kept_project_resumes_its_coordinator_only_with_the_same_tool(tmp_path, monkeypatch):
+    import asyncio
+
+    from agentop.service.store import SessionStore, StoreError
+
+    monkeypatch.setenv("AGENTOP_HOME", str(tmp_path))
+    projects.create("alpha", "projects")
+    registry.upsert_session("old-coord", {
+        "project": "alpha", "display_name": "Coordinator", "tool": "codex", "agent_session_id": "OLD-1", "created_at": 1,
+    })
+    store = SessionStore()
+    started = []
+
+    async def create(tool, cwd, name=None, resume_id=None, **kwargs):
+        started.append((tool, resume_id))
+        return {"tool": tool}
+
+    monkeypatch.setattr(store, "create", create)
+    monkeypatch.setattr(coordinator, "write_instructions", lambda found: None)
+
+    async def check():
+        await store.ensure_coordinator("alpha", ["codex", "claude"], creating=True)
+        await store.ensure_coordinator("alpha", ["codex", "claude"], creating=True, tool="codex")
+        await store.ensure_coordinator("alpha", ["codex", "claude"], creating=True, tool="claude")
+        with pytest.raises(StoreError) as refused:
+            await store.ensure_coordinator("alpha", ["codex"], creating=True, tool="claude")
+        assert refused.value.status == 400
+        store._sessions["coord-1"] = {"id": "coord-1", "project": "alpha", "display_name": "Coordinator",
+                                      "status": "running", "tool": "codex"}
+        with pytest.raises(StoreError) as refused:
+            await store.ensure_coordinator("alpha", ["codex", "claude"], creating=True, tool="claude")
+        assert refused.value.status == 409
+        assert (await store.ensure_coordinator("alpha", ["codex", "claude"], creating=True, tool="codex"))["id"] == "coord-1"
+
+    asyncio.run(check())
+    assert started == [("codex", "OLD-1"), ("codex", "OLD-1"), ("claude", None)]

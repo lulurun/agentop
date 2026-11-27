@@ -158,13 +158,37 @@ class PluginAPI:
 
         return self._host.store.get(session_id) or history.record(session_id)
 
-    async def create_project(self, name: str, welcome: str = "", instructions: str = "") -> dict:
-        """Make a project the plugin owns and start its Coordinator; raises projects.ProjectError."""
-        from agentop import agentclis, projects
+    async def installed_tools(self) -> list[str]:
+        from agentop import agentclis
 
+        return [t.name for t in await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)]
+
+    async def check_coordinator_tool(self, name: str, tool: str) -> None:
+        """Raise projects.ProjectError unless `tool` can start the project's Coordinator; changes nothing."""
+        from agentop import projects
+
+        from .store import StoreError
+
+        available = await self.installed_tools()
+        if tool not in available:
+            raise projects.ProjectError(f"{tool or 'No tool'} is not an installed agent tool")
+        # Creating an existing one fails anyway, saying why; only a kept folder may still have a Coordinator running.
+        if await asyncio.to_thread(projects.exists, name):
+            return
+        try:
+            self._host.store.check_coordinator_tool(name, tool, available)
+        except StoreError as exc:
+            raise projects.ProjectError(exc.message) from None
+
+    async def create_project(self, name: str, welcome: str = "", instructions: str = "", tool: str | None = None) -> dict:
+        """Make a project the plugin owns and start its Coordinator, with `tool` when given; raises projects.ProjectError."""
+        from agentop import projects
+
+        available = await self.installed_tools()
+        if tool is not None:
+            await self.check_coordinator_tool(name, tool)
         found = await asyncio.to_thread(projects.create, name, self.id, welcome, instructions)
-        tools = await asyncio.to_thread(agentclis.installed, agentclis.AGENTS)
-        await self._host.store.ensure_coordinator(name, [t.name for t in tools], creating=True)
+        await self._host.store.ensure_coordinator(name, available, creating=True, tool=tool)
         return found
 
     async def start_coordinator(self, name: str) -> dict | None:

@@ -36,6 +36,7 @@ def register(api) -> None:
 
     class NewProject(BaseModel):
         name: str
+        tool: str | None = None
 
     class Wake(BaseModel):
         text: str
@@ -56,10 +57,13 @@ def register(api) -> None:
     async def create_project(body: NewProject):
         """A new project, or a closed one's kept folder taken back as it is."""
         name = body.name.strip()
-        if await asyncio.to_thread(projects.kept, name):
-            await asyncio.to_thread(track.reopen, name, BY_OWNER)
         try:
-            return await api.create_project(name, WELCOME, INSTRUCTIONS)
+            # Before the kept folder is marked reopened, so a refused tool changes nothing.
+            if body.tool is not None:
+                await api.check_coordinator_tool(name, body.tool)
+            if await asyncio.to_thread(projects.kept, name):
+                await asyncio.to_thread(track.reopen, name, BY_OWNER)
+            return await api.create_project(name, WELCOME, INSTRUCTIONS, body.tool)
         except projects.ProjectError as exc:
             raise HTTPException(400, str(exc)) from None
 

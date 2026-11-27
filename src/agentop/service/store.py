@@ -546,15 +546,9 @@ class SessionStore:
             except Exception:
                 LOG.exception("The first prompt of %s failed", session_id)
 
-    async def ensure_coordinator(self, project: str, available: list[str], *, creating: bool = False) -> dict | None:
-        """Return its Coordinator; only explicit creation starts one for Projects."""
-        if not projects.has_coordinator(project):
-            raise StoreError(400, f"The {project} project has no Coordinator")
-        found = await asyncio.to_thread(projects.get, project)
-        if found is None:
-            raise StoreError(404, f"No project called {project}")
+    def running_coordinator(self, project: str) -> dict | None:
         name = projects.COORDINATOR
-        running = next(
+        return next(
             (
                 r
                 for r in self._sessions.values()
@@ -562,6 +556,31 @@ class SessionStore:
             ),
             None,
         )
+
+    def check_coordinator_tool(self, project: str, tool: str, available: list[str]) -> None:
+        """Refuse a chosen tool that isn't installed, or that differs from the project's Coordinator still running."""
+        if tool not in available:
+            raise StoreError(400, f"{tool} is not an installed agent tool")
+        running = self.running_coordinator(project)
+        if running and running.get("tool") != tool:
+            raise StoreError(409, f"The {project} Coordinator is still running with {running.get('tool')}")
+
+    async def ensure_coordinator(
+        self, project: str, available: list[str], *, creating: bool = False, tool: str | None = None
+    ) -> dict | None:
+        """Return its Coordinator; only explicit creation starts one for Projects.
+
+        A chosen `tool` must be installed; it resumes the last Coordinator only when that one used the same tool.
+        """
+        if tool is not None:
+            self.check_coordinator_tool(project, tool, available)
+        if not projects.has_coordinator(project):
+            raise StoreError(400, f"The {project} project has no Coordinator")
+        found = await asyncio.to_thread(projects.get, project)
+        if found is None:
+            raise StoreError(404, f"No project called {project}")
+        name = projects.COORDINATOR
+        running = self.running_coordinator(project)
         if running:
             return copy.deepcopy(running)
         if found.get("owner") == "projects" and not creating:
@@ -577,7 +596,7 @@ class SessionStore:
         if before:
             last = max(before, key=lambda r: r.get("created_at") or 0)
             agent = ops.get_agent(last["tool"])
-            if agent and agent.get_resume_cmd(last["agent_session_id"]):
+            if (tool is None or last["tool"] == tool) and agent and agent.get_resume_cmd(last["agent_session_id"]):
                 return await self.create(
                     last["tool"],
                     found["folder"],
@@ -587,7 +606,7 @@ class SessionStore:
                     project=project,
                     prompt=coordinator.resume_prompt(found),
                 )
-        tool = coordinator.pick_tool(available)
+        tool = tool or coordinator.pick_tool(available)
         if tool is None:
             return None
         return await self.create(tool, found["folder"], name, project=project, prompt=coordinator.first_prompt(found))
