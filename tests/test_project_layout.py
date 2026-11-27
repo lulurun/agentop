@@ -138,3 +138,17 @@ def test_a_saved_layout_drops_empty_optional_fields_but_keeps_no_active_tab(clie
     saved = json.loads(projects.layout_path("alpha").read_text())
     assert saved["mid-panel"]["left"] == {"open": False, "tabs": [], "active": None}
     assert saved["mid-panel"]["right"]["tabs"][0]["content"] == {"kind": "plugin", "plugin": "memory", "view": "search"}
+
+
+def test_panel_widths_and_the_split_are_kept_and_bounded(client):
+    projects.create("alpha", "projects")
+    sized = layout(**{"left-panel": {"open": True, "width": 300}, "right-panel": {"open": False, "width": 420}})
+    sized["mid-panel"]["split"] = 0.35
+    assert client.put("/api/v2/projects/alpha/layout", json=sized, headers=AUTH).status_code == 204
+    assert client.get("/api/v2/projects/alpha/layout", headers=AUTH).json() == sized
+    for bad in ({"open": True, "width": 50}, {"open": True, "width": 300.5}, {"open": True, "width": "300"}):
+        assert client.put("/api/v2/projects/alpha/layout", json=layout(**{"left-panel": bad}), headers=AUTH).status_code == 422
+    too_far = layout()
+    too_far["mid-panel"]["split"] = 1.5
+    assert client.put("/api/v2/projects/alpha/layout", json=too_far, headers=AUTH).status_code == 422
+    assert client.get("/api/v2/projects/alpha/layout", headers=AUTH).json() == sized

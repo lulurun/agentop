@@ -585,7 +585,32 @@ button.app-outdated:hover { background: var(--line); }
 /* Main-area tabs: one or two groups side by side, each with its own tab bar */
 .workbench { flex: 1; min-height: 0; display: flex; }
 .tab-group { position: relative; flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
-.tab-group + .tab-group { border-left: 1px solid var(--line); }
+.workbench[data-areas="2"] .tab-group { min-width: min(200px, 40%); }
+
+/* Boundaries that can be dragged: a wide hit area over a thin line, and a grip to find them by. */
+.splitter { position: relative; z-index: 3; flex: none; touch-action: none; cursor: col-resize; outline: none; }
+.splitter::before { content: ""; position: absolute; inset: 0 4px; background: transparent; transition: background 0.12s; }
+.splitter::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 28px;
+  margin: -14px 0 0 -2px;
+  border-radius: 2px;
+  background: var(--line);
+  opacity: 0.9;
+}
+.splitter:hover::before, .splitter:focus-visible::before, .splitter[data-dragging]::before { background: var(--action); }
+.splitter:hover::after, .splitter:focus-visible::after, .splitter[data-dragging]::after { background: var(--action); }
+.splitter-left, .splitter-right { position: absolute; top: 44px; bottom: 0; width: 8px; }
+.splitter-left { left: calc(var(--left) - 4px); }
+.splitter-right { right: calc(var(--right) - 4px); }
+.splitter-areas { width: 1px; margin: 0 -4px; padding: 0 4px; box-sizing: content-box; background: var(--line); background-clip: content-box; }
+.splitter-areas::before { inset: 0 3px; }
+body[data-resizing] { cursor: col-resize; user-select: none; }
+body[data-resizing] iframe { pointer-events: none; }
 .tab-bar {
   display: flex;
   align-items: stretch;
@@ -858,7 +883,8 @@ button.app-outdated:hover { background: var(--line); }
   .session-row[aria-current="true"] { margin-right: 0; width: 100%; }
   /* No room for two groups: only the focused one shows. */
   .workbench[data-areas="2"] .tab-group:not([data-focused]) { display: none; }
-  .workbench[data-areas="2"] .tab-group + .tab-group { border-left: 0; }
+  .workbench[data-areas="2"] .tab-group { min-width: 0; }
+  .splitter { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

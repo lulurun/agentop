@@ -1,8 +1,10 @@
 import { modeStore } from "../plugins/input/state";
-import { useEffect } from "react";
+import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
 import { PluginPanel } from "../plugins/Slot";
 import { layoutAction, type PanelOrArea } from "../hotkeys";
-import { currentFeature, layoutOf, panelsOf, useApp } from "../store";
+import { currentFeature, layoutOf, panelsOf, useApp, widthsOf } from "../store";
+import { DEFAULT_LEFT, DEFAULT_RIGHT, fitSides, MAX_SIDE, MIN_MIDDLE, MIN_SIDE } from "../sizes";
+import { Splitter } from "./Splitter";
 import { pluginOf, featuresFor } from "../features";
 import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
@@ -92,6 +94,19 @@ function runLayoutKey(event: KeyboardEvent) {
   }
 }
 
+const onResize = (notify: () => void) => {
+  window.addEventListener("resize", notify);
+  return () => window.removeEventListener("resize", notify);
+};
+
+/** The window's width, drawn again as it changes. */
+export function useWindowWidth(): number {
+  return useSyncExternalStore(onResize, () => window.innerWidth);
+}
+
+/** Below this the side panels are overlays, at a width of their own (styles.css). */
+const OVERLAYS = 900;
+
 export function App() {
   // Each field on its own, so a change elsewhere in the store, such as a session's, doesn't draw the app again.
   const leftOpen = useApp((s) => panelsOf(s).leftOpen);
@@ -111,6 +126,13 @@ export function App() {
   const hasRight = linked && current.right;
   const showLeft = hasLeft && leftOpen;
   const showRight = hasRight && rightOpen;
+  const leftWidth = useApp((s) => widthsOf(s).leftWidth) ?? DEFAULT_LEFT;
+  const rightWidth = useApp((s) => widthsOf(s).rightWidth) ?? DEFAULT_RIGHT;
+  const setPanelWidth = useApp((s) => s.setPanelWidth);
+  const windowWidth = useWindowWidth();
+  const appRef = useRef<HTMLDivElement>(null);
+  const docked = windowWidth >= OVERLAYS;
+  const fit = fitSides(windowWidth, showLeft ? leftWidth : null, showRight ? rightWidth : null);
 
   useEffect(() => {
     void useApp.getState().init();
@@ -124,9 +146,14 @@ export function App() {
 
   if (!activeId || !hasConnections) return null;
   const plugin = pluginOf(current.id);
+  const bounds = () => appRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, windowWidth, 0);
+  // Each side may grow only as far as leaves the middle panel its room beside the other side as drawn.
+  const leftMax = Math.max(MIN_SIDE, Math.min(MAX_SIDE, windowWidth - MIN_MIDDLE - fit.right));
+  const rightMax = Math.max(MIN_SIDE, Math.min(MAX_SIDE, windowWidth - MIN_MIDDLE - fit.left));
+  const sizes = { "--left": `${fit.left}px`, "--right": `${fit.right}px` } as CSSProperties;
 
   return (
-    <div className="app" data-left={showLeft} data-right={showRight} data-feature={current.id}>
+    <div ref={appRef} className="app" data-left={showLeft} data-right={showRight} data-feature={current.id} style={docked ? sizes : undefined}>
       <header className="header">
         {hasLeft && (
           <button type="button" className="icon" aria-label="Toggle left panel" aria-pressed={leftOpen} title="Toggle left panel (Ctrl+Shift+1)" onClick={toggleLeft}>
@@ -153,7 +180,31 @@ export function App() {
           {current.id === "sessions" ? <Sidebar /> : plugin && <div className="sidebar-scroll"><PluginPanel pluginId={plugin} side="left" /></div>}
         </aside>
       )}
+      {docked && showLeft && (
+        <Splitter
+          label="Resize the left panel"
+          className="splitter-left"
+          value={fit.left}
+          min={MIN_SIDE}
+          max={leftMax}
+          onMove={(x) => setPanelWidth("left", Math.min(leftMax, x - bounds().left))}
+          onNudge={(dx) => setPanelWidth("left", Math.min(leftMax, fit.left + dx))}
+          onReset={() => setPanelWidth("left", Math.min(leftMax, DEFAULT_LEFT))}
+        />
+      )}
       <MainArea />
+      {docked && showRight && (
+        <Splitter
+          label="Resize the right panel"
+          className="splitter-right"
+          value={fit.right}
+          min={MIN_SIDE}
+          max={rightMax}
+          onMove={(x) => setPanelWidth("right", Math.min(rightMax, bounds().right - x))}
+          onNudge={(dx) => setPanelWidth("right", Math.min(rightMax, fit.right - dx))}
+          onReset={() => setPanelWidth("right", Math.min(rightMax, DEFAULT_RIGHT))}
+        />
+      )}
       {showRight && (
         <aside className="details" aria-label="Right panel" tabIndex={-1}>
           {current.id === "sessions" ? <DetailsPanel /> : plugin && <PluginPanel pluginId={plugin} side="right" />}

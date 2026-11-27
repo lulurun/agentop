@@ -18,7 +18,8 @@ import * as tabs from "./tabs";
 import type { Area, Layout, OpenMode, Tab, TabContent } from "./tabs";
 import { UI_PLUGINS } from "./plugins/registry";
 import { FIXED_PROJECT, isKnownFeature, isProjectFeature, isStaleTab, pluginOf, featuresFor, type FeatureId } from "./features";
-import { defaultView, fromFile, LayoutSync, sameView, toFile, type ProjectView } from "./layoutfile";
+import { defaultView, fromFile, LayoutSync, sameView, toFile, withoutSizes, type ProjectView } from "./layoutfile";
+import { clampSide, clampSplit, readSide, readSplit } from "./sizes";
 
 const DEFAULT_PROJECT = "default";
 
@@ -80,6 +81,11 @@ export interface AppState {
   sessionsLoaded: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
+  /** This browser's side panel widths, for a feature without a project; undefined for the default. */
+  leftWidth?: number;
+  rightWidth?: number;
+  /** The middle panel's split per connection, for each feature whose layout isn't a project's. */
+  splits: Record<string, Partial<Record<FeatureId, number>>>;
   /** The panels' sections folded shut, by `Section` id. */
   folded: string[];
   switcherOpen: boolean;
@@ -132,6 +138,10 @@ export interface AppState {
   removeHistory(item: HistoryItem): Promise<void>;
   toggleLeft(): void;
   toggleRight(): void;
+  /** The shown view's side panel width, in pixels. */
+  setPanelWidth(side: "left" | "right", width: number): void;
+  /** A feature's split: the left area's share of its middle panel. */
+  setSplit(feature: FeatureId, share: number): void;
   setFolded(section: string, folded: boolean): void;
   setSwitcherOpen(open: boolean): void;
   setDialog(dialog: Dialog, project?: string): void;
@@ -143,6 +153,7 @@ export interface AppState {
 }
 
 const LAYOUT_KEY = "agentop.layout";
+const SPLITS_KEY = "agentop.splits";
 const FOLDED_KEY = "agentop.folded";
 
 function loadFolded(): string[] {
@@ -279,6 +290,22 @@ export function panelsOf(state: Pick<AppState, "scopes" | "activeId" | "projectV
   return view?.ready && !narrow() ? view : state;
 }
 
+type PanelState = Pick<AppState, "scopes" | "activeId" | "projectViews" | "leftWidth" | "rightWidth" | "features" | "plugins" | "pluginsLoaded">;
+
+/** The side panels' widths set for the view shown, the shown project's or this browser's; undefined for the default. */
+export function widthsOf(state: PanelState): { leftWidth?: number; rightWidth?: number } {
+  const project = projectOf(state, currentFeature(state));
+  const view = project ? state.projectViews[state.activeId]?.[project] : undefined;
+  return view?.ready ? view : state;
+}
+
+/** A feature's split on the active connection: its project's, or this browser's for a layout that isn't a project's. */
+export function splitOf(state: Pick<AppState, "scopes" | "activeId" | "projectViews" | "splits">, feature: FeatureId): number | undefined {
+  const project = projectOf(state, feature);
+  if (project) return state.projectViews[state.activeId]?.[project]?.split;
+  return state.splits[state.activeId]?.[feature];
+}
+
 /** One view: a feature on a connection, and the project it shows, if any. */
 export interface ViewOwner {
   connection: string;
@@ -374,28 +401,52 @@ function loadSelected(): Record<string, string> {
 function savedPanels(): { leftOpen: boolean; rightOpen: boolean } | null {
   try {
     const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null");
-    return saved && typeof saved.leftOpen === "boolean" && typeof saved.rightOpen === "boolean" ? saved : null;
+    return saved && typeof saved.leftOpen === "boolean" && typeof saved.rightOpen === "boolean" ? { leftOpen: saved.leftOpen, rightOpen: saved.rightOpen } : null;
   } catch {
     return null;
   }
 }
 
-function loadLayout(): { leftOpen: boolean; rightOpen: boolean } {
-  const narrow = typeof window !== "undefined" && window.innerWidth < 900;
-  try {
-    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null");
-    if (saved && !narrow) return saved;
-  } catch {
-    // Fall through to the defaults.
-  }
-  return { leftOpen: !narrow, rightOpen: !narrow };
+interface BrowserPanels {
+  leftOpen: boolean;
+  rightOpen: boolean;
+  leftWidth?: number;
+  rightWidth?: number;
 }
 
-function saveLayout(layout: { leftOpen: boolean; rightOpen: boolean }) {
+function loadLayout(): BrowserPanels {
+  const open = savedPanels();
+  let widths: { leftWidth?: number; rightWidth?: number } = {};
   try {
-    localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout));
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null");
+    widths = { leftWidth: readSide(saved?.leftWidth), rightWidth: readSide(saved?.rightWidth) };
+  } catch {
+    // The defaults.
+  }
+  return { ...(open && !narrow() ? open : { leftOpen: !narrow(), rightOpen: !narrow() }), ...widths };
+}
+
+function saveLayout({ leftOpen, rightOpen, leftWidth, rightWidth }: BrowserPanels) {
+  try {
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify({ leftOpen, rightOpen, leftWidth, rightWidth }));
   } catch {
     // Only a convenience.
+  }
+}
+
+function loadSplits(): AppState["splits"] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(SPLITS_KEY) ?? "{}");
+    const splits: AppState["splits"] = {};
+    for (const [connection, features] of Object.entries(saved && typeof saved === "object" ? saved : {})) {
+      for (const [feature, share] of Object.entries(features && typeof features === "object" ? features : {})) {
+        const split = readSplit(share);
+        if (split !== undefined) splits[connection] = { ...splits[connection], [feature]: split };
+      }
+    }
+    return splits;
+  } catch {
+    return {};
   }
 }
 
@@ -527,7 +578,15 @@ export const useApp = create<AppState>((set, get) => {
 
   const sync = new LayoutSync({
     read: (connection, project) => clientFor(connection).projectLayout(project),
-    write: (connection, project, file, keepalive) => clientFor(connection).saveProjectLayout(project, file, keepalive),
+    write: async (connection, project, file, keepalive) => {
+      try {
+        await clientFor(connection).saveProjectLayout(project, file, keepalive);
+      } catch (error) {
+        const plain = error instanceof ApiError && error.status === 422 ? withoutSizes(file) : null;
+        if (!plain) throw error;
+        await clientFor(connection).saveProjectLayout(project, plain, keepalive);
+      }
+    },
   });
   /** Each project's first load since the page opened; an edit made before it is done waits for it. */
   const firstLoads = new Map<string, Promise<void>>();
@@ -877,7 +936,40 @@ export const useApp = create<AppState>((set, get) => {
     }
     const panels = side === "left" ? { leftOpen: !state.leftOpen, rightOpen: state.rightOpen } : { leftOpen: state.leftOpen, rightOpen: !state.rightOpen };
     set(panels);
-    saveLayout(panels);
+    saveLayout({ ...get(), ...panels });
+  }
+
+  function setPanelWidth(side: "left" | "right", px: number) {
+    const state = get();
+    const width = clampSide(px);
+    const key = side === "left" ? "leftWidth" : "rightWidth";
+    const project = projectOf(state, currentFeature(state));
+    if (project && state.projectViews[state.activeId]?.[project]?.ready) {
+      updateProject(state.activeId, project, (view) => (view[key] === width ? view : { ...view, [key]: width }));
+      return;
+    }
+    if (state[key] === width) return;
+    set({ [key]: width });
+    saveLayout(get());
+  }
+
+  function setSplit(feature: FeatureId, value: number) {
+    const state = get();
+    const share = clampSplit(value);
+    const connection = state.activeId;
+    const project = projectOf(state, feature);
+    if (project) {
+      updateProject(connection, project, (view) => (view.split === share ? view : { ...view, split: share }));
+      return;
+    }
+    if (state.splits[connection]?.[feature] === share) return;
+    const splits = { ...state.splits, [connection]: { ...state.splits[connection], [feature]: share } };
+    set({ splits });
+    try {
+      localStorage.setItem(SPLITS_KEY, JSON.stringify(splits));
+    } catch {
+      // Only a convenience.
+    }
   }
 
   async function connect(target: Connection) {
@@ -978,6 +1070,7 @@ export const useApp = create<AppState>((set, get) => {
     projectViews: {},
     sessionsLoaded: false,
     ...loadLayout(),
+    splits: loadSplits(),
     folded: loadFolded(),
     switcherOpen: false,
     dialog: null,
@@ -1145,6 +1238,8 @@ export const useApp = create<AppState>((set, get) => {
       await get().loadHistory();
     },
 
+    setPanelWidth,
+    setSplit,
     toggleLeft: () => togglePanel("left"),
     toggleRight: () => togglePanel("right"),
 

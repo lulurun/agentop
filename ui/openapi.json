@@ -692,6 +692,19 @@
           "open": {
             "title": "Open",
             "type": "boolean"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "maximum": 2000.0,
+                "minimum": 120.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
           }
         },
         "required": [
@@ -774,6 +787,19 @@
           },
           "right": {
             "$ref": "#/components/schemas/LayoutArea"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "maximum": 0.95,
+                "minimum": 0.05,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Split"
           }
         },
         "required": [

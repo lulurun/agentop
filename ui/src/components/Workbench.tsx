@@ -2,7 +2,9 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { ServiceClient, Session } from "../api/client";
 import { UI_PLUGINS } from "../plugins/registry";
 import { FileTab, PluginTab } from "../plugins/Slot";
-import { activeConnection, layoutOf, layoutReady, sessionTitle, useApp } from "../store";
+import { activeConnection, layoutOf, layoutReady, sessionTitle, splitOf, useApp } from "../store";
+import { DEFAULT_SPLIT, MAX_SPLIT, MIN_SPLIT, splitAt } from "../sizes";
+import { Splitter } from "./Splitter";
 import { areasOf, canSplit, other, sessionOf, type Area, type Group, type Tab } from "../tabs";
 import type { FeatureId } from "../features";
 import { connectionName } from "../connections";
@@ -197,12 +199,15 @@ function GroupView({
   alone,
   focused,
   renderSession,
+  share,
 }: {
   feature: FeatureId;
   group: Group;
   area: Area;
   /** The only area in the middle panel. */
   alone: boolean;
+  /** Its share of the middle panel's width beside the other area. */
+  share: number;
   focused: boolean;
   renderSession(props: Omit<SessionPaneProps, "client">): ReactNode;
 }) {
@@ -230,6 +235,7 @@ function GroupView({
       data-area={area}
       data-focused={focused || undefined}
       aria-label={area === "left" ? "Left area" : "Right area"}
+      style={alone ? undefined : { flexGrow: share }}
       onPointerDownCapture={() => {
         if (!focused) focusArea(feature, area);
       }}
@@ -285,22 +291,48 @@ export function Workbench({
   const layout = useApp((s) => layoutOf(s, feature));
   // Until the project's file is read, rather than its defaults, so a restored tab doesn't flash in after another.
   const ready = useApp((s) => layoutReady(s, feature));
+  const split = useApp((s) => splitOf(s, feature)) ?? DEFAULT_SPLIT;
+  const setSplit = useApp((s) => s.setSplit);
+  const ref = useRef<HTMLDivElement>(null);
   const areas = areasOf(layout);
   if (!ready) return null;
   if (areas.length === 0) return hidden ? null : <>{background}</>;
+  const box = () => ref.current?.getBoundingClientRect() ?? new DOMRect();
+  const views = areas.map(([area, group]) => (
+    <GroupView
+      key={area}
+      feature={feature}
+      group={group}
+      area={area}
+      alone={areas.length === 1}
+      share={area === "left" ? split : 1 - split}
+      focused={!hidden && area === layout.focused}
+      renderSession={renderSession}
+    />
+  ));
   return (
-    <div className="workbench" data-areas={areas.length} data-feature={feature} hidden={hidden || undefined} aria-hidden={hidden || undefined}>
-      {areas.map(([area, group]) => (
-        <GroupView
-          key={area}
-          feature={feature}
-          group={group}
-          area={area}
-          alone={areas.length === 1}
-          focused={!hidden && area === layout.focused}
-          renderSession={renderSession}
+    <div ref={ref} className="workbench" data-areas={areas.length} data-feature={feature} hidden={hidden || undefined} aria-hidden={hidden || undefined}>
+      {views[0]}
+      {views.length === 2 && (
+        <Splitter
+          key="split"
+          label="Resize the left and right areas"
+          className="splitter-areas"
+          value={split * 100}
+          min={MIN_SPLIT * 100}
+          max={MAX_SPLIT * 100}
+          onMove={(x) => {
+            const { left, width } = box();
+            setSplit(feature, splitAt(x, left, width));
+          }}
+          onNudge={(dx) => {
+            const { left, width } = box();
+            setSplit(feature, splitAt(left + split * width + dx, left, width));
+          }}
+          onReset={() => setSplit(feature, DEFAULT_SPLIT)}
         />
-      ))}
+      )}
+      {views[1]}
     </div>
   );
 }

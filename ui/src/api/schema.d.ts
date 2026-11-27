@@ -959,6 +959,8 @@ export interface components {
         LayoutPanel: {
             /** Open */
             open: boolean;
+            /** Width */
+            width?: number | null;
         };
         /** LayoutTab */
         LayoutTab: {
@@ -978,6 +980,8 @@ export interface components {
         MidPanel: {
             left: components["schemas"]["LayoutArea"];
             right: components["schemas"]["LayoutArea"];
+            /** Split */
+            split?: number | null;
         };
         /** PastTabContent */
         PastTabContent: {

@@ -2,6 +2,7 @@
  * A project's layout file, `.project/layout.json` (docs/0_10_ui.md, Project layouts): its format,
  * a lenient reader for files edited by hand, and the queue that loads and saves it per project.
  */
+import { readSide, readSplit, type Sizes } from "./sizes";
 import { newTabId, type Area, type FileSource, type Group, type Layout, type Tab, type TabContent } from "./tabs";
 
 export const LAYOUT_VERSION = 1;
@@ -12,16 +13,21 @@ export interface AreaFile {
   active: string | null;
 }
 
+export interface PanelFile {
+  open: boolean;
+  width?: number;
+}
+
 export interface LayoutFile {
   version: typeof LAYOUT_VERSION;
-  "left-panel": { open: boolean };
-  "mid-panel": { left: AreaFile; right: AreaFile };
-  "right-panel": { open: boolean };
+  "left-panel": PanelFile;
+  "mid-panel": { left: AreaFile; right: AreaFile; split?: number };
+  "right-panel": PanelFile;
   focused: Area;
 }
 
-/** What the app shows of one project: its middle panel's tabs, and whether each side panel is open. */
-export interface ProjectView {
+/** What the app shows of one project: its middle panel's tabs, whether each side panel is open, and the sizes set. */
+export interface ProjectView extends Sizes {
   layout: Layout;
   leftOpen: boolean;
   rightOpen: boolean;
@@ -36,14 +42,27 @@ function areaFile(group: Group | null): AreaFile {
   return { open: true, tabs: group.tabs.map(({ id, content }) => ({ id, content })), active: group.active };
 }
 
+const panelFile = (open: boolean, width: number | undefined): PanelFile => (width === undefined ? { open } : { open, width });
+
 export function toFile(view: ProjectView): LayoutFile {
+  const mid: LayoutFile["mid-panel"] = { left: areaFile(view.layout.left), right: areaFile(view.layout.right) };
+  if (view.split !== undefined) mid.split = view.split;
   return {
     version: LAYOUT_VERSION,
-    "left-panel": { open: view.leftOpen },
-    "mid-panel": { left: areaFile(view.layout.left), right: areaFile(view.layout.right) },
-    "right-panel": { open: view.rightOpen },
+    "left-panel": panelFile(view.leftOpen, view.leftWidth),
+    "mid-panel": mid,
+    "right-panel": panelFile(view.rightOpen, view.rightWidth),
     focused: view.layout.focused,
   };
+}
+
+/** The file without its sizes, for a service older than them, whose check refuses them. */
+export function withoutSizes(file: LayoutFile): LayoutFile | null {
+  const { width: _l, ...left } = file["left-panel"];
+  const { width: _r, ...right } = file["right-panel"];
+  const { split: _s, ...mid } = file["mid-panel"];
+  if (_l === undefined && _r === undefined && _s === undefined) return null;
+  return { ...file, "left-panel": left, "mid-panel": mid, "right-panel": right };
 }
 
 const SOURCES: FileSource[] = ["workdir", "memory", "transcript"];
@@ -112,7 +131,11 @@ export function fromFile(value: unknown): ProjectView | null | "newer" {
   const right = readArea(mid.right, seen);
   const wanted: Area = file.focused === "right" ? "right" : "left";
   const focused: Area = (wanted === "left" ? left : right) ? wanted : left ? "left" : right ? "right" : "left";
-  return { layout: { left, right, focused }, leftOpen: open(file["left-panel"]), rightOpen: open(file["right-panel"]) };
+  const width = (panel: unknown) => readSide((panel as { width?: unknown } | null)?.width);
+  const view: ProjectView = { layout: { left, right, focused }, leftOpen: open(file["left-panel"]), rightOpen: open(file["right-panel"]) };
+  const sizes: Sizes = { leftWidth: width(file["left-panel"]), rightWidth: width(file["right-panel"]), split: readSplit(mid.split) };
+  for (const [key, value] of Object.entries(sizes)) if (value !== undefined) view[key as keyof Sizes] = value;
+  return view;
 }
 
 export function sameView(a: ProjectView, b: ProjectView): boolean {

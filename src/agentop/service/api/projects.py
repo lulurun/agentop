@@ -59,7 +59,10 @@ async def get_layout(name: str, ctx: Ctx):
 @router.put("/projects/{name}/layout", status_code=204)
 async def put_layout(name: str, layout: ProjectLayout, ctx: Ctx):
     data = layout.model_dump(by_alias=True)
-    for area in data["mid-panel"].values():
+    for part, size in ((data["left-panel"], "width"), (data["right-panel"], "width"), (data["mid-panel"], "split")):
+        if part[size] is None:
+            del part[size]
+    for area in (data["mid-panel"]["left"], data["mid-panel"]["right"]):
         for tab in area["tabs"]:
             content = {k: v for k, v in tab["content"].items() if v is not None}
             if "file" in content:

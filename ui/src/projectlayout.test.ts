@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Connection } from "./connections";
 import { openCoordinatorFor, openFile, selectDialogue } from "./plugins/dialogue/state";
 import { openProject } from "./plugins/projects/index";
-import { currentFeature, layoutIn, layoutOf, panelsOf, parseLayouts, selectedId, useApp } from "./store";
+import { currentFeature, layoutIn, layoutOf, panelsOf, parseLayouts, selectedId, splitOf, useApp, widthsOf } from "./store";
 import { areasOf, type TabContent } from "./tabs";
 
 const PROJECTS = "plugin:projects" as const;
@@ -11,6 +11,8 @@ const DIALOGUES = "plugin:dialogue" as const;
 /** Each connection's service: its projects' layout.json files, and replies held back when asked. */
 const services = new Map<string, Map<string, unknown>>();
 const requests: string[] = [];
+/** Services older than panel widths, whose check refuses them. */
+const olderService = new Set<string>();
 let holdReads: ((url: string) => boolean) | null = null;
 /** Any other request held back, by `METHOD origin/path`. */
 let holdRequests: ((request: string) => boolean) | null = null;
@@ -41,7 +43,11 @@ beforeEach(() => {
     const files = serviceAt(origin);
     const project = decodeURIComponent(match[1]);
     if (method === "PUT") {
-      files.set(project, JSON.parse(String(init.body)));
+      const body = JSON.parse(String(init.body));
+      if (olderService.has(origin) && (body["left-panel"].width ?? body["right-panel"].width ?? body["mid-panel"].split) !== undefined) {
+        return new Response(JSON.stringify({ detail: "Extra inputs are not permitted" }), { status: 422 });
+      }
+      files.set(project, body);
       return new Response(null, { status: 204 });
     }
     if (holdReads?.(`${origin}/${project}`)) await new Promise<void>((resolve) => held.push(resolve));
@@ -284,6 +290,90 @@ describe("project layouts", () => {
     await app().setProject(PROJECTS, "alpha");
     expect(layoutOf(app()).left!.tabs.map((t) => t.id)).toEqual(["l"]);
     expect(layoutOf(app()).left!.active).toBe("l");
+  });
+});
+
+describe("panel widths and the split", () => {
+  it("are each project's own, saved in its file, and shown again on return", async () => {
+    const { url } = connect();
+    const app = useApp.getState;
+    await app().setProject(PROJECTS, "alpha");
+    app().setPanelWidth("left", 340);
+    app().setPanelWidth("right", 401.6);
+    app().setSplit(PROJECTS, 0.3);
+    expect(widthsOf(app())).toMatchObject({ leftWidth: 340, rightWidth: 402 });
+
+    await app().setProject(PROJECTS, "beta");
+    expect([widthsOf(app()).leftWidth, widthsOf(app()).rightWidth]).toEqual([undefined, undefined]);
+    expect(splitOf(app(), PROJECTS)).toBeUndefined();
+    app().setPanelWidth("left", 220);
+
+    const alpha = saved(url, "alpha")!;
+    expect(alpha["left-panel"]).toEqual({ open: true, width: 340 });
+    expect(alpha["right-panel"]).toEqual({ open: true, width: 402 });
+    expect(alpha["mid-panel"].split).toBe(0.3);
+    await app().setProject(PROJECTS, "alpha");
+    expect(widthsOf(app())).toMatchObject({ leftWidth: 340, rightWidth: 402 });
+    expect(splitOf(app(), PROJECTS)).toBe(0.3);
+    await until(() => saved(url, "beta") !== undefined);
+    expect(saved(url, "beta")!["left-panel"]).toEqual({ open: true, width: 220 });
+    // Sessions' own split and widths are untouched by the projects'.
+    expect(splitOf(app(), "sessions")).toBeUndefined();
+    expect(saved(url, "default")?.["left-panel"]?.width).toBeUndefined();
+  });
+
+  it("clamp a hand edit, ignore one that isn't a number, and write none until one is set", async () => {
+    const { url } = connect();
+    const app = useApp.getState;
+    const files = serviceAt(new URL(url).origin);
+    await app().setProject(PROJECTS, "plain");
+    app().toggleLeft();
+    await app().setProject(PROJECTS, "edited");
+    expect(saved(url, "plain")!["left-panel"]).toEqual({ open: false });
+    expect("split" in saved(url, "plain")!["mid-panel"]).toBe(false);
+
+    const edited = structuredClone(saved(url, "plain"))!;
+    edited["left-panel"] = { open: true, width: 5000 };
+    edited["right-panel"] = { open: true, width: "wide" };
+    edited["mid-panel"].split = 0.01;
+    files.set("plain", edited);
+    await app().setProject(PROJECTS, "plain");
+    expect([widthsOf(app()).leftWidth, widthsOf(app()).rightWidth]).toEqual([800, undefined]);
+    expect(splitOf(app(), PROJECTS)).toBe(0.1);
+  });
+
+  it("are left out of the file for a service older than them, rather than losing the save", async () => {
+    const { url } = connect();
+    olderService.add(new URL(url).origin);
+    const app = useApp.getState;
+    await app().setProject(PROJECTS, "alpha");
+    app().openTab(file("x.py"), "left");
+    app().setPanelWidth("left", 333);
+    await app().setProject(PROJECTS, "beta");
+    await until(() => saved(url, "alpha") !== undefined);
+    expect(saved(url, "alpha")!["left-panel"]).toEqual({ open: true });
+    expect(saved(url, "alpha")!["mid-panel"].left.tabs[0].content.file.path).toBe("x.py");
+  });
+
+  it("without a project are this browser's, and never reach a project's file or another connection", async () => {
+    const { url } = connect();
+    const app = useApp.getState;
+    await app().setProject(PROJECTS, "alpha");
+    app().setPanelWidth("left", 300);
+    await app().setProject(PROJECTS, null);
+    expect(widthsOf(app()).leftWidth).not.toBe(300);
+    app().setPanelWidth("left", 410);
+    app().setSplit(PROJECTS, 0.7);
+    expect(widthsOf(app()).leftWidth).toBe(410);
+    expect(JSON.parse(localStorage.getItem("agentop.layout")!).leftWidth).toBe(410);
+    expect(splitOf(app(), PROJECTS)).toBe(0.7);
+    await until(() => saved(url, "alpha")?.["left-panel"].width === 300);
+
+    const other = connect();
+    expect(splitOf(app(), PROJECTS)).toBeUndefined();
+    await app().setProject(PROJECTS, "alpha");
+    expect(widthsOf(app()).leftWidth).toBeUndefined();
+    expect(saved(other.url, "alpha")).toBeUndefined();
   });
 });
 

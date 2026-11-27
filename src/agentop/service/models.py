@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictInt, model_validator
 
 
 class Health(BaseModel):
@@ -302,11 +302,13 @@ class LayoutArea(_Strict):
 
 class LayoutPanel(_Strict):
     open: StrictBool
+    width: Annotated[StrictInt, Field(ge=120, le=2000)] | None = None
 
 
 class MidPanel(_Strict):
     left: LayoutArea
     right: LayoutArea
+    split: Annotated[float, Field(ge=0.05, le=0.95)] | None = None
 
 
 class ProjectLayout(_Strict):
