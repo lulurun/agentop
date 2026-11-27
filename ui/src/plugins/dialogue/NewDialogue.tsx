@@ -81,7 +81,7 @@ export function NewDialogue({ plugin }: { plugin: PluginContext }) {
       });
       await refreshDialogues(plugin.client);
       closeWizard();
-      selectDialogue(created.id);
+      void selectDialogue(created.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);

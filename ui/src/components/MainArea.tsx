@@ -9,7 +9,7 @@ import { TerminalView } from "../terminal/TerminalView";
 import { pluginOf } from "../features";
 import { Workbench, type SessionPaneProps } from "./Workbench";
 
-type Selection = Pick<AppState, "sessions" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded">;
+type Selection = Pick<AppState, "sessions" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded" | "scopes">;
 
 export function selectedSession(state: Selection): Session | undefined {
   const id = selectedId(state);

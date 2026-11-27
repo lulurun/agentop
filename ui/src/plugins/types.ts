@@ -73,6 +73,11 @@ export interface PluginFeature {
   views: Record<string, PluginView>;
   /** The view of its default tab, pinned first in the left area as Sessions' start buffer is. */
   home?: string;
+  /**
+   * Its tabs and panels are per project, as Projects' and Dialogues' are: the core keeps one
+   * layout for each, in the project's `layout.json`, and shows the one picked with `setProject`.
+   */
+  projects?: boolean;
   /** The middle panel with no areas. */
   background?: ComponentType<{ plugin: PluginContext }>;
   left?: ComponentType<{ plugin: PluginContext }>;

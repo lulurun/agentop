@@ -361,6 +361,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{name}/layout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Layout
+         * @description As written, so a hand edit with a mistake in one tab still loads; the app reads it leniently.
+         */
+        get: operations["get_layout_projects__name__layout_get"];
+        /** Put Layout */
+        put: operations["put_layout_projects__name__layout_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/send": {
         parameters: {
             query?: never;
@@ -755,6 +776,29 @@ export interface components {
             /** Truncated */
             truncated: boolean;
         };
+        /** FileRefModel */
+        FileRefModel: {
+            /** Path */
+            path: string;
+            /** Sessionid */
+            sessionId: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "workdir" | "memory" | "transcript";
+            /** View */
+            view?: "diff" | null;
+        };
+        /** FileTabContent */
+        FileTabContent: {
+            file: components["schemas"]["FileRefModel"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "file";
+        };
         /** GitChanges */
         GitChanges: {
             /** Ahead */
@@ -902,12 +946,48 @@ export interface components {
              */
             truncated: boolean;
         };
+        /** LayoutArea */
+        LayoutArea: {
+            /** Active */
+            active?: string | null;
+            /** Open */
+            open: boolean;
+            /** Tabs */
+            tabs?: components["schemas"]["LayoutTab"][];
+        };
+        /** LayoutPanel */
+        LayoutPanel: {
+            /** Open */
+            open: boolean;
+        };
+        /** LayoutTab */
+        LayoutTab: {
+            /** Content */
+            content: components["schemas"]["SessionTabContent"] | components["schemas"]["FileTabContent"] | components["schemas"]["PlainTabContent"] | components["schemas"]["PastTabContent"] | components["schemas"]["PluginTabContent"];
+            /** Id */
+            id: string;
+        };
         /** LoginMethod */
         LoginMethod: {
             /** Id */
             id: string;
             /** Name */
             name: string;
+        };
+        /** MidPanel */
+        MidPanel: {
+            left: components["schemas"]["LayoutArea"];
+            right: components["schemas"]["LayoutArea"];
+        };
+        /** PastTabContent */
+        PastTabContent: {
+            /** Historyid */
+            historyId: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "past";
         };
         /** PatchPlugin */
         PatchPlugin: {
@@ -920,6 +1000,14 @@ export interface components {
             description?: string | null;
             /** Display Name */
             display_name?: string | null;
+        };
+        /** PlainTabContent */
+        PlainTabContent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "start" | "status";
         };
         /** PluginInfo */
         PluginInfo: {
@@ -943,6 +1031,39 @@ export interface components {
             ui: string[];
             /** Version */
             version: string;
+        };
+        /** PluginTabContent */
+        PluginTabContent: {
+            /** Key */
+            key?: string | null;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "plugin";
+            /** Plugin */
+            plugin: string;
+            /** View */
+            view: string;
+        };
+        /**
+         * ProjectLayout
+         * @description A project's layout in the app, `.project/layout.json` (docs/0_10_ui.md, Project layouts).
+         */
+        ProjectLayout: {
+            /**
+             * Focused
+             * @enum {string}
+             */
+            focused: "left" | "right";
+            "left-panel": components["schemas"]["LayoutPanel"];
+            "mid-panel": components["schemas"]["MidPanel"];
+            "right-panel": components["schemas"]["LayoutPanel"];
+            /**
+             * Version
+             * @constant
+             */
+            version: 1;
         };
         /** ProjectModel */
         ProjectModel: {
@@ -1095,6 +1216,16 @@ export interface components {
             tool: string | null;
         } & {
             [key: string]: unknown;
+        };
+        /** SessionTabContent */
+        SessionTabContent: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "session";
+            /** Sessionid */
+            sessionId: string;
         };
         /** StartDecision */
         StartDecision: {
@@ -2071,6 +2202,81 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SessionModel"];
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_layout_projects__name__layout_get: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The saved layout as written */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description None saved */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_layout_projects__name__layout_put: {
+        parameters: {
+            query?: never;
+            header?: {
+                authorization?: string | null;
+            };
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectLayout"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {

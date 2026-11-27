@@ -81,7 +81,7 @@ export class ServiceClient {
     return typeof this.tokenOf === "function" ? this.tokenOf() : this.tokenOf;
   }
 
-  async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  async request<T>(method: string, path: string, body?: unknown, keepalive = false): Promise<T> {
     let response: Response;
     const token = this.token;
     try {
@@ -92,6 +92,8 @@ export class ServiceClient {
           ...(body === undefined ? {} : { "Content-Type": "application/json" }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
+        // So a save made as the page goes away still arrives.
+        keepalive,
       });
     } catch {
       throw new NetworkError(`Could not reach ${this.baseUrl}`);
@@ -153,6 +155,10 @@ export class ServiceClient {
   startSettings = () => this.get<StartSettings>("/start/settings");
   saveStartSettings = (body: StartSettingsPatch) => this.request<StartSettings>("PUT", "/start/settings", body);
   plugins = () => this.get<PluginInfo[]>("/plugins");
+  /** The project's saved layout as written, or null for none. */
+  projectLayout = async (project: string) => (await this.get<unknown>(`/projects/${encodeURIComponent(project)}/layout`)) ?? null;
+  saveProjectLayout = (project: string, layout: unknown, keepalive = false) =>
+    this.request<void>("PUT", `/projects/${encodeURIComponent(project)}/layout`, layout, keepalive);
   setPluginEnabled = (id: string, enabled: boolean) =>
     this.request<PluginInfo>("PATCH", `/plugins/${encodeURIComponent(id)}`, { enabled });
 

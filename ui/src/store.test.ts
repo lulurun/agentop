@@ -39,12 +39,18 @@ describe("saved tabs", () => {
     expect(parseLayouts({ home: { sessions: old, history } })).toEqual({ home: { sessions: layout } });
   });
 
-  it("drops a plugin tab whose view is gone, such as the old pinned Dialogues tab", () => {
-    const agent = { id: "a", content: { kind: "plugin", plugin: "dialogue", view: "agent", key: "d1:a" } };
-    const old = { id: "home", pinned: true, content: { kind: "plugin", plugin: "dialogue", view: "dialogues" } };
-    const saved = { groups: [{ tabs: [old, agent], active: "home" }], focused: 0 };
-    const tabs = parseLayouts({ home: { "plugin:dialogue": saved } }).home["plugin:dialogue"]!.left!.tabs;
-    expect(tabs.map((t) => t.id)).toEqual(["a"]);
+  it("drops a plugin tab whose view is gone", () => {
+    const conversation = { id: "c", content: { kind: "plugin", plugin: "memory", view: "conversation", key: "claude:s1" } };
+    const old = { id: "home", pinned: true, content: { kind: "plugin", plugin: "memory", view: "recent" } };
+    const saved = { groups: [{ tabs: [old, conversation], active: "home" }], focused: 0 };
+    const tabs = parseLayouts({ home: { "plugin:memory": saved } }).home["plugin:memory"]!.left!.tabs;
+    expect(tabs.map((t) => t.id)).toEqual(["c"]);
+  });
+
+  it("gives no project another project feature's old tabs, which held every project's at once", () => {
+    const tab = { tabs: [{ id: "f", content: { kind: "file", file: { sessionId: "a", source: "workdir", path: "x" } } }], active: "f" };
+    const saved = { left: tab, right: null, focused: "left" };
+    expect(parseLayouts({ home: { "plugin:projects": saved, "plugin:dialogue": saved, sessions: saved } })).toEqual({ home: { sessions: saved } });
   });
 });
 

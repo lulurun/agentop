@@ -2,7 +2,7 @@ import { modeStore } from "../plugins/input/state";
 import { useEffect } from "react";
 import { PluginPanel } from "../plugins/Slot";
 import { layoutAction, type PanelOrArea } from "../hotkeys";
-import { currentFeature, layoutOf, useApp } from "../store";
+import { currentFeature, layoutOf, panelsOf, useApp } from "../store";
 import { pluginOf, featuresFor } from "../features";
 import { DetailsPanel } from "./DetailsPanel";
 import { AddServiceDialog } from "./ServiceDialogs";
@@ -71,7 +71,8 @@ function runLayoutKey(event: KeyboardEvent) {
       if (target === "left-panel" || target === "right-panel") {
         const left = target === "left-panel";
         if (!(left ? here?.left : here?.right)) break;
-        if (!(left ? app.leftOpen : app.rightOpen)) (left ? app.toggleLeft : app.toggleRight)();
+        const panels = panelsOf(app);
+        if (!(left ? panels.leftOpen : panels.rightOpen)) (left ? app.toggleLeft : app.toggleRight)();
       } else {
         const area = target === "left-area" ? "left" : "right";
         if (!layout[area]) break;
@@ -93,8 +94,8 @@ function runLayoutKey(event: KeyboardEvent) {
 
 export function App() {
   // Each field on its own, so a change elsewhere in the store, such as a session's, doesn't draw the app again.
-  const leftOpen = useApp((s) => s.leftOpen);
-  const rightOpen = useApp((s) => s.rightOpen);
+  const leftOpen = useApp((s) => panelsOf(s).leftOpen);
+  const rightOpen = useApp((s) => panelsOf(s).rightOpen);
   const toggleLeft = useApp((s) => s.toggleLeft);
   const toggleRight = useApp((s) => s.toggleRight);
   const setDialog = useApp((s) => s.setDialog);

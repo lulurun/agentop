@@ -17,7 +17,15 @@ import { applyTheme, loadSettings, saveSettings, type Settings } from "./setting
 import * as tabs from "./tabs";
 import type { Area, Layout, OpenMode, Tab, TabContent } from "./tabs";
 import { UI_PLUGINS } from "./plugins/registry";
-import { isKnownFeature, isStaleTab, pluginOf, featuresFor, type FeatureId } from "./features";
+import { FIXED_PROJECT, isKnownFeature, isProjectFeature, isStaleTab, pluginOf, featuresFor, type FeatureId } from "./features";
+import { defaultView, fromFile, LayoutSync, sameView, toFile, type ProjectView } from "./layoutfile";
+
+const DEFAULT_PROJECT = "default";
+
+/** A project's view, and whether its file has been read yet (or failed to be) since the page opened. */
+export interface ProjectEntry extends ProjectView {
+  ready: boolean;
+}
 
 export type LinkState =
   | { state: "connecting" }
@@ -62,8 +70,14 @@ export interface AppState {
   history: HistoryState;
   /** Selected session per connection: the focused tab's session. Session IDs are only unique within one service. */
   selected: Record<string, string>;
-  /** The main area's tabs per connection, one layout per feature. */
+  /** The main area's tabs per connection, one layout per feature that isn't a project's, as Memory's. */
   layouts: Record<string, Partial<Record<FeatureId, Layout>>>;
+  /** Per connection, the project each project feature shows; Sessions always shows `default`. */
+  scopes: Record<string, Partial<Record<FeatureId, string>>>;
+  /** Per connection and project: its tabs and panels, from its layout.json (docs/0_10_ui.md, Project layouts). */
+  projectViews: Record<string, Record<string, ProjectEntry>>;
+  /** The sessions' snapshot has come in since connecting, so a session missing from it is gone. */
+  sessionsLoaded: boolean;
   leftOpen: boolean;
   rightOpen: boolean;
   /** The panels' sections folded shut, by `Section` id. */
@@ -83,6 +97,8 @@ export interface AppState {
   /** Sign this app out of the active service, and revoke its client there. */
   signOut(): Promise<void>;
   setFeature(feature: FeatureId): void;
+  /** Show a project in a project feature, its layout read again from its file; null for none. */
+  setProject(feature: FeatureId, project: string | null): Promise<void>;
   setPluginEnabled(id: string, enabled: boolean): Promise<void>;
   updateSettings(changes: Partial<Settings>): void;
   /** The service was stopped on purpose, so don't keep trying to reach it. */
@@ -136,12 +152,33 @@ function loadFolded(): string[] {
 const SELECTED_KEY = "agentop.selected";
 const TABS_KEY = "agentop.tabs";
 const FEATURE_KEY = "agentop.workspace";
+const SCOPES_KEY = "agentop.scopes";
+/** Where Projects kept its chosen project before the core did. */
+const OLD_PROJECTS_KEY = "agentop.projects.current";
+
+/** The chosen project per connection and feature; Projects' from before the core kept it too. */
+export function loadScopes(storage: Pick<Storage, "getItem"> = localStorage): AppState["scopes"] {
+  try {
+    const saved = JSON.parse(storage.getItem(SCOPES_KEY) ?? "null");
+    if (saved && typeof saved === "object") return saved;
+    const old = JSON.parse(storage.getItem(OLD_PROJECTS_KEY) ?? "{}");
+    const scopes: AppState["scopes"] = {};
+    for (const [connection, name] of Object.entries(old ?? {})) {
+      if (typeof name === "string") scopes[connection] = { "plugin:projects": name };
+    }
+    return scopes;
+  } catch {
+    return {};
+  }
+}
 
 type Layouts = AppState["layouts"];
 
 /**
  * Saved tabs, per connection and feature. Tabs saved before features were
- * one layout per connection: those become the Sessions layout.
+ * one layout per connection: those become the Sessions layout. Sessions' are read only
+ * to move into the default project's layout.json; another project feature's held every
+ * project's tabs at once, so they are dropped rather than given to any one project.
  */
 export function parseLayouts(saved: Record<string, unknown>): Layouts {
   const result: Layouts = {};
@@ -154,7 +191,7 @@ export function parseLayouts(saved: Record<string, unknown>): Layouts {
     }
     const byFeature: Partial<Record<FeatureId, Layout>> = {};
     for (const [feature, layout] of Object.entries(value as Record<string, unknown>)) {
-      if (!isKnownFeature(feature)) continue;
+      if (!isKnownFeature(feature) || (feature !== "sessions" && isProjectFeature(feature))) continue;
       const parsed = tabs.parseLayout(layout);
       if (parsed) byFeature[feature as FeatureId] = tabs.closeWhere(parsed, isStaleTab);
     }
@@ -163,12 +200,25 @@ export function parseLayouts(saved: Record<string, unknown>): Layouts {
   return result;
 }
 
+/** A project feature's tabs while it shows no project, as Status or the New dialogue wizard; kept apart from the old mixed ones. */
+const NO_PROJECT_KEY = "agentop.tabs.noproject";
+
 function loadLayouts(): Layouts {
-  try {
-    return parseLayouts(JSON.parse(localStorage.getItem(TABS_KEY) ?? "{}"));
-  } catch {
-    return {};
+  const read = (key: string) => {
+    try {
+      return JSON.parse(localStorage.getItem(key) ?? "{}");
+    } catch {
+      return {};
+    }
+  };
+  const layouts = parseLayouts(read(TABS_KEY));
+  for (const [id, byFeature] of Object.entries(read(NO_PROJECT_KEY) as Record<string, Record<string, unknown>>)) {
+    for (const [feature, value] of Object.entries(byFeature ?? {})) {
+      const layout = isKnownFeature(feature) && isProjectFeature(feature) && feature !== "sessions" ? tabs.parseLayout(value) : null;
+      if (layout) layouts[id] = { ...layouts[id], [feature]: tabs.closeWhere(layout, isStaleTab) };
+    }
   }
+  return layouts;
 }
 
 function loadFeatures(): Record<string, FeatureId> {
@@ -191,14 +241,44 @@ export function currentFeature(state: Pick<AppState, "features" | "activeId" | "
   return featuresFor(state.plugins).some((w) => w.id === wanted) ? wanted : "sessions";
 }
 
-/** Where `selected` keeps a feature's selected session: Sessions' under the connection's ID, as before projects. */
-export function selectionKey(activeId: string, feature: FeatureId): string {
-  return feature === "sessions" ? activeId : `${activeId}|${feature}`;
+/** The project a feature shows on the active connection: `default` for Sessions, the one picked for another project feature. */
+export function projectOf(state: Pick<AppState, "scopes" | "activeId">, feature: FeatureId): string | undefined {
+  return FIXED_PROJECT[feature] ?? (isProjectFeature(feature) ? state.scopes[state.activeId]?.[feature] : undefined);
+}
+
+/**
+ * Where `selected` keeps a feature's selected session: Sessions' under the connection's ID, as before projects;
+ * another project feature's per project, so one project's right panel never shows another's session.
+ */
+export function selectionKey(activeId: string, feature: FeatureId, project?: string): string {
+  if (feature === "sessions") return activeId;
+  if (project) return `${activeId}|${feature}|${project}`;
+  // A project feature with none shown has a key of its own, not the one it once shared across its projects.
+  return isProjectFeature(feature) ? `${activeId}|${feature}|` : `${activeId}|${feature}`;
 }
 
 /** The session the feature shown has selected: the one its right panel shows. */
-export function selectedId(state: Pick<AppState, "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded">): string | undefined {
-  return state.selected[selectionKey(state.activeId, currentFeature(state))];
+export function selectedId(state: Pick<AppState, "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded" | "scopes">): string | undefined {
+  const feature = currentFeature(state);
+  return state.selected[selectionKey(state.activeId, feature, projectOf(state, feature))];
+}
+
+const narrow = () => typeof window !== "undefined" && window.innerWidth < 900;
+
+/**
+ * Whether the side panels are open: the shown project's, or this browser's own for a feature without one.
+ * On a narrow screen they are overlays that start shut, so a project's file doesn't open them there.
+ */
+export function panelsOf(state: Pick<AppState, "scopes" | "activeId" | "projectViews" | "leftOpen" | "rightOpen" | "features" | "plugins" | "pluginsLoaded">): { leftOpen: boolean; rightOpen: boolean } {
+  const project = projectOf(state, currentFeature(state));
+  const view = project ? state.projectViews[state.activeId]?.[project] : undefined;
+  return view?.ready && !narrow() ? view : state;
+}
+
+/** The feature's layout has been read, or there is none to read: until then its middle panel shows nothing. */
+export function layoutReady(state: Pick<AppState, "scopes" | "activeId" | "projectViews">, feature: FeatureId): boolean {
+  const project = projectOf(state, feature);
+  return !project || !!state.projectViews[state.activeId]?.[project]?.ready;
 }
 
 /**
@@ -211,33 +291,21 @@ export function featureForProject(state: Pick<AppState, "features" | "activeId" 
 }
 
 const EMPTY_LAYOUT = tabs.emptyLayout();
-// A derived layout must be the same object each time, or every render would see a change.
-const derived = new Map<string, Layout>();
 
-function derive(key: string, make: () => Layout): Layout {
-  if (!derived.has(key)) derived.set(key, make());
-  return derived.get(key)!;
+type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded" | "scopes" | "projectViews">;
+
+/** A layout with the feature's pinned tab in it: Sessions' start buffer, or a plugin's `home`. */
+function withFeaturePinned(layout: Layout, feature: FeatureId): Layout {
+  if (feature === "sessions") return withPinned(layout, tabs.START_TAB);
+  const home = homeTab(feature);
+  return home ? withPinned(layout, home) : layout;
 }
 
-type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded">;
-
-/**
- * A feature's tabs on the active connection, by default the one shown.
- * Before it has any, Sessions gets the session selected last time.
- */
+/** A feature's tabs on the active connection, by default the one shown: those of the project it shows, if it shows one. */
 export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature(state)): Layout {
-  const saved = state.layouts[state.activeId]?.[feature];
-  if (feature !== "sessions") {
-    const home = homeTab(feature);
-    return home ? withPinned(saved ?? EMPTY_LAYOUT, home) : (saved ?? EMPTY_LAYOUT);
-  }
-  if (saved) return saved;
-  const selected = state.selected[state.activeId];
-  if (!selected) return withPinned(EMPTY_LAYOUT, tabs.START_TAB);
-  return withPinned(
-    derive(`${state.activeId}\n${selected}`, () => tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left", "replace", "t0")),
-    tabs.START_TAB,
-  );
+  const project = projectOf(state, feature);
+  const saved = project ? state.projectViews[state.activeId]?.[project]?.layout : state.layouts[state.activeId]?.[feature];
+  return withFeaturePinned(saved ?? EMPTY_LAYOUT, feature);
 }
 
 const homeTabs = new Map<string, Tab>();
@@ -274,6 +342,16 @@ function loadSelected(): Record<string, string> {
     return JSON.parse(localStorage.getItem(SELECTED_KEY) ?? "{}");
   } catch {
     return {};
+  }
+}
+
+/** The side panels as this browser saved them, whatever the screen's width. */
+function savedPanels(): { leftOpen: boolean; rightOpen: boolean } | null {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "null");
+    return saved && typeof saved.leftOpen === "boolean" && typeof saved.rightOpen === "boolean" ? saved : null;
+  } catch {
+    return null;
   }
 }
 
@@ -415,6 +493,148 @@ export const useApp = create<AppState>((set, get) => {
   let attempt = 0;
   let socket: WebSocket | null = null;
 
+  // Each connection's own client, never the active one: a save that is late must reach the service it was made for.
+  function clientFor(connection: string): ServiceClient {
+    const found = get().connections.find((c) => c.id === connection);
+    if (!found) throw new Error(`No connection ${connection}`);
+    return new ServiceClient(found.url, () => get().connections.find((c) => c.id === connection)?.token ?? "");
+  }
+
+  const sync = new LayoutSync({
+    read: (connection, project) => clientFor(connection).projectLayout(project),
+    write: (connection, project, file, keepalive) => clientFor(connection).saveProjectLayout(project, file, keepalive),
+  });
+  /** Each project's first load since the page opened; an edit made before it is done waits for it. */
+  const firstLoads = new Map<string, Promise<void>>();
+  /** Projects whose file was read at least once, so what is shown came from it. */
+  const everLoaded = new Set<string>();
+
+  function setView(connection: string, project: string, view: ProjectEntry, edited: boolean) {
+    set((s) => ({ projectViews: { ...s.projectViews, [connection]: { ...s.projectViews[connection], [project]: view } } }));
+    if (edited) sync.edited(connection, project, toFile(view));
+  }
+
+  /** The view less tabs that can't show: a plugin's view it no longer has or that is off, a session that has gone. */
+  function cleanView<V extends ProjectView>(view: V): V {
+    const state = get();
+    const on = new Set(state.plugins.filter((p) => p.state === "enabled").map((p) => p.id));
+    const gone = (content: TabContent) =>
+      isStaleTab(content) ||
+      (state.pluginsLoaded && content.kind === "plugin" && !on.has(content.plugin)) ||
+      (state.sessionsLoaded && content.kind === "session" && !state.sessions[content.sessionId]);
+    const layout = tabs.closeWhere(view.layout, gone);
+    return layout === view.layout ? view : { ...view, layout };
+  }
+
+  /** Sessions' tabs and the panels as this browser kept them before layout.json, for the default project's first file. */
+  function legacyView(connection: string): ProjectView | null {
+    const state = get();
+    const selected = state.selected[connection];
+    const layout = state.layouts[connection]?.sessions ?? (selected ? tabs.open(tabs.emptyLayout(), { kind: "session", sessionId: selected }, "left") : null);
+    if (!layout) return null;
+    const panels = savedPanels() ?? { leftOpen: true, rightOpen: true };
+    return { ...panels, layout };
+  }
+
+  function dropLegacy(connection: string) {
+    const { sessions: _moved, ...rest } = get().layouts[connection] ?? {};
+    saveLayouts({ ...get().layouts, [connection]: rest });
+  }
+
+  /** Read a project's layout.json and show it, unless changed here meanwhile; it lands on that connection's project only. */
+  function loadProject(connection: string, project: string): Promise<void> {
+    const key = `${connection}\n${project}`;
+    const existing = get().projectViews[connection]?.[project];
+    if (!existing) setView(connection, project, { ...defaultView(), ready: false }, false);
+    const run = (async () => {
+      // Edits made while the file couldn't be read were made on the defaults, not on it: the file wins.
+      if (!everLoaded.has(key)) sync.discard(connection, project);
+      const result = await sync.load(connection, project);
+      const now = get().projectViews[connection]?.[project] ?? { ...defaultView(), ready: false };
+      if (result.kind === "failed") {
+        // The service is away, or older and without the route: show what there is and save nothing.
+        if (!now.ready) setView(connection, project, { ...((project === DEFAULT_PROJECT && legacyView(connection)) || now), ready: true }, false);
+        return;
+      }
+      everLoaded.add(key);
+      if (result.kind === "stale") {
+        sync.allowWrites(connection, project);
+        if (!now.ready) setView(connection, project, { ...now, ready: true }, false);
+        return;
+      }
+      const parsed = fromFile(result.file);
+      if (parsed === "newer") {
+        sync.forbidWrites(connection, project);
+        setView(connection, project, { ...defaultView(), ready: true }, false);
+        return;
+      }
+      sync.allowWrites(connection, project);
+      const legacy = !parsed && result.file === null && project === DEFAULT_PROJECT ? legacyView(connection) : null;
+      const read = parsed ?? legacy ?? defaultView();
+      const view = connection === get().activeId ? cleanView(read) : read;
+      const save = !!legacy || view !== read;
+      if (now.ready && !save && sameView(now, view)) return;
+      setView(connection, project, { ...view, ready: true }, save);
+      if (legacy) dropLegacy(connection);
+    })();
+    if (!existing) firstLoads.set(key, run);
+    return run;
+  }
+
+  /** Change a project's view and save it. Before its file has first been read, the change waits for it. */
+  function updateProject(connection: string, project: string, change: (view: ProjectView) => ProjectView, after?: (view: ProjectView) => void) {
+    const entry = get().projectViews[connection]?.[project];
+    if (!entry?.ready) {
+      const first = firstLoads.get(`${connection}\n${project}`) ?? loadProject(connection, project);
+      void first.then(() => updateProject(connection, project, change, after));
+      return;
+    }
+    const next = change(entry);
+    if (next === entry) return;
+    setView(connection, project, { ...next, ready: true }, true);
+    after?.(next);
+  }
+
+  /** Apply a change to every project view of the active connection that is showing its file's tabs. */
+  function updateReadyViews(change: (layout: Layout) => Layout) {
+    const connection = get().activeId;
+    for (const [project, entry] of Object.entries(get().projectViews[connection] ?? {})) {
+      if (entry.ready) updateProject(connection, project, (view) => {
+        const layout = change(view.layout);
+        return layout === view.layout ? view : { ...view, layout };
+      });
+    }
+  }
+
+  /** Read again the layouts on screen: Sessions' (always on the page) and the project feature's shown. */
+  function loadVisible() {
+    const state = get();
+    void loadProject(state.activeId, DEFAULT_PROJECT);
+    const shown = projectOf(state, currentFeature(state));
+    if (shown && shown !== DEFAULT_PROJECT) void loadProject(state.activeId, shown);
+  }
+
+  function saveScopes(scopes: AppState["scopes"]) {
+    set({ scopes });
+    try {
+      localStorage.setItem(SCOPES_KEY, JSON.stringify(scopes));
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  /**
+   * The feature a session's tab opens in. For another project's session in a project feature
+   * showing some other project, that feature switches to the session's project first.
+   */
+  function featureForSession(project?: string | null): FeatureId {
+    const feature = featureForProject(get(), project);
+    if (project && project !== DEFAULT_PROJECT && isProjectFeature(feature) && projectOf(get(), feature) !== project) {
+      void get().setProject(feature, project);
+    }
+    return feature;
+  }
+
   async function loadPlugins(mine: number) {
     let plugins: PluginInfo[];
     try {
@@ -432,9 +652,9 @@ export const useApp = create<AppState>((set, get) => {
   function closePluginTabs(plugins: PluginInfo[]) {
     const on = new Set(plugins.filter((p) => p.state === "enabled").map((p) => p.id));
     const state = get();
-    const mine = state.layouts[state.activeId];
-    if (!mine) return;
+    const mine = state.layouts[state.activeId] ?? {};
     const off = (content: TabContent) => content.kind === "plugin" && !on.has(content.plugin);
+    updateReadyViews((layout) => tabs.closeWhere(layout, off));
     const next: Partial<Record<FeatureId, Layout>> = {};
     let changed = false;
     for (const [feature, layout] of Object.entries(mine) as [FeatureId, Layout][]) {
@@ -453,7 +673,16 @@ export const useApp = create<AppState>((set, get) => {
   function saveLayouts(layouts: Layouts, selected = get().selected) {
     set({ layouts, selected });
     try {
-      localStorage.setItem(TABS_KEY, JSON.stringify(layouts));
+      // A project's tabs are in its layout.json; Sessions' old ones stay here until they have moved there.
+      const split = (noProject: boolean) =>
+        Object.fromEntries(
+          Object.entries(layouts).map(([id, byFeature]) => [
+            id,
+            Object.fromEntries(Object.entries(byFeature ?? {}).filter(([f]) => noProject === (f !== "sessions" && isProjectFeature(f as FeatureId)))),
+          ]),
+        );
+      localStorage.setItem(TABS_KEY, JSON.stringify(split(false)));
+      localStorage.setItem(NO_PROJECT_KEY, JSON.stringify(split(true)));
       localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
     } catch {
       // Only a convenience.
@@ -463,6 +692,10 @@ export const useApp = create<AppState>((set, get) => {
   function showFeature(feature: FeatureId) {
     const state = get();
     if (state.features[state.activeId] === feature) return;
+    const leaving = projectOf(state, currentFeature(state));
+    const entering = projectOf(state, feature);
+    if (leaving && leaving !== entering) void sync.flush(state.activeId, leaving);
+    if (entering) void loadProject(state.activeId, entering);
     const features = { ...state.features, [state.activeId]: feature };
     set({ features });
     try {
@@ -486,11 +719,17 @@ export const useApp = create<AppState>((set, get) => {
     const batch = pending;
     pending = null;
     if (!batch || batch.mine !== attempt) return;
-    set({ sessions: batch.events.reduce(applyEvent, get().sessions) });
+    const snapshot = batch.events.some((e) => e.type === "snapshot");
+    set({ sessions: batch.events.reduce(applyEvent, get().sessions), ...(snapshot ? { sessionsLoaded: true } : {}) });
+    if (snapshot) {
+      const { sessions } = get();
+      updateReadyViews((layout) => tabs.closeWhere(layout, (c) => c.kind === "session" && !sessions[c.sessionId]));
+    }
     for (const event of batch.events) {
       if (event.type !== "session.removed") continue;
-      const features = new Set<FeatureId>(["sessions", ...(Object.keys(get().layouts[get().activeId] ?? {}) as FeatureId[])]);
-      for (const feature of features) updateLayout((layout) => tabs.closeSession(layout, event.id), feature);
+      updateReadyViews((layout) => tabs.closeSession(layout, event.id));
+      const features = Object.keys(get().layouts[get().activeId] ?? {}) as FeatureId[];
+      for (const feature of features) if (!projectOf(get(), feature)) updateLayout((layout) => tabs.closeSession(layout, event.id), feature);
     }
   }
 
@@ -529,6 +768,7 @@ export const useApp = create<AppState>((set, get) => {
         set({ link: { state: "connected", service } });
         // On every open, so a reconnect also catches changes made while away.
         void loadPlugins(mine);
+        loadVisible();
         // A restart, as after an update, may bring another version and app.
         void activeClient(get())
           .service()
@@ -556,23 +796,61 @@ export const useApp = create<AppState>((set, get) => {
    */
   function updateLayout(change: (layout: Layout) => Layout, feature: FeatureId = currentFeature(get())) {
     const state = get();
+    const connection = state.activeId;
+    const project = projectOf(state, feature);
+    const follow = (layout: Layout, selected: Record<string, string>) => {
+      const key = selectionKey(connection, feature, project);
+      const focused = tabs.focusedTab(layout);
+      const session = focused && tabs.sessionOf(focused.content);
+      if (session) selected[key] = session;
+      else if (!focused) delete selected[key];
+      return selected;
+    };
+    if (project) {
+      updateProject(
+        connection,
+        project,
+        (view) => {
+          const before = withFeaturePinned(view.layout, feature);
+          const layout = change(before);
+          return layout === before ? view : { ...view, layout };
+        },
+        (view) => saveSelected(follow(view.layout, { ...get().selected })),
+      );
+      return;
+    }
     const before = layoutOf(state, feature);
     const layout = change(before);
     if (layout === before) return;
-    const layouts = { ...state.layouts, [state.activeId]: { ...state.layouts[state.activeId], [feature]: layout } };
-    const selected = { ...state.selected };
-    const key = selectionKey(state.activeId, feature);
-    const focused = tabs.focusedTab(layout);
-    const session = focused && tabs.sessionOf(focused.content);
-    if (session) selected[key] = session;
-    else if (!focused) delete selected[key];
-    saveLayouts(layouts, selected);
+    const layouts = { ...state.layouts, [connection]: { ...state.layouts[connection], [feature]: layout } };
+    saveLayouts(layouts, follow(layout, { ...state.selected }));
+  }
+
+  function saveSelected(selected: Record<string, string>) {
+    set({ selected });
+    try {
+      localStorage.setItem(SELECTED_KEY, JSON.stringify(selected));
+    } catch {
+      // Only a convenience.
+    }
+  }
+
+  function togglePanel(side: "left" | "right") {
+    const state = get();
+    const project = projectOf(state, currentFeature(state));
+    if (project && state.projectViews[state.activeId]?.[project]?.ready && !narrow()) {
+      updateProject(state.activeId, project, (view) => (side === "left" ? { ...view, leftOpen: !view.leftOpen } : { ...view, rightOpen: !view.rightOpen }));
+      return;
+    }
+    const panels = side === "left" ? { leftOpen: !state.leftOpen, rightOpen: state.rightOpen } : { leftOpen: state.leftOpen, rightOpen: !state.rightOpen };
+    set(panels);
+    saveLayout(panels);
   }
 
   async function connect(target: Connection) {
     closeLink();
     const mine = attempt;
-    set({ link: { state: "connecting" }, sessions: {}, plugins: [], pluginsLoaded: false, history: NO_HISTORY });
+    set({ link: { state: "connecting" }, sessions: {}, sessionsLoaded: false, plugins: [], pluginsLoaded: false, history: NO_HISTORY });
     // Another tab may have renewed the token while this one was asleep: don't call it signed out.
     await syncCredentials();
     if (mine !== attempt) return;
@@ -588,6 +866,8 @@ export const useApp = create<AppState>((set, get) => {
     // The service's own name, shown unless the user gave one. A connection added signed out has only its host.
     if (connection.label !== name) get().updateConnection(connection.id, { label: name });
     void openEvents(mine, result.service);
+    // Over HTTP, so the tabs come back even when the event socket is blocked.
+    loadVisible();
     // For the limit on active sessions, even with the left panel shut.
     void get().loadHistory();
   }
@@ -639,6 +919,11 @@ export const useApp = create<AppState>((set, get) => {
       if (document.visibilityState === "visible") void renewDue();
     });
     window.addEventListener("focus", () => void renewDue());
+    // A layout edited in the last moment before the page goes is saved on the way out.
+    window.addEventListener("pagehide", () => void sync.flushAll(undefined, true));
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") void sync.flushAll(undefined, true);
+    });
     window.addEventListener("storage", (event) => {
       if (event.key === null || event.key === "agentop.connections") void syncCredentials();
     });
@@ -656,6 +941,9 @@ export const useApp = create<AppState>((set, get) => {
     history: NO_HISTORY,
     selected: loadSelected(),
     layouts: loadLayouts(),
+    scopes: loadScopes(),
+    projectViews: {},
+    sessionsLoaded: false,
     ...loadLayout(),
     folded: loadFolded(),
     switcherOpen: false,
@@ -682,6 +970,7 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     switchTo(id) {
+      void sync.flushAll(get().activeId);
       platform.saveActiveId(id);
       set({ activeId: id, switcherOpen: false, error: null });
       void connect(activeConnection(get()));
@@ -714,6 +1003,17 @@ export const useApp = create<AppState>((set, get) => {
       showFeature(feature);
     },
 
+    async setProject(feature, project) {
+      if (!isProjectFeature(feature) || FIXED_PROJECT[feature]) return;
+      const state = get();
+      const connection = state.activeId;
+      const leaving = projectOf(state, feature);
+      if (leaving && leaving !== project) void sync.flush(connection, leaving);
+      const { [feature]: _old, ...rest } = state.scopes[connection] ?? {};
+      saveScopes({ ...state.scopes, [connection]: project ? { ...rest, [feature]: project } : rest });
+      if (project) await loadProject(connection, project);
+    },
+
     async setPluginEnabled(id, enabled) {
       const updated = await get().act((client) => client.setPluginEnabled(id, enabled));
       if (updated) set({ plugins: get().plugins.map((p) => (p.id === id ? updated : p)) });
@@ -729,7 +1029,7 @@ export const useApp = create<AppState>((set, get) => {
 
     markStopped() {
       closeLink();
-      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {}, plugins: [], pluginsLoaded: false });
+      set({ link: { state: "failed", failure: { kind: "stopped" } }, sessions: {}, sessionsLoaded: false, plugins: [], pluginsLoaded: false });
     },
 
     addConnection(connection) {
@@ -750,19 +1050,22 @@ export const useApp = create<AppState>((set, get) => {
       persist(connections);
       const { [id]: _layouts, ...layouts } = get().layouts;
       const { [id]: _feature, ...features } = get().features;
-      set({ connections, features });
+      const { [id]: _views, ...projectViews } = get().projectViews;
+      const { [id]: _scopes, ...scopes } = get().scopes;
+      set({ connections, features, projectViews });
+      saveScopes(scopes);
       saveLayouts(layouts);
       if (get().activeId === id && connections[0]) get().switchTo(connections[0].id);
     },
 
     select(sessionId, mode = "replace", area = "left") {
-      const feature = featureForProject(get(), get().sessions[sessionId]?.project);
+      const feature = featureForSession(get().sessions[sessionId]?.project);
       updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, area, mode), feature);
       showFeature(feature);
     },
 
     openTab(content, area, mode = "replace") {
-      const feature = content.kind === "session" ? featureForProject(get(), get().sessions[content.sessionId]?.project) : currentFeature(get());
+      const feature = content.kind === "session" ? featureForSession(get().sessions[content.sessionId]?.project) : currentFeature(get());
       updateLayout((layout) => tabs.open(layout, content, area, mode), feature);
       showFeature(feature);
     },
@@ -786,7 +1089,7 @@ export const useApp = create<AppState>((set, get) => {
       if (!created) return;
       const past = (content: TabContent) => content.kind === "past" && content.historyId === item.id;
       const session: TabContent = { kind: "session", sessionId: created.id };
-      const feature = featureForProject(get(), item.project);
+      const feature = featureForSession(item.project);
       updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), feature);
       showFeature(feature);
       void get().loadHistory();
@@ -799,17 +1102,8 @@ export const useApp = create<AppState>((set, get) => {
       await get().loadHistory();
     },
 
-    toggleLeft() {
-      const leftOpen = !get().leftOpen;
-      set({ leftOpen });
-      saveLayout({ leftOpen, rightOpen: get().rightOpen });
-    },
-
-    toggleRight() {
-      const rightOpen = !get().rightOpen;
-      set({ rightOpen });
-      saveLayout({ leftOpen: get().leftOpen, rightOpen });
-    },
+    toggleLeft: () => togglePanel("left"),
+    toggleRight: () => togglePanel("right"),
 
     setFolded(section, shut) {
       const folded = get().folded.filter((s) => s !== section).concat(shut ? [section] : []);

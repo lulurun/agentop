@@ -5,8 +5,8 @@
  */
 import { useEffect } from "react";
 import { create } from "zustand";
-import { useApp } from "../../store";
-import { focusArea, focusedTab, open, type Layout, type TabContent } from "../../tabs";
+import { layoutOf, useApp } from "../../store";
+import { areasOf, focusArea, focusedTab, open, type Layout, type TabContent } from "../../tabs";
 import type { PluginClient } from "../types";
 
 export const PLUGIN_ID = "dialogue";
@@ -170,21 +170,34 @@ export function showAgents(layout: Layout, id: string): Layout {
   return focusArea(open(open(layout, agentTab(id, "a"), "left"), agentTab(id, "b"), "right"), "left");
 }
 
-export function selectDialogue(id: string): void {
+/** Each dialogue is a project with its own tabs: show this one's as they were left, or its two agents if it has none or is picked again. */
+export async function selectDialogue(id: string): Promise<void> {
   useDialogues.setState({ selected: id });
+  const again = currentProject() === id;
+  await useApp.getState().setProject(FEATURE, id);
+  if (currentProject() !== id) return;
+  if (!again && areasOf(layoutOf(useApp.getState(), FEATURE)).length > 0) return;
   const app = useApp.getState();
   app.openTab(agentTab(id, "a"), "left");
   app.openTab(agentTab(id, "b"), "right");
   app.focusArea(FEATURE, "left");
 }
 
-export function openFile(id: string, path: string): void {
+const currentProject = () => {
+  const s = useApp.getState();
+  return s.scopes[s.activeId]?.[FEATURE];
+};
+
+export async function openFile(id: string, path: string): Promise<void> {
   useDialogues.setState({ selected: id });
-  useApp.getState().openTab(fileTab(id, path), "right", "tab");
+  if (currentProject() !== id) await useApp.getState().setProject(FEATURE, id);
+  if (currentProject() === id) useApp.getState().openTab(fileTab(id, path), "right", "tab");
 }
 
+/** The wizard belongs to no dialogue, so it opens with none shown. */
 export function openWizard(): void {
   useApp.getState().setFeature(FEATURE);
+  void useApp.getState().setProject(FEATURE, null);
   useApp.getState().openTab(wizardTab, "left");
 }
 
@@ -192,18 +205,15 @@ export function closeWizard(): void {
   useApp.getState().closeTabs(FEATURE, (c) => isView(c, "new"));
 }
 
-/** Close every tab of a removed dialogue. */
+/** A removed dialogue's tabs go with its folder; the feature shows none. */
 export function forgetDialogue(id: string): void {
   if (useDialogues.getState().selected === id) useDialogues.setState({ selected: null });
-  useApp.getState().closeTabs(FEATURE, (c) => dialogueOf(c) === id);
+  if (currentProject() === id) void useApp.getState().setProject(FEATURE, null);
 }
 
-/** The dialogue the right panel is about: the focused tab's, or the one picked last. */
+/** The dialogue the right panel is about: the focused tab's, or else the one shown. */
 export function useCurrentDialogue(): string | null {
-  const focused = useApp((s) => {
-    const layout = s.layouts[s.activeId]?.[FEATURE];
-    return layout ? dialogueOf(focusedTab(layout)?.content) : null;
-  });
-  const selected = useDialogues((s) => s.selected);
-  return focused ?? selected;
+  const focused = useApp((s) => dialogueOf(focusedTab(layoutOf(s, FEATURE))?.content));
+  const shown = useApp((s) => s.scopes[s.activeId]?.[FEATURE] ?? null);
+  return focused ?? shown;
 }

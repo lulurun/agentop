@@ -579,3 +579,64 @@ test("a project is made with a name, opens its Coordinator, and keeps its sessio
   expect(readFileSync(join(s.root, "state/projects/beta/AGENTS.md"), "utf8")).toBe(agents);
   expect(readFileSync(join(s.root, "state/projects/beta/track/1/CLOSED.md"), "utf8")).toMatch(/reopened by the owner, in the app\n$/);
 });
+
+test("each project shows its own tabs and panels from its layout.json, and Sessions has one too", async ({ page }) => {
+  const s = await open(page);
+  const project = (name: string) => {
+    const directory = join(s.root, "state/projects", name);
+    mkdirSync(join(directory, ".project"), { recursive: true });
+    writeFileSync(join(directory, ".project", "project.json"), JSON.stringify({ owner: "projects", created_at: 0 }));
+    return join(directory, ".project", "layout.json");
+  };
+  const alpha = project("alpha");
+  const beta = project("beta");
+  // Written by hand: a file tab on the left, the right panel shut.
+  const byHand = {
+    version: 1,
+    "left-panel": { open: true },
+    "mid-panel": {
+      left: { open: true, tabs: [{ id: "x", content: { kind: "file", file: { sessionId: "gone-abc123", source: "workdir", path: "docs/fileX.md" } } }], active: "x" },
+      right: { open: false, tabs: [], active: null },
+    },
+    "right-panel": { open: false },
+    focused: "left",
+  };
+  writeFileSync(alpha, JSON.stringify(byHand));
+
+  await features(page).getByRole("button", { name: "Projects" }).click();
+  const left = page.getByRole("complementary", { name: "Left panel" });
+  const tabsShown = page.getByRole("main").locator('.workbench:not([hidden]) [role="tab"]');
+  const rightPanel = page.getByRole("complementary", { name: "Right panel" });
+  await left.getByRole("button", { name: "alpha", exact: true }).click();
+  await expect(tabsShown).toHaveText(["fileX.md"]);
+  await expect(rightPanel).toHaveCount(0);
+
+  // fileX is alpha's: beta starts with no tabs, and its own panels.
+  await left.getByRole("button", { name: "beta", exact: true }).click();
+  await expect(tabsShown).toHaveCount(0);
+  await expect(rightPanel).toHaveCount(1);
+  await openStatus(page);
+  await expect(tabsShown).toHaveText(["Status"]);
+  await expect.poll(() => existsSync(beta) && JSON.parse(readFileSync(beta, "utf8"))["mid-panel"].left.tabs[0]?.content.kind).toBe("status");
+
+  await left.getByRole("button", { name: "alpha", exact: true }).click();
+  await expect(tabsShown).toHaveText(["fileX.md"]);
+  await expect(rightPanel).toHaveCount(0);
+  expect(JSON.parse(readFileSync(alpha, "utf8"))).toEqual(byHand);
+
+  await page.reload();
+  await expect(page.locator(".link-connected")).toBeVisible();
+  await expect(tabsShown).toHaveText(["fileX.md"]);
+  await left.getByRole("button", { name: "beta", exact: true }).click();
+  await expect(tabsShown).toHaveText(["Status"]);
+
+  // Sessions is the default project, with its file in the default project's folder.
+  await features(page).getByRole("button", { name: "Sessions" }).click();
+  await expect(tabsShown).toHaveText(["New"]);
+  await page.keyboard.press("Control+Shift+Digit0");
+  const sessions = join(s.root, "state/projects/default/.project/layout.json");
+  await expect.poll(() => existsSync(sessions) && JSON.parse(readFileSync(sessions, "utf8"))["right-panel"].open).toBe(false);
+  await features(page).getByRole("button", { name: "Projects" }).click();
+  await expect(tabsShown).toHaveText(["Status"]);
+  await expect(rightPanel).toHaveCount(1);
+});

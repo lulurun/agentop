@@ -273,14 +273,15 @@ export function moveToOther(layout: Layout, area: Area, tabId: string): Layout {
   return compact({ ...withArea(withArea(layout, area, from), to, moved), focused: to });
 }
 
-function validContent(content: unknown): boolean {
+/** Whether a value read from storage is a tab's content. */
+export function isTabContent(content: unknown): content is TabContent {
   if (!content || typeof content !== "object") return false;
   const c = content as Record<string, unknown>;
   switch (c.kind) {
     case "session":
       return typeof c.sessionId === "string";
     case "file":
-      return !!c.file && typeof (c.file as FileRef).path === "string";
+      return !!c.file && typeof (c.file as FileRef).path === "string" && typeof (c.file as FileRef).sessionId === "string";
     case "status":
     case "start":
       return true;
@@ -295,7 +296,7 @@ function validContent(content: unknown): boolean {
 
 function validGroup(g: unknown): g is Group {
   const group = g as Group;
-  return !!group && Array.isArray(group.tabs) && group.tabs.every((t) => typeof t?.id === "string" && validContent(t.content));
+  return !!group && Array.isArray(group.tabs) && group.tabs.every((t) => typeof t?.id === "string" && isTabContent(t.content));
 }
 
 /** A saved layout from storage, or null if it isn't one. Reads the older `{groups, focused}` too. */

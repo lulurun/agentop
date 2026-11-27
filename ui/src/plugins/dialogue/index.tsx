@@ -74,7 +74,7 @@ const sideAlive = (d: DialogueSummary, side: Side) => (side === "a" ? d.session_
 
 function DialogueRow({ d, current }: { d: DialogueSummary; current: boolean }) {
   return (
-    <button type="button" className="session-row dialogue-row" data-status={markOf(d)} aria-current={current || undefined} onClick={() => selectDialogue(d.id)} title={d.id}>
+    <button type="button" className="session-row dialogue-row" data-status={markOf(d)} aria-current={current || undefined} onClick={() => void selectDialogue(d.id)} title={d.id}>
       <span className={`mark mark-${markOf(d)}`} aria-hidden="true" />
       <span className="session-name">{d.title}</span>
       <span className="session-meta">
@@ -310,7 +310,7 @@ function FileLinks({ id, files }: { id: string; files: DialogueFile[] }) {
     <ul className="file-list dialogue-files">
       {files.map((f) => (
         <li key={f.path}>
-          <button type="button" className="file-row" onClick={() => openFile(id, f.path)} title={`Open ${f.path}`}>
+          <button type="button" className="file-row" onClick={() => void openFile(id, f.path)} title={`Open ${f.path}`}>
             <span className="file-glyph" aria-hidden="true">·</span>
             <span>{f.path.replace(/^deliverables\//, "")}</span>
             <span className="file-size">{formatBytes(f.size)}</span>
@@ -546,6 +546,7 @@ function fileLabel(viewKey: string): string {
 export const plugin: UiPlugin = {
   feature: {
     label: "Dialogues",
+    projects: true,
     views: {
       new: { label: "New dialogue", Component: NewDialogue },
       agent: { label: "Agent", Component: AgentView, tabLabel: agentLabel },

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, model_validator
 
 
 class Health(BaseModel):
@@ -238,6 +238,94 @@ class ProjectModel(BaseModel):
     owner: str | None = None
     folder: str
     created_at: float | None = None
+
+
+_Id = Annotated[str, Field(min_length=1, max_length=200)]
+
+
+class _Strict(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class SessionTabContent(_Strict):
+    kind: Literal["session"]
+    sessionId: _Id
+
+
+class FileRefModel(_Strict):
+    sessionId: _Id
+    source: Literal["workdir", "memory", "transcript"]
+    path: str = Field(max_length=4096)
+    view: Literal["diff"] | None = None
+
+
+class FileTabContent(_Strict):
+    kind: Literal["file"]
+    file: FileRefModel
+
+
+class PlainTabContent(_Strict):
+    kind: Literal["status", "start"]
+
+
+class PastTabContent(_Strict):
+    kind: Literal["past"]
+    historyId: _Id
+
+
+class PluginTabContent(_Strict):
+    kind: Literal["plugin"]
+    plugin: _Id
+    view: _Id
+    key: str | None = Field(None, max_length=4096)
+
+
+class LayoutTab(_Strict):
+    id: Annotated[str, Field(min_length=1, max_length=64)]
+    content: Annotated[
+        Union[SessionTabContent, FileTabContent, PlainTabContent, PastTabContent, PluginTabContent],
+        Field(discriminator="kind"),
+    ]
+
+
+class LayoutArea(_Strict):
+    open: StrictBool
+    tabs: list[LayoutTab] = Field(default_factory=list, max_length=64)
+    active: str | None = None
+
+    @model_validator(mode="after")
+    def _active_is_a_tab(self):
+        if self.active is not None and all(t.id != self.active for t in self.tabs):
+            raise ValueError("active is not one of the area's tabs")
+        return self
+
+
+class LayoutPanel(_Strict):
+    open: StrictBool
+
+
+class MidPanel(_Strict):
+    left: LayoutArea
+    right: LayoutArea
+
+
+class ProjectLayout(_Strict):
+    """A project's layout in the app, `.project/layout.json` (docs/0_10_ui.md, Project layouts)."""
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    version: Literal[1]
+    left_panel: LayoutPanel = Field(alias="left-panel")
+    mid_panel: MidPanel = Field(alias="mid-panel")
+    right_panel: LayoutPanel = Field(alias="right-panel")
+    focused: Literal["left", "right"]
+
+    @model_validator(mode="after")
+    def _tab_ids_are_unique(self):
+        ids = [t.id for area in (self.mid_panel.left, self.mid_panel.right) for t in area.tabs]
+        if len(ids) != len(set(ids)):
+            raise ValueError("tab ids must be unique")
+        return self
 
 
 class ResumeRef(BaseModel):

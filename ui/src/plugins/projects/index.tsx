@@ -3,7 +3,8 @@ import { DetailsPanel } from "../../components/DetailsPanel";
 import { selectedSession } from "../../components/MainArea";
 import { Section } from "../../components/Section";
 import { SessionSections } from "../../components/Sidebar";
-import { focusedPastId, useApp } from "../../store";
+import { focusedPastId, layoutOf, useApp } from "../../store";
+import { areasOf } from "../../tabs";
 import type { PluginContext, UiPlugin } from "../types";
 import { isProjectCoordinator } from "./progress";
 import { ProgressViewer } from "./ProgressViewer";
@@ -15,36 +16,7 @@ interface Project {
   created_at: number | null;
 }
 
-const CURRENT_KEY = "agentop.projects.current";
-
-/** The project chosen, per service, shared by the left panel and the background. */
-const current = (() => {
-  const listeners = new Set<() => void>();
-  let saved: Record<string, string> = {};
-  try {
-    saved = JSON.parse(localStorage.getItem(CURRENT_KEY) ?? "{}");
-  } catch {
-    saved = {};
-  }
-  return {
-    subscribe(listener: () => void) {
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    snapshot: () => saved,
-    set(service: string, name: string | null) {
-      saved = { ...saved };
-      if (name) saved[service] = name;
-      else delete saved[service];
-      try {
-        localStorage.setItem(CURRENT_KEY, JSON.stringify(saved));
-      } catch {
-        // Kept for this page only.
-      }
-      listeners.forEach((l) => l());
-    },
-  };
-})();
+const FEATURE = "plugin:projects" as const;
 
 /** The plugin's projects, refreshed by every component that asks. */
 const listing = (() => {
@@ -67,19 +39,29 @@ const listing = (() => {
 function useProjects(plugin: PluginContext) {
   const service = useApp((s) => s.activeId);
   const projects = useSyncExternalStore(listing.subscribe, listing.snapshot);
-  const chosen = useSyncExternalStore(current.subscribe, current.snapshot)[service];
+  const chosen = useApp((s) => s.scopes[s.activeId]?.[FEATURE]);
   const select = useApp((s) => s.select);
   const act = useApp((s) => s.act);
+  const setProject = useApp((s) => s.setProject);
 
   useEffect(() => {
     void listing.load(plugin).catch(() => undefined);
   }, [plugin, service]);
 
+  // A project closed meanwhile is no longer shown, nor its tabs.
+  const gone = !!projects && !!chosen && !projects.some((p) => p.name === chosen);
+  useEffect(() => {
+    if (gone) void setProject(FEATURE, null);
+  }, [gone, setProject]);
+
+  /** Show a project as it was left; one with no tabs yet, or when asked, gets its Coordinator's. */
   const open = useCallback(
-    async (name: string) => {
-      current.set(service, name);
-      const rows = await act((client) => client.sessions());
+    async (name: string, coordinator = false) => {
+      await setProject(FEATURE, name);
       if (useApp.getState().activeId !== service) return;
+      if (!coordinator && areasOf(layoutOf(useApp.getState(), FEATURE)).length > 0) return;
+      const rows = await act((client) => client.sessions());
+      if (useApp.getState().activeId !== service || useApp.getState().scopes[service]?.[FEATURE] !== name) return;
       const row = rows?.find(
         (s) => s.project === name && s.display_name === "Coordinator" && (s.status === "running" || s.status === "starting"),
       );
@@ -88,7 +70,7 @@ function useProjects(plugin: PluginContext) {
         select(row.id);
       }
     },
-    [service, select, act],
+    [service, select, act, setProject],
   );
 
   const create = useCallback(
@@ -184,7 +166,7 @@ function Background({ plugin }: { plugin: PluginContext }) {
           <h2>{chosen}</h2>
           <p>Talk to its Coordinator to run it, or open any of its sessions from the left panel.</p>
           <div className="placard-actions">
-            <button type="button" className="primary" onClick={() => void open(chosen)}>
+            <button type="button" className="primary" onClick={() => void open(chosen, true)}>
               Open the Coordinator
             </button>
           </div>
@@ -226,6 +208,7 @@ export const plugin: UiPlugin = {
         Component: ({ plugin, viewKey }) => viewKey ? <ProgressViewer plugin={plugin} project={viewKey} /> : null,
       },
     },
+    projects: true,
     left: Left,
     right: Right,
     background: Background,

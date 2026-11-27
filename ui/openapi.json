@@ -312,6 +312,69 @@
         "title": "FileListing",
         "type": "object"
       },
+      "FileRefModel": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "maxLength": 4096,
+            "title": "Path",
+            "type": "string"
+          },
+          "sessionId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Sessionid",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "workdir",
+              "memory",
+              "transcript"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "view": {
+            "anyOf": [
+              {
+                "const": "diff",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "View"
+          }
+        },
+        "required": [
+          "sessionId",
+          "source",
+          "path"
+        ],
+        "title": "FileRefModel",
+        "type": "object"
+      },
+      "FileTabContent": {
+        "additionalProperties": false,
+        "properties": {
+          "file": {
+            "$ref": "#/components/schemas/FileRefModel"
+          },
+          "kind": {
+            "const": "file",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "file"
+        ],
+        "title": "FileTabContent",
+        "type": "object"
+      },
       "GitChanges": {
         "properties": {
           "ahead": {
@@ -590,6 +653,101 @@
         "title": "HistoryStats",
         "type": "object"
       },
+      "LayoutArea": {
+        "additionalProperties": false,
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          },
+          "tabs": {
+            "items": {
+              "$ref": "#/components/schemas/LayoutTab"
+            },
+            "maxItems": 64,
+            "title": "Tabs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "open"
+        ],
+        "title": "LayoutArea",
+        "type": "object"
+      },
+      "LayoutPanel": {
+        "additionalProperties": false,
+        "properties": {
+          "open": {
+            "title": "Open",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "open"
+        ],
+        "title": "LayoutPanel",
+        "type": "object"
+      },
+      "LayoutTab": {
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "discriminator": {
+              "mapping": {
+                "file": "#/components/schemas/FileTabContent",
+                "past": "#/components/schemas/PastTabContent",
+                "plugin": "#/components/schemas/PluginTabContent",
+                "session": "#/components/schemas/SessionTabContent",
+                "start": "#/components/schemas/PlainTabContent",
+                "status": "#/components/schemas/PlainTabContent"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SessionTabContent"
+              },
+              {
+                "$ref": "#/components/schemas/FileTabContent"
+              },
+              {
+                "$ref": "#/components/schemas/PlainTabContent"
+              },
+              {
+                "$ref": "#/components/schemas/PastTabContent"
+              },
+              {
+                "$ref": "#/components/schemas/PluginTabContent"
+              }
+            ],
+            "title": "Content"
+          },
+          "id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "content"
+        ],
+        "title": "LayoutTab",
+        "type": "object"
+      },
       "LoginMethod": {
         "properties": {
           "id": {
@@ -606,6 +764,45 @@
           "name"
         ],
         "title": "LoginMethod",
+        "type": "object"
+      },
+      "MidPanel": {
+        "additionalProperties": false,
+        "properties": {
+          "left": {
+            "$ref": "#/components/schemas/LayoutArea"
+          },
+          "right": {
+            "$ref": "#/components/schemas/LayoutArea"
+          }
+        },
+        "required": [
+          "left",
+          "right"
+        ],
+        "title": "MidPanel",
+        "type": "object"
+      },
+      "PastTabContent": {
+        "additionalProperties": false,
+        "properties": {
+          "historyId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Historyid",
+            "type": "string"
+          },
+          "kind": {
+            "const": "past",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "historyId"
+        ],
+        "title": "PastTabContent",
         "type": "object"
       },
       "PatchPlugin": {
@@ -649,6 +846,24 @@
           }
         },
         "title": "PatchSession",
+        "type": "object"
+      },
+      "PlainTabContent": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "status",
+              "start"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "PlainTabContent",
         "type": "object"
       },
       "PluginInfo": {
@@ -709,6 +924,84 @@
           "ui"
         ],
         "title": "PluginInfo",
+        "type": "object"
+      },
+      "PluginTabContent": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "maxLength": 4096,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key"
+          },
+          "kind": {
+            "const": "plugin",
+            "title": "Kind",
+            "type": "string"
+          },
+          "plugin": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Plugin",
+            "type": "string"
+          },
+          "view": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "plugin",
+          "view"
+        ],
+        "title": "PluginTabContent",
+        "type": "object"
+      },
+      "ProjectLayout": {
+        "additionalProperties": false,
+        "description": "A project's layout in the app, `.project/layout.json` (docs/0_10_ui.md, Project layouts).",
+        "properties": {
+          "focused": {
+            "enum": [
+              "left",
+              "right"
+            ],
+            "title": "Focused",
+            "type": "string"
+          },
+          "left-panel": {
+            "$ref": "#/components/schemas/LayoutPanel"
+          },
+          "mid-panel": {
+            "$ref": "#/components/schemas/MidPanel"
+          },
+          "right-panel": {
+            "$ref": "#/components/schemas/LayoutPanel"
+          },
+          "version": {
+            "const": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "left-panel",
+          "mid-panel",
+          "right-panel",
+          "focused"
+        ],
+        "title": "ProjectLayout",
         "type": "object"
       },
       "ProjectModel": {
@@ -1191,6 +1484,28 @@
           "tmux"
         ],
         "title": "SessionModel",
+        "type": "object"
+      },
+      "SessionTabContent": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "session",
+            "title": "Kind",
+            "type": "string"
+          },
+          "sessionId": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Sessionid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "sessionId"
+        ],
+        "title": "SessionTabContent",
         "type": "object"
       },
       "StartDecision": {
@@ -3190,6 +3505,119 @@
           }
         },
         "summary": "Start Coordinator"
+      }
+    },
+    "/projects/{name}/layout": {
+      "get": {
+        "description": "As written, so a hand edit with a mistake in one tab still loads; the app reads it leniently.",
+        "operationId": "get_layout_projects__name__layout_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "The saved layout as written"
+          },
+          "204": {
+            "description": "None saved"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Layout"
+      },
+      "put": {
+        "operationId": "put_layout_projects__name__layout_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectLayout"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Layout"
       }
     },
     "/send": {

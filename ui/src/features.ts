@@ -39,6 +39,16 @@ export function pluginOf(id: FeatureId): string | undefined {
   return id.startsWith("plugin:") ? id.slice("plugin:".length) : undefined;
 }
 
+/** The project a feature always shows: Sessions is the `default` project. */
+export const FIXED_PROJECT: Partial<Record<FeatureId, string>> = { sessions: "default" };
+
+/** Its tabs belong to a project: Sessions', and a plugin feature's that says so. */
+export function isProjectFeature(id: FeatureId): boolean {
+  if (FIXED_PROJECT[id]) return true;
+  const plugin = pluginOf(id);
+  return !!plugin && !!UI_PLUGINS[plugin]?.feature?.projects;
+}
+
 /** A feature this app still offers: History was one until 2026-11-15, and is now in Sessions' left panel. */
 export function isKnownFeature(id: string): id is FeatureId {
   return id === "sessions" || id.startsWith("plugin:");

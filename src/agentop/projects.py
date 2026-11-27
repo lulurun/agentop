@@ -1,6 +1,6 @@
 """Projects: a group of sessions and the folder they share, ~/.agentop/projects/<name>/. See docs/0_13_projects.md.
 
-agentop's own record of a project is in its `.project/` folder: project.json here, sessions.json in registry.
+agentop's own record of a project is in its `.project/` folder: project.json and layout.json here, sessions.json in registry.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ import re
 import time
 from pathlib import Path
 
-from agentop.jsonfile import write_json_atomic
+from agentop.jsonfile import move_aside, write_json_atomic
 from agentop.paths import projects_dir
 
 DEFAULT = "default"
@@ -18,6 +18,8 @@ CORE = "core"
 COORDINATOR = "Coordinator"
 META_DIR = ".project"
 CODE_DIR = "code"
+LAYOUT_FILE = "layout.json"
+LAYOUT_MAX_BYTES = 256 * 1024
 
 _NAME = re.compile(r"[a-z0-9][a-z0-9_-]{0,95}")
 
@@ -127,6 +129,36 @@ def close(name: str) -> None:
     if not exists(name):
         raise ProjectError(f"No project called {name}")
     _meta_path(name).unlink()
+
+
+def layout_path(name: str) -> Path:
+    return meta_dir(name) / LAYOUT_FILE
+
+
+def read_layout(name: str) -> dict | None:
+    """The app's saved layout for the project as written, or None; one that isn't a JSON object is moved aside."""
+    path = layout_path(name)
+    try:
+        if path.stat().st_size > LAYOUT_MAX_BYTES:
+            raise ValueError("is too large")
+        data = json.loads(path.read_text())
+        if not isinstance(data, dict):
+            raise ValueError("is not a JSON object")
+    except FileNotFoundError:
+        return None
+    except (OSError, ValueError) as error:
+        try:
+            move_aside(path, f"is unreadable ({error})")
+        except OSError:
+            pass
+        return None
+    return data
+
+
+def write_layout(name: str, layout: dict) -> None:
+    if name == DEFAULT:
+        ensure_default()
+    write_json_atomic(layout_path(name), layout)
 
 
 def split_target(target: str) -> tuple[str | None, str]:

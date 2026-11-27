@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { ServiceClient, Session } from "../api/client";
 import { UI_PLUGINS } from "../plugins/registry";
 import { FileTab, PluginTab } from "../plugins/Slot";
-import { activeConnection, layoutOf, sessionTitle, useApp } from "../store";
+import { activeConnection, layoutOf, layoutReady, sessionTitle, useApp } from "../store";
 import { areasOf, canSplit, other, sessionOf, type Area, type Group, type Tab } from "../tabs";
 import type { FeatureId } from "../features";
 import { connectionName } from "../connections";
@@ -283,7 +283,10 @@ export function Workbench({
   hidden?: boolean;
 }) {
   const layout = useApp((s) => layoutOf(s, feature));
+  // Until the project's file is read, rather than its defaults, so a restored tab doesn't flash in after another.
+  const ready = useApp((s) => layoutReady(s, feature));
   const areas = areasOf(layout);
+  if (!ready) return null;
   if (areas.length === 0) return hidden ? null : <>{background}</>;
   return (
     <div className="workbench" data-areas={areas.length} data-feature={feature} hidden={hidden || undefined} aria-hidden={hidden || undefined}>
