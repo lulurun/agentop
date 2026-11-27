@@ -17,3 +17,8 @@ export function formatBytes(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
+
+export function formatTitle(title: string): string {
+  const points = [...title];
+  return points.length > 128 ? `${points.slice(0, 128).join("")}...` : title;
+}

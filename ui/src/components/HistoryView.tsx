@@ -4,7 +4,7 @@ import { activeCount, useApp } from "../store";
 import { ChatView } from "./Conversation";
 import { Row, TokenRows } from "./DetailsPanel";
 import { FilesSection } from "./FilesSection";
-import { formatBytes } from "./format";
+import { formatBytes, formatTitle } from "./format";
 import { Section } from "./Section";
 import { ToolBadge } from "./Sidebar";
 
@@ -178,7 +178,7 @@ export function PastDetails({ historyId }: { historyId: string }) {
       <Section id="details" title="Details">
         <dl>
           <Row label="Name" value={item.name} />
-          <Row label="Title" value={item.title || "Untitled"} />
+          <Row label="Title" value={item.title ? formatTitle(item.title) : "Untitled"} />
           {item.description && <Row label="Description" value={item.description} />}
           <Row label="Tool" value={item.tool} />
           <Row label="Directory" value={item.cwd || "Unknown"} copy={item.cwd || undefined} />

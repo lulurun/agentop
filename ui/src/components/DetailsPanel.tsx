@@ -6,7 +6,7 @@ import { focusedPastId, useApp } from "../store";
 import { FilesSection } from "./FilesSection";
 import { PastDetails } from "./HistoryView";
 import { Section } from "./Section";
-import { formatDuration, formatTokens } from "./format";
+import { formatDuration, formatTitle, formatTokens } from "./format";
 import { selectedSession } from "./MainArea";
 
 export function Row({ label, value, copy }: { label: string; value: string; copy?: string }) {
@@ -194,7 +194,7 @@ export const DetailsPanel = memo(function DetailsPanel({ actions }: { actions?: 
           ) : (
             <Row label="Name" value={session.display_name} />
           )}
-          {session.ai_title && <Row label="Title" value={session.ai_title} />}
+          {session.ai_title && <Row label="Title" value={formatTitle(session.ai_title)} />}
           <Row label="Tool" value={session.tool ?? "Unknown"} />
           <Row label="Directory" value={session.cwd || "Unknown"} copy={session.cwd} />
           {session.bridge_url && <BridgeRow url={session.bridge_url} />}
