@@ -110,6 +110,10 @@ export interface AppState {
   select(sessionId: string, mode?: OpenMode, area?: Area): void;
   /** Open a tab in an area (docs/0_10_ui.md, Where tabs open) of the feature shown; a default-project session's tab always opens in Sessions. */
   openTab(content: TabContent, area: Area, mode?: OpenMode): void;
+  /** Open a tab in one captured view (`ownerOf`), shown or not, for an action that awaited first; it never switches what is shown. */
+  openTabIn(owner: ViewOwner, content: TabContent, area: Area, mode?: OpenMode): void;
+  focusAreaIn(owner: ViewOwner, area: Area): void;
+  closeTabsIn(owner: ViewOwner, matches: (content: TabContent) => boolean): void;
   /** Close the tabs of a feature whose content matches. */
   closeTabs(feature: FeatureId, matches: (content: TabContent) => boolean): void;
   activateTab(feature: FeatureId, area: Area, tabId: string): void;
@@ -275,6 +279,29 @@ export function panelsOf(state: Pick<AppState, "scopes" | "activeId" | "projectV
   return view?.ready && !narrow() ? view : state;
 }
 
+/** One view: a feature on a connection, and the project it shows, if any. */
+export interface ViewOwner {
+  connection: string;
+  feature: FeatureId;
+  project?: string;
+}
+
+/** The view a feature shows now, by default the feature shown; captured before an await, so what follows lands there. */
+export function ownerOf(state: Pick<AppState, "scopes" | "activeId" | "features" | "plugins" | "pluginsLoaded">, feature: FeatureId = currentFeature(state)): ViewOwner {
+  return { connection: state.activeId, feature, project: projectOf(state, feature) };
+}
+
+/** That view is the one on screen. */
+export function isShown(state: Pick<AppState, "scopes" | "activeId" | "features" | "plugins" | "pluginsLoaded">, owner: ViewOwner): boolean {
+  return state.activeId === owner.connection && currentFeature(state) === owner.feature && projectOf(state, owner.feature) === owner.project;
+}
+
+/** A view's tabs, whether or not it is shown. */
+export function layoutIn(state: Pick<AppState, "layouts" | "projectViews">, { connection, feature, project }: ViewOwner): Layout {
+  const saved = project ? state.projectViews[connection]?.[project]?.layout : state.layouts[connection]?.[feature];
+  return withFeaturePinned(saved ?? EMPTY_LAYOUT, feature);
+}
+
 /** The feature's layout has been read, or there is none to read: until then its middle panel shows nothing. */
 export function layoutReady(state: Pick<AppState, "scopes" | "activeId" | "projectViews">, feature: FeatureId): boolean {
   const project = projectOf(state, feature);
@@ -303,9 +330,7 @@ function withFeaturePinned(layout: Layout, feature: FeatureId): Layout {
 
 /** A feature's tabs on the active connection, by default the one shown: those of the project it shows, if it shows one. */
 export function layoutOf(state: LayoutState, feature: FeatureId = currentFeature(state)): Layout {
-  const project = projectOf(state, feature);
-  const saved = project ? state.projectViews[state.activeId]?.[project]?.layout : state.layouts[state.activeId]?.[feature];
-  return withFeaturePinned(saved ?? EMPTY_LAYOUT, feature);
+  return layoutIn(state, ownerOf(state, feature));
 }
 
 const homeTabs = new Map<string, Tab>();
@@ -627,8 +652,13 @@ export const useApp = create<AppState>((set, get) => {
    * The feature a session's tab opens in. For another project's session in a project feature
    * showing some other project, that feature switches to the session's project first.
    */
-  function featureForSession(project?: string | null): FeatureId {
+  function featureForSession(project?: string | null): FeatureId | null {
     const feature = featureForProject(get(), project);
+    const fixed = FIXED_PROJECT[feature];
+    if (fixed && project && project !== fixed) {
+      console.warn(`A session of ${project} isn't opened in ${feature}`);
+      return null;
+    }
     if (project && project !== DEFAULT_PROJECT && isProjectFeature(feature) && projectOf(get(), feature) !== project) {
       void get().setProject(feature, project);
     }
@@ -795,9 +825,12 @@ export const useApp = create<AppState>((set, get) => {
    * The feature's selected session follows its focused tab.
    */
   function updateLayout(change: (layout: Layout) => Layout, feature: FeatureId = currentFeature(get())) {
+    updateLayoutIn(ownerOf(get(), feature), change);
+  }
+
+  /** Change the tabs of one view, whichever is shown now: what a delayed action uses, so it lands where it began. */
+  function updateLayoutIn({ connection, feature, project }: ViewOwner, change: (layout: Layout) => Layout) {
     const state = get();
-    const connection = state.activeId;
-    const project = projectOf(state, feature);
     const follow = (layout: Layout, selected: Record<string, string>) => {
       const key = selectionKey(connection, feature, project);
       const focused = tabs.focusedTab(layout);
@@ -819,7 +852,7 @@ export const useApp = create<AppState>((set, get) => {
       );
       return;
     }
-    const before = layoutOf(state, feature);
+    const before = withFeaturePinned(state.layouts[connection]?.[feature] ?? EMPTY_LAYOUT, feature);
     const layout = change(before);
     if (layout === before) return;
     const layouts = { ...state.layouts, [connection]: { ...state.layouts[connection], [feature]: layout } };
@@ -1060,15 +1093,24 @@ export const useApp = create<AppState>((set, get) => {
 
     select(sessionId, mode = "replace", area = "left") {
       const feature = featureForSession(get().sessions[sessionId]?.project);
+      if (!feature) return;
       updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, area, mode), feature);
       showFeature(feature);
     },
 
     openTab(content, area, mode = "replace") {
       const feature = content.kind === "session" ? featureForSession(get().sessions[content.sessionId]?.project) : currentFeature(get());
+      if (!feature) return;
       updateLayout((layout) => tabs.open(layout, content, area, mode), feature);
       showFeature(feature);
     },
+    openTabIn(owner, content, area, mode = "replace") {
+      const project = content.kind === "session" ? get().sessions[content.sessionId]?.project : undefined;
+      if (owner.project && project && project !== owner.project) return;
+      updateLayoutIn(owner, (layout) => tabs.open(layout, content, area, mode));
+    },
+    focusAreaIn: (owner, area) => updateLayoutIn(owner, (layout) => tabs.focusArea(layout, area)),
+    closeTabsIn: (owner, matches) => updateLayoutIn(owner, (layout) => tabs.closeWhere(layout, matches)),
     closeTabs: (feature, matches) => updateLayout((layout) => tabs.closeWhere(layout, matches), feature),
     activateTab: (feature, area, tabId) => updateLayout((layout) => tabs.activate(layout, area, tabId), feature),
     closeTab: (feature, area, tabId) => updateLayout((layout) => tabs.close(layout, area, tabId), feature),
@@ -1085,14 +1127,15 @@ export const useApp = create<AppState>((set, get) => {
     },
 
     async resumeHistory(item) {
+      // The past session's tab is in the view shown now; the reply may come after another is.
+      const owner = ownerOf(get());
       const created = await get().act((client) => client.resumeHistory(item.id));
       if (!created) return;
       const past = (content: TabContent) => content.kind === "past" && content.historyId === item.id;
       const session: TabContent = { kind: "session", sessionId: created.id };
-      const feature = featureForSession(item.project);
-      updateLayout((layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"), feature);
-      showFeature(feature);
-      void get().loadHistory();
+      const into = owner.project && item.project && owner.project !== item.project ? null : owner;
+      if (into) updateLayoutIn(into, (layout) => tabs.open(tabs.mapContent(layout, (c) => (past(c) ? session : c)), session, "left"));
+      if (get().activeId === owner.connection) void get().loadHistory();
     },
 
     async removeHistory(item) {

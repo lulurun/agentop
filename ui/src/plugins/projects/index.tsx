@@ -3,7 +3,7 @@ import { DetailsPanel } from "../../components/DetailsPanel";
 import { selectedSession } from "../../components/MainArea";
 import { Section } from "../../components/Section";
 import { SessionSections } from "../../components/Sidebar";
-import { focusedPastId, layoutOf, useApp } from "../../store";
+import { focusedPastId, layoutIn, useApp, type ViewOwner } from "../../store";
 import { areasOf } from "../../tabs";
 import type { PluginContext, UiPlugin } from "../types";
 import { isProjectCoordinator } from "./progress";
@@ -36,12 +36,28 @@ const listing = (() => {
   };
 })();
 
+/**
+ * Show a project as it was left; one with no tabs yet, or when asked, gets its Coordinator's. Captured before any
+ * await, so its Coordinator's tab goes into this project's own tabs on this service, whatever is shown later.
+ */
+export async function openProject(service: string, name: string, coordinator = false): Promise<void> {
+  const app = useApp.getState;
+  if (app().activeId !== service) return;
+  const owner: ViewOwner = { connection: service, feature: FEATURE, project: name };
+  await app().setProject(FEATURE, name);
+  if (!coordinator && areasOf(layoutIn(app(), owner)).length > 0) return;
+  const rows = await app().act((client) => client.sessions());
+  if (app().activeId !== service) return;
+  const row = rows?.find((s) => s.project === name && s.display_name === "Coordinator" && (s.status === "running" || s.status === "starting"));
+  if (!row) return;
+  useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
+  app().openTabIn(owner, { kind: "session", sessionId: row.id }, "left");
+}
+
 function useProjects(plugin: PluginContext) {
   const service = useApp((s) => s.activeId);
   const projects = useSyncExternalStore(listing.subscribe, listing.snapshot);
   const chosen = useApp((s) => s.scopes[s.activeId]?.[FEATURE]);
-  const select = useApp((s) => s.select);
-  const act = useApp((s) => s.act);
   const setProject = useApp((s) => s.setProject);
 
   useEffect(() => {
@@ -55,23 +71,7 @@ function useProjects(plugin: PluginContext) {
   }, [gone, setProject]);
 
   /** Show a project as it was left; one with no tabs yet, or when asked, gets its Coordinator's. */
-  const open = useCallback(
-    async (name: string, coordinator = false) => {
-      await setProject(FEATURE, name);
-      if (useApp.getState().activeId !== service) return;
-      if (!coordinator && areasOf(layoutOf(useApp.getState(), FEATURE)).length > 0) return;
-      const rows = await act((client) => client.sessions());
-      if (useApp.getState().activeId !== service || useApp.getState().scopes[service]?.[FEATURE] !== name) return;
-      const row = rows?.find(
-        (s) => s.project === name && s.display_name === "Coordinator" && (s.status === "running" || s.status === "starting"),
-      );
-      if (row) {
-        useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
-        select(row.id);
-      }
-    },
-    [service, select, act, setProject],
-  );
+  const open = useCallback((name: string, coordinator = false) => openProject(service, name, coordinator), [service]);
 
   const create = useCallback(
     async (name: string) => {

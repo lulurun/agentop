@@ -5,7 +5,8 @@
  */
 import { useEffect } from "react";
 import { create } from "zustand";
-import { layoutOf, useApp } from "../../store";
+import { activeClient, isShown, layoutIn, layoutOf, ownerOf, useApp, type ViewOwner } from "../../store";
+import type { Session } from "../../api/client";
 import { areasOf, focusArea, focusedTab, open, type Layout, type TabContent } from "../../tabs";
 import type { PluginClient } from "../types";
 
@@ -170,28 +171,38 @@ export function showAgents(layout: Layout, id: string): Layout {
   return focusArea(open(open(layout, agentTab(id, "a"), "left"), agentTab(id, "b"), "right"), "left");
 }
 
-/** Each dialogue is a project with its own tabs: show this one's as they were left, or its two agents if it has none or is picked again. */
-export async function selectDialogue(id: string): Promise<void> {
+/**
+ * Each dialogue is a project with its own tabs: show this one's as they were left, or its two agents
+ * if it has none or is picked again. `connection` is the service it was asked on, when asked after an await.
+ */
+export async function selectDialogue(id: string, connection = useApp.getState().activeId): Promise<void> {
+  if (useApp.getState().activeId !== connection) return;
   useDialogues.setState({ selected: id });
-  const again = currentProject() === id;
+  const owner: ViewOwner = { connection, feature: FEATURE, project: id };
+  const again = isShown(useApp.getState(), owner);
   await useApp.getState().setProject(FEATURE, id);
-  if (currentProject() !== id) return;
-  if (!again && areasOf(layoutOf(useApp.getState(), FEATURE)).length > 0) return;
+  // Whatever is shown by now, the agents go only into this dialogue's own tabs.
+  if (!again && areasOf(layoutIn(useApp.getState(), owner)).length > 0) return;
   const app = useApp.getState();
-  app.openTab(agentTab(id, "a"), "left");
-  app.openTab(agentTab(id, "b"), "right");
-  app.focusArea(FEATURE, "left");
+  app.openTabIn(owner, agentTab(id, "a"), "left");
+  app.openTabIn(owner, agentTab(id, "b"), "right");
+  app.focusAreaIn(owner, "left");
 }
 
-const currentProject = () => {
-  const s = useApp.getState();
-  return s.scopes[s.activeId]?.[FEATURE];
-};
-
 export async function openFile(id: string, path: string): Promise<void> {
+  const owner: ViewOwner = { connection: useApp.getState().activeId, feature: FEATURE, project: id };
   useDialogues.setState({ selected: id });
-  if (currentProject() !== id) await useApp.getState().setProject(FEATURE, id);
-  if (currentProject() === id) useApp.getState().openTab(fileTab(id, path), "right", "tab");
+  if (!isShown(useApp.getState(), owner)) await useApp.getState().setProject(FEATURE, id);
+  useApp.getState().openTabIn(owner, fileTab(id, path), "right", "tab");
+}
+
+/** Open a dialogue's Coordinator in that dialogue's own tabs, on the service asked, whatever is shown by the time it answers. */
+export async function openCoordinatorFor(id: string, client: PluginClient = activeClient(useApp.getState()).plugin(PLUGIN_ID)): Promise<void> {
+  const owner: ViewOwner = { connection: useApp.getState().activeId, feature: FEATURE, project: id };
+  const row = await useApp.getState().act(() => client.post<Session>(`${dialoguePath(id)}/coordinator`));
+  if (!row || useApp.getState().activeId !== owner.connection) return;
+  useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
+  useApp.getState().openTabIn(owner, { kind: "session", sessionId: row.id }, "left");
 }
 
 /** The wizard belongs to no dialogue, so it opens with none shown. */
@@ -201,14 +212,16 @@ export function openWizard(): void {
   useApp.getState().openTab(wizardTab, "left");
 }
 
-export function closeWizard(): void {
-  useApp.getState().closeTabs(FEATURE, (c) => isView(c, "new"));
+export function closeWizard(owner: ViewOwner = ownerOf(useApp.getState(), FEATURE)): void {
+  useApp.getState().closeTabsIn(owner, (c) => isView(c, "new"));
 }
 
-/** A removed dialogue's tabs go with its folder; the feature shows none. */
-export function forgetDialogue(id: string): void {
+/** A removed dialogue's tabs go with its folder; the feature shows none, on the service it was removed from. */
+export function forgetDialogue(id: string, connection: string): void {
+  const app = useApp.getState();
+  if (app.activeId !== connection) return;
   if (useDialogues.getState().selected === id) useDialogues.setState({ selected: null });
-  if (currentProject() === id) void useApp.getState().setProject(FEATURE, null);
+  if (app.scopes[connection]?.[FEATURE] === id) void app.setProject(FEATURE, null);
 }
 
 /** The dialogue the right panel is about: the focused tab's, or else the one shown. */

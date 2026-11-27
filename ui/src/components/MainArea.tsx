@@ -4,7 +4,7 @@ import { connectionName, failureMessage, tokenFromInput, type ConnectFailure } f
 import { platform } from "../platform";
 import { LoginMethods, useLoginMethods } from "../plugins/Login";
 import { PluginPanel, TerminalInputs } from "../plugins/Slot";
-import { activeConnection, currentFeature, selectedId, useActiveClient, useApp, type AppState } from "../store";
+import { activeConnection, currentFeature, ownerOf, selectedId, useActiveClient, useApp, type AppState } from "../store";
 import { TerminalView } from "../terminal/TerminalView";
 import { pluginOf } from "../features";
 import { Workbench, type SessionPaneProps } from "./Workbench";
@@ -153,8 +153,8 @@ function ConnectionProblem() {
 
 function useReplace(session: Session) {
   const act = useApp((s) => s.act);
-  const select = useApp((s) => s.select);
   return async function replaceWith(resume: boolean) {
+    const owner = ownerOf(useApp.getState());
     const created = await act((client) =>
       client.create({
         tool: session.tool!,
@@ -164,8 +164,9 @@ function useReplace(session: Session) {
         resume: resume ? { session_id: session.session_id! } : null,
       }),
     );
-    if (created) {
-      select(created.id);
+    // Another service by now: its client would be the wrong one to close this session with.
+    if (created && useApp.getState().activeId === owner.connection) {
+      useApp.getState().openTabIn(owner, { kind: "session", sessionId: created.id }, "left");
       await act((client) => client.close(session.id));
     }
   };

@@ -5,9 +5,9 @@
  */
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import type { ToolInfo } from "../../api/client";
-import { useApp } from "../../store";
+import { isShown, ownerOf, useApp } from "../../store";
 import type { PluginContext } from "../types";
-import { closeWizard, refreshDialogues, selectDialogue, type Scenario } from "./state";
+import { closeWizard, FEATURE, refreshDialogues, selectDialogue, type Scenario } from "./state";
 
 /** `acceptance_criteria` → `Acceptance criteria`. */
 export function fieldLabel(name: string): string {
@@ -70,6 +70,8 @@ export function NewDialogue({ plugin }: { plugin: PluginContext }) {
     if (!scenario || !ready || submitting) return;
     setSubmitting(true);
     setError("");
+    // The wizard's own tabs and service, to come back to once the dialogue is made.
+    const owner = ownerOf(useApp.getState(), FEATURE);
     try {
       const answers = Object.fromEntries(scenario.fields.map((f) => [f, values[f].trim()]));
       const created = await plugin.client.post<{ id: string }>("/dialogues", {
@@ -80,8 +82,8 @@ export function NewDialogue({ plugin }: { plugin: PluginContext }) {
         max_turns: turns,
       });
       await refreshDialogues(plugin.client);
-      closeWizard();
-      void selectDialogue(created.id);
+      closeWizard(owner);
+      if (isShown(useApp.getState(), owner)) void selectDialogue(created.id, owner.connection);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setSubmitting(false);
@@ -187,7 +189,7 @@ export function NewDialogue({ plugin }: { plugin: PluginContext }) {
 
         {error && <p className="form-error">{error}</p>}
         <div className="dialog-actions">
-          <button type="button" onClick={closeWizard}>
+          <button type="button" onClick={() => closeWizard()}>
             Cancel
           </button>
           <button type="submit" className="primary" disabled={!ready || submitting} title={missing.length ? `Still to fill in: ${missing.map(fieldLabel).join(", ")}` : undefined}>

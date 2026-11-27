@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Connection } from "./connections";
-import { layoutOf, panelsOf, parseLayouts, selectedId, useApp } from "./store";
+import { openCoordinatorFor, openFile, selectDialogue } from "./plugins/dialogue/state";
+import { openProject } from "./plugins/projects/index";
+import { currentFeature, layoutIn, layoutOf, panelsOf, parseLayouts, selectedId, useApp } from "./store";
 import { areasOf, type TabContent } from "./tabs";
 
 const PROJECTS = "plugin:projects" as const;
@@ -10,7 +12,11 @@ const DIALOGUES = "plugin:dialogue" as const;
 const services = new Map<string, Map<string, unknown>>();
 const requests: string[] = [];
 let holdReads: ((url: string) => boolean) | null = null;
+/** Any other request held back, by `METHOD origin/path`. */
+let holdRequests: ((request: string) => boolean) | null = null;
 const held: (() => void)[] = [];
+/** Each service's sessions, for `GET /sessions` and the Coordinator routes. */
+const rows = new Map<string, Record<string, unknown>[]>();
 
 function serviceAt(url: string) {
   if (!services.has(url)) services.set(url, new Map());
@@ -23,7 +29,15 @@ beforeEach(() => {
     const method = init?.method ?? "GET";
     const match = pathname.match(/^\/api\/v2\/projects\/([^/]+)\/layout$/);
     requests.push(`${method} ${origin}${pathname}`);
-    if (!match) return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 });
+    if (!match) {
+      if (holdRequests?.(`${method} ${origin}${pathname}`)) await new Promise<void>((resolve) => held.push(resolve));
+      const listed = rows.get(origin) ?? [];
+      if (method === "GET" && pathname === "/api/v2/sessions") return new Response(JSON.stringify(listed), { status: 200 });
+      const coordinator = pathname.match(/^\/api\/v2\/plugins\/dialogue\/dialogues\/([^/]+)\/coordinator$/);
+      const found = coordinator && listed.find((r) => r.project === decodeURIComponent(coordinator[1]));
+      if (method === "POST" && found) return new Response(JSON.stringify(found), { status: 202 });
+      return new Response(JSON.stringify({ detail: "Not Found" }), { status: 404 });
+    }
     const files = serviceAt(origin);
     const project = decodeURIComponent(match[1]);
     if (method === "PUT") {
@@ -39,8 +53,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   holdReads = null;
+  holdRequests = null;
   held.splice(0).forEach((r) => r());
   requests.length = 0;
+  rows.clear();
 });
 
 let n = 0;
@@ -298,5 +314,159 @@ describe("Sessions, the default project", () => {
     await until(() => !!useApp.getState().projectViews[id]?.default?.ready);
     expect(shownFiles()).toEqual(["start", "old.py"]);
     expect(useApp.getState().layouts[id]?.sessions).toBeDefined();
+  });
+});
+
+/** The kinds and plugin keys of a view's tabs, whatever is shown. */
+const tabsIn = (connection: string, feature: string, project?: string) =>
+  areasOf(layoutIn(useApp.getState(), { connection, feature: feature as never, project })).flatMap(([, g]) =>
+    g.tabs.map((t) => (t.content.kind === "plugin" ? `${t.content.view}:${t.content.key}` : t.content.kind === "session" ? `session:${t.content.sessionId}` : t.content.kind)),
+  );
+const release = () => held.splice(0).forEach((r) => r());
+
+describe("a plugin's action that waits lands only in the view it began in", () => {
+  it("Dialogues: picking a dialogue, then going to Sessions before its file comes, puts no agent in Sessions", async () => {
+    const { id } = connect(DIALOGUES);
+    const app = useApp.getState;
+    holdReads = (key) => key.endsWith("/d-slow");
+    const selecting = selectDialogue("d-slow");
+    await until(() => held.length === 1);
+    app().setFeature("sessions");
+    await until(() => !!app().projectViews[id]?.default?.ready);
+    holdReads = null;
+    release();
+    await selecting;
+    await until(() => tabsIn(id, DIALOGUES, "d-slow").length === 2);
+    expect(tabsIn(id, "sessions", "default")).toEqual(["start"]);
+    expect(currentFeature(app())).toBe("sessions");
+    expect(tabsIn(id, DIALOGUES, "d-slow")).toEqual(["agent:d-slow:a", "agent:d-slow:b"]);
+  });
+
+  it("Dialogues: picking another dialogue meanwhile keeps it shown, and the first one's agents stay its own", async () => {
+    const { id } = connect(DIALOGUES);
+    const app = useApp.getState;
+    holdReads = (key) => key.endsWith("/d-slow");
+    const selecting = selectDialogue("d-slow");
+    await until(() => held.length === 1);
+    holdReads = null;
+    await selectDialogue("d-other");
+    release();
+    await selecting;
+    await until(() => tabsIn(id, DIALOGUES, "d-slow").length === 2);
+    expect(app().scopes[id]?.[DIALOGUES]).toBe("d-other");
+    expect(tabsIn(id, DIALOGUES, "d-other")).toEqual(["agent:d-other:a", "agent:d-other:b"]);
+    expect(shownFiles()).toEqual(["plugin", "plugin"]);
+  });
+
+  it("Dialogues: switching service meanwhile, to one with a dialogue of the same id, leaves that one alone", async () => {
+    const one = connect(DIALOGUES);
+    const app = useApp.getState;
+    holdReads = (key) => key.endsWith("/d-same") && key.includes(new URL(one.url).host);
+    const selecting = selectDialogue("d-same");
+    await until(() => held.length === 1);
+    holdReads = null;
+    const two = connect(DIALOGUES);
+    await app().setProject(DIALOGUES, "d-same");
+    release();
+    await selecting;
+    await until(() => tabsIn(one.id, DIALOGUES, "d-same").length === 2);
+    expect(tabsIn(two.id, DIALOGUES, "d-same")).toEqual([]);
+    await until(() => saved(one.url, "d-same") !== undefined);
+    await new Promise((r) => setTimeout(r, 450));
+    expect(saved(two.url, "d-same")).toBeUndefined();
+    expect(app().activeId).toBe(two.id);
+  });
+
+  it("Dialogues: a file asked for before going to Sessions opens in its dialogue, not in Sessions", async () => {
+    const { id } = connect(DIALOGUES);
+    const app = useApp.getState;
+    holdReads = (key) => key.endsWith("/d-file");
+    const opening = openFile("d-file", "deliverables/plan.md");
+    await until(() => held.length === 1);
+    app().setFeature("sessions");
+    holdReads = null;
+    release();
+    await opening;
+    await until(() => tabsIn(id, DIALOGUES, "d-file").length === 1);
+    expect(tabsIn(id, DIALOGUES, "d-file")).toEqual(["file:d-file:deliverables/plan.md"]);
+    expect(tabsIn(id, "sessions", "default")).toEqual(["start"]);
+    expect(currentFeature(app())).toBe("sessions");
+  });
+
+  it("Dialogues: Open the Coordinator, answered after another dialogue is picked, opens it in its own dialogue", async () => {
+    const { id, url } = connect(DIALOGUES);
+    const app = useApp.getState;
+    rows.set(new URL(url).origin, [{ id: "coord-1", project: "d-mine", display_name: "Coordinator", status: "running" }]);
+    holdRequests = (r) => r.startsWith("POST") && r.endsWith("/coordinator");
+    // What the right panel's button does, with the owner it captures.
+    await app().setProject(DIALOGUES, "d-mine");
+    const asking = openCoordinatorFor("d-mine");
+    await until(() => held.length === 1);
+    await app().setProject(DIALOGUES, "d-other");
+    release();
+    await asking;
+    await until(() => tabsIn(id, DIALOGUES, "d-mine").length === 1);
+    expect(tabsIn(id, DIALOGUES, "d-mine")).toEqual(["session:coord-1"]);
+    expect(tabsIn(id, DIALOGUES, "d-other")).toEqual([]);
+    expect(app().scopes[id]?.[DIALOGUES]).toBe("d-other");
+  });
+
+  it("Projects: a Coordinator found after going to Sessions opens in its project, never in Sessions", async () => {
+    const { id, url } = connect(PROJECTS);
+    const app = useApp.getState;
+    rows.set(new URL(url).origin, [{ id: "coord-a", project: "alpha", display_name: "Coordinator", status: "running" }]);
+    holdRequests = (r) => r.startsWith("GET") && r.endsWith("/api/v2/sessions");
+    const opening = openProject(id, "alpha");
+    await until(() => held.length === 1);
+    app().setFeature("sessions");
+    await until(() => !!app().projectViews[id]?.default?.ready);
+    release();
+    await opening;
+    await until(() => tabsIn(id, PROJECTS, "alpha").length === 1);
+    expect(tabsIn(id, PROJECTS, "alpha")).toEqual(["session:coord-a"]);
+    expect(tabsIn(id, "sessions", "default")).toEqual(["start"]);
+    expect(currentFeature(app())).toBe("sessions");
+  });
+
+  it("Projects: picking another project meanwhile keeps it shown, without the first one's Coordinator", async () => {
+    const { id, url } = connect(PROJECTS);
+    const app = useApp.getState;
+    rows.set(new URL(url).origin, [{ id: "coord-a", project: "alpha", display_name: "Coordinator", status: "running" }]);
+    holdRequests = (r) => r.startsWith("GET") && r.endsWith("/api/v2/sessions");
+    const opening = openProject(id, "alpha");
+    await until(() => held.length === 1);
+    holdRequests = null;
+    await app().setProject(PROJECTS, "beta");
+    release();
+    await opening;
+    await until(() => tabsIn(id, PROJECTS, "alpha").length === 1);
+    expect(app().scopes[id]?.[PROJECTS]).toBe("beta");
+    expect(tabsIn(id, PROJECTS, "beta")).toEqual([]);
+  });
+
+  it("Projects: switching service meanwhile drops the answer: no row or tab on the other service", async () => {
+    const one = connect(PROJECTS);
+    const app = useApp.getState;
+    rows.set(new URL(one.url).origin, [{ id: "coord-a", project: "alpha", display_name: "Coordinator", status: "running" }]);
+    holdRequests = (r) => r.startsWith("GET") && r.endsWith("/api/v2/sessions");
+    const opening = openProject(one.id, "alpha");
+    await until(() => held.length === 1);
+    holdRequests = null;
+    const two = connect(PROJECTS);
+    await app().setProject(PROJECTS, "alpha");
+    release();
+    await opening;
+    expect(app().sessions["coord-a"]).toBeUndefined();
+    expect(tabsIn(two.id, PROJECTS, "alpha")).toEqual([]);
+    expect(app().activeId).toBe(two.id);
+  });
+
+  it("never opens another project's session in Sessions", () => {
+    const { id } = connect("sessions");
+    useApp.setState({ sessions: { "s-x": { id: "s-x", project: "alpha" } as never } });
+    useApp.getState().select("s-x");
+    useApp.getState().openTab({ kind: "session", sessionId: "s-x" }, "left", "tab");
+    expect(tabsIn(id, "sessions", "default")).toEqual(["start"]);
+    expect(currentFeature(useApp.getState())).toBe("sessions");
   });
 });

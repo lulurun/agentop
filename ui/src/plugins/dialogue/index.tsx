@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import type { Session } from "../../api/client";
 import { sessionIdsKey, useActiveClient, useApp } from "../../store";
 import { formatBytes } from "../../components/format";
 import { Section } from "../../components/Section";
@@ -10,6 +9,7 @@ import { NewDialogue } from "./NewDialogue";
 import {
   dialoguePath,
   forgetDialogue,
+  openCoordinatorFor,
   openFile,
   openWizard,
   refreshDialogues,
@@ -323,7 +323,6 @@ function FileLinks({ id, files }: { id: string; files: DialogueFile[] }) {
 
 function Actions({ plugin, d }: { plugin: PluginContext; d: DialogueDetail }) {
   const act = useApp((s) => s.act);
-  const select = useApp((s) => s.select);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -338,11 +337,8 @@ function Actions({ plugin, d }: { plugin: PluginContext; d: DialogueDetail }) {
 
   async function openCoordinator() {
     setBusy(true);
-    const row = await act(() => plugin.client.post<Session>(`${dialoguePath(d.id)}/coordinator`));
+    await openCoordinatorFor(d.id, plugin.client);
     setBusy(false);
-    if (!row) return;
-    useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
-    select(row.id);
   }
 
   return (
@@ -369,7 +365,10 @@ function Actions({ plugin, d }: { plugin: PluginContext; d: DialogueDetail }) {
             <button type="button" disabled={busy} onClick={() => setConfirming(false)}>
               Keep
             </button>
-            <button type="button" className="primary" disabled={busy} onClick={() => void run((c) => c.delete(dialoguePath(d.id)), () => forgetDialogue(d.id))}>
+            <button type="button" className="primary" disabled={busy} onClick={() => {
+              const connection = useApp.getState().activeId;
+              void run((c) => c.delete(dialoguePath(d.id)), () => forgetDialogue(d.id, connection));
+            }}>
               {busy ? "Removing…" : "Remove for good"}
             </button>
           </div>

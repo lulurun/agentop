@@ -127,14 +127,16 @@ export const useStart = create<StartState>()((set, get) => {
         return;
       }
       update(key, (q) => ({ ...q, phase: "launching", deadline: undefined, error: undefined }));
+      const connection = useApp.getState().activeId;
       client
         .launchStart({ prompt, tool, model, cwd, name, title, probe: p.decision?.id ?? null, changed: p.changed })
         .then(
           (session) => {
             update(key, (q) => ({ ...q, phase: "launched", sessionId: session.id }));
+            if (useApp.getState().activeId !== connection) return;
             useApp.setState((s) => ({ sessions: { ...s.sessions, [session.id]: session } }));
-            // Someone typing the next prompt keeps the buffer; the row's link opens the session.
-            if (!get().draft.trim()) useApp.getState().select(session.id, "tab", "left");
+            // Someone typing the next prompt keeps the buffer; the row's link opens the session. Into Sessions' tabs, not whatever is shown by now.
+            if (!get().draft.trim()) useApp.getState().openTabIn({ connection, feature: "sessions", project: "default" }, { kind: "session", sessionId: session.id }, "left", "tab");
           },
           (error: unknown) =>
             update(key, (q) => ({ ...q, phase: "editing", error: error instanceof Error ? error.message : String(error) })),
