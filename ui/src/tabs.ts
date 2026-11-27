@@ -38,6 +38,8 @@ export interface Tab {
 export interface Group {
   tabs: Tab[];
   active: string | null;
+  /** Shut with its toggle in the header: its tabs are kept, but it doesn't show. */
+  hidden?: boolean;
 }
 
 export type Area = "left" | "right";
@@ -73,9 +75,46 @@ export function emptyLayout(): Layout {
   return { left: null, right: null, focused: "left" };
 }
 
-/** The areas that are there, left first. */
+/** The areas that are there, shut ones too, left first. */
 export function areasOf(layout: Layout): [Area, Group][] {
   return AREAS.flatMap((area) => (layout[area] ? [[area, layout[area]!] as [Area, Group]] : []));
+}
+
+/** The areas the middle panel shows, left first. */
+export function shownAreas(layout: Layout): [Area, Group][] {
+  return areasOf(layout).filter(([, group]) => !group.hidden);
+}
+
+const shown = (layout: Layout, area: Area) => !!layout[area] && !layout[area]!.hidden;
+
+function reveal(group: Group): Group {
+  if (!group.hidden) return group;
+  const { hidden: _, ...rest } = group;
+  return rest;
+}
+
+/**
+ * The middle panel never shuts its last area, and the active area is one it shows: an area
+ * shut with none shown beside it opens again.
+ */
+export function keepShown(layout: Layout): Layout {
+  let next = layout;
+  if (!shown(next, "left") && !shown(next, "right")) {
+    const area = next[next.focused] ? next.focused : next.left ? "left" : next.right ? "right" : null;
+    if (!area) return layout;
+    next = { ...next, [area]: reveal(next[area]!), focused: area };
+  }
+  if (!shown(next, next.focused) && shown(next, other(next.focused))) next = { ...next, focused: other(next.focused) };
+  return next;
+}
+
+/** Shut or open an area with its header toggle, keeping its tabs. The only area shown can't be shut. */
+export function toggleArea(layout: Layout, area: Area): Layout {
+  const group = layout[area];
+  if (!group) return layout;
+  if (group.hidden) return { ...layout, [area]: reveal(group) };
+  if (!shown(layout, other(area))) return layout;
+  return { ...layout, [area]: { ...group, hidden: true }, focused: other(area) };
 }
 
 export function sameContent(a: TabContent, b: TabContent): boolean {
@@ -167,8 +206,9 @@ export function open(layout: Layout, content: TabContent, area: Area, mode: Open
     if (content.kind === "start" && found[0] !== area) return moveToOther(layout, found[0], found[1].id);
     return activate(layout, found[0], found[1].id);
   }
-  const group = layout[area];
-  if (!group) return { ...withArea(layout, area, { tabs: [{ id, content }], active: id }), focused: area };
+  const shut = layout[area];
+  if (!shut) return { ...withArea(layout, area, { tabs: [{ id, content }], active: id }), focused: area };
+  const group = reveal(shut);
   const slot = slotOf(content);
   if (mode !== "tab" && slot) {
     // The active tab of the same kind; for a plugin's view, any tab of it in the area.
@@ -188,7 +228,7 @@ export function open(layout: Layout, content: TabContent, area: Area, mode: Open
 export function activate(layout: Layout, area: Area, tabId: string): Layout {
   const group = layout[area];
   if (!group?.tabs.some((t) => t.id === tabId)) return layout;
-  return { ...withArea(layout, area, { ...group, active: tabId }), focused: area };
+  return { ...withArea(layout, area, { ...reveal(group), active: tabId }), focused: area };
 }
 
 /** The active area's tab at `index`, made active. */
@@ -197,8 +237,11 @@ export function activateAt(layout: Layout, index: number): Layout {
   return tab ? activate(layout, layout.focused, tab.id) : layout;
 }
 
+/** Make an area the active one, opening it if it was shut. */
 export function focusArea(layout: Layout, area: Area): Layout {
-  return layout[area] && layout.focused !== area ? { ...layout, focused: area } : layout;
+  const group = layout[area];
+  if (!group || (layout.focused === area && !group.hidden)) return layout;
+  return { ...withArea(layout, area, reveal(group)), focused: area };
 }
 
 /** Drop an empty area; the active area moves to the other one if it went. */
@@ -206,7 +249,7 @@ function compact(layout: Layout): Layout {
   const left = layout.left?.tabs.length ? layout.left : null;
   const right = layout.right?.tabs.length ? layout.right : null;
   const focused = (layout.focused === "left" ? left : right) ? layout.focused : left ? "left" : right ? "right" : "left";
-  return { left, right, focused };
+  return keepShown({ left, right, focused });
 }
 
 export function close(layout: Layout, area: Area, tabId: string): Layout {
@@ -216,7 +259,7 @@ export function close(layout: Layout, area: Area, tabId: string): Layout {
   const tabs = group.tabs.filter((t) => t.id !== tabId);
   // Closing the active tab shows its right neighbour, or else its left one.
   const active = group.active === tabId ? (tabs[Math.min(at, tabs.length - 1)]?.id ?? null) : group.active;
-  return compact(withArea(layout, area, { tabs, active }));
+  return compact(withArea(layout, area, { ...group, tabs, active }));
 }
 
 /** Close the active area's tab. */
@@ -250,14 +293,6 @@ export function mapContent(layout: Layout, change: (content: TabContent) => TabC
   return { ...layout, left: map(layout.left), right: map(layout.right) };
 }
 
-/** Show the active tab in the other area too, when there is no other area yet. */
-export function split(layout: Layout, id = newTabId()): Layout {
-  const tab = focusedTab(layout);
-  const to = other(layout.focused);
-  if (!tab || !canSplit(tab.content) || layout[to]) return layout;
-  return { ...withArea(layout, to, { tabs: [{ ...tab, id }], active: id }), focused: to };
-}
-
 /** Move a tab to the other area, making it if it isn't there. */
 export function moveToOther(layout: Layout, area: Area, tabId: string): Layout {
   const source = layout[area];
@@ -266,8 +301,8 @@ export function moveToOther(layout: Layout, area: Area, tabId: string): Layout {
   const to = other(area);
   const at = source.tabs.findIndex((t) => t.id === tabId);
   const rest = source.tabs.filter((t) => t.id !== tabId);
-  const from = { tabs: rest, active: source.active === tabId ? (rest[Math.min(at, rest.length - 1)]?.id ?? null) : source.active };
-  const destination = layout[to] ?? { tabs: [], active: null };
+  const from = { ...source, tabs: rest, active: source.active === tabId ? (rest[Math.min(at, rest.length - 1)]?.id ?? null) : source.active };
+  const destination = reveal(layout[to] ?? { tabs: [], active: null });
   const existing = destination.tabs.find((t) => sameContent(t.content, tab.content));
   const moved = existing ? { ...destination, active: existing.id } : insertAfterActive(destination, tab);
   return compact({ ...withArea(withArea(layout, area, from), to, moved), focused: to });

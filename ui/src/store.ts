@@ -124,7 +124,6 @@ export interface AppState {
   closeTabs(feature: FeatureId, matches: (content: TabContent) => boolean): void;
   activateTab(feature: FeatureId, area: Area, tabId: string): void;
   closeTab(feature: FeatureId, area: Area, tabId: string): void;
-  splitTab(feature: FeatureId): void;
   moveTab(feature: FeatureId, area: Area, tabId: string): void;
   focusArea(feature: FeatureId, area: Area): void;
   /** The feature shown: pick the active area's tab at a position. */
@@ -138,6 +137,8 @@ export interface AppState {
   removeHistory(item: HistoryItem): Promise<void>;
   toggleLeft(): void;
   toggleRight(): void;
+  /** Shut or open an area of the shown feature's middle panel, keeping its tabs. */
+  toggleArea(area: Area): void;
   /** The shown view's side panel width, in pixels. */
   setPanelWidth(side: "left" | "right", width: number): void;
   /** A feature's split: the left area's share of its middle panel. */
@@ -1207,7 +1208,6 @@ export const useApp = create<AppState>((set, get) => {
     closeTabs: (feature, matches) => updateLayout((layout) => tabs.closeWhere(layout, matches), feature),
     activateTab: (feature, area, tabId) => updateLayout((layout) => tabs.activate(layout, area, tabId), feature),
     closeTab: (feature, area, tabId) => updateLayout((layout) => tabs.close(layout, area, tabId), feature),
-    splitTab: (feature) => updateLayout((layout) => tabs.split(layout), feature),
     moveTab: (feature, area, tabId) => updateLayout((layout) => tabs.moveToOther(layout, area, tabId), feature),
     focusArea: (feature, area) => updateLayout((layout) => tabs.focusArea(layout, area), feature),
     activateTabAt: (index) => updateLayout((layout) => tabs.activateAt(layout, index)),
@@ -1242,6 +1242,7 @@ export const useApp = create<AppState>((set, get) => {
     setSplit,
     toggleLeft: () => togglePanel("left"),
     toggleRight: () => togglePanel("right"),
+    toggleArea: (area) => updateLayout((layout) => tabs.toggleArea(layout, area)),
 
     setFolded(section, shut) {
       const folded = get().folded.filter((s) => s !== section).concat(shut ? [section] : []);

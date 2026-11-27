@@ -118,17 +118,7 @@ describe("tab keys", () => {
   });
 });
 
-describe("splitting and moving", () => {
-  it("split shows the active tab in the other area", () => {
-    expect(show(tabs.split(build([session("a"), "left"]), id()))).toBe("[a] | [a] @right");
-    expect(show(tabs.split(build([file("x"), "right"]), id()))).toBe("[x] | [x] @left");
-  });
-
-  it("only while the other area isn't there", () => {
-    const two = tabs.split(build([session("a"), "left"]), id());
-    expect(tabs.split(two, id())).toBe(two);
-  });
-
+describe("moving", () => {
   it("moving a tab takes it to the other area", () => {
     const layout = build([session("a"), "left"], [session("b"), "left", "tab"]);
     expect(show(tabs.moveToOther(layout, "left", tabId(layout, "left", 1)))).toBe("[a] | [b] @right");
@@ -140,6 +130,47 @@ describe("splitting and moving", () => {
     const lone = build([session("a"), "left"]);
     expect(show(tabs.moveToOther(lone, "left", tabId(lone, "left", 0)))).toBe("- | [a] @right");
   });
+});
+
+describe("shutting an area with its header toggle", () => {
+  const two = () => build([session("a"), "left"], [session("b"), "right"]);
+  const hidden = (layout: Layout) => tabs.AREAS.filter((a) => layout[a]?.hidden);
+
+  it("keeps its tabs, moves the focus to the other area, and opens again as it was", () => {
+    const shut = tabs.toggleArea(two(), "right");
+    expect(hidden(shut)).toEqual(["right"]);
+    expect(show(shut)).toBe("[a] | [b] @left");
+    expect(tabs.shownAreas(shut).map(([a]) => a)).toEqual(["left"]);
+    const back = tabs.toggleArea(shut, "right");
+    expect(hidden(back)).toEqual([]);
+    expect(show(back)).toBe("[a] | [b] @left");
+  });
+
+  it("never shuts the only area shown, or one that isn't there", () => {
+    const lone = build([session("a"), "left"]);
+    expect(tabs.toggleArea(lone, "left")).toBe(lone);
+    expect(tabs.toggleArea(lone, "right")).toBe(lone);
+    const shut = tabs.toggleArea(two(), "left");
+    expect(tabs.toggleArea(shut, "right")).toBe(shut);
+  });
+
+  it("opens again when a tab is opened, shown, or focused there", () => {
+    const shut = tabs.toggleArea(two(), "right");
+    expect(hidden(tabs.open(shut, session("c"), "right", "replace", id()))).toEqual([]);
+    expect(hidden(tabs.open(shut, session("b"), "left"))).toEqual([]);
+    expect(show(tabs.focusArea(shut, "right"))).toBe("[a] | [b] @right");
+    expect(hidden(tabs.focusArea(shut, "right"))).toEqual([]);
+  });
+
+  it("stays shut while a tab in it closes, and opens when the other area goes", () => {
+    const layout = build([session("a"), "left"], [session("b"), "right"], [session("c"), "right", "tab"]);
+    const shut = tabs.toggleArea(layout, "right");
+    expect(hidden(tabs.closeSession(shut, "b"))).toEqual(["right"]);
+    const alone = tabs.closeSession(shut, "a");
+    expect(show(alone)).toBe("- | b [c] @right");
+    expect(hidden(alone)).toEqual([]);
+  });
+
 });
 
 describe("saved layouts", () => {
@@ -180,9 +211,9 @@ describe("every feature's tabs", () => {
     expect(show(tabs.open(tabs.focusArea(opened, "right"), status, "left", "replace", id()))).toBe("a [status] | [x.txt] @left");
   });
 
-  it("only sessions and files split", () => {
-    const layout = tabs.pinnedLayout(search);
-    expect(tabs.split(layout, id())).toBe(layout);
+  it("only sessions and files open in both areas", () => {
+    const layout = tabs.pinnedLayout(dialogue);
+    expect(show(tabs.open(layout, dialogue, "right", "also", id()))).toBe("[dialogue:dialogues] | - @left");
     expect(tabs.canSplit(dialogue)).toBe(false);
   });
 

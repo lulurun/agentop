@@ -3,7 +3,7 @@
  * a lenient reader for files edited by hand, and the queue that loads and saves it per project.
  */
 import { readSide, readSplit, type Sizes } from "./sizes";
-import { newTabId, type Area, type FileSource, type Group, type Layout, type Tab, type TabContent } from "./tabs";
+import { keepShown, newTabId, type Area, type FileSource, type Group, type Layout, type Tab, type TabContent } from "./tabs";
 
 export const LAYOUT_VERSION = 1;
 
@@ -39,7 +39,7 @@ export function defaultView(): ProjectView {
 
 function areaFile(group: Group | null): AreaFile {
   if (!group?.tabs.length) return { open: false, tabs: [], active: null };
-  return { open: true, tabs: group.tabs.map(({ id, content }) => ({ id, content })), active: group.active };
+  return { open: !group.hidden, tabs: group.tabs.map(({ id, content }) => ({ id, content })), active: group.active };
 }
 
 const panelFile = (open: boolean, width: number | undefined): PanelFile => (width === undefined ? { open } : { open, width });
@@ -99,7 +99,7 @@ const MAX_TABS = 64;
 function readArea(value: unknown, seen: Set<string>): Group | null {
   if (!value || typeof value !== "object") return null;
   const area = value as Record<string, unknown>;
-  if (area.open === false || !Array.isArray(area.tabs)) return null;
+  if (!Array.isArray(area.tabs)) return null;
   const tabs: Tab[] = [];
   for (const raw of area.tabs) {
     const content = cleanContent((raw as Record<string, unknown> | null)?.content);
@@ -111,7 +111,7 @@ function readArea(value: unknown, seen: Set<string>): Group | null {
   }
   if (!tabs.length) return null;
   const active = tabs.some((t) => t.id === area.active) ? (area.active as string) : tabs[0].id;
-  return { tabs, active };
+  return area.open === false ? { tabs, active, hidden: true } : { tabs, active };
 }
 
 /**
@@ -132,7 +132,7 @@ export function fromFile(value: unknown): ProjectView | null | "newer" {
   const wanted: Area = file.focused === "right" ? "right" : "left";
   const focused: Area = (wanted === "left" ? left : right) ? wanted : left ? "left" : right ? "right" : "left";
   const width = (panel: unknown) => readSide((panel as { width?: unknown } | null)?.width);
-  const view: ProjectView = { layout: { left, right, focused }, leftOpen: open(file["left-panel"]), rightOpen: open(file["right-panel"]) };
+  const view: ProjectView = { layout: keepShown({ left, right, focused }), leftOpen: open(file["left-panel"]), rightOpen: open(file["right-panel"]) };
   const sizes: Sizes = { leftWidth: width(file["left-panel"]), rightWidth: width(file["right-panel"]), split: readSplit(mid.split) };
   for (const [key, value] of Object.entries(sizes)) if (value !== undefined) view[key as keyof Sizes] = value;
   return view;

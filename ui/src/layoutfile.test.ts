@@ -31,6 +31,20 @@ describe("the layout file", () => {
     expect(file["mid-panel"].right).toEqual({ open: false, tabs: [], active: null });
   });
 
+  it("writes a shut area as off with its tabs, and reads it back shut", () => {
+    const shut: ProjectView = { ...view, layout: { ...view.layout, right: { ...view.layout.right!, hidden: true }, focused: "left" } };
+    const file = toFile(shut);
+    expect(file["mid-panel"].right).toEqual({ open: false, tabs: view.layout.right!.tabs, active: "t2" });
+    expect(fromFile(JSON.parse(JSON.stringify(file)))).toEqual(shut);
+  });
+
+  it("opens a shut area when no other is shown", () => {
+    const file = toFile({ ...view, layout: { left: null, right: { ...view.layout.right!, hidden: true }, focused: "left" } });
+    const read = fromFile(JSON.parse(JSON.stringify(file))) as ProjectView;
+    expect(read.layout.right).toEqual(view.layout.right);
+    expect(read.layout.focused).toBe("right");
+  });
+
   it("leaves no pinned flag in the file: the app pins its own tabs", () => {
     const pinned = { ...view, layout: { ...view.layout, left: { tabs: [{ id: "home", content: { kind: "status" as const }, pinned: true }], active: "home" } } };
     expect(toFile(pinned)["mid-panel"].left.tabs[0]).toEqual({ id: "home", content: { kind: "status" } });
@@ -74,8 +88,8 @@ describe("the layout file", () => {
     expect(ids[0]).toBe("a");
     expect(new Set(ids).size).toBe(3);
     expect(layout.left!.active).toBe("a");
-    // An area set off shows nothing, so the focus goes to the area there is.
-    expect(layout.right).toBeNull();
+    // A shut area keeps its tabs but shows nothing, so the focus goes to the area shown.
+    expect(layout.right).toEqual({ tabs: [{ id: "r", content: { kind: "status" } }], active: "r", hidden: true });
     expect(layout.focused).toBe("left");
   });
 });

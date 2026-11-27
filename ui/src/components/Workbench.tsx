@@ -5,7 +5,7 @@ import { FileTab, PluginTab } from "../plugins/Slot";
 import { activeConnection, layoutOf, layoutReady, sessionTitle, splitOf, useApp } from "../store";
 import { DEFAULT_SPLIT, MAX_SPLIT, MIN_SPLIT, splitAt } from "../sizes";
 import { Splitter } from "./Splitter";
-import { areasOf, canSplit, other, sessionOf, type Area, type Group, type Tab } from "../tabs";
+import { sessionOf, shownAreas, type Area, type Group, type Tab } from "../tabs";
 import type { FeatureId } from "../features";
 import { connectionName } from "../connections";
 import { PastSessionView } from "./HistoryView";
@@ -126,10 +126,7 @@ function TabButton({ feature, tab, area, active }: { feature: FeatureId; tab: Ta
   );
 }
 
-function TabBar({ feature, group, area, alone }: { feature: FeatureId; group: Group; area: Area; alone: boolean }) {
-  const splitTab = useApp((s) => s.splitTab);
-  const active = group.tabs.find((t) => t.id === group.active);
-  const to = other(area);
+function TabBar({ feature, group, area }: { feature: FeatureId; group: Group; area: Area }) {
   return (
     <div className="tab-bar">
       <div className="tab-list" role="tablist" aria-label={area === "left" ? "Left area tabs" : "Right area tabs"}>
@@ -137,14 +134,6 @@ function TabBar({ feature, group, area, alone }: { feature: FeatureId; group: Gr
           <TabButton key={tab.id} feature={feature} tab={tab} area={area} active={tab.id === group.active} />
         ))}
       </div>
-      {alone && active && canSplit(active.content) && (
-        <button type="button" className="icon tab-split" aria-label={`Show in the ${to} area too`} title={`Show in the ${to} area too`} onClick={() => splitTab(feature)}>
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-            <rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor" />
-            <line x1="8" y1="2.5" x2="8" y2="13.5" stroke="currentColor" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 }
@@ -243,7 +232,7 @@ function GroupView({
         if (!focused) focusArea(feature, area);
       }}
     >
-      <TabBar feature={feature} group={group} area={area} alone={alone} />
+      <TabBar feature={feature} group={group} area={area} />
       <AreaContext.Provider value={area}>
       <div className="tab-body" role="tabpanel">
         {kept.map((k) => {
@@ -294,7 +283,7 @@ export function Workbench({
   const split = useApp((s) => splitOf(s, feature)) ?? DEFAULT_SPLIT;
   const setSplit = useApp((s) => s.setSplit);
   const ref = useRef<HTMLDivElement>(null);
-  const areas = areasOf(layout);
+  const areas = shownAreas(layout);
   if (!ready) return null;
   if (areas.length === 0) return hidden ? null : <>{background}</>;
   const box = () => ref.current?.getBoundingClientRect() ?? new DOMRect();

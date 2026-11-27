@@ -2,7 +2,8 @@ import { modeStore } from "../plugins/input/state";
 import { useEffect, useRef, useSyncExternalStore, type CSSProperties } from "react";
 import { PluginPanel } from "../plugins/Slot";
 import { layoutAction, type PanelOrArea } from "../hotkeys";
-import { currentFeature, layoutOf, panelsOf, useApp, widthsOf } from "../store";
+import { currentFeature, layoutOf, layoutReady, panelsOf, useApp, widthsOf } from "../store";
+import type { Area } from "../tabs";
 import { DEFAULT_LEFT, DEFAULT_RIGHT, fitSides, MAX_SIDE, MIN_MIDDLE, MIN_SIDE } from "../sizes";
 import { Splitter } from "./Splitter";
 import { pluginOf, featuresFor } from "../features";
@@ -104,8 +105,57 @@ export function useWindowWidth(): number {
   return useSyncExternalStore(onResize, () => window.innerWidth);
 }
 
-/** Below this the side panels are overlays, at a width of their own (styles.css). */
+/** Below this the side panels are overlays, at a width of their own, and one area shows (styles.css). */
 const OVERLAYS = 900;
+
+type AreaState = "absent" | "hidden" | "shown";
+
+/** The middle panel's two areas as the header's toggles see them, as one string so the store's other changes don't draw them again. */
+function useAreas(): { left: AreaState; right: AreaState; focused: Area } | null {
+  const key = useApp((s) => {
+    const feature = currentFeature(s);
+    if (!layoutReady(s, feature)) return "";
+    const layout = layoutOf(s, feature);
+    const of = (area: Area) => (!layout[area] ? "absent" : layout[area]!.hidden ? "hidden" : "shown");
+    return `${of("left")} ${of("right")} ${layout.focused}`;
+  });
+  if (!key) return null;
+  const [left, right, focused] = key.split(" ") as [AreaState, AreaState, Area];
+  return { left, right, focused };
+}
+
+/** The toggle of one area of the middle panel. Where only one area fits, it shows that area instead. */
+function AreaToggle({ area, docked, linked }: { area: Area; docked: boolean; linked: boolean }) {
+  const areas = useAreas();
+  const toggleArea = useApp((s) => s.toggleArea);
+  const focusArea = useApp((s) => s.focusArea);
+  const feature = useApp(currentFeature);
+  const name = area === "left" ? "left area" : "right area";
+  const state = linked && areas ? areas[area] : "absent";
+  const otherShown = !!areas && areas[area === "left" ? "right" : "left"] === "shown";
+  // On a narrow screen the middle panel draws only the active area of two.
+  const showing = state === "shown" && (docked || !otherShown || areas!.focused === area);
+  const othersShowing = docked ? otherShown : otherShown && !showing;
+  const disabled = state === "absent" || (showing && !othersShowing);
+  const title =
+    state === "absent" ? `No tabs in the ${name}`
+    : disabled ? `The ${name} is the only one shown`
+    : docked ? `${showing ? "Hide" : "Show"} the ${name}`
+    : `Show the ${name}`;
+  return (
+    <button
+      type="button"
+      className="icon"
+      aria-label={`Toggle ${name}`}
+      aria-pressed={showing}
+      title={title}
+      disabled={disabled}
+      onClick={() => (docked ? toggleArea(area) : focusArea(feature, area))}
+    >
+      <ToolbarIcon side={area === "left" ? "mid-left" : "mid-right"} filled={showing} />
+    </button>
+  );
+}
 
 export function App() {
   // Each field on its own, so a change elsewhere in the store, such as a session's, doesn't draw the app again.
@@ -121,7 +171,7 @@ export function App() {
   const setError = useApp((s) => s.setError);
   const { current } = useFeatures();
   const linked = useApp((s) => s.link.state === "connected" || s.link.state === "reconnecting");
-  // A feature without a panel has no toggle for it either.
+  // A feature without a panel leaves its toggle disabled.
   const hasLeft = linked && current.left;
   const hasRight = linked && current.right;
   const showLeft = hasLeft && leftOpen;
@@ -155,25 +205,27 @@ export function App() {
   return (
     <div ref={appRef} className="app" data-left={showLeft} data-right={showRight} data-feature={current.id} style={docked ? sizes : undefined}>
       <header className="header">
-        {hasLeft && (
-          <button type="button" className="icon" aria-label="Toggle left panel" aria-pressed={leftOpen} title="Toggle left panel (Ctrl+Shift+1)" onClick={toggleLeft}>
-            <ToolbarIcon side="left" filled={leftOpen} />
-          </button>
-        )}
+        <img className="brand" src="./logo.svg" alt="agentop" width={22} height={22} draggable={false} />
         <div className="header-title">
           <ServiceSwitcher />
           {linked && <FeatureNav />}
           <AppOutdated />
           <UpdateBadge />
         </div>
-        <button type="button" className="icon" aria-label="Settings" title="Settings (Ctrl+Shift+9)" onClick={() => setDialog("settings")}>
-          <GearIcon />
-        </button>
-        {hasRight && (
-          <button type="button" className="icon" aria-label="Toggle right panel" aria-pressed={rightOpen} title="Toggle right panel (Ctrl+Shift+0)" onClick={toggleRight}>
-            <ToolbarIcon side="right" filled={rightOpen} />
+        <div className="header-tools" role="group" aria-label="Settings and layout">
+          <button type="button" className="icon" aria-label="Settings" title="Settings (Ctrl+Shift+9)" onClick={() => setDialog("settings")}>
+            <GearIcon />
           </button>
-        )}
+          {/* Always in their places: a part this feature lacks, or no connection, leaves its toggle disabled. */}
+          <button type="button" className="icon" aria-label="Toggle left panel" aria-pressed={showLeft} disabled={!hasLeft} title={hasLeft ? "Toggle left panel (Ctrl+Shift+1)" : "No left panel here"} onClick={toggleLeft}>
+            <ToolbarIcon side="left" filled={showLeft} />
+          </button>
+          <AreaToggle area="left" docked={docked} linked={linked} />
+          <AreaToggle area="right" docked={docked} linked={linked} />
+          <button type="button" className="icon" aria-label="Toggle right panel" aria-pressed={showRight} disabled={!hasRight} title={hasRight ? "Toggle right panel (Ctrl+Shift+0)" : "No right panel here"} onClick={toggleRight}>
+            <ToolbarIcon side="right" filled={showRight} />
+          </button>
+        </div>
       </header>
       {showLeft && (
         <aside className="sidebar" aria-label="Left panel" tabIndex={-1}>

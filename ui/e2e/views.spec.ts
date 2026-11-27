@@ -457,7 +457,7 @@ test("Memory lists recent sessions, searches them like the web, and opens a sess
 
   // No left panel: the search is the left area's pinned tab, over the sessions newest first.
   await features(page).getByRole("button", { name: "Memory" }).click();
-  await expect(page.getByRole("button", { name: "Toggle left panel" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Toggle left panel" })).toBeDisabled();
   const memory = page.locator('.workbench[data-feature="plugin:memory"]');
   const left = memory.locator('.tab-group[data-area="left"]');
   const right = memory.locator('.tab-group[data-area="right"]');
