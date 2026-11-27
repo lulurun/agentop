@@ -316,26 +316,24 @@ def test_the_safety_net_never_clears_over_a_draft_or_below_the_threshold(alpha, 
     assert pane.typed == [] and events("clear.sent") == []
 
 
-def test_a_closed_milestone_clears_at_the_next_safe_point(alpha, monkeypatch, capsys):
-    monkeypatch.setattr(wake, "context_share", lambda row, agent: (1_000, 200_000))
-    monkeypatch.setattr(ops, "current_session", lambda: ("coord-1", "alpha", "Coordinator"))
-    for ref in ("M1A1", "M1A2"):
-        with pursuit._locked("alpha"):
-            track.add_note("alpha", ref, "did it myself", "coordinator")
-            track.set_action("alpha", ref, "done", "", "")
-    cli.coordinator_milestone(SimpleNamespace(milestone_command="close", milestone="M1", summary="Login in."), "alpha")
-    with pursuit._locked("alpha"):
-        track.add_milestone("alpha", "Next", None)
-        track.add_action("alpha", "M2", "More")
-    task("dev", "M2A1")
-    waiting()
-    pane = FakePane("codex")
-    assert turn_ends(pane) == ["cleared"]
-    assert events("clear.verified")[0]["why"] == "M1 was closed"
-    pursuit.log("alpha", "wake", source="owner")
-    waiting()
-    pane = FakePane("codex")
+@pytest.mark.parametrize("tool", ["claude", "codex"])
+@pytest.mark.parametrize("share", [None, (1_000, 200_000)])
+def test_a_closed_milestone_keeps_results_visible_until_a_real_wake(alpha, monkeypatch, tool, share):
+    monkeypatch.setattr(wake, "context_share", lambda row, agent: share)
+    close_m1()
+    pursuit.yield_turn("alpha", "done", {"evidence": "Login shipped.", "next": NEXT})
+    pane = FakePane(tool)
+    before = pane.screen()
+    assert turn_ends(pane, end="unknown") == []
     assert turn_ends(pane) == []
+    assert pane.typed == [] and pane.screen() == before
+    assert events("clear.sent") == []
+
+    wake.deliver_event("alpha", pane, "A real task event.", "task.report")
+    assert pane.typed[0] == "/clear" and len(pane.typed) == 2
+    assert pane.typed[1].startswith(wake.CLEARED)
+    assert NEXT in pane.typed[1] and "A real task event." in pane.typed[1]
+    assert events("clear.verified")[0]["source"] == "task.report"
 
 
 def test_yield_clear_goes_through_the_same_check_then_says_carry_on(alpha, monkeypatch, capsys):
@@ -381,7 +379,7 @@ def test_an_open_owner_ask_is_never_cleared_off_the_screen_until_the_owner_wakes
     assert turn_ends(pane) == ["not cleared"] and pane.typed == []
     skipped = events("clear.skipped")[-1]
     assert skipped["reason"] == f"{ask} asks the owner and is still open"
-    assert skipped["why"] == ("the yield asked for it" if clear else "M1 was closed")
+    assert skipped["why"] == ("the yield asked for it" if clear else "the context holds 190000 of 200000 tokens")
     assert turn_ends(FakePane()) == ["not cleared"]
     # The owner answers: the ask closes, and the deferred clear happens at the end of the next yield's turn.
     pursuit.wake_note("alpha", "owner")
@@ -391,7 +389,7 @@ def test_an_open_owner_ask_is_never_cleared_off_the_screen_until_the_owner_wakes
     pursuit.yield_turn("alpha", "done", {"evidence": "merged", "next": "Pick the next milestone with the owner."})
     pane = FakePane()
     assert turn_ends(pane) == ["cleared"] and pane.typed[0] == "/clear"
-    assert events("clear.verified")[-1]["why"] == ("the yield asked for it" if clear else "M1 was closed")
+    assert events("clear.verified")[-1]["why"] == ("the yield asked for it" if clear else "the context holds 190000 of 200000 tokens")
 
 
 def test_a_task_event_still_clears_over_an_owner_yield(alpha, monkeypatch, capsys):

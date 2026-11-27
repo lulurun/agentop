@@ -264,11 +264,6 @@ def clear_reason(project: str, row: dict, agent: AgentCli) -> tuple[str, bool] |
         return None
     if pursuit.pending_clear(project) is not None:
         return "the yield asked for it", True
-    found = pursuit.events(project)
-    last_clear = max((e["at"] for e in found if e["kind"] == "clear.verified"), default=0.0)
-    closed = [e for e in found if e["kind"] == "milestone.close" and e["at"] > last_clear]
-    if closed:
-        return f"M{closed[-1].get('milestone')} was closed", False
     share = context_share(row, agent)
     limit = (projects.get(project) or {}).get("clear_context_at", CONTEXT_SHARE)
     if share and share[1] and share[0] >= float(limit) * share[1]:
