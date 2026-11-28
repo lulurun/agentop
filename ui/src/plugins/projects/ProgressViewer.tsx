@@ -1,8 +1,15 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ApiError } from "../../api/client";
 import { Section } from "../../components/Section";
+import { useArea } from "../../components/Workbench";
+import { useApp, type ViewOwner } from "../../store";
+import { other } from "../../tabs";
 import type { PluginContext } from "../types";
-import { chosenAfter, latestOnly, pick, progressPath, stateLabel, when, type Choice, type NoteRow, type Progress, type TaskRow } from "./progress";
+import {
+  canOpen, chosenAfter, latestOnly, pick, progressPath, resultMeta, stateLabel, when,
+  type ActionResults, type Choice, type NoteRow, type Progress, type ResultFile, type TaskRow,
+} from "./progress";
+import { FEATURE } from "./state";
 
 const Markdown = lazy(() => import("./Markdown"));
 
@@ -164,6 +171,54 @@ function Execution({ data, expanded, toggle }: { data: Progress; expanded: Set<s
   );
 }
 
+function Result({ file, onOpen }: { file: ResultFile; onOpen(file: ResultFile): void }) {
+  return (
+    <li className="progress-result" data-problem={file.problem ?? undefined}>
+      {canOpen(file) ? (
+        <button type="button" className="progress-result-name" title={`Open ${file.path}`} onClick={() => onOpen(file)}>
+          {file.name}
+        </button>
+      ) : (
+        <span className="progress-result-name" title={file.path}>{file.name}</span>
+      )}
+      <span className="progress-meta">{resultMeta(file)}</span>
+    </li>
+  );
+}
+
+function Results({ data, onOpen }: { data: Progress; onOpen(file: ResultFile): void }) {
+  const actions = data.actions ?? [];
+  if (!actions.length) return <p className="detail-empty">No actions in this direction's plan yet.</p>;
+  return (
+    <>
+      {data.results_truncated && (
+        <p className="detail-empty" role="status">results/ holds too many entries; only the first ones were looked at.</p>
+      )}
+      <ul className="progress-list" aria-label="Results by action">
+        {actions.map((a: ActionResults) => (
+          <li key={a.ref} className="progress-action">
+            <span className="progress-row-head">
+              <span className="progress-id">{a.ref}</span>
+              {a.status && <span className="progress-state">{a.status}</span>}
+            </span>
+            {a.title && <span className="progress-meta">{a.title}</span>}
+            {a.results.length ? (
+              <ul className="progress-results" aria-label={`Results of ${a.ref}`}>
+                {a.results.map((file) => (
+                  <Result key={file.path} file={file} onOpen={onOpen} />
+                ))}
+                {a.more ? <li className="detail-empty">and {a.more} more in results/</li> : null}
+              </ul>
+            ) : (
+              <p className="detail-empty">No results yet.</p>
+            )}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
 /** The Progress Viewer of one project's track. */
 export function ProgressViewer({ plugin, project }: { plugin: PluginContext; project: string }) {
   const [data, setData] = useState<Progress | null>(null);
@@ -173,6 +228,16 @@ export function ProgressViewer({ plugin, project }: { plugin: PluginContext; pro
   const requests = useMemo(latestOnly, []);
   const choiceRef = useRef(choice);
   choiceRef.current = choice;
+  // The view this viewer was opened in, so a result opens among this project's tabs on this service, whatever is shown later.
+  const connection = useRef(useApp.getState().activeId).current;
+  const owner = useMemo((): ViewOwner => ({ connection, feature: FEATURE, project }), [connection, project]);
+  const area = useArea();
+  const openTabIn = useApp((s) => s.openTabIn);
+  const openResult = useCallback(
+    (file: ResultFile) =>
+      openTabIn(owner, { kind: "file", file: { sessionId: project, source: "project", path: file.path } }, other(area), "replace"),
+    [openTabIn, owner, project, area],
+  );
 
   const fetchFor = useCallback(
     async (wanted: Choice) => {
@@ -272,6 +337,9 @@ export function ProgressViewer({ plugin, project }: { plugin: PluginContext; pro
           </Section>
           <Section id={`projects:progress:${project}:plan`} title="Plan">
             {data.plan == null ? <p className="detail-empty">PLAN.md is missing from track/{data.generation}.</p> : <Doc text={data.plan} />}
+          </Section>
+          <Section id={`projects:progress:${project}:results`} title="Results by action">
+            <Results data={data} onOpen={openResult} />
           </Section>
           <Section id={`projects:progress:${project}:execution`} title="Execution">
             <Execution data={data} expanded={expanded} toggle={toggle} />

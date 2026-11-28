@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { isImage, isMarkdown, languageFor, linkTarget, resolve } from "./paths";
+import { fileQuery, isImage, isMarkdown, languageFor, linkTarget, resolve } from "./paths";
+
+describe("fileQuery", () => {
+  it("asks for a project's file by its project and any other by its session", () => {
+    expect(fileQuery({ sessionId: "alpha", source: "project", path: "results/P1_M1A1_a.md" }).toString())
+      .toBe("project=alpha&source=project&path=results%2FP1_M1A1_a.md");
+    expect(fileQuery({ sessionId: "s1", source: "workdir", path: "a b" }).toString()).toBe("session=s1&source=workdir&path=a+b");
+  });
+});
 
 describe("isMarkdown", () => {
   it("knows Markdown by its extension", () => {

@@ -280,6 +280,17 @@ def _stop(name: str, project: str) -> None:
         print(f"Warning: {name} was not stopped: {exc}", file=sys.stderr)
 
 
+def _supporting(task: dict) -> str:
+    prefix = pursuit.task_prefix(task)
+    if prefix is None:
+        return ""
+    return (
+        f"Name every other file or folder you write for this task under results/ with the same prefix, {prefix} "
+        f"(for example results/{prefix}tests.txt), so the Progress Viewer lists it under {task['action']}. "
+        "Don't rename, move or overwrite other tasks' results.\n\n"
+    )
+
+
 def brief(task: dict, project: str, extra: str) -> str:
     """The task's first prompt, after the project header ops.first_prompt adds."""
     artifact = pursuit.resolve_artifact(project, task["artifact"])
@@ -289,6 +300,7 @@ def brief(task: dict, project: str, extra: str) -> str:
         f"Goal: {task['goal']}\n\nAcceptance criteria:\n{criteria}\n\n"
         f"Artifact: write your result to {artifact}. For code, it says what you changed (commits), how you verified it, "
         "and what is left.\n\n"
+        f"{_supporting(task)}"
         "When you are done, run: agentop coordinator task report \"<one paragraph: what you did, and the evidence it meets "
         "each criterion, pointing to the artifact for the detail>\". "
         "It checks the artifact exists and tells the Coordinator. If you can't finish or need a decision, run "
@@ -335,6 +347,9 @@ def task_start(args, project: str) -> None:
         pursuit.fail(project, task["id"], f"The session didn't start: {exc}")
         _fail(str(exc))
     print(f"Task {task['id']}: {args.name} ({args.tool}) started in {cwd}; round 1 of {pursuit.MAX_ROUNDS}.")
+    if task.get("artifact_requested"):
+        print(f"The artifact is named {task['artifact']} (asked: {task['artifact_requested']}): "
+              f"result files of {task['action']} start with {pursuit.task_prefix(task)}, and none is overwritten.")
     print(f"Its result goes to {task['artifact']}. It reports with agentop coordinator task report; you'll get a message.")
 
 

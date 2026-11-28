@@ -8,7 +8,7 @@ import { Workbench } from "../../components/Workbench";
 import { useApp, layoutOf } from "../../store";
 import { plugin as projectsPlugin } from "./index";
 import { ProgressViewer } from "./ProgressViewer";
-import { chosenAfter, isProjectCoordinator, latestOnly, pick, progressPath, type Progress, type TaskRow } from "./progress";
+import { canOpen, chosenAfter, isProjectCoordinator, latestOnly, pick, progressPath, resultMeta, type Progress, type ResultFile, type TaskRow } from "./progress";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -298,5 +298,55 @@ describe("Progress Viewer", () => {
     calls[1].resolve(progress({ generations: [], current: 0, generation: 0, missing: { track: true, direction: true, plan: true, executions: true }, legacy: true }));
     await settle();
     expect(container.textContent).toContain("No track yet: this project keeps its state outside track/.");
+  });
+
+  it("lists each action's results beneath it and opens a text result in this project's view", async () => {
+    const original = useApp.getState();
+    const openTabIn = vi.fn();
+    act(() => useApp.setState({ openTabIn }));
+    try {
+      render();
+      const file = (fields: Partial<ResultFile>): ResultFile =>
+        ({ name: "x", path: "results/x", task: null, kind: "supporting", size: 10, problem: null, ...fields });
+      calls[0].resolve(progress({
+        actions: [
+          { ref: "M1A1", title: "Build it", status: "done", results: [
+            file({ name: "P2_M1A1_dev.md", path: "results/P2_M1A1_dev.md", task: "P2_M1A1-1", kind: "artifact", size: 2048 }),
+            file({ name: "P2_M1A1_tests.txt", path: "results/P2_M1A1_tests.txt" }),
+            file({ name: "P2_M1A1_link.txt", path: "results/P2_M1A1_link.txt", problem: "outside", size: null }),
+          ] },
+          { ref: "M1A10", title: null, status: null, results: [file({ name: "P2_M1A10_a.md", path: "results/P2_M1A10_a.md", task: "P2_M1A10-1", kind: "artifact", problem: "missing", size: null })] },
+          { ref: "M1A2", title: "Later", status: "planned", results: [], more: 0 },
+        ],
+      }));
+      await settle();
+      const first = q('[aria-label="Results of M1A1"]')!;
+      expect([...first.querySelectorAll("li")].map((li) => li.textContent)).toEqual([
+        "P2_M1A1_dev.mdartifact of P2_M1A1-1 · 2 KB",
+        "P2_M1A1_tests.txtsupporting · 10 B",
+        "P2_M1A1_link.txtsupporting · leads outside the project, not shown",
+      ]);
+      expect(first.querySelectorAll("button")).toHaveLength(2);
+      expect(q('[aria-label="Results of M1A10"]')!.textContent).toContain("not written");
+      expect(q('[aria-label="Results of M1A10"] button')).toBeNull();
+      expect(container.textContent).toContain("No results yet.");
+
+      click(byText("button", "P2_M1A1_tests.txt"));
+      expect(openTabIn).toHaveBeenCalledWith(
+        { connection: original.activeId, feature: "plugin:projects", project: "alpha" },
+        { kind: "file", file: { sessionId: "alpha", source: "project", path: "results/P2_M1A1_tests.txt" } },
+        "right",
+        "replace",
+      );
+    } finally {
+      act(() => useApp.setState({ openTabIn: original.openTabIn }));
+    }
+  });
+
+  it("says why a result can't be opened", () => {
+    const base: ResultFile = { name: "a", path: "results/a", task: null, kind: "supporting", size: 0, problem: "empty" };
+    expect([canOpen(base), resultMeta(base)]).toEqual([true, "supporting · empty"]);
+    for (const problem of ["missing", "outside", "folder", "unsupported"] as const) expect(canOpen({ ...base, problem })).toBe(false);
+    expect(resultMeta({ ...base, problem: null, size: 3 * 1024 * 1024 })).toBe("supporting · 3.0 MB");
   });
 });

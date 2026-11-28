@@ -1,4 +1,11 @@
-/** Where a link in a Markdown file goes. Pure, so it is tested on its own. */
+/** Where a link in a Markdown file goes, and how the service is asked for a file. Pure, so it is tested on its own. */
+import type { FileRef } from "../../tabs";
+
+/** The query /file and /image take: a project's file by its project, any other by its session. */
+export function fileQuery(file: Pick<FileRef, "sessionId" | "source" | "path">): URLSearchParams {
+  const owner = file.source === "project" ? "project" : "session";
+  return new URLSearchParams({ [owner]: file.sessionId, source: file.source, path: file.path });
+}
 
 const MARKDOWN = /\.(md|markdown|mdown|mkd|mdx)$/i;
 // The kinds the service's /image serves (IMAGE_TYPES in the viewer plugin).

@@ -1550,3 +1550,10 @@ button.icon.section-action:hover { background: var(--raised); color: var(--text)
 .progress-detail ul { margin: 2px 0; padding-left: 18px; }
 .progress-field h5 { margin: 8px 0 2px; font-size: 12px; font-weight: 600; color: var(--quiet); text-transform: uppercase; letter-spacing: 0.04em; }
 .progress-round { margin: 4px 0; }
+.progress-action { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; margin-bottom: 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--ink); }
+.progress-results { margin: 4px 0 0; padding: 0; list-style: none; }
+.progress-result { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; padding: 1px 0; }
+.progress-result-name { padding: 0; border: 0; background: none; font-family: var(--code); font-size: 12px; text-align: left; overflow-wrap: anywhere; color: inherit; }
+button.progress-result-name { color: var(--action); cursor: pointer; }
+button.progress-result-name:hover { text-decoration: underline; }
+.progress-result[data-problem="missing"] .progress-result-name, .progress-result[data-problem="outside"] .progress-result-name { color: var(--quiet); }

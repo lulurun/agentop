@@ -786,7 +786,7 @@ export interface components {
              * Source
              * @enum {string}
              */
-            source: "workdir" | "memory" | "transcript";
+            source: "workdir" | "memory" | "transcript" | "project";
             /** View */
             view?: "diff" | null;
         };

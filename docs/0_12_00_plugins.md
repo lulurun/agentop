@@ -179,7 +179,7 @@ Use `python tools/test_status.py --session <tmux-name>` to watch a managed sessi
 
 ### File viewer (`viewer`)
 
-Fills the `file-viewer` slot: a file from the right panel (the working directory, the agent tool's memory folder, or a transcript) opens in a tab.
+Fills the `file-viewer` slot: a file from the right panel (the working directory, the agent tool's memory folder, or a transcript), or a result from the Progress Viewer (the `project` source), opens in a tab.
 
 - **Text** with line numbers, coloured by language: 20 highlight.js grammars registered by hand through lowlight (`ui/src/plugins/viewer/highlight.ts`), the file's extension or name picking the language (`languageFor` in `paths.ts`). They live in a chunk of their own, fetched when a file is first opened. Files over 512 KB stay plain. `rehype-highlight` was tried and dropped: it bundles highlight.js's 37 common grammars whatever it is given.
 - **Diffs.** A file from the Changed list opens as its diff against HEAD (staged and unstaged together, deleted and new files too, `GET /diff`), with Open file to see its text. The diff view is not coloured yet.
@@ -187,7 +187,7 @@ Fills the `file-viewer` slot: a file from the right panel (the working directory
 - **Images** (PNG, JPEG, GIF, WebP, AVIF, BMP, ICO or SVG, up to 5 MB) open drawn in the middle of the tab.
 - **Transcripts** open as a conversation (`GET /conversation`, the latest 5000 messages), with Raw beside it; each tool's `AgentCli.conversation_reader` reads them, so this works without the Memory plugin.
 
-Only files in the session's working directory, its memory folder, or its transcript list can be read (`GET /file`).
+Only files in the session's working directory, its memory folder, or its transcript list can be read (`GET /file?session=…`), or, with `source=project&project=<name>`, a file in that project's folder outside its `.project/` records. The real path is checked after links are resolved, so neither `..` nor a link leads out; reads stop at 2 MB (images at 5 MB).
 
 ### Email code (`email-code`)
 

@@ -17,7 +17,7 @@ import remarkGfm from "remark-gfm";
 import type { FileRef } from "../../tabs";
 import type { PluginContext } from "../types";
 import { rehypeHighlight } from "./highlight";
-import { linkTarget } from "./paths";
+import { fileQuery, linkTarget } from "./paths";
 
 // Ids get a prefix, so one in the file can't clash with the app's own elements:
 // headings get PREFIX, and ids written in the file's HTML get the sanitizer's.
@@ -120,7 +120,7 @@ function LocalImage({ file, alt, plugin }: { file: FileRef; alt: string; plugin:
   const [failed, setFailed] = useState<string | null>(null);
   useEffect(() => {
     let current = true;
-    const query = new URLSearchParams({ session: file.sessionId, source: file.source, path: file.path });
+    const query = fileQuery(file);
     plugin.client.get<Image>(`/image?${query}`).then(
       (image) => current && setUrl(`data:${image.type};base64,${image.data}`),
       (error: unknown) => current && setFailed(error instanceof Error ? error.message : String(error)),

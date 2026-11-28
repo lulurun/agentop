@@ -6,7 +6,7 @@ import { ChatView, type ChatMessage } from "../../components/Conversation";
 import { useArea } from "../../components/Workbench";
 import type { PluginContext, UiPlugin } from "../types";
 import { parseDiff, type DiffRow } from "./diff";
-import { isImage, isMarkdown, languageFor } from "./paths";
+import { fileQuery, isImage, isMarkdown, languageFor } from "./paths";
 
 // Its libraries load the first time a Markdown file is opened.
 const Markdown = lazy(() => import("./Markdown"));
@@ -182,7 +182,7 @@ function ImageViewer({ file, plugin }: { file: FileRef; plugin: PluginContext })
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    const query = new URLSearchParams({ session: file.sessionId, source: file.source, path: file.path });
+    const query = fileQuery(file);
     // The page can't put its token on an <img>, so the image comes as data.
     plugin.client.get<FileImage>(`/image?${query}`).then(
       (value) => {
@@ -250,7 +250,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
   const area = useArea();
 
   const load = useCallback(() => {
-    const query = new URLSearchParams({ session: file.sessionId, source: file.source, path: file.path });
+    const query = fileQuery(file);
     plugin.client.get<FileText>(`/file?${query}`).then(
       (value) => {
         setResult(value);
@@ -349,6 +349,7 @@ function TextViewer({ file, plugin }: { file: FileRef; plugin: PluginContext }) 
       <div className="viewer-bar">
         <span className="viewer-path" title={result?.absolute ?? file.path}>
           {file.source === "transcript" && <span className="viewer-source">Transcript</span>}
+          {file.source === "project" && <span className="viewer-source">Project</span>}
           {file.path}
         </span>
         {result && (

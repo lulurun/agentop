@@ -247,3 +247,12 @@ describe("loading and saving", () => {
     expect((await sync.load("c", "b")).kind).toBe("loaded");
   });
 });
+
+describe("a project file tab", () => {
+  it("is kept in the layout file as it is", async () => {
+    const { cleanContent } = await import("./layoutfile");
+    const file = { sessionId: "alpha", source: "project", path: "results/P1_M1A1_a.md" };
+    expect(cleanContent({ kind: "file", file })).toEqual({ kind: "file", file });
+    expect(cleanContent({ kind: "file", file: { ...file, source: "elsewhere" } })).toBeNull();
+  });
+});

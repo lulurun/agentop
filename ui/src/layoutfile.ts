@@ -65,7 +65,7 @@ export function withoutSizes(file: LayoutFile): LayoutFile | null {
   return { ...file, "left-panel": left, "mid-panel": mid, "right-panel": right };
 }
 
-const SOURCES: FileSource[] = ["workdir", "memory", "transcript"];
+const SOURCES: FileSource[] = ["workdir", "memory", "transcript", "project"];
 const str = (value: unknown, max = 200): value is string => typeof value === "string" && value.length > 0 && value.length <= max;
 
 /** A tab's content as the service accepts it, with nothing else in it; null if it isn't one. */

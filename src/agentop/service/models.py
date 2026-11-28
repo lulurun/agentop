@@ -254,7 +254,7 @@ class SessionTabContent(_Strict):
 
 class FileRefModel(_Strict):
     sessionId: _Id
-    source: Literal["workdir", "memory", "transcript"]
+    source: Literal["workdir", "memory", "transcript", "project"]
     path: str = Field(max_length=4096)
     view: Literal["diff"] | None = None
 

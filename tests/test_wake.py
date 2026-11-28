@@ -125,7 +125,7 @@ def report(monkeypatch, pane, name="dev", summary="12 tests pass", blocked=False
     monkeypatch.setattr(ops, "current_session", lambda: (f"{name}-1", "alpha", name))
     monkeypatch.setattr(ops, "find_session", lambda target, project=None: row)
     monkeypatch.setattr(wake, "pane_of", lambda r: pane)
-    path = projects.folder("alpha") / f"results/{name}.md"
+    path = projects.folder("alpha") / pursuit.task_for("alpha", name)["artifact"]
     path.parent.mkdir(exist_ok=True)
     path.write_text("result")
     cli.run_task(SimpleNamespace(task_command="report", project=None, summary=summary, blocked=blocked), None)
@@ -176,7 +176,7 @@ def test_without_a_safe_point_the_report_is_typed_without_a_clear(alpha, monkeyp
     pane = FakePane(states=states, screen="draft" if case == "draft" else "old")
     if case == "other report":
         task("api", "M1A2")
-        path = projects.folder("alpha") / "results/api.md"
+        path = projects.folder("alpha") / pursuit.task_for("alpha", "api")["artifact"]
         path.parent.mkdir(exist_ok=True)
         path.write_text("x")
         pursuit.report("alpha", "api", "done")

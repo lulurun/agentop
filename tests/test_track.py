@@ -74,8 +74,10 @@ def folder(project="alpha"):
 
 def report(monkeypatch, capsys, session, text="done", project="alpha"):
     monkeypatch.setattr(ops, "current_session", lambda: (f"{session}-1", project, session))
-    (folder(project) / "results").mkdir(exist_ok=True)
-    (folder(project) / f"results/{session}.md").write_text("result")
+    task = pursuit.task_for(project, session)
+    artifact = folder(project) / (task["artifact"] if task else f"results/{session}.md")
+    artifact.parent.mkdir(parents=True, exist_ok=True)
+    artifact.write_text("result")
     out, _ = ag(capsys, "coordinator", "task", "report", text)
     as_coordinator(monkeypatch)
     return out
@@ -166,7 +168,7 @@ def test_accept_reject_and_fail_write_the_execution_entry_and_the_action_status(
     assert "Recorded in track/1/EXECUTION_M2.md; M2A1 is done" in out
     execution = (folder() / "track/1/EXECUTION_M2.md").read_text()
     assert execution.count("## P1_M2A1-1") == 1
-    for part in ("rounds 2 · accepted", "Input: dev's goal", "- tests pass", "Artifact: results/dev.md",
+    for part in ("rounds 2 · accepted", "Input: dev's goal", "- tests pass", "Artifact: results/P1_M2A1_dev.md",
                  "Brief: Read the README first. / Then the spec.", "- round 1: 12 tests pass", "- round 2: docs added",
                  "- round 2 accepted: ran pytest; read the docs"):
         assert part in execution, part

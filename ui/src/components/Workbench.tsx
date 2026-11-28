@@ -39,7 +39,7 @@ function useTabLabel(tab: Tab): { label: string; title: string; status?: string 
       : { label: "Session", title: content.sessionId };
   }
   const { file } = content;
-  const where = file.source === "transcript" ? "transcript" : (session?.cwd ?? "");
+  const where = file.source === "transcript" ? "transcript" : file.source === "project" ? `project ${file.sessionId}` : (session?.cwd ?? "");
   const diff = file.view === "diff";
   return { label: diff ? `${baseName(file.path)} (diff)` : baseName(file.path), title: `${diff ? "Changes to " : ""}${file.path} (${where})` };
 }

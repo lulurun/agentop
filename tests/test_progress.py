@@ -61,7 +61,7 @@ def test_closures_sort_newest_first_within_a_minute_and_with_no_tasks_json(alpha
     assert [t["id"] for t in again["completed"]] == ["P1_M2A1-1", "P1_M2A1-2"]
     dev = by_id(again)["P1_M2A1-1"]
     assert dev["sources"] == ["markdown", "journal"] and dev["checked"] == "read it too"
-    assert dev["input"] == {"goal": "dev's goal", "accept": ["tests pass"], "artifact": "results/dev.md",
+    assert dev["input"] == {"goal": "dev's goal", "accept": ["tests pass"], "artifact": "results/P1_M2A1_dev.md",
                             "brief": "Read the README first. / Then the spec."}
 
 
@@ -303,7 +303,7 @@ def test_a_malformed_or_incomplete_snapshot_row_does_not_erase_the_markdown(alph
     dev, api = result["P1_M2A1-1"], result["P1_M2A1-2"]
     assert dev["input"]["goal"] == "dev's goal" and dev["input"]["accept"] == ["tests pass"]
     assert dev["rounds"][0]["summary"] == "dev's summary" and dev["checked"] == "y" and dev["state"] == "accepted"
-    assert api["input"]["artifact"] == "results/api.md" and api["rounds"][0]["summary"] == "api's summary"
+    assert api["input"]["artifact"] == "results/P1_M2A1_api.md" and api["rounds"][0]["summary"] == "api's summary"
     assert len(api["rounds"]) == progress.MAX_ROUNDS
     assert [t["id"] for t in progress.read(alpha)["completed"]] == ["P1_M2A1-1", "P1_M2A1-2"]
 
@@ -368,7 +368,7 @@ def test_headings_inside_reports_stay_in_their_entry_without_tasks_json(alpha, c
     assert result["issues"] == []
     assert [t["id"] for t in result["completed"]] == ["P1_M2A2-1", "P1_M2A1-1"]
     dev, api, ops = (by_id(result)[i] for i in ("P1_M2A1-1", "P1_M2A2-1", "P1_M2A2-2"))
-    assert dev["input"] == {"goal": "dev's goal", "accept": ["tests pass"], "artifact": "results/dev.md",
+    assert dev["input"] == {"goal": "dev's goal", "accept": ["tests pass"], "artifact": "results/P1_M2A1_dev.md",
                             "brief": "Read the README first. / Then the spec."}
     assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [(first, feedback), (second, None)]
     assert (dev["state"], dev["checked"], dev["raw"]) == ("accepted", checked, None)
@@ -449,7 +449,7 @@ def test_a_task_update_replaces_its_whole_entry_whatever_its_text_holds(alpha, c
         (LOOKALIKE, False, "BLOCKED: no\n\n## Results\n\nagain"),
         ("BLOCKED: is a word here\n\n## Results\n\n150 tests passed.", False, None)]
     assert (dev["checked"], dev["state"], dev["raw"], dev["input"]["goal"]) == (checked, "accepted", None, "dev's goal")
-    assert (api["rounds"][0]["summary"], api["checked"], api["input"]["artifact"]) == ("Ordinary summary", "Verified too", "results/api.md")
+    assert (api["rounds"][0]["summary"], api["checked"], api["input"]["artifact"]) == ("Ordinary summary", "Verified too", "results/P1_M2A2_api.md")
     assert [n["body"] for n in result["notes"]] == ["Second note", LOOKALIKE]
 
 
@@ -481,7 +481,7 @@ def test_a_legacy_entry_without_its_older_versions_and_rewritten_whole(alpha, ca
         assert [t["id"] for t in result["completed"]] == ["P1_M2A2-1", "P1_M2A1-1"]
         dev, api, ops = (by_id(result)[i] for i in ("P1_M2A1-1", "P1_M2A2-1", "P1_M2A2-2"))
         assert [(r["summary"], r["feedback"]) for r in dev["rounds"]] == [(first, feedback), (second, None)]
-        assert (dev["checked"], dev["raw"], dev["input"]["artifact"]) == (checked, None, "results/dev.md")
+        assert (dev["checked"], dev["raw"], dev["input"]["artifact"]) == (checked, None, "results/P1_M2A1_dev.md")
         assert (api["rounds"][0]["summary"], api["checked"]) == ("Plain\n\n## Results\n\nok", "Verified too")
         assert (ops["state"], ops["rounds"][0]["summary"]) == ("awaiting review", "Half done.\n\n## Blocked on\n\nAccess.")
 

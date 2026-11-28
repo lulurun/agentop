@@ -196,6 +196,53 @@ def resolve_artifact(project: str, path: str) -> Path:
     return target
 
 
+_ANY_PREFIX = re.compile(r"^P\d+_M\d+A\d+(?:-\d+)?_")
+MAX_ARTIFACT_TRIES = 100
+
+
+def result_prefix(direction: int, action: str) -> str:
+    """The prefix of a task's result files, P{N}_M{m}A{a}_: one action of one direction, whatever the attempt."""
+    return f"P{direction}_{action}_"
+
+
+def task_prefix(task: dict) -> str | None:
+    if task.get("action") and isinstance(task.get("direction"), int):
+        return result_prefix(task["direction"], task["action"])
+    return None
+
+
+def name_artifact(project: str, path: str, prefix: str, attempt: int, tasks: list[dict]) -> str:
+    """The artifact's path for a new task, relative to the project folder, its name starting with `prefix`.
+
+    A name with another action's or direction's prefix is refused; one already on disk or named by an
+    earlier task gets `-{attempt}` (and a count) before its suffix, so a retry never overwrites it. Raises PursuitError.
+    """
+    root = projects.folder(project).resolve()
+    target = resolve_artifact(project, path)
+    name = target.name
+    if not name.startswith(prefix):
+        other = _ANY_PREFIX.match(name)
+        if other:
+            raise PursuitError(
+                f"The artifact {path} starts with {other[0]}, which is not this task's prefix {prefix}. "
+                f"Name it {prefix}{name[len(other[0]):]} (or leave the prefix out and agentop adds it)"
+            )
+        name = prefix + name
+    claimed = set()
+    for task in tasks:
+        try:
+            claimed.add(resolve_artifact(project, task["artifact"]))
+        except (PursuitError, KeyError, TypeError, OSError):
+            continue
+    stem, suffix = (name[: -len(Path(name).suffix)], Path(name).suffix) if Path(name).suffix else (name, "")
+    candidates = [name] + [f"{stem}-{attempt}{suffix}"] + [f"{stem}-{attempt}-{i}{suffix}" for i in range(2, MAX_ARTIFACT_TRIES)]
+    for candidate in candidates:
+        chosen = target.with_name(candidate)
+        if chosen not in claimed and not os.path.lexists(chosen):
+            return chosen.relative_to(root).as_posix()
+    raise PursuitError(f"Every name like {name} is taken; pick another --artifact")
+
+
 def open_tasks(project: str) -> list[dict]:
     return [t for t in load_tasks(project) if t["status"] == "open"]
 
@@ -250,6 +297,11 @@ def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept
             raise PursuitError(f"No new task starts: {refusal[0].lower()}{refusal[1:]}")
         if action is not None:
             action = track.check_action(project, action)
+        requested = artifact
+        if action is not None:
+            counter = track.load_counter(project)
+            attempt = counter["tasks"].get(f"P{counter['direction']}_{action}", 0) + 1
+            artifact = name_artifact(project, artifact, result_prefix(counter["direction"], action), attempt, tasks)
         if track.exists(project):
             task_id, direction = track.next_task_id(project, action)
         else:
@@ -266,6 +318,7 @@ def open_task(project: str, session: str, tool: str, cwd: str, goal: str, accept
             "goal": goal,
             "accept": accept,
             "artifact": artifact,
+            **({"artifact_requested": requested} if requested != artifact else {}),
             "status": "open",
             "opened_at": time.time(),
             "rounds": [{"sent_at": time.time()}],

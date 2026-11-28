@@ -1,5 +1,5 @@
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Service } from "./service";
 
@@ -156,4 +156,62 @@ test.describe("on a narrow screen", () => {
     expect(coordinatorTool(s, "narrow-one")).toBe("codex");
     await shot(page, info, "narrow-created");
   });
+});
+
+test("the Progress Viewer lists each action's results beneath it and opens a text result in a file tab", async ({ page }, info) => {
+  test.setTimeout(150_000);
+  const s = await open(page);
+  await projectButton(page).click();
+  await creator(page).getByLabel("Name").fill("results");
+  const create = creator(page).getByRole("button", { name: "Create", exact: true });
+  await expect(create).toBeEnabled();
+  await create.click();
+  await expect(page.getByTestId("terminal")).toContainText("fake agent ready", { timeout: 45_000 });
+
+  const folder = join(s.root, "state/projects/results");
+  writeFileSync(join(folder, "track/1/PLAN.md"),
+    "# Plan 1\n\n## M1 Build  [in progress]\n\n- M1A1 Write the report  [done] → P1_M1A1-1\n- M1A10 Tenth action  [planned]\n");
+  mkdirSync(join(folder, "results"), { recursive: true });
+  writeFileSync(join(folder, "results/P1_M1A1_report.md"), "# Report of M1A1\n\nAll 12 checks pass.\n");
+  writeFileSync(join(folder, "results/P1_M1A1_tests.txt"), "12 passed\n");
+  writeFileSync(join(folder, "results/P1_M1A10_other.md"), "tenth\n");
+  writeFileSync(join(folder, "results/P2_M1A1_next.md"), "next direction\n");
+  writeFileSync(join(folder, "results/old-report.md"), "older artifact\n");
+  // An older task, from before prefixes: its record names the artifact.
+  writeFileSync(join(folder, ".project/tasks.json"), JSON.stringify({ tasks: [{
+    id: "P1_M1A1-1", action: "M1A1", direction: 1, session: "dev", tool: "codex", goal: "Write it", accept: ["passes"],
+    artifact: "results/old-report.md", status: "accepted", opened_at: 1_700_000_000, closed_at: 1_700_000_100,
+    rounds: [{ sent_at: 1_700_000_000, reported_at: 1_700_000_050, summary: "done" }], checked: "read it",
+  }] }));
+
+  await page.getByRole("complementary", { name: "Right panel" }).getByRole("button", { name: "Progress Viewer" }).click();
+  const viewer = page.locator(".progress-viewer");
+  const m1a1 = viewer.getByRole("list", { name: "Results of M1A1", exact: true });
+  await expect(m1a1.getByRole("listitem")).toHaveText([
+    /^old-report\.mdartifact of P1_M1A1-1/,
+    /^P1_M1A1_report\.mdsupporting/,
+    /^P1_M1A1_tests\.txtsupporting/,
+  ]);
+  await expect(viewer.getByRole("list", { name: "Results of M1A10", exact: true }).getByRole("listitem")).toHaveText([/^P1_M1A10_other\.md/]);
+  await expect(viewer.getByText("P2_M1A1_next.md")).toHaveCount(0);
+  await m1a1.scrollIntoViewIfNeeded();
+  await shot(page, info, "results-by-action");
+
+  const asked = page.waitForRequest((r) => r.url().includes("/plugins/viewer/file?"));
+  await m1a1.getByRole("button", { name: "P1_M1A1_tests.txt" }).click();
+  const request = await asked;
+  expect(new URL(request.url()).searchParams.get("project")).toBe("results");
+  const text = page.getByLabel("Contents of results/P1_M1A1_tests.txt");
+  await expect(text).toHaveText("12 passed\n");
+  await expect(page.getByRole("tab", { name: /P1_M1A1_tests\.txt/ })).toBeVisible();
+  await m1a1.getByRole("button", { name: "P1_M1A1_report.md" }).click();
+  await expect(page.getByLabel("Preview of results/P1_M1A1_report.md")).toContainText("All 12 checks pass.");
+  await shot(page, info, "result-opened");
+
+  // The service refuses a path out of the project, whatever the page asks.
+  const headers = await request.allHeaders();
+  const read = (path: string) => page.request.get(`${s.url}/api/v2/plugins/viewer/file?${new URLSearchParams({ project: "results", source: "project", path })}`, { headers });
+  expect((await read("results/P1_M1A1_tests.txt")).status()).toBe(200);
+  expect((await read("../../service.json")).status()).toBe(403);
+  expect((await read(".project/tasks.json")).status()).toBe(403);
 });

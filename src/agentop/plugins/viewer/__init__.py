@@ -1,6 +1,7 @@
 """File viewer: a session's file as text, a diff, an image, or a transcript read as a conversation.
 
-Sources are confined: the working directory, the agent tool's memory folder, or a listed transcript.
+Sources are confined: the working directory, the agent tool's memory folder, a listed transcript, or a project's folder
+(without its .project/ records).
 """
 
 from __future__ import annotations
@@ -12,10 +13,10 @@ from typing import Literal
 
 from fastapi import HTTPException
 
-from agentop import conversation, files, transcripts
+from agentop import conversation, files, projects, transcripts
 from agentop.agentclis import get_agent
 
-Source = Literal["workdir", "memory", "transcript"]
+Source = Literal["workdir", "memory", "transcript", "project"]
 
 MAX_BYTES = 2 * 1024 * 1024
 SNIFF_BYTES = 8192
@@ -85,14 +86,33 @@ def register(api):
         agent = get_agent(row.get("tool") or "")
         return source == "transcript" and agent is not None and agent.conversation_reader(target) is not None
 
-    async def located(row: dict, source: str, path: str, read):
+    def locate_in_project(project: str, path: str) -> Path:
+        if not projects.exists(project):
+            raise FileNotFoundError(path)
+        real_root, target = files.resolve_inside(str(projects.folder(project)), path)
+        if target != real_root and projects.META_DIR in target.relative_to(real_root).parts:
+            raise files.OutsideRoot(path)
+        return target
+
+    def where(session: str | None, project: str | None, source: str):
+        """How to find the file: from a session's row, or, for `project`, from the project's folder."""
+        if source == "project":
+            if not project:
+                raise HTTPException(422, "A project file needs ?project=")
+            return lambda path: locate_in_project(project, path)
+        if not session:
+            raise HTTPException(422, "A session file needs ?session=")
+        row = session_row(session)
+        return lambda path: locate(row, source, path)
+
+    async def located(find, path: str, read):
         try:
-            target = await asyncio.to_thread(locate, row, source, path)
+            target = await asyncio.to_thread(find, path)
             if not target.is_file():
                 raise FileNotFoundError(path)
             return target, await asyncio.to_thread(read, target)
         except files.OutsideRoot:
-            raise HTTPException(403, "That path is outside the session's directory") from None
+            raise HTTPException(403, "That path is outside the folder it is read from") from None
         except FileNotFoundError:
             raise HTTPException(404, "No such file") from None
         except PermissionError:
@@ -101,23 +121,21 @@ def register(api):
             raise HTTPException(415, str(exc)) from None
 
     @api.router.get("/file")
-    async def read_file(session: str, path: str, source: Source = "workdir"):
-        row = session_row(session)
-        target, result = await located(row, source, path, read_text)
+    async def read_file(path: str, source: Source = "workdir", session: str | None = None, project: str | None = None):
+        target, result = await located(where(session, project, source), path, read_text)
         return {
             "path": path,
             "source": source,
             "absolute": str(target),
-            "conversation": readable(row, source, target),
+            "conversation": source != "project" and readable(session_row(session), source, target),
             **result,
         }
 
     # As data for the page to put in the <img>: an <img> request can't carry the token header.
     @api.router.get("/image")
-    async def read_image_file(session: str, path: str, source: Source = "workdir"):
+    async def read_image_file(path: str, source: Source = "workdir", session: str | None = None, project: str | None = None):
         """An image file, or one a Markdown file shows, from the same places /file reads."""
-        row = session_row(session)
-        target, result = await located(row, source, path, read_image)
+        target, result = await located(where(session, project, source), path, read_image)
         return {"path": path, "absolute": str(target), **result}
 
     @api.router.get("/diff")
@@ -141,7 +159,7 @@ def register(api):
     async def read_conversation(session: str, path: str):
         """A transcript's prompts and replies, oldest first."""
         row = session_row(session)
-        target, messages = await located(row, "transcript", path, lambda t: conversation.read(get_agent(row.get("tool") or ""), t))
+        target, messages = await located(lambda p: locate(row, "transcript", p), path, lambda t: conversation.read(get_agent(row.get("tool") or ""), t))
         if messages is None:
             raise HTTPException(404, "This file isn't a conversation the viewer can read")
         return {

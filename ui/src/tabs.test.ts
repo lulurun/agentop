@@ -262,3 +262,14 @@ describe("Sessions' start buffer", () => {
     expect(tabs.withPinnedTab(moved)).toBe(moved);
   });
 });
+
+describe("a project's file", () => {
+  it("belongs to no session, and is told apart from a session's file of the same path", () => {
+    const project: TabContent = { kind: "file", file: { sessionId: "alpha", source: "project", path: "results/a.md" } };
+    const session: TabContent = { kind: "file", file: { sessionId: "alpha", source: "workdir", path: "results/a.md" } };
+    expect(tabs.sessionOf(project)).toBeUndefined();
+    expect(tabs.sameContent(project, session)).toBe(false);
+    expect(tabs.closeSession({ left: { tabs: [{ id: "a", content: project }], active: "a" }, right: null, focused: "left" }, "alpha").left?.tabs)
+      .toHaveLength(1);
+  });
+});

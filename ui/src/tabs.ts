@@ -3,10 +3,14 @@
  * bar showing one buffer at a time. Pure functions of a Layout, tested on their own.
  */
 
-/** `workdir` is the session's working directory, `memory` the notes the agent tool keeps for its project, `transcript` one of the tool's log files for it. */
-export type FileSource = "workdir" | "memory" | "transcript";
+/**
+ * `workdir` is the session's working directory, `memory` the notes the agent tool keeps for its project, `transcript`
+ * one of the tool's log files for it, `project` a project's folder, such as its results/.
+ */
+export type FileSource = "workdir" | "memory" | "transcript" | "project";
 
 export interface FileRef {
+  /** The session the file is read through; for `project`, the project's name. */
   sessionId: string;
   source: FileSource;
   /** Relative to the source's folder. */
@@ -140,7 +144,7 @@ export function sameContent(a: TabContent, b: TabContent): boolean {
  */
 export function sessionOf(content: TabContent): string | undefined {
   if (content.kind === "session") return content.sessionId;
-  if (content.kind === "file") return content.file.sessionId;
+  if (content.kind === "file") return content.file.source === "project" ? undefined : content.file.sessionId;
   return undefined;
 }
 

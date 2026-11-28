@@ -17,7 +17,7 @@ from pathlib import Path
 
 from agentop import projects
 
-from . import track
+from . import results, track
 
 MAX_DOC_BYTES = 1_000_000
 # One journal line or one EXECUTION entry; files are streamed, so records past any size stay readable.
@@ -765,7 +765,7 @@ def _read(project: str, wanted: int | None) -> dict:
         "direction": None, "direction_placeholder": False, "plan": None,
         "active": [], "completed": [], "notes": [], "issues": reader.issues,
         "missing": {"track": not found, "direction": True, "plan": True, "executions": True},
-        "legacy": False,
+        "legacy": False, "actions": [], "results_truncated": False,
     }
     stored = _snapshot(reader, project)
     if not found:
@@ -805,4 +805,5 @@ def _read(project: str, wanted: int | None) -> dict:
     result["active"].sort(key=_open_key)
     result["completed"].sort(key=_closed_key)
     result["notes"].sort(key=lambda note: (note["recorded_at"] is None, -(note["recorded_at"] or 0), -note["number"], note["id"]))
+    result.update(results.by_action(project, n, plan, result["active"] + result["completed"]))
     return result
