@@ -59,9 +59,9 @@ async function openStatus(page: Page, name = "box") {
 
 const features = (page: Page) => page.getByRole("navigation", { name: "Features" });
 
-/** Make a project from the Project button's creation buffer. */
+/** Make a project from the New project button's creation buffer. */
 async function createProject(page: Page, name: string) {
-  await page.getByRole("complementary", { name: "Left panel" }).getByRole("button", { name: "Project", exact: true }).click();
+  await page.getByRole("complementary", { name: "Left panel" }).getByRole("button", { name: "New project", exact: true }).click();
   const buffer = page.getByRole("region", { name: "New project", exact: true });
   await buffer.getByLabel("Name").fill(name);
   await buffer.getByRole("button", { name: "Create", exact: true }).click();
@@ -612,28 +612,30 @@ test("each project shows its own tabs and panels from its layout.json, and Sessi
   const left = page.getByRole("complementary", { name: "Left panel" });
   const tabsShown = page.getByRole("main").locator('.workbench:not([hidden]) [role="tab"]');
   const rightPanel = page.getByRole("complementary", { name: "Right panel" });
+  // Each project's own Coordinator and Progress tabs are there too, around its saved ones.
   await left.getByRole("button", { name: "alpha", exact: true }).click();
-  await expect(tabsShown).toHaveText(["fileX.md"]);
+  await expect(tabsShown).toHaveText(["Coordinator: alpha", "fileX.md", "Progress: alpha"]);
   await expect(rightPanel).toHaveCount(0);
 
-  // fileX is alpha's: beta starts with no tabs, and its own panels.
+  // fileX is alpha's: beta starts with only its own two, and its own panels.
   await left.getByRole("button", { name: "beta", exact: true }).click();
-  await expect(tabsShown).toHaveCount(0);
+  await expect(tabsShown).toHaveText(["Coordinator: beta", "Progress: beta"]);
   await expect(rightPanel).toHaveCount(1);
   await openStatus(page);
-  await expect(tabsShown).toHaveText(["Status"]);
-  await expect.poll(() => existsSync(beta) && JSON.parse(readFileSync(beta, "utf8"))["mid-panel"].left.tabs[0]?.content.kind).toBe("status");
+  await expect(tabsShown).toHaveText(["Coordinator: beta", "Status", "Progress: beta"]);
+  await expect.poll(() => existsSync(beta) && JSON.parse(readFileSync(beta, "utf8"))["mid-panel"].left.tabs[1]?.content.kind).toBe("status");
 
+  // Only looked at, alpha's file is left as written.
   await left.getByRole("button", { name: "alpha", exact: true }).click();
-  await expect(tabsShown).toHaveText(["fileX.md"]);
+  await expect(tabsShown).toHaveText(["Coordinator: alpha", "fileX.md", "Progress: alpha"]);
   await expect(rightPanel).toHaveCount(0);
   expect(JSON.parse(readFileSync(alpha, "utf8"))).toEqual(byHand);
 
   await page.reload();
   await expect(page.locator(".link-connected")).toBeVisible();
-  await expect(tabsShown).toHaveText(["fileX.md"]);
+  await expect(tabsShown).toHaveText(["Coordinator: alpha", "fileX.md", "Progress: alpha"]);
   await left.getByRole("button", { name: "beta", exact: true }).click();
-  await expect(tabsShown).toHaveText(["Status"]);
+  await expect(tabsShown).toHaveText(["Coordinator: beta", "Status", "Progress: beta"]);
 
   // Sessions is the default project, with its file in the default project's folder.
   await features(page).getByRole("button", { name: "Sessions" }).click();
@@ -642,6 +644,6 @@ test("each project shows its own tabs and panels from its layout.json, and Sessi
   const sessions = join(s.root, "state/projects/default/.project/layout.json");
   await expect.poll(() => existsSync(sessions) && JSON.parse(readFileSync(sessions, "utf8"))["right-panel"].open).toBe(false);
   await features(page).getByRole("button", { name: "Projects" }).click();
-  await expect(tabsShown).toHaveText(["Status"]);
+  await expect(tabsShown).toHaveText(["Coordinator: beta", "Status", "Progress: beta"]);
   await expect(rightPanel).toHaveCount(1);
 });

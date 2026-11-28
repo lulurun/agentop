@@ -37,6 +37,8 @@ export interface Tab {
   content: TabContent;
   /** A feature's default tab: it can be moved, but not closed. */
   pinned?: boolean;
+  /** Pinned to its area too: it can't be moved, nor have its content replaced. */
+  fixed?: boolean;
 }
 
 export interface Group {
@@ -163,6 +165,43 @@ export function withPinnedTab(layout: Layout, pinned: Tab = START_TAB): Layout {
   return { ...layout, left: { ...left, tabs: [pinned, ...left.tabs], active: left.active ?? pinned.id } };
 }
 
+/**
+ * The layout with a fixed tab in its area: added first there if missing, moved back from the other
+ * area, and never twice. The same layout when it is already so. A shut area stays shut.
+ */
+export function withFixedTab(layout: Layout, fixed: Tab, area: Area): Layout {
+  const same = (t: Tab) => sameContent(t.content, fixed.content);
+  const away = other(area);
+  const found = layout[area]?.tabs.filter(same) ?? [];
+  const strays = layout[away]?.tabs.some(same) ?? false;
+  if (!strays && found.length === 1 && found[0].pinned && found[0].fixed) return layout;
+  let next = layout;
+  if (strays) {
+    const group = layout[away]!;
+    const rest = group.tabs.filter((t) => !same(t));
+    next = withArea(next, away, rest.length ? { ...group, tabs: rest, active: rest.some((t) => t.id === group.active) ? group.active : rest[0].id } : null);
+  }
+  const group = next[area];
+  const keep = found[0];
+  let placed: Group;
+  if (keep) {
+    const tabs = group!.tabs.filter((t) => !same(t) || t === keep).map((t) => (t === keep ? { ...t, pinned: true, fixed: true } : t));
+    placed = { ...group!, tabs, active: tabs.some((t) => t.id === group!.active) ? group!.active : keep.id };
+  } else {
+    const taken = areasOf(next).some(([, g]) => g.tabs.some((t) => t.id === fixed.id));
+    const tab: Tab = { ...fixed, id: taken ? newTabId() : fixed.id, pinned: true, fixed: true };
+    placed = group ? { ...group, tabs: [tab, ...group.tabs], active: group.active ?? tab.id } : { tabs: [tab], active: tab.id };
+  }
+  next = withArea(next, area, placed);
+  return next[next.focused] ? next : { ...next, focused: area };
+}
+
+/** Open every area there is, keeping which is active: as when a project is entered. */
+export function showAll(layout: Layout): Layout {
+  if (!layout.left?.hidden && !layout.right?.hidden) return layout;
+  return { ...layout, left: layout.left && reveal(layout.left), right: layout.right && reveal(layout.right) };
+}
+
 /** A layout of one pinned tab, the default of a feature that opens with one. */
 export function pinnedLayout(content: TabContent, id = "home"): Layout {
   return { left: { tabs: [{ id, content, pinned: true }], active: id }, right: null, focused: "left" };
@@ -218,8 +257,8 @@ export function open(layout: Layout, content: TabContent, area: Area, mode: Open
     // The active tab of the same kind; for a plugin's view, any tab of it in the area.
     const current = activeTab(group);
     const target =
-      current && slotOf(current.content) === slot ? current
-      : content.kind === "plugin" ? group.tabs.find((t) => slotOf(t.content) === slot)
+      current && !current.fixed && slotOf(current.content) === slot ? current
+      : content.kind === "plugin" ? group.tabs.find((t) => !t.fixed && slotOf(t.content) === slot)
       : undefined;
     if (target) {
       const tabs = group.tabs.map((t) => (t.id === target.id ? { ...t, content } : t));
@@ -301,7 +340,7 @@ export function mapContent(layout: Layout, change: (content: TabContent) => TabC
 export function moveToOther(layout: Layout, area: Area, tabId: string): Layout {
   const source = layout[area];
   const tab = source?.tabs.find((t) => t.id === tabId);
-  if (!source || !tab) return layout;
+  if (!source || !tab || tab.fixed) return layout;
   const to = other(area);
   const at = source.tabs.findIndex((t) => t.id === tabId);
   const rest = source.tabs.filter((t) => t.id !== tabId);

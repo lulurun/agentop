@@ -2,10 +2,10 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import type { ServiceClient, Session } from "../api/client";
 import { UI_PLUGINS } from "../plugins/registry";
 import { FileTab, PluginTab } from "../plugins/Slot";
-import { activeConnection, layoutOf, layoutReady, sessionTitle, splitOf, useApp } from "../store";
+import { activeConnection, layoutOf, layoutReady, sessionTitle, splitOf, tabSession, useApp } from "../store";
 import { DEFAULT_SPLIT, MAX_SPLIT, MIN_SPLIT, splitAt } from "../sizes";
 import { Splitter } from "./Splitter";
-import { sessionOf, shownAreas, type Area, type Group, type Tab } from "../tabs";
+import { shownAreas, type Area, type Group, type Tab } from "../tabs";
 import type { FeatureId } from "../features";
 import { connectionName } from "../connections";
 import { PastSessionView } from "./HistoryView";
@@ -17,7 +17,7 @@ function baseName(path: string): string {
 }
 
 function useTabLabel(tab: Tab): { label: string; title: string; status?: string } {
-  const id = sessionOf(tab.content);
+  const id = useApp((s) => tabSession(s.sessions, tab.content));
   const session = useApp((s) => (id ? s.sessions[id] : undefined));
   const historyId = tab.content.kind === "past" ? tab.content.historyId : undefined;
   const past = useApp((s) => (historyId ? s.history.items?.find((i) => i.id === historyId) : undefined));
@@ -31,7 +31,7 @@ function useTabLabel(tab: Tab): { label: string; title: string; status?: string 
     const label = view?.label ?? content.view;
     if (!content.key) return { label, title: label };
     const named = view?.tabLabel?.(content.key);
-    return { label: named ?? `${label}: ${content.key}`, title: named ?? label };
+    return { label: named ?? `${label}: ${content.key}`, title: named ?? label, status: session?.status };
   }
   if (content.kind === "session") {
     return session
@@ -101,7 +101,8 @@ function TabButton({ feature, tab, area, active }: { feature: FeatureId; tab: Ta
         }}
         onContextMenu={(event) => {
           event.preventDefault();
-          setMenu({ x: event.clientX, y: event.clientY });
+          // A fixed tab can't be closed or moved, so it has no menu.
+          if (!tab.fixed) setMenu({ x: event.clientX, y: event.clientY });
         }}
       >
         {label}
@@ -203,7 +204,10 @@ function GroupView({
   const focusArea = useApp((s) => s.focusArea);
   const closeTab = useApp((s) => s.closeTab);
   const tab = group.tabs.find((t) => t.id === group.active);
-  const shown = tab?.content.kind === "session" ? { sessionId: tab.content.sessionId, tabId: tab.id } : null;
+  // A plugin tab that stands for a session, as a project's Coordinator, shows that session's terminal while it has one.
+  const standsFor = useApp((s) => (tab?.content.kind === "plugin" ? tabSession(s.sessions, tab.content) : undefined));
+  const shownId = tab?.content.kind === "session" ? tab.content.sessionId : standsFor;
+  const shown = tab && shownId ? { sessionId: shownId, tabId: tab.id } : null;
 
   // The sessions shown here last, most recent first. A session is in a group's tabs at most
   // once, so it is kept by its id: a tab that switched to another session keeps the one it
@@ -250,7 +254,7 @@ function GroupView({
             </div>
           );
         })}
-        {tab?.content.kind === "session"
+        {tab?.content.kind === "session" || shown
           ? null
           : tab?.content.kind === "file" ? <FileTab key={tab.id} file={tab.content.file} />
           : tab?.content.kind === "status" ? <StatusView key={tab.id} onClose={() => closeTab(feature, area, tab.id)} />

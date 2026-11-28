@@ -1,7 +1,8 @@
 /** The Projects feature's shared state: its listing, opening a project, and the Project creation buffer. */
 import { create } from "zustand";
+import type { Session } from "../../api/client";
 import { layoutIn, useApp, type ViewOwner } from "../../store";
-import { areasOf, type TabContent } from "../../tabs";
+import type { TabContent } from "../../tabs";
 import type { PluginContext } from "../types";
 
 export interface Project {
@@ -37,22 +38,33 @@ export const listing = (() => {
   };
 })();
 
+export const coordinatorTab = (project: string): TabContent => ({ kind: "plugin", plugin: PLUGIN_ID, view: "coordinator", key: project });
+
+const coordinators = new WeakMap<Record<string, Session>, Map<string, string | undefined>>();
+
+/** The session a project's Coordinator tab shows: its newest running or starting Coordinator, else its newest one at all. */
+export function coordinatorOf(project: string, sessions: Record<string, Session>): string | undefined {
+  let byProject = coordinators.get(sessions);
+  if (!byProject) coordinators.set(sessions, (byProject = new Map()));
+  if (byProject.has(project)) return byProject.get(project);
+  const live = (s: Session) => (s.status === "running" || s.status === "starting" ? 1 : 0);
+  const found = Object.values(sessions)
+    .filter((s) => s.managed && s.project === project && s.display_name === "Coordinator")
+    .sort((a, b) => live(b) - live(a) || (b.created_at ?? 0) - (a.created_at ?? 0) || b.id.localeCompare(a.id))[0]?.id;
+  byProject.set(project, found);
+  return found;
+}
+
 /**
- * Show a project as it was left; one with no tabs yet, or when asked, gets its Coordinator's. Captured before any
- * await, so its Coordinator's tab goes into this project's own tabs on this service, whatever is shown later.
+ * Show a project as it was left, its areas shown; asked for, with its Coordinator tab active. The owner is captured
+ * before any await, so the tab is activated in this project's own tabs on this service, whatever is shown later.
  */
 export async function openProject(service: string, name: string, coordinator = false): Promise<void> {
   const app = useApp.getState;
   if (app().activeId !== service) return;
   const owner: ViewOwner = { connection: service, feature: FEATURE, project: name };
   await app().setProject(FEATURE, name);
-  if (!coordinator && areasOf(layoutIn(app(), owner)).length > 0) return;
-  const rows = await app().act((client) => client.sessions());
-  if (app().activeId !== service) return;
-  const row = rows?.find((s) => s.project === name && s.display_name === "Coordinator" && (s.status === "running" || s.status === "starting"));
-  if (!row) return;
-  useApp.setState((s) => ({ sessions: { ...s.sessions, [row.id]: row } }));
-  app().openTabIn(owner, { kind: "session", sessionId: row.id }, "left");
+  if (coordinator) app().openTabIn(owner, coordinatorTab(name), "left");
 }
 
 /** What the creation buffer holds on one service, kept while its tab is away or the request is out. */

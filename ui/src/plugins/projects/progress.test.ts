@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 describe("Projects workbench", () => {
-  it("opens one closable Progress Viewer in the right area and keeps the side panel available", async () => {
+  it("shows the project's permanent Coordinator and Progress tabs, and keeps the side panel available", async () => {
     const original = useApp.getState();
     const feature = "plugin:projects";
     const info = { id: "projects", state: "enabled", ui: ["feature"] } as PluginInfo;
@@ -142,12 +142,16 @@ describe("Projects workbench", () => {
       await settle();
       click(pane("left").querySelector<HTMLButtonElement>(".project-pick"));
       await settle();
-      click(byText("button", "Progress Viewer"));
-      click(byText("button", "Progress Viewer"));
+      const leftArea = q('[data-area="left"]')!;
       const rightArea = q('[data-area="right"]')!;
-      expect(rightArea.querySelector('[role="tab"]')?.textContent).toBe("Progress Viewer: alpha");
+      expect([...leftArea.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(["Coordinator: alpha"]);
+      expect([...rightArea.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(["Progress: alpha"]);
+      // The Coordinator tab shows its session's terminal, and selects it for Details.
+      expect(leftArea.textContent).toContain("Terminal");
+      click(byText("button", "Progress Viewer"));
+      click(byText("button", "Progress Viewer"));
       expect(layoutOf(useApp.getState()).right?.tabs).toHaveLength(1);
-      expect(q('[data-area="left"]')?.textContent).toContain("Terminal");
+      expect(container.querySelectorAll(".tab-close")).toHaveLength(0);
       expect(pane("right").textContent).toContain("Coordinator");
       expect(pane("right").querySelector(".panel-section:last-child")?.getAttribute("aria-label")).toBe("Actions");
       for (const side of ["left", "right"]) expect(pane(side).querySelector('[role="tablist"]')).toBeNull();
@@ -155,9 +159,14 @@ describe("Projects workbench", () => {
       calls[0].resolve(progress());
       await settle();
       expect(rightArea.textContent).toContain("Ship the viewer.");
-      click(q('[aria-label="Close Progress Viewer: alpha"]'));
-      expect(q('[data-area="right"]')).toBeNull();
+      // Neither closes with the middle button, nor has a menu to close or move it with.
+      const fixedTab = rightArea.querySelector<HTMLElement>('[role="tab"]')!;
+      act(() => { fixedTab.dispatchEvent(new MouseEvent("auxclick", { bubbles: true, button: 1 })); });
+      act(() => { fixedTab.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true })); });
+      expect(q('[role="menu"]')).toBeNull();
+      expect(q('[data-area="right"] [role="tab"]')?.textContent).toBe("Progress: alpha");
       act(() => useApp.getState().select(worker.id));
+      expect([...q('[data-area="left"]')!.querySelectorAll('[role="tab"]')].map((t) => t.textContent)).toEqual(["Coordinator: alpha", "worker"]);
       expect(byText("button", "Progress Viewer")).toBeUndefined();
       expect(pane("right").querySelector(".panel-section:last-child")?.getAttribute("aria-label")).toBe("Actions");
     } finally {

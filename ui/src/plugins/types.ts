@@ -62,6 +62,8 @@ export interface PluginView {
   /** The label of one of its tabs, from the tab's `viewKey`. Without it the tab shows `label: viewKey`. */
   tabLabel?(viewKey: string): string;
   Component: ComponentType<{ plugin: PluginContext; viewKey?: string }>;
+  /** The session whose terminal the tab shows instead of `Component` while there is one, as a project's Coordinator. */
+  session?(viewKey: string, sessions: Record<string, Session>): string | undefined;
 }
 
 /**
@@ -78,6 +80,8 @@ export interface PluginFeature {
    * layout for each, in the project's `layout.json`, and shows the one picked with `setProject`.
    */
   projects?: boolean;
+  /** Views each of its projects always has, one tab per area keyed by the project's name, that can't be closed or moved. */
+  fixed?: Partial<Record<"left" | "right", string>>;
   /** The middle panel with no areas. */
   background?: ComponentType<{ plugin: PluginContext }>;
   left?: ComponentType<{ plugin: PluginContext }>;

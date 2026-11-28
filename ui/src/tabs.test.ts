@@ -273,3 +273,58 @@ describe("a project's file", () => {
       .toHaveLength(1);
   });
 });
+
+describe("fixed tabs", () => {
+  const coordinator: tabs.Tab = { id: "fixed-coordinator", content: { kind: "plugin", plugin: "projects", view: "coordinator", key: "alpha" }, pinned: true, fixed: true };
+  const progress: tabs.Tab = { id: "fixed-progress", content: { kind: "plugin", plugin: "projects", view: "progress", key: "alpha" }, pinned: true, fixed: true };
+  const both = (layout: Layout) => tabs.withFixedTab(tabs.withFixedTab(layout, coordinator, "left"), progress, "right");
+
+  it("go first in their areas of an empty layout, and the same layout comes back once they are", () => {
+    const layout = both(tabs.emptyLayout());
+    expect(show(layout)).toBe("[projects:coordinator] | [projects:progress] @left");
+    expect(tabs.withFixedTab(layout, coordinator, "left")).toBe(layout);
+    expect(tabs.withFixedTab(layout, progress, "right")).toBe(layout);
+  });
+
+  it("join a saved layout without changing its other tabs, which stays active, nor opening a shut area", () => {
+    const saved = tabs.toggleArea(build([file("x.py"), "left"], [file("y.py"), "right", "tab"]), "right");
+    const layout = both(saved);
+    expect(show(layout)).toBe("projects:coordinator [x.py] | projects:progress [y.py] @left");
+    expect(layout.right!.hidden).toBe(true);
+    const shown = tabs.showAll(layout);
+    expect(shown.right!.hidden).toBeUndefined();
+    expect(tabs.showAll(shown)).toBe(shown);
+  });
+
+  it("are moved back to their own area and kept once, unpinned copies from a file included", () => {
+    const stray = { ...progress, id: "p", pinned: undefined, fixed: undefined };
+    const twice = { ...coordinator, id: "c2", pinned: undefined, fixed: undefined };
+    const saved: Layout = {
+      left: { tabs: [{ id: "f", content: file("x.py") }, stray, { ...coordinator, id: "c1", pinned: undefined, fixed: undefined }, twice], active: "p" },
+      right: null,
+      focused: "left",
+    };
+    const layout = both(saved);
+    expect(show(layout)).toBe("[x.py] projects:coordinator | [projects:progress] @left");
+    expect(layout.left!.tabs.find((t) => t.id === "c1")).toMatchObject({ pinned: true, fixed: true });
+  });
+
+  it("can't be closed, moved, or have another view put in their place; other tabs can", () => {
+    const layout = tabs.open(both(tabs.emptyLayout()), file("a.py"), "left", "tab", "a");
+    expect(tabs.close(layout, "left", coordinator.id)).toBe(layout);
+    expect(tabs.closeActive(tabs.activate(layout, "right", progress.id))).toEqual(tabs.activate(layout, "right", progress.id));
+    expect(tabs.moveToOther(layout, "left", coordinator.id)).toBe(layout);
+    expect(tabs.moveToOther(layout, "right", progress.id)).toBe(layout);
+    const beta = { kind: "plugin", plugin: "projects", view: "progress", key: "beta" } as TabContent;
+    const replaced = tabs.open(tabs.activate(layout, "right", progress.id), beta, "right", "replace", "b");
+    expect(show(replaced)).toBe("projects:coordinator [a.py] | projects:progress [projects:progress] @right");
+    expect(show(tabs.moveToOther(layout, "left", "a"))).toBe("[projects:coordinator] | projects:progress [a.py] @right");
+    expect(show(tabs.close(layout, "left", "a"))).toBe("[projects:coordinator] | [projects:progress] @left");
+  });
+
+  it("get a fresh id when a saved tab already has theirs", () => {
+    const saved: Layout = { left: { tabs: [{ id: coordinator.id, content: file("x.py") }], active: coordinator.id }, right: null, focused: "left" };
+    const layout = tabs.withFixedTab(saved, coordinator, "left");
+    expect(new Set(layout.left!.tabs.map((t) => t.id)).size).toBe(2);
+  });
+});

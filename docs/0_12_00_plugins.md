@@ -131,7 +131,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 | Slot | `plugin` key | Where it draws |
 |------|--------------|----------------|
-| `feature` | `feature` | A feature in the feature nav: a label, left and right panels, a background, the views its tabs show, and a pinned home view ([0_10_ui.md](0_10_ui.md#rules-for-plugins)) |
+| `feature` | `feature` | A feature in the feature nav: a label, left and right panels, a background, the views its tabs show, and a pinned home view or, per project, a fixed view in each area ([0_10_ui.md](0_10_ui.md#rules-for-plugins)) |
 | `right-panel` | `rightPanel` | A section in Sessions' right panel |
 | `session-badge` | `sessionBadge` | A badge on a session row |
 | `settings-section` | `settingsSection` | A section in the service's Status, under Plugins |
@@ -151,7 +151,7 @@ The web and desktop builds are static, and the desktop app has a strict script C
 
 ### Projects (`projects`)
 
-The owner's own projects. Each has a goal and a Coordinator session the owner talks to, which pursues it by starting the project's other sessions and routing work between them; the sessions share a folder in `~/.agentop/projects/` (a core mechanism). The Projects feature has the Project button (its New project buffer takes a name and the Coordinator's tool), the project list, and for the chosen project Sessions' own sections and right panel; picking a project opens its existing running Coordinator. Browsing never starts one; the owner asks the Coordinator to close. `agentop project create | close` act on its projects and need it on. Its own commands, `agentop coordinator …` (with `agentop coordinator task report` for a task's session), hold its Coordinators to their pursuit, and on the scan tick it logs a Coordinator turn that ended without a reason, and tells a Coordinator that cleared its context to carry on ([0_13_projects.md 4.3](0_13_projects.md#43-pursuit-tools-projects-plugin)). Turning it off stops its projects' sessions and keeps their folders. Everything else is in [0_13_projects.md](0_13_projects.md).
+The owner's own projects. Each has a goal and a Coordinator session the owner talks to, which pursues it by starting the project's other sessions and routing work between them; the sessions share a folder in `~/.agentop/projects/` (a core mechanism). The Projects feature has the New project button (its New project buffer takes a name and the Coordinator's tool), the project list, and for the chosen project Sessions' own sections and right panel. Each project always has two fixed tabs, **Coordinator: <name>** in the left area, which shows its Coordinator's terminal whichever session that is by now, and **Progress: <name>** in the right area ([0_10_ui.md](0_10_ui.md#tabs)). Browsing never starts a Coordinator; the owner asks the Coordinator to close. `agentop project create | close` act on its projects and need it on. Its own commands, `agentop coordinator …` (with `agentop coordinator task report` for a task's session), hold its Coordinators to their pursuit, and on the scan tick it logs a Coordinator turn that ended without a reason, and tells a Coordinator that cleared its context to carry on ([0_13_projects.md 4.3](0_13_projects.md#43-pursuit-tools-projects-plugin)). Turning it off stops its projects' sessions and keeps their folders. Everything else is in [0_13_projects.md](0_13_projects.md).
 
 Routes: `GET`, `POST /projects`, `DELETE /projects/{name}`, `POST /projects/{name}/coordinator`, `GET /projects/{name}/pursuit`.
 

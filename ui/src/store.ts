@@ -119,6 +119,8 @@ export interface AppState {
   /** Open a tab in one captured view (`ownerOf`), shown or not, for an action that awaited first; it never switches what is shown. */
   openTabIn(owner: ViewOwner, content: TabContent, area: Area, mode?: OpenMode): void;
   focusAreaIn(owner: ViewOwner, area: Area): void;
+  /** Save a view's tabs as they now are: its fixed tabs in, and no second tab of a session one of them shows. */
+  tidyIn(owner: ViewOwner): void;
   closeTabsIn(owner: ViewOwner, matches: (content: TabContent) => boolean): void;
   /** Close the tabs of a feature whose content matches. */
   closeTabs(feature: FeatureId, matches: (content: TabContent) => boolean): void;
@@ -273,10 +275,26 @@ export function selectionKey(activeId: string, feature: FeatureId, project?: str
   return isProjectFeature(feature) ? `${activeId}|${feature}|` : `${activeId}|${feature}`;
 }
 
-/** The session the feature shown has selected: the one its right panel shows. */
-export function selectedId(state: Pick<AppState, "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded" | "scopes">): string | undefined {
+/** The session a tab shows: its own, its file's, or the one a plugin's view stands for, as a project's Coordinator. */
+export function tabSession(sessions: Record<string, Session>, content: TabContent): string | undefined {
+  const own = tabs.sessionOf(content);
+  if (own || content.kind !== "plugin" || !content.key) return own;
+  return UI_PLUGINS[content.plugin]?.feature?.views[content.view]?.session?.(content.key, sessions);
+}
+
+/**
+ * The session the feature shown has selected: the one its right panel shows. A focused tab that stands
+ * for a session selects whichever that is by now, or none.
+ */
+export function selectedId(state: Pick<AppState, "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded" | "scopes"> & Partial<Pick<AppState, "sessions" | "layouts" | "projectViews">>): string | undefined {
   const feature = currentFeature(state);
-  return state.selected[selectionKey(state.activeId, feature, projectOf(state, feature))];
+  const project = projectOf(state, feature);
+  if (project && state.sessions && state.projectViews && state.layouts) {
+    const focused = tabs.focusedTab(layoutIn({ layouts: state.layouts, projectViews: state.projectViews }, { connection: state.activeId, feature, project }));
+    const content = focused?.content;
+    if (content?.kind === "plugin" && UI_PLUGINS[content.plugin]?.feature?.views[content.view]?.session) return tabSession(state.sessions, content);
+  }
+  return state.selected[selectionKey(state.activeId, feature, project)];
 }
 
 const narrow = () => typeof window !== "undefined" && window.innerWidth < 900;
@@ -327,7 +345,7 @@ export function isShown(state: Pick<AppState, "scopes" | "activeId" | "features"
 /** A view's tabs, whether or not it is shown. */
 export function layoutIn(state: Pick<AppState, "layouts" | "projectViews">, { connection, feature, project }: ViewOwner): Layout {
   const saved = project ? state.projectViews[connection]?.[project]?.layout : state.layouts[connection]?.[feature];
-  return withFeaturePinned(saved ?? EMPTY_LAYOUT, feature);
+  return withFeaturePinned(saved ?? EMPTY_LAYOUT, feature, project);
 }
 
 /** The feature's layout has been read, or there is none to read: until then its middle panel shows nothing. */
@@ -349,11 +367,65 @@ const EMPTY_LAYOUT = tabs.emptyLayout();
 
 type LayoutState = Pick<AppState, "layouts" | "selected" | "activeId" | "features" | "plugins" | "pluginsLoaded" | "scopes" | "projectViews">;
 
-/** A layout with the feature's pinned tab in it: Sessions' start buffer, or a plugin's `home`. */
-function withFeaturePinned(layout: Layout, feature: FeatureId): Layout {
+/** A layout with the feature's pinned tabs in it: Sessions' start buffer, or a plugin's `home`, and its project's fixed tabs. */
+function withFeaturePinned(layout: Layout, feature: FeatureId, project?: string): Layout {
   if (feature === "sessions") return withPinned(layout, tabs.START_TAB);
   const home = homeTab(feature);
-  return home ? withPinned(layout, home) : layout;
+  let next = home ? withPinned(layout, home) : layout;
+  for (const [area, tab] of project ? fixedTabs(feature, project) : []) next = withFixed(next, tab, area);
+  return next;
+}
+
+const fixedSets = new Map<string, [Area, Tab][]>();
+
+/** A plugin feature's fixed tabs for one project, from its UI's `fixed` views; the same objects each time. */
+export function fixedTabs(feature: FeatureId, project: string): [Area, Tab][] {
+  const plugin = pluginOf(feature);
+  const fixed = plugin ? UI_PLUGINS[plugin]?.feature?.fixed : undefined;
+  if (!plugin || !fixed) return [];
+  const key = `${feature}\n${project}`;
+  let found = fixedSets.get(key);
+  if (!found) {
+    found = tabs.AREAS.flatMap((area) => {
+      const view = fixed[area];
+      return view ? [[area, { id: `fixed-${view}`, content: { kind: "plugin", plugin, view, key: project }, pinned: true, fixed: true }] as [Area, Tab]] : [];
+    });
+    fixedSets.set(key, found);
+  }
+  return found;
+}
+
+/** The fixed tab of a view that stands for this session, so the session opens there rather than in a second tab. */
+function fixedFor(owner: ViewOwner, sessions: Record<string, Session>, sessionId: string): [Area, Tab] | undefined {
+  if (!owner.project) return undefined;
+  return fixedTabs(owner.feature, owner.project).find(([, tab]) => tabSession(sessions, tab.content) === sessionId);
+}
+
+/** A layout less the session tabs its fixed tabs stand for, such as a Coordinator's from before; the fixed tab takes their focus. */
+function foldIntoFixed(layout: Layout, owner: ViewOwner, sessions: Record<string, Session>): Layout {
+  let next = layout;
+  for (const [area, tab] of owner.project ? fixedTabs(owner.feature, owner.project) : []) {
+    const id = tabSession(sessions, tab.content);
+    if (!id) continue;
+    const shadow = (c: TabContent) => c.kind === "session" && c.sessionId === id;
+    if (!tabs.areasOf(next).some(([, g]) => g.tabs.some((t) => shadow(t.content)))) continue;
+    const focused = tabs.focusedTab(next);
+    const wasShown = !!focused && shadow(focused.content);
+    next = tabs.closeWhere(next, shadow);
+    const kept = next[area]?.tabs.find((t) => tabs.sameContent(t.content, tab.content));
+    if (wasShown && kept) next = tabs.activate(next, area, kept.id);
+  }
+  return next;
+}
+
+const fixedAdded = new WeakMap<Layout, WeakMap<Tab, Layout>>();
+
+function withFixed(layout: Layout, fixed: Tab, area: Area): Layout {
+  let byTab = fixedAdded.get(layout);
+  if (!byTab) fixedAdded.set(layout, (byTab = new WeakMap()));
+  let found = byTab.get(fixed);
+  if (!found) byTab.set(fixed, (found = tabs.withFixedTab(layout, fixed, area)));
+  return found;
 }
 
 /** A feature's tabs on the active connection, by default the one shown: those of the project it shows, if it shows one. */
@@ -691,12 +763,39 @@ export const useApp = create<AppState>((set, get) => {
     }
   }
 
+  /**
+   * Select the session a view's focused tab stands for, which may be new since, as a Coordinator that started:
+   * the right panel keeps showing it after the focus moves to a tab of no session.
+   */
+  function followFocus(owner: ViewOwner) {
+    const key = selectionKey(owner.connection, owner.feature, owner.project);
+    const focused = tabs.focusedTab(layoutIn(get(), owner));
+    const session = focused && tabSession(get().sessions, focused.content);
+    if (session && get().selected[key] !== session) saveSelected({ ...get().selected, [key]: session });
+  }
+
+  /** Projects entered since the page opened, by connection, feature and project. */
+  const entered = new Set<string>();
+
+  /** A project with fixed tabs is entered with all its areas shown; they can be shut again after. */
+  function enter(owner: ViewOwner) {
+    if (!owner.project || fixedTabs(owner.feature, owner.project).length === 0) return;
+    entered.add(`${owner.connection}\n${owner.feature}\n${owner.project}`);
+    updateLayoutIn(owner, tabs.showAll);
+    followFocus(owner);
+  }
+
   /** Read again the layouts on screen: Sessions' (always on the page) and the project feature's shown. */
   function loadVisible() {
     const state = get();
     void loadProject(state.activeId, DEFAULT_PROJECT);
-    const shown = projectOf(state, currentFeature(state));
-    if (shown && shown !== DEFAULT_PROJECT) void loadProject(state.activeId, shown);
+    const feature = currentFeature(state);
+    const owner = ownerOf(state, feature);
+    const shown = owner.project;
+    if (!shown || shown === DEFAULT_PROJECT) return;
+    const first = !entered.has(`${owner.connection}\n${feature}\n${shown}`);
+    // Entered once per page: a reconnect leaves the areas as they are.
+    void loadProject(state.activeId, shown).then(() => first && enter(owner));
   }
 
   function saveScopes(scopes: AppState["scopes"]) {
@@ -815,6 +914,12 @@ export const useApp = create<AppState>((set, get) => {
       const { sessions } = get();
       updateReadyViews((layout) => tabs.closeWhere(layout, (c) => c.kind === "session" && !sessions[c.sessionId]));
     }
+    // A session that the shown project's fixed tab now stands for, such as a new Coordinator, leaves no second tab.
+    const shown = ownerOf(get());
+    if (shown.project && fixedTabs(shown.feature, shown.project).length && get().projectViews[shown.connection]?.[shown.project]?.ready) {
+      updateLayoutIn(shown, (layout) => layout);
+      followFocus(shown);
+    }
     for (const event of batch.events) {
       if (event.type !== "session.removed") continue;
       updateReadyViews((layout) => tabs.closeSession(layout, event.id));
@@ -894,7 +999,7 @@ export const useApp = create<AppState>((set, get) => {
     const follow = (layout: Layout, selected: Record<string, string>) => {
       const key = selectionKey(connection, feature, project);
       const focused = tabs.focusedTab(layout);
-      const session = focused && tabs.sessionOf(focused.content);
+      const session = focused && tabSession(get().sessions, focused.content);
       if (session) selected[key] = session;
       else if (!focused) delete selected[key];
       return selected;
@@ -904,8 +1009,8 @@ export const useApp = create<AppState>((set, get) => {
         connection,
         project,
         (view) => {
-          const before = withFeaturePinned(view.layout, feature);
-          const layout = change(before);
+          const before = withFeaturePinned(view.layout, feature, project);
+          const layout = foldIntoFixed(change(before), { connection, feature, project }, get().sessions);
           return layout === before ? view : { ...view, layout };
         },
         (view) => saveSelected(follow(view.layout, { ...get().selected })),
@@ -917,6 +1022,12 @@ export const useApp = create<AppState>((set, get) => {
     if (layout === before) return;
     const layouts = { ...state.layouts, [connection]: { ...state.layouts[connection], [feature]: layout } };
     saveLayouts(layouts, follow(layout, { ...state.selected }));
+  }
+
+  /** Open a tab; a session that one of the view's fixed tabs stands for shows in that tab instead. */
+  function openIn(owner: ViewOwner, layout: Layout, content: TabContent, area: Area, mode: OpenMode): Layout {
+    const fixed = content.kind === "session" ? fixedFor(owner, get().sessions, content.sessionId) : undefined;
+    return fixed ? tabs.open(layout, fixed[1].content, fixed[0]) : tabs.open(layout, content, area, mode);
   }
 
   function saveSelected(selected: Record<string, string>) {
@@ -1138,7 +1249,9 @@ export const useApp = create<AppState>((set, get) => {
       if (leaving && leaving !== project) void sync.flush(connection, leaving);
       const { [feature]: _old, ...rest } = state.scopes[connection] ?? {};
       saveScopes({ ...state.scopes, [connection]: project ? { ...rest, [feature]: project } : rest });
-      if (project) await loadProject(connection, project);
+      if (!project) return;
+      await loadProject(connection, project);
+      enter({ connection, feature, project });
     },
 
     async setPluginEnabled(id, enabled) {
@@ -1188,21 +1301,22 @@ export const useApp = create<AppState>((set, get) => {
     select(sessionId, mode = "replace", area = "left") {
       const feature = featureForSession(get().sessions[sessionId]?.project);
       if (!feature) return;
-      updateLayout((layout) => tabs.open(layout, { kind: "session", sessionId }, area, mode), feature);
+      updateLayout((layout) => openIn(ownerOf(get(), feature), layout, { kind: "session", sessionId }, area, mode), feature);
       showFeature(feature);
     },
 
     openTab(content, area, mode = "replace") {
       const feature = content.kind === "session" ? featureForSession(get().sessions[content.sessionId]?.project) : currentFeature(get());
       if (!feature) return;
-      updateLayout((layout) => tabs.open(layout, content, area, mode), feature);
+      updateLayout((layout) => openIn(ownerOf(get(), feature), layout, content, area, mode), feature);
       showFeature(feature);
     },
     openTabIn(owner, content, area, mode = "replace") {
       const project = content.kind === "session" ? get().sessions[content.sessionId]?.project : undefined;
       if (owner.project && project && project !== owner.project) return;
-      updateLayoutIn(owner, (layout) => tabs.open(layout, content, area, mode));
+      updateLayoutIn(owner, (layout) => openIn(owner, layout, content, area, mode));
     },
+    tidyIn: (owner) => updateLayoutIn(owner, (layout) => layout),
     focusAreaIn: (owner, area) => updateLayoutIn(owner, (layout) => tabs.focusArea(layout, area)),
     closeTabsIn: (owner, matches) => updateLayoutIn(owner, (layout) => tabs.closeWhere(layout, matches)),
     closeTabs: (feature, matches) => updateLayout((layout) => tabs.closeWhere(layout, matches), feature),
